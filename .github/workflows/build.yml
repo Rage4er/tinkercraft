@@ -1,0 +1,51 @@
+# test
+name: Test package 
+on:
+  push:
+    branches:
+      - '*'
+  pull_request:
+    branches:
+      - '*'
+
+jobs:
+  linux:
+    runs-on: ubuntu-24.04
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v1
+      with:
+         submodules: recursive 
+    - name: Install libraries
+      run: |
+          sudo apt update
+          sudo apt install libasound2-dev libavcodec-dev libavformat-dev libavutil-dev libgl-dev libgtk-3-dev libpango1.0-dev libxtst-dev libgtk2.0-0 zip
+    - name: start xvfb
+      run:
+        Xvfb :0 &
+    - name: initialize the X11 DISPLAY variable
+      run:
+        export DISPLAY=:0
+    - name: Build
+      run: bash build.sh
+    - name: Set Java
+      uses: actions/setup-java@v1
+      with:
+        java-version: 25
+        jdkFile: zulu25.32.21-ca-fx-jdk25.0.2-linux_x64.tar.gz
+
+    - name: Run Unit Tests
+      run: xvfb-run -s '-screen 0 1024x768x24' ./gradlew test
+      
+    - name: Download Bowler kernel into CI
+      run: wget https://github.com/CommonWealthRobotics/bowler-script-kernel/releases/latest/download/bowler-kernel.jar
+
+    - name: Compile Script
+      run: xvfb-run -s '-screen 0 1024x768x24' java --enable-preview -Dprism.verbose=true -Dprism.forceGPU=true -Xmx6500M -jar bowler-kernel.jar -g https://github.com/CommonWealthRobotics/CaDoodle-Git-Resources.git loadGit.groovy
+    - name: Zip Results
+      run: zip -r gitcache.zip ~/Documents/bowler-workspace/gitcache/
+    - name: After JDK download, list directory contnts
+      run: pwd; ls -la      
+    
+ 
+      

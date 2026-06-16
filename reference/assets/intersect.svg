@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="755.90552"
+   height="755.90552"
+   viewBox="0 0 200 200"
+   version="1.1"
+   id="svg1"
+   inkscape:version="1.4.2 (f4327f4, 2025-05-13)"
+   sodipodi:docname="intersect.svg"
+   inkscape:export-filename="../src/main/resources/com/commonwealthrobotics/intersect.png"
+   inkscape:export-xdpi="8.1280003"
+   inkscape:export-ydpi="8.1280003"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview1"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:document-units="px"
+     inkscape:zoom="0.43843001"
+     inkscape:cx="-208.69922"
+     inkscape:cy="-198.43532"
+     inkscape:window-width="3840"
+     inkscape:window-height="1506"
+     inkscape:window-x="-11"
+     inkscape:window-y="-11"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="layer1"
+     showgrid="false" />
+  <defs
+     id="defs1" />
+  <g
+     inkscape:label="Layer 1"
+     inkscape:groupmode="layer"
+     id="layer1">
+    <g
+       id="g1"
+       transform="translate(-2.8198378,-3.6331474)">
+      <rect
+         style="fill:#ffffff;fill-opacity:1;stroke:#020000;stroke-width:10;stroke-dasharray:none;stroke-opacity:1"
+         id="rect1"
+         width="123.85168"
+         height="120.00449"
+         x="15.931417"
+         y="16.298508" />
+      <ellipse
+         style="fill:none;fill-opacity:1;stroke:#020000;stroke-width:10;stroke-dasharray:none;stroke-opacity:1"
+         id="path1"
+         cx="120.88482"
+         cy="124.80221"
+         rx="68.823441"
+         ry="66.165581" />
+      <path
+         id="rect1-3"
+         style="fill:#263d8c;fill-opacity:1;stroke:#020000;stroke-width:10;stroke-dasharray:none;stroke-opacity:1"
+         d="m 120.89671,58.612387 a 68.823441,66.165581 0 0 0 -68.823122,66.165753 68.823441,66.165581 0 0 0 1.091407,11.50162 H 139.7953 V 61.156402 a 68.823441,66.165581 0 0 0 -18.89859,-2.544015 z" />
+    </g>
+  </g>
+</svg>

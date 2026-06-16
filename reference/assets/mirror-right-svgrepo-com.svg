@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Uploaded to: SVG Repo, www.svgrepo.com, Generator: SVG Repo Mixer Tools -->
+
+<svg
+   width="256"
+   height="256"
+   viewBox="0 0 7.68 7.68"
+   fill="none"
+   version="1.1"
+   id="svg6"
+   sodipodi:docname="mirror-right-svgrepo-com.svg"
+   inkscape:version="1.4.2 (f4327f4, 2025-05-13)"
+   inkscape:export-filename="..\src\main\resources\com\commonwealthrobotics\mirror.png"
+   inkscape:export-xdpi="24"
+   inkscape:export-ydpi="24"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs10" />
+  <sodipodi:namedview
+     id="namedview8"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:pageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     showgrid="false"
+     inkscape:zoom="3.4517273"
+     inkscape:cx="144.13074"
+     inkscape:cy="97.921987"
+     inkscape:window-width="3840"
+     inkscape:window-height="1506"
+     inkscape:window-x="-11"
+     inkscape:window-y="-11"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg6"
+     inkscape:showpageshadow="2"
+     inkscape:deskcolor="#d1d1d1" />
+  <path
+     style="fill:#263d8c;stroke:none;stroke-width:0.425173"
+     d="m 7.5577018,7.4953328 -3.48,-7.1731005 v 7.1731005 z m -3.0537,0.026899 z"
+     id="path351-3"
+     sodipodi:nodetypes="cccc" />
+  <path
+     style="fill:#ffffff;stroke:none;stroke-width:0.404544"
+     d="m 0.3506032,7.3735479 3.24,-6.9749979 v 6.9749979 z m 2.8430999,0.026183 z"
+     id="path2"
+     sodipodi:nodetypes="cccc" />
+  <path
+     style="fill:none;stroke:#020000;stroke-width:0.2703;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:0.7;stroke-dasharray:0.2703, 0.5406;stroke-dashoffset:0;stroke-opacity:1"
+     d="M 0.22648262,7.3583538 3.487755,0.43213863 V 7.3583538 Z M 3.2920789,6.8129143 Z"
+     id="path351"
+     sodipodi:nodetypes="cccc" />
+</svg>
