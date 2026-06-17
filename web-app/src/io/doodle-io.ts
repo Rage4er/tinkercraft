@@ -1,16 +1,16 @@
 // ============================================================
 // .doodle формат — ZIP-архив с model.json + thumbnail.png
-// Совместимость с оригинальным Java CaDoodleFile.
+// Совместимость с оригинальным Java TinkerCraftFile.
 // ============================================================
 
 import JSZip from 'jszip'
-import type { CaDoodleFile, CaDoodleOperation } from '../csg/types'
+import type { TinkerCraftFile, TinkerCraftOperation } from '../csg/types'
 
 const FORMAT_VERSION = '1.0.0'
 
 // ---- Разобрать .doodle файл ----
 
-export async function parseDoodle(buffer: ArrayBuffer): Promise<CaDoodleFile> {
+export async function parseDoodle(buffer: ArrayBuffer): Promise<TinkerCraftFile> {
   const zip = await JSZip.loadAsync(buffer)
 
   const modelFile = zip.file('model.json')
@@ -20,13 +20,13 @@ export async function parseDoodle(buffer: ArrayBuffer): Promise<CaDoodleFile> {
   const raw = JSON.parse(json)
 
   // Поддержка обоих форматов: { version, operations } или просто массив операций
-  let operations: CaDoodleOperation[]
+  let operations: TinkerCraftOperation[]
   let version = FORMAT_VERSION
 
   if (Array.isArray(raw)) {
-    operations = raw as CaDoodleOperation[]
+    operations = raw as TinkerCraftOperation[]
   } else if (raw && Array.isArray(raw.operations)) {
-    operations = raw.operations as CaDoodleOperation[]
+    operations = raw.operations as TinkerCraftOperation[]
     version = raw.version ?? FORMAT_VERSION
   } else {
     throw new Error('Некорректный model.json: ожидается массив операций или { version, operations }')
@@ -45,12 +45,12 @@ export async function parseDoodle(buffer: ArrayBuffer): Promise<CaDoodleFile> {
 // ---- Сериализовать в .doodle ----
 
 export async function serializeDoodle(
-  operations: CaDoodleOperation[],
+  operations: TinkerCraftOperation[],
   thumbnailDataUrl?: string,
 ): Promise<Blob> {
   const zip = new JSZip()
 
-  const doc: CaDoodleFile = {
+  const doc: TinkerCraftFile = {
     version: FORMAT_VERSION,
     operations,
   }

@@ -1,7 +1,7 @@
-# CaDoodle: план миграции Java/JavaFX → Web (Three.js)
+# TinkerCraft: план миграции Java/JavaFX → Web (Three.js)
 
 > Составлен: июнь 2026  
-> Проект: CaDoodle-Application  
+> Проект: TinkerCraft-Application  
 > Цель: полное воспроизведение UI и функциональности в браузере
 
 ---
@@ -443,9 +443,9 @@ class WorkplaneManager {
 ```
 
 **Deliverables Фазы 2:**
-- [ ] Three.js сцена со светом и тенью
-- [ ] OrbitControls (вращение, панорамирование, зум)
-- [ ] Навигационный куб с анимированным перелётом
+- [x] Three.js сцена со светом и тенью
+- [x] OrbitControls (вращение, панорамирование, зум)
+- [x] Навигационный куб с анимированным перелётом
 - [ ] Рабочая плоскость с настраиваемым snap
 - [ ] Отражение теней от объектов на ground
 - [ ] FitView / ResetView с анимацией
@@ -941,17 +941,25 @@ MVP (фазы 0–5 + 7)          8–11 мес.
 - [ ] 100% unit-тесты движка операций — отложено до Фазы 7
 
 ### Фаза 2
-- [ ] Three.js сцена со светом и тенью
-- [ ] OrbitControls (вращение, панорамирование, зум)
-- [ ] Навигационный куб с анимированным перелётом
+- [x] Three.js сцена со светом и тенью — `Viewport3D.tsx`
+- [x] OrbitControls (вращение, панорамирование, зум) — `Viewport3D.tsx`
+- [x] FitView (F / кнопка «Fit») — автоматический framing по bbox сцены
+- [x] Числовые поля позиции/вращения в панели свойств (X/Y/Z, rotX/Y/Z)
+- [x] Color picker для выбранного объекта
+- [x] Кнопка показать/скрыть объект
+- [x] Экспорт STL (бинарный, multi-object merge) — `stl-export.ts`
+- [x] Навигационный куб (ViewCube) — клик по грани → анимированный перелёт камеры
 - [ ] Рабочая плоскость с настраиваемым snap
-- [ ] FitView / ResetView с анимацией
 
 ### Фаза 3
-- [ ] Выделение: клик + Ctrl+клик + drag-select
-- [ ] Move gizmo (3 оси + 3 плоскости)
-- [ ] Resize gizmo (8 углов + 6 граней)
-- [ ] Rotation gizmo (3 кольца)
+- [x] Выделение: клик + Ctrl+клик (Shift+клик) — raycast в Viewport3D
+- [x] Move gizmo (TransformControls, режим translate, клавиша G)
+- [x] Rotation gizmo (TransformControls, режим rotate, клавиша R)
+- [x] Scale gizmo (TransformControls, режим scale, клавиша S)
+- [x] Гизмо сохраняет позицию/поворот в store через moveObject + undo/redo
+- [x] Список объектов в левой панели (клик → выбор, Shift/Ctrl → мульти)
+- [ ] Resize gizmo по граням/углам (точный resize)
+- [ ] Drag-select (рамка выделения)
 - [ ] Mirror с preview
 - [ ] Align (9 позиций)
 - [ ] Fillet
@@ -968,9 +976,9 @@ MVP (фазы 0–5 + 7)          8–11 мес.
 - [ ] Тёмный/светлый режим
 
 ### Фаза 5
-- [ ] Открытие `.doodle` файлов
-- [ ] Сохранение `.doodle` файлов
+- [x] Открытие `.doodle` файлов — File API + JSZip
+- [x] Сохранение `.doodle` файлов — JSZip + download
+- [x] Экспорт STL — бинарный, multi-object
 - [ ] Автосохранение в IndexedDB
-- [ ] Экспорт STL
 - [ ] Импорт STL / SVG / 3MF
 - [ ] Менеджер проектов

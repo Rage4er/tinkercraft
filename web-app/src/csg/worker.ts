@@ -110,7 +110,7 @@ self.addEventListener('message', async (e: MessageEvent) => {
         })
         cache.set(msg.objId as string, m)
         const { vertices, indices, tris } = extractMesh(m)
-        self.postMessage(
+        ;(self as unknown as Worker).postMessage(
           { reqId: msg.reqId, type: 'mesh', objId: msg.objId, vertices, indices, tris, ms: performance.now() - t0 },
           [vertices.buffer, indices.buffer]
         )
@@ -135,7 +135,7 @@ self.addEventListener('message', async (e: MessageEvent) => {
         cache.delete(msg.idB as string)
         cache.set(msg.resultId as string, result)
         const { vertices, indices, tris } = extractMesh(result)
-        self.postMessage(
+        ;(self as unknown as Worker).postMessage(
           { reqId: msg.reqId, type: 'mesh', objId: msg.resultId, vertices, indices, tris, ms: performance.now() - t0 },
           [vertices.buffer, indices.buffer]
         )
@@ -183,10 +183,10 @@ self.addEventListener('message', async (e: MessageEvent) => {
         for (const [objId, m] of cache) {
           const { vertices, indices, tris } = extractMesh(m)
           results.push({ objId, vertices, indices, tris })
-          transfers.push(vertices.buffer, indices.buffer)
+          transfers.push(vertices.buffer as ArrayBuffer, indices.buffer as ArrayBuffer)
         }
 
-        self.postMessage(
+        ;(self as unknown as Worker).postMessage(
           { reqId: msg.reqId, type: 'sceneBuilt', results, ms: performance.now() - t0 },
           transfers
         )

@@ -1,12 +1,12 @@
 // ============================================================
-// Zustand store — CaDoodleDocument с полным undo/redo
+// Zustand store — TinkerCraftDocument с полным undo/redo
 // Canonical state: operations[] + historyIndex
 // Scene (objects) — производное от истории операций.
 // ============================================================
 
 import { create } from 'zustand/react'
 import type {
-  CaDoodleOperation, AddShapeOperation,
+  TinkerCraftOperation, AddShapeOperation,
   SceneObject, ShapeType, ShapeParams, TransformNR, CsgBooleanOp,
 } from '../csg/types'
 import {
@@ -14,6 +14,7 @@ import {
   workerClearAll, workerDeleteObjects,
 } from '../csg/worker-client'
 import { parseDoodle, serializeDoodle, openDoodleFilePicker, downloadBlob } from '../io/doodle-io'
+import { downloadStl } from '../io/stl-export'
 
 // ---- ID генератор ----
 let _idCounter = 0
@@ -30,7 +31,7 @@ function colorForIndex(n: number): string { return PALETTE[n % PALETTE.length] }
 
 export interface DocumentStore {
   // История операций (canonical document)
-  operations: CaDoodleOperation[]
+  operations: TinkerCraftOperation[]
   historyIndex: number                 // текущий конец истории (для undo/redo)
 
   // Производная сцена
@@ -49,11 +50,15 @@ export interface DocumentStore {
   selectObjects:  (ids: string[], addToSelection: boolean) => void
   clearSelection: () => void
   csgBoolean:     (op: CsgBooleanOp) => Promise<void>
+  moveObject:     (id: string, transform: TransformNR) => Promise<void>
+  setColor:       (id: string, color: string) => void
+  toggleVisible:  (id: string) => void
   undo:           () => Promise<void>
   redo:           () => Promise<void>
   clearScene:     () => Promise<void>
   openDoodle:     () => Promise<void>
   saveDoodle:     () => Promise<void>
+  exportStl:      () => void
 }
 
 // ---- Вспомогательные функции сборки сцены ----
@@ -86,7 +91,7 @@ async function applyAddOp(
  * Используется для undo/redo и загрузки файла.
  */
 async function rebuildFromHistory(
-  ops: CaDoodleOperation[],
+  ops: TinkerCraftOperation[],
   currentMeta: Record<string, Pick<SceneObject, 'color' | 'shapeType' | 'params' | 'transform'>>,
 ): Promise<Record<string, SceneObject>> {
   const result = await workerRebuildScene(ops)
@@ -184,7 +189,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const stillPresent = selectedIds.filter(id => objects[id])
     if (stillPresent.length === 0) return
 
-    const op: CaDoodleOperation = { type: 'delete', ids: stillPresent }
+    const op: TinkerCraftOperation = { type: 'delete', ids: stillPresent }
     const newObjects = { ...objects }
     for (const id of stillPresent) delete newObjects[id]
 
@@ -249,14 +254,14 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       delete newObjects[idB]
       newObjects[resultId] = newObj
 
-      const histOp: CaDoodleOperation = {
+      const histOp: TinkerCraftOperation = {
         type: 'group',
         ids: [idA, idB],
         isHull: false,
         isIntersect: op === 'intersect',
         // Store extra info for rebuild
         ...({ subtractOp: op === 'subtract', resultId } as object),
-      } as CaDoodleOperation
+      } as TinkerCraftOperation
 
       const newOps = [...operations.slice(0, historyIndex), histOp]
       set({
@@ -362,5 +367,76 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const name = fileName ?? 'untitled.doodle'
     downloadBlob(blob, name.endsWith('.doodle') ? name : name + '.doodle')
     set({ modified: false })
+  },
+
+  // ── Переместить / изменить transform объекта ──
+  moveObject: async (id, transform) => {
+    const { objects, operations, historyIndex } = get()
+    const obj = objects[id]
+    if (!obj) return
+
+    set({ busy: true })
+    try {
+      const t0   = performance.now()
+      const mesh = await workerBuildShape(id, obj.shapeType, obj.params, transform)
+      const ms   = performance.now() - t0
+
+      // Добавляем move-операцию в историю
+      const delta = {
+        x: transform.x - obj.transform.x,
+        y: transform.y - obj.transform.y,
+        z: transform.z - obj.transform.z,
+      }
+      const op: TinkerCraftOperation = { type: 'move', ids: [id], delta }
+      const newOps = [...operations.slice(0, historyIndex), op]
+
+      set({
+        operations:   newOps,
+        historyIndex: newOps.length,
+        objects: {
+          ...objects,
+          [id]: { ...obj, transform, vertices: mesh.vertices, indices: mesh.indices },
+        },
+        modified:  true,
+        busy:      false,
+        lastCsgMs: ms,
+      })
+    } catch (e) {
+      set({ busy: false })
+      console.error('moveObject error:', e)
+    }
+  },
+
+  // ── Изменить цвет ──
+  setColor: (id, color) => {
+    const { objects } = get()
+    if (!objects[id]) return
+    set({ objects: { ...objects, [id]: { ...objects[id], color } }, modified: true })
+  },
+
+  // ── Показать/скрыть ──
+  toggleVisible: (id) => {
+    const { objects } = get()
+    if (!objects[id]) return
+    const op: TinkerCraftOperation = {
+      type: 'visibility',
+      ids: [id],
+      visible: !objects[id].visible,
+    }
+    const { operations, historyIndex } = get()
+    const newOps = [...operations.slice(0, historyIndex), op]
+    set({
+      operations:   newOps,
+      historyIndex: newOps.length,
+      objects: { ...objects, [id]: { ...objects[id], visible: !objects[id].visible } },
+      modified: true,
+    })
+  },
+
+  // ── Экспорт STL ──
+  exportStl: () => {
+    const { objects, fileName } = get()
+    const visible = Object.values(objects)
+    downloadStl(visible, (fileName?.replace(/\.doodle$/, '') ?? 'tinkercraft') + '.stl')
   },
 }))

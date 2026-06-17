@@ -1,6 +1,6 @@
 // ============================================================
 // STL Экспорт — бинарный формат
-// Совместим с CaDoodle Java ExportManager.java
+// Совместим с TinkerCraft Java ExportManager.java
 // ============================================================
 
 import type { SceneObject } from '../csg/types'
@@ -21,7 +21,7 @@ export function exportToStl(objects: SceneObject[]): Blob {
   const header = new Uint8Array(buf, 0, 80)
 
   // Header — ASCII текст
-  const title = 'CaDoodle Web STL Export'
+  const title = 'TinkerCraft Web STL Export'
   for (let i = 0; i < title.length && i < 80; i++) {
     header[i] = title.charCodeAt(i)
   }
@@ -76,7 +76,7 @@ export function exportToStl(objects: SceneObject[]): Blob {
   return new Blob([buf], { type: 'application/octet-stream' })
 }
 
-export function downloadStl(objects: SceneObject[], fileName = 'cadoodle-export.stl'): void {
+export function downloadStl(objects: SceneObject[], fileName = 'tinkercraft-export.stl'): void {
   const blob = exportToStl(objects)
   const url  = URL.createObjectURL(blob)
   const a    = document.createElement('a')

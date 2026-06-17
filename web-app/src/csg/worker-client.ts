@@ -51,7 +51,7 @@ function getWorker(): Worker {
     const [resolve, reject] = entry
 
     if (msg.type === 'error') {
-      reject(new Error((msg as { message: string }).message))
+      reject(new Error((msg as unknown as { message: string }).message))
     } else {
       resolve(msg)
     }

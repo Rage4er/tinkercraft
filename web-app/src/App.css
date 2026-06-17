@@ -1,5 +1,5 @@
 /* ============================================================
-   CaDoodle Web — основные стили, Фаза 0
+   TinkerCraft Web — основные стили, Фаза 0
    Тёмная тема (dark CAD), шрифт системный
    ============================================================ */
 
@@ -92,6 +92,8 @@ body {
 .btn.danger:hover { border-color: var(--accent-red); }
 .btn.primary { background: #1e3a5f; border-color: var(--accent); color: var(--accent); }
 .btn.primary:hover { background: #2a4f7f; }
+.btn.active  { background: #1e3a5f; border-color: var(--accent-mauve); color: var(--accent-mauve); box-shadow: 0 0 0 1px var(--accent-mauve); }
+.btn.active:hover { background: #2d2a4f; }
 
 .btn-icon { font-size: 16px; line-height: 1; }
 
@@ -189,6 +191,41 @@ body {
   white-space: nowrap;
 }
 
+/* ---- Object list (left panel) ---- */
+.object-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 2px 4px;
+}
+.object-list-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--text-secondary);
+  transition: background 0.1s;
+  user-select: none;
+}
+.object-list-item:hover    { background: var(--bg-hover); }
+.object-list-item.selected { background: var(--bg-selected); color: var(--text-primary); }
+.object-list-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex-shrink: 0;
+  border: 1px solid rgba(255,255,255,0.15);
+}
+.object-list-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* ---- Right panel (properties) ---- */
 .panel-right {
   width: 220px;
@@ -233,6 +270,30 @@ body {
   border: 1px solid var(--border);
   cursor: pointer;
 }
+
+.props-input {
+  width: 70px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  padding: 2px 5px;
+  text-align: right;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.props-input:focus {
+  border-color: var(--accent);
+}
+.props-input:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+/* Chrome/Safari spin buttons */
+.props-input::-webkit-inner-spin-button,
+.props-input::-webkit-outer-spin-button { opacity: 0.4; }
 
 /* ---- CSG buttons group ---- */
 .csg-group {

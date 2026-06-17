@@ -1,6 +1,10 @@
-# CaDoodle Web — Миграция Java/JavaFX → Three.js
+Вот **актуализированный README.md** с правильным разделением: где говорится об исходном проекте CaDoodle, а где — о нашем TinkerCraft:
 
-Этот репозиторий содержит материалы для портирования десктопного 3D CAD-приложения [CaDoodle](https://cadoodlecad.com) на веб-технологии (Three.js + React).
+---
+
+# TinkerCraft Web — Миграция Java/JavaFX → Three.js
+
+Этот репозиторий содержит материалы для портирования десктопного 3D CAD-приложения [CaDoodle](https://cadoodlecad.com) на веб-технологии (Three.js + React). Результат миграции — **TinkerCraft** — веб-версия с полным воспроизведением функциональности оригинала.
 
 ---
 
@@ -13,7 +17,7 @@
 │   ├── assets/             # SVG-иконки оригинального UI (нужны при разработке)
 │   └── docs/               # Скриншоты оригинального приложения
 │
-├── web-app/                # Новый веб-проект (заполняется начиная с Фазы 0)
+├── tinkercraft-web/        # Новый веб-проект (заполняется начиная с Фазы 0)
 │
 ├── MIGRATION_PLAN.md       # Подробный план миграции на русском
 ├── LICENSE
@@ -22,7 +26,7 @@
 
 ---
 
-## Что такое CaDoodle
+## Что такое CaDoodle (исходный проект)
 
 **CaDoodle** — десктопное приложение для параметрического 3D-моделирования (Java/JavaFX). Упрощённый аналог Tinkercad для образования и хобби.
 
@@ -42,11 +46,15 @@ ZIP-архив, содержащий:
 - `model.json` — история всех операций (AddShape, Move, Resize, Fillet, Mirror и т.д.)
 - `thumbnail.png` — превью проекта
 
-Совместимость формата между веб-версией и оригинальным Java-приложением — **обязательное требование**.
+Совместимость формата между веб-версией (TinkerCraft) и оригинальным Java-приложением (CaDoodle) — **обязательное требование**.
 
 ---
 
-## Целевой стек веб-версии
+## Что такое TinkerCraft (наш проект)
+
+**TinkerCraft** — веб-версия CaDoodle, разрабатываемая в рамках миграции с Java/JavaFX на современный веб-стек. Цель — полное воспроизведение UI и функциональности в браузере.
+
+### Целевой стек
 
 | Компонент | Технология |
 |---|---|
@@ -81,3 +89,25 @@ ZIP-архив, содержащий:
 - Репозиторий: [CaDoodle-Application](https://github.com/CommonWealthRobotics/CaDoodle-Application)
 - Сайт: [cadoodlecad.com](https://cadoodlecad.com)
 - Иконки: [Solar Bold Icons](https://www.svgrepo.com/collection/solar-bold-icons/)
+
+---
+
+## Быстрый старт (после настройки)
+
+```bash
+# Клонировать репозиторий
+git clone https://github.com/your-org/tinkercraft-web.git
+cd tinkercraft-web
+
+# Установить зависимости
+pnpm install
+
+# Запустить dev-сервер
+pnpm dev
+
+# Собрать production-версию
+pnpm build
+```
+
+---
+

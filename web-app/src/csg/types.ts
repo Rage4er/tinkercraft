@@ -1,14 +1,14 @@
 // ============================================================
-// Типы формата .doodle — полное соответствие Java CaDoodleFile
+// Типы формата .doodle — полное соответствие Java TinkerCraftFile
 // ============================================================
 
-export interface CaDoodleFile {
+export interface TinkerCraftFile {
   version: string
-  operations: CaDoodleOperation[]
+  operations: TinkerCraftOperation[]
   thumbnail?: string // base64 PNG
 }
 
-export type CaDoodleOperation =
+export type TinkerCraftOperation =
   | AddShapeOperation
   | MoveOperation
   | ResizeOperation

@@ -4,11 +4,15 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   resolve: {
-    dedupe: ['react', 'react-dom'],
+    // Единый экземпляр для каждого из этих пакетов во всём бандле
+    dedupe: ['react', 'react-dom', 'three'],
   },
   optimizeDeps: {
+    // manifold-3d: WASM, не трогаем esbuild-ом
+    // three/examples/jsm: намеренно НЕ включаем сюда, иначе esbuild встроит
+    // свою копию three внутрь чанка и получим два экземпляра Object3D
     exclude: ['manifold-3d'],
-    include: ['react', 'react-dom', 'zustand'],
+    include: ['react', 'react-dom', 'zustand', 'three'],
   },
   worker: {
     format: 'es',
