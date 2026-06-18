@@ -1,6 +1,5 @@
 // ============================================================
 // Worker Client — Promise-обёртка над CSG Web Worker
-// Singleton: один воркер на всё приложение.
 // ============================================================
 
 import type { CsgBooleanOp, ShapeType, ShapeParams, TransformNR } from './types'
@@ -18,8 +17,8 @@ export interface SceneMeshResult {
   ms: number
 }
 
-type PendingResolve = (value: unknown) => void
-type PendingReject  = (reason: unknown) => void
+type PendingResolve = (v: unknown) => void
+type PendingReject  = (r: unknown) => void
 
 let _worker: Worker | null = null
 let _ready = false
@@ -43,22 +42,17 @@ function getWorker(): Worker {
       _readyResolve?.()
       return
     }
-
     if (!msg.reqId) return
     const entry = _pending.get(msg.reqId)
     if (!entry) return
     _pending.delete(msg.reqId)
     const [resolve, reject] = entry
-
-    if (msg.type === 'error') {
-      reject(new Error((msg as unknown as { message: string }).message))
-    } else {
-      resolve(msg)
-    }
+    if (msg.type === 'error') reject(new Error((msg as unknown as { message: string }).message))
+    else resolve(msg)
   })
 
   _worker.addEventListener('error', (e: ErrorEvent) => {
-    console.error('[CSG Worker]', e.message)
+    console.error('[Worker]', e.message)
     for (const [, [, reject]] of _pending) reject(new Error(e.message))
     _pending.clear()
   })
@@ -75,7 +69,7 @@ function send<T>(type: string, data: Record<string, unknown>): Promise<T> {
 }
 
 async function waitReady(): Promise<void> {
-  getWorker() // ensure created
+  getWorker()
   if (_ready) return
   return _readyPromise
 }
@@ -83,23 +77,38 @@ async function waitReady(): Promise<void> {
 // ---- Public API ----
 
 export async function workerBuildShape(
-  objId: string,
-  shapeType: ShapeType,
-  params: ShapeParams,
-  transform: TransformNR,
+  objId: string, shapeType: ShapeType, params: ShapeParams, transform: TransformNR,
 ): Promise<MeshResult> {
   await waitReady()
   return send<MeshResult>('buildShape', { objId, shapeType, params, transform })
 }
 
+export async function workerApplyFillet(
+  objId: string, shapeType: ShapeType, params: ShapeParams, radius: number, transform: TransformNR,
+): Promise<MeshResult> {
+  await waitReady()
+  return send<MeshResult>('applyFillet', { objId, shapeType, params, radius, transform })
+}
+
+export async function workerBuildImportedMesh(
+  objId: string, vertices: number[], indices: number[],
+): Promise<MeshResult> {
+  await waitReady()
+  return send<MeshResult>('buildImportedMesh', { objId, vertices, indices })
+}
+
 export async function workerCsgBoolean(
-  idA: string,
-  idB: string,
-  op: CsgBooleanOp,
-  resultId: string,
+  idA: string, idB: string, op: CsgBooleanOp, resultId: string,
 ): Promise<MeshResult> {
   await waitReady()
   return send<MeshResult>('csgBoolean', { idA, idB, op, resultId })
+}
+
+export async function workerMirrorObject(
+  objId: string, plane: 'XY' | 'XZ' | 'YZ',
+): Promise<MeshResult> {
+  await waitReady()
+  return send<MeshResult>('mirrorObject', { objId, plane })
 }
 
 export async function workerRebuildScene(

@@ -5,13 +5,15 @@
 export interface TinkerCraftFile {
   version: string
   operations: TinkerCraftOperation[]
-  thumbnail?: string // base64 PNG
+  thumbnail?: string
 }
 
 export type TinkerCraftOperation =
   | AddShapeOperation
+  | ImportMeshOperation
   | MoveOperation
   | ResizeOperation
+  | ResizeDimsOperation
   | FilletOperation
   | MirrorOperation
   | AlignOperation
@@ -19,19 +21,26 @@ export type TinkerCraftOperation =
   | DeleteOperation
   | HideShowOperation
   | ColorOperation
-
-export type OperationType =
-  | 'add_shape' | 'move' | 'resize' | 'fillet'
-  | 'mirror'   | 'align' | 'group' | 'delete'
-  | 'visibility' | 'color'
+  | RenameOperation
 
 export interface AddShapeOperation {
   type: 'add_shape'
   id: string
   shapeType: ShapeType
   params: ShapeParams
-  color: string        // hex #rrggbb
+  color: string
   transform: TransformNR
+}
+
+/** Импортированный STL/OBJ меш — хранит сырые вершины в истории */
+export interface ImportMeshOperation {
+  type: 'import_mesh'
+  id: string
+  name: string
+  color: string
+  transform: TransformNR
+  vertices: number[]
+  indices: number[]
 }
 
 export interface MoveOperation {
@@ -64,6 +73,7 @@ export interface AlignOperation {
   ids: string[]
   axis: 'X' | 'Y' | 'Z'
   anchor: 'min' | 'center' | 'max'
+  deltas?: Record<string, number>
 }
 
 export interface GroupOperation {
@@ -71,13 +81,15 @@ export interface GroupOperation {
   ids: string[]
   isHull: boolean
   isIntersect: boolean
-  subtractOp?: boolean   // true если это subtract (A − B)
-  resultId?: string      // id результирующего объекта (для rebuild)
+  subtractOp?: boolean
+  resultId?: string
 }
 
-export interface DeleteOperation   { type: 'delete';     ids: string[] }
-export interface HideShowOperation { type: 'visibility'; ids: string[]; visible: boolean }
-export interface ColorOperation    { type: 'color';      ids: string[]; color: string }
+export interface ResizeDimsOperation { type: 'resize_dims'; id: string; params: ShapeParams }
+export interface RenameOperation     { type: 'rename';      id: string; name: string }
+export interface DeleteOperation     { type: 'delete';      ids: string[] }
+export interface HideShowOperation   { type: 'visibility';  ids: string[]; visible: boolean }
+export interface ColorOperation      { type: 'color';       ids: string[]; color: string }
 
 // ---- Вспомогательные типы ----
 
@@ -96,35 +108,33 @@ export type AnchorPoint =
 
 export type ShapeType =
   | 'cube' | 'sphere' | 'cylinder' | 'cone'
-  | 'torus' | 'prism' | 'pyramid'
+  | 'torus' | 'prism' | 'pyramid' | 'import_mesh'
 
 export interface ShapeParams {
-  width?:  number   // мм
-  height?: number
-  depth?:  number
-  radius?: number
-  segments?: number
+  width?:       number
+  height?:      number
+  depth?:       number
+  radius?:      number
+  segments?:    number
+  filletRadius?: number
   [key: string]: number | undefined
 }
 
-// ---- Внутреннее состояние сцены (runtime, не сохраняется) ----
-
 export interface SceneObject {
   id: string
+  name?: string
   shapeType: ShapeType
   params: ShapeParams
   color: string
   transform: TransformNR
   visible: boolean
   locked: boolean
-  // Serialized manifold mesh для рендера
   vertices: Float32Array
   indices: Uint32Array
 }
 
 export type CsgBooleanOp = 'union' | 'subtract' | 'intersect'
 
-// ---- Результаты замеров производительности (Фаза 0) ----
 export interface PerfMetrics {
   csgTimeMs: number
   triangleCount: number
