@@ -60,19 +60,15 @@ body {
 /* ---- Toolbar ---- */
 .toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 2px;
-  padding: 4px 8px;
+  gap: 2px 0;
+  padding: 2px 8px;
   background: var(--bg-panel);
   border-bottom: 1px solid var(--border);
-  height: 44px;
+  min-height: 40px;
   flex-shrink: 0;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-width: thin;
 }
-.toolbar::-webkit-scrollbar { height: 3px; }
-.toolbar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 
 .toolbar-logo {
   font-weight: 700;
@@ -82,9 +78,22 @@ body {
   letter-spacing: 0.02em;
   white-space: nowrap;
   flex-shrink: 0;
+  padding: 4px 0;
 }
 
-.toolbar-divider { width: 1px; height: 24px; background: var(--border); margin: 0 4px; flex-shrink: 0; }
+/* Each logical group of buttons — stays together as a unit */
+.toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 6px;
+  border-left: 1px solid var(--border);
+  margin-left: 2px;
+}
+.toolbar-group:first-child {
+  border-left: none;
+  margin-left: 0;
+}
 
 /* ---- Buttons ---- */
 .btn {

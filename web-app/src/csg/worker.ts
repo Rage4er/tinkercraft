@@ -18,54 +18,27 @@ const initPromise: Promise<void> = (async () => {
 // Кэш manifold-объектов по id
 const cache = new Map<string, M>();
 
+interface ShapeInfo {
+  shapeType: string;
+  params: Record<string, number>;
+  filletRadius: number;
+}
+
 // ---- Утилиты ----
 
 function buildPrimitive(shapeType: string, params: Record<string, number>): M {
   const { Manifold } = wasm;
   switch (shapeType) {
     case "cube": {
-      // FIX: Добавлена проверка на глубину (depth) для 3D куба
       let width = params.width;
       let height = params.height;
       let depth = params.depth;
       
-      // Убедиться, что все размеры заданы и положительны
       if (width === undefined || width <= 0) width = 20;
       if (height === undefined || height <= 0) height = 20;
       if (depth === undefined || depth <= 0) depth = 20;
       
-      console.log(
-        `[Worker] Building cube with dimensions: ${width} x ${height} x ${depth}`,
-      );
-      
-      // Проверка: если depth равно width (fallback), это нормально
-      const result = Manifold.cube([width, height, depth], true);
-      
-      // Диагностика: проверить, что меш не плоский
-      const mesh = result.getMesh();
-      const rawProps = Array.from(mesh.vertProperties);
-      const zCoords = rawProps.filter((_, i) => i % 3 === 2);
-      const minZ = Math.min(...zCoords);
-      const maxZ = Math.max(...zCoords);
-      const zRange = maxZ - minZ;
-      
-      console.log(
-        `[Worker] Cube mesh diagnostics: ` +
-        `numProp=${mesh.numProp}, raw.length=${mesh.vertProperties.length}, ` +
-        `vertices count=${mesh.vertProperties.length / (mesh.numProp || 3)}, ` +
-        `Z-range=[${minZ.toFixed(3)}, ${maxZ.toFixed(3)}] (${(maxZ - minZ).toFixed(3)} mm), ` +
-        `triVerts.length=${mesh.triVerts.length}`
-      );
-      
-      if (zRange < 0.1) {
-        console.error(
-          `[Worker] CRITICAL: Cube Z-range is too small! ` +
-          `Input: ${width}x${height}x${depth}, Output Z-range: ${zRange.toFixed(3)} ` +
-          `(numProp: ${mesh.numProp}, raw.length: ${mesh.vertProperties.length})`
-        );
-      }
-      
-      return result;
+      return Manifold.cube([width, height, depth], true);
     }
     case "sphere":
       return Manifold.sphere(params.radius ?? 12, params.segments ?? 32);
@@ -221,33 +194,6 @@ function extractMesh(manifold: M): {
       vertices[i * 3 + 1] = raw[i * numProp + 1];
       vertices[i * 3 + 2] = raw[i * numProp + 2];
     }
-  }
-  // FIX: Проверка наличия Z-координат и диагностика
-  const zCoords = Array.from(vertices).filter((_, i) => i % 3 === 2);
-  const minZ = Math.min(...zCoords);
-  const maxZ = Math.max(...zCoords);
-  const hasZ = zCoords.some(v => v !== 0) || (maxZ - minZ > 0.01);
-  
-  // Логирование первых 12 значений raw и vertices для сравнения
-  const rawPreview = Array.from(raw).slice(0, 12);
-  const verticesPreview = Array.from(vertices).slice(0, 12);
-  console.log(
-    "[Worker] extractMesh diagnostics: " +
-    `numProp=${numProp}, raw.length=${raw.length}, vertices.length=${vertices.length}, ` +
-    `raw[0..11]=${JSON.stringify(rawPreview)}, vertices[0..11]=${JSON.stringify(verticesPreview)}`
-  );
-  
-  if (!hasZ) {
-    console.warn(
-      "[Worker] Mesh has no Z-coordinates - object is flat! " +
-      `Z range: [${minZ.toFixed(2)}, ${maxZ.toFixed(2)}], ` +
-      `numProp: ${numProp}, raw.length: ${raw.length}`
-    );
-  } else {
-    console.log(
-      "[Worker] Mesh Z-range:", minZ.toFixed(2), "→", maxZ.toFixed(2),
-      `(${(maxZ - minZ).toFixed(2)} mm depth)`
-    );
   }
   const indices = new Uint32Array(mesh.triVerts);
   return { vertices, indices, tris: indices.length / 3 };

@@ -577,285 +577,287 @@ export default function App() {
       {/* ── TOOLBAR ── */}
       <div className="toolbar">
         <span className="toolbar-logo">⬛ TinkerCraft{titleSuffix}</span>
-        <div className="toolbar-divider" />
 
-        {/* Файл */}
-        <button
-          className="btn"
-          onClick={openDoodle}
-          title="Открыть .doodle (Ctrl+O)"
-        >
-          📂 Открыть
-        </button>
-        <button
-          className="btn"
-          onClick={saveDoodle}
-          title="Сохранить .doodle (Ctrl+S)"
-        >
-          💾 Сохранить
-        </button>
-        <button
-          className="btn"
-          onClick={exportStl}
-          disabled={objectList.length === 0}
-          title="Экспорт STL"
-        >
-          📐 STL
-        </button>
-        <button
-          className="btn"
-          onClick={importStl}
-          disabled={busy}
-          title="Импорт STL"
-        >
-          📥 Импорт
-        </button>
-        <button
-          className="btn"
-          onClick={() => setShowPM(true)}
-          title="Менеджер проектов"
-        >
-          📁 Проекты
-        </button>
+        <div className="toolbar-group">
+          {/* Файл */}
+          <button
+            className="btn"
+            onClick={openDoodle}
+            title="Открыть .doodle (Ctrl+O)"
+          >
+            📂 Открыть
+          </button>
+          <button
+            className="btn"
+            onClick={saveDoodle}
+            title="Сохранить .doodle (Ctrl+S)"
+          >
+            💾 Сохранить
+          </button>
+          <button
+            className="btn"
+            onClick={exportStl}
+            disabled={objectList.length === 0}
+            title="Экспорт STL"
+          >
+            📐 STL
+          </button>
+          <button
+            className="btn"
+            onClick={importStl}
+            disabled={busy}
+            title="Импорт STL"
+          >
+            📥 Импорт
+          </button>
+          <button
+            className="btn"
+            onClick={() => setShowPM(true)}
+            title="Менеджер проектов"
+          >
+            📁 Проекты
+          </button>
+        </div>
 
-        <div className="toolbar-divider" />
+        <div className="toolbar-group">
+          {/* Undo/Redo */}
+          <button
+            className="btn"
+            onClick={undo}
+            disabled={!canUndo || busy}
+            title="Отменить (Ctrl+Z)"
+          >
+            ↩ Undo
+          </button>
+          <button
+            className="btn"
+            onClick={redo}
+            disabled={!canRedo || busy}
+            title="Повторить (Ctrl+Y)"
+          >
+            ↪ Redo
+          </button>
+        </div>
 
-        {/* Undo/Redo */}
-        <button
-          className="btn"
-          onClick={undo}
-          disabled={!canUndo || busy}
-          title="Отменить (Ctrl+Z)"
-        >
-          ↩ Undo
-        </button>
-        <button
-          className="btn"
-          onClick={redo}
-          disabled={!canRedo || busy}
-          title="Повторить (Ctrl+Y)"
-        >
-          ↪ Redo
-        </button>
+        <div className="toolbar-group">
+          {/* Copy/Paste */}
+          <button
+            className="btn"
+            onClick={copySelected}
+            disabled={selectedIds.length === 0}
+            title="Копировать (Ctrl+C)"
+          >
+            ⧉ Copy
+          </button>
+          <button
+            className="btn"
+            onClick={pasteClipboard}
+            disabled={!hasCopied || busy}
+            title="Вставить (Ctrl+V)"
+          >
+            📋 Paste
+          </button>
+          <button
+            className="btn"
+            onClick={deleteSelected}
+            disabled={selectedIds.length === 0 || busy}
+            title="Удалить (Del)"
+          >
+            🗑 Del
+          </button>
+        </div>
 
-        <div className="toolbar-divider" />
+        <div className="toolbar-group">
+          {/* Вид */}
+          <button
+            className="btn"
+            onClick={() => fitViewRef.current?.()}
+            title="Fit view (F)"
+          >
+            🔍 Fit
+          </button>
+          <button
+            className="btn"
+            onClick={() => resetViewRef.current?.()}
+            title="Сброс вида (H)"
+          >
+            🏠 Home
+          </button>
+        </div>
 
-        {/* Copy/Paste */}
-        <button
-          className="btn"
-          onClick={copySelected}
-          disabled={selectedIds.length === 0}
-          title="Копировать (Ctrl+C)"
-        >
-          ⧉ Copy
-        </button>
-        <button
-          className="btn"
-          onClick={pasteClipboard}
-          disabled={!hasCopied || busy}
-          title="Вставить (Ctrl+V)"
-        >
-          📋 Paste
-        </button>
-        <button
-          className="btn"
-          onClick={deleteSelected}
-          disabled={selectedIds.length === 0 || busy}
-          title="Удалить (Del)"
-        >
-          🗑 Del
-        </button>
+        <div className="toolbar-group">
+          {/* Гизмо */}
+          <button
+            className={`btn${gizmoMode === "translate" ? " active" : ""}`}
+            disabled={selectedIds.length === 0}
+            onClick={() =>
+              setGizmoMode((m) => (m === "translate" ? null : "translate"))
+            }
+            title="Переместить (G)"
+          >
+            ⤢ Move
+          </button>
+          <button
+            className={`btn${gizmoMode === "rotate" ? " active" : ""}`}
+            disabled={selectedIds.length === 0}
+            onClick={() =>
+              setGizmoMode((m) => (m === "rotate" ? null : "rotate"))
+            }
+            title="Повернуть (R)"
+          >
+            ↻ Rotate
+          </button>
+          <button
+            className={`btn${gizmoMode === "scale" ? " active" : ""}`}
+            disabled={selectedIds.length === 0}
+            onClick={() => setGizmoMode((m) => (m === "scale" ? null : "scale"))}
+            title="Масштаб (S)"
+          >
+            ⤡ Scale
+          </button>
+          {gizmoMode !== null && (
+            <button
+              className="btn danger"
+              onClick={() => setGizmoMode(null)}
+              title="Выйти (Esc)"
+            >
+              ✕
+            </button>
+          )}
+        </div>
 
-        <div className="toolbar-divider" />
+        <div className="toolbar-group">
+          {/* Линейка */}
+          <button
+            className={`btn${rulerActive ? " active" : ""}`}
+            onClick={() => {
+              setRulerActive((r) => !r);
+              setRulerDist(null);
+            }}
+            title="Линейка — 2 клика для измерения расстояния"
+          >
+            📏 Линейка
+          </button>
+        </div>
 
-        {/* Вид */}
-        <button
-          className="btn"
-          onClick={() => fitViewRef.current?.()}
-          title="Fit view (F)"
-        >
-          🔍 Fit
-        </button>
-        <button
-          className="btn"
-          onClick={() => resetViewRef.current?.()}
-          title="Сброс вида (H)"
-        >
-          🏠 Home
-        </button>
+        <div className="toolbar-group">
+          {/* Зеркало */}
+          <button
+            className="btn"
+            disabled={!canMirror}
+            onClick={() => mirrorSelected("YZ")}
+            title="Зеркало YZ"
+          >
+            ⟺YZ
+          </button>
+          <button
+            className="btn"
+            disabled={!canMirror}
+            onClick={() => mirrorSelected("XZ")}
+            title="Зеркало XZ"
+          >
+            ⟺XZ
+          </button>
+          <button
+            className="btn"
+            disabled={!canMirror}
+            onClick={() => mirrorSelected("XY")}
+            title="Зеркало XY"
+          >
+            ⟺XY
+          </button>
+        </div>
 
-        <div className="toolbar-divider" />
+        <div className="toolbar-group">
+          {/* Выравнивание */}
+          <button
+            className="btn"
+            disabled={!canAlign}
+            onClick={() => alignSelected("X", "min")}
+            title="◧X"
+          >
+            ◧X
+          </button>
+          <button
+            className="btn"
+            disabled={!canAlign}
+            onClick={() => alignSelected("X", "center")}
+            title="⊡X"
+          >
+            ⊡X
+          </button>
+          <button
+            className="btn"
+            disabled={!canAlign}
+            onClick={() => alignSelected("X", "max")}
+            title="◨X"
+          >
+            ◨X
+          </button>
+          <button
+            className="btn"
+            disabled={!canAlign}
+            onClick={() => alignSelected("Y", "center")}
+            title="⊡Y"
+          >
+            ⊡Y
+          </button>
+          <button
+            className="btn"
+            disabled={!canAlign}
+            onClick={() => alignSelected("Z", "center")}
+            title="⊡Z"
+          >
+            ⊡Z
+          </button>
+        </div>
 
-        {/* Гизмо */}
-        <button
-          className={`btn${gizmoMode === "translate" ? " active" : ""}`}
-          disabled={selectedIds.length === 0}
-          onClick={() =>
-            setGizmoMode((m) => (m === "translate" ? null : "translate"))
-          }
-          title="Переместить (G)"
-        >
-          ⤢ Move
-        </button>
-        <button
-          className={`btn${gizmoMode === "rotate" ? " active" : ""}`}
-          disabled={selectedIds.length === 0}
-          onClick={() =>
-            setGizmoMode((m) => (m === "rotate" ? null : "rotate"))
-          }
-          title="Повернуть (R)"
-        >
-          ↻ Rotate
-        </button>
-        <button
-          className={`btn${gizmoMode === "scale" ? " active" : ""}`}
-          disabled={selectedIds.length === 0}
-          onClick={() => setGizmoMode((m) => (m === "scale" ? null : "scale"))}
-          title="Масштаб (S)"
-        >
-          ⤡ Scale
-        </button>
-        {gizmoMode !== null && (
+        <div className="toolbar-group">
+          {/* CSG */}
+          <button
+            className="btn primary"
+            disabled={!canCsg}
+            onClick={() => csgBoolean("union")}
+          >
+            ∪
+          </button>
+          <button
+            className="btn primary"
+            disabled={!canCsg}
+            onClick={() => csgBoolean("subtract")}
+          >
+            −
+          </button>
+          <button
+            className="btn primary"
+            disabled={!canCsg}
+            onClick={() => csgBoolean("intersect")}
+          >
+            ∩
+          </button>
+        </div>
+
+        <div className="toolbar-group">
+          {/* Тема */}
+          <button
+            className="btn"
+            onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
+            title="Сменить тему"
+          >
+            {theme === "dark" ? "☀ Light" : "🌙 Dark"}
+          </button>
+        </div>
+
+        <div className="toolbar-group">
           <button
             className="btn danger"
-            onClick={() => setGizmoMode(null)}
-            title="Выйти (Esc)"
+            onClick={clearScene}
+            disabled={busy}
+            title="Очистить сцену"
           >
-            ✕
+            ✖ Clear
           </button>
-        )}
-
-        <div className="toolbar-divider" />
-
-        {/* Линейка */}
-        <button
-          className={`btn${rulerActive ? " active" : ""}`}
-          onClick={() => {
-            setRulerActive((r) => !r);
-            setRulerDist(null);
-          }}
-          title="Линейка — 2 клика для измерения расстояния"
-        >
-          📏 Линейка
-        </button>
-
-        <div className="toolbar-divider" />
-
-        {/* Зеркало */}
-        <button
-          className="btn"
-          disabled={!canMirror}
-          onClick={() => mirrorSelected("YZ")}
-          title="Зеркало YZ"
-        >
-          ⟺YZ
-        </button>
-        <button
-          className="btn"
-          disabled={!canMirror}
-          onClick={() => mirrorSelected("XZ")}
-          title="Зеркало XZ"
-        >
-          ⟺XZ
-        </button>
-        <button
-          className="btn"
-          disabled={!canMirror}
-          onClick={() => mirrorSelected("XY")}
-          title="Зеркало XY"
-        >
-          ⟺XY
-        </button>
-
-        <div className="toolbar-divider" />
-
-        {/* Выравнивание */}
-        <button
-          className="btn"
-          disabled={!canAlign}
-          onClick={() => alignSelected("X", "min")}
-          title="◧X"
-        >
-          ◧X
-        </button>
-        <button
-          className="btn"
-          disabled={!canAlign}
-          onClick={() => alignSelected("X", "center")}
-          title="⊡X"
-        >
-          ⊡X
-        </button>
-        <button
-          className="btn"
-          disabled={!canAlign}
-          onClick={() => alignSelected("X", "max")}
-          title="◨X"
-        >
-          ◨X
-        </button>
-        <button
-          className="btn"
-          disabled={!canAlign}
-          onClick={() => alignSelected("Y", "center")}
-          title="⊡Y"
-        >
-          ⊡Y
-        </button>
-        <button
-          className="btn"
-          disabled={!canAlign}
-          onClick={() => alignSelected("Z", "center")}
-          title="⊡Z"
-        >
-          ⊡Z
-        </button>
-
-        <div className="toolbar-divider" />
-
-        {/* CSG */}
-        <button
-          className="btn primary"
-          disabled={!canCsg}
-          onClick={() => csgBoolean("union")}
-        >
-          ∪
-        </button>
-        <button
-          className="btn primary"
-          disabled={!canCsg}
-          onClick={() => csgBoolean("subtract")}
-        >
-          −
-        </button>
-        <button
-          className="btn primary"
-          disabled={!canCsg}
-          onClick={() => csgBoolean("intersect")}
-        >
-          ∩
-        </button>
-
-        <div className="toolbar-divider" />
-
-        {/* Тема */}
-        <button
-          className="btn"
-          onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
-          title="Сменить тему"
-        >
-          {theme === "dark" ? "☀ Light" : "🌙 Dark"}
-        </button>
-
-        <button
-          className="btn danger"
-          onClick={clearScene}
-          disabled={busy}
-          title="Очистить сцену"
-          style={{ marginLeft: "auto" }}
-        >
-          ✖ Clear
-        </button>
+        </div>
       </div>
 
       {/* ── MAIN ── */}
