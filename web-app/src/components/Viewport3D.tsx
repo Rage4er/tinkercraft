@@ -190,13 +190,19 @@ export default function Viewport3D({
       const id = obj.userData.objectId as string;
       const pos = obj.position;
       const rot = obj.rotation;
+      const scl = obj.scale;
       const snap = snapValueRef.current;
       const sx = snap > 0 ? Math.round(pos.x / snap) * snap : pos.x;
       const sy = snap > 0 ? Math.round(pos.y / snap) * snap : pos.y;
       const sz = snap > 0 ? Math.round(pos.z / snap) * snap : pos.z;
-      const entry = meshMapRef.current.get(id);
-      if (!entry) return;
-      const mesh = entry.mesh;
+      // Convert Three.js radians → degrees for the store
+      const rx = THREE.MathUtils.radToDeg(rot.x);
+      const ry = THREE.MathUtils.radToDeg(rot.y);
+      const rz = THREE.MathUtils.radToDeg(rot.z);
+      onTransformEnd(id, {
+        x: sx, y: sy, z: sz,
+        rotX: rx, rotY: ry, rotZ: rz,
+      });
     });
     scene.add((tc as unknown as { getHelper(): THREE.Object3D }).getHelper());
     transformCtRef.current = tc;
