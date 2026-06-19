@@ -556,7 +556,7 @@ export default function Viewport3D({
           );
           existing.mesh.geometry.computeVertexNormals();
           existing.mesh.geometry.attributes.position.needsUpdate = true;
-          existing.mesh.geometry.attributes.index.needsUpdate = true;
+          if (existing.mesh.geometry.index) existing.mesh.geometry.index.needsUpdate = true;
           existing.mesh.geometry.computeBoundingBox();
           existing.mesh.geometry.computeBoundingSphere();
         }
