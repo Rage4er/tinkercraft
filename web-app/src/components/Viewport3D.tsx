@@ -77,7 +77,7 @@ export default function Viewport3D({
   const controlsRef = useRef<OrbitControls | null>(null);
   const transformCtRef = useRef<TransformControls | null>(null);
   const meshMapRef = useRef<
-    Map<string, { mesh: THREE.Mesh; helper?: THREE.BoxHelper }>
+    Map<string, { mesh: THREE.Mesh }>
   >(new Map());
   const rulerLineRef = useRef<THREE.Line | null>(null);
   const rulerMarkersRef = useRef<THREE.Mesh[]>([]);
@@ -95,6 +95,11 @@ export default function Viewport3D({
   useEffect(() => {
     snapValueRef.current = snapValue;
   }, [snapValue]);
+
+  const selectedIdsRef = useRef(selectedIds);
+  useEffect(() => {
+    selectedIdsRef.current = selectedIds;
+  }, [selectedIds]);
 
   const pointerDownPos = useRef<{ x: number; y: number } | null>(null);
   const isDraggingRef = useRef(false);
@@ -192,10 +197,6 @@ export default function Viewport3D({
       const entry = meshMapRef.current.get(id);
       if (!entry) return;
       const mesh = entry.mesh;
-      const helper = new THREE.BoxHelper(mesh);
-      helper.material.color.set(0xffff00);
-      meshMapRef.current.set(id, { mesh, helper });
-      scene.add(helper);
     });
     scene.add((tc as unknown as { getHelper(): THREE.Object3D }).getHelper());
     transformCtRef.current = tc;
@@ -239,28 +240,16 @@ export default function Viewport3D({
         fpsRef.current = { last: now, frames: 0 };
       }
 
-      // ---- Update BoxHelpers for debugging ----
-      // Remove helpers for deselected objects
-      for (const id of Array.from(meshMapRef.current.keys())) {
-        if (!selectedIds.has(id)) {
-          const entry = meshMapRef.current.get(id);
-          const helper = entry?.helper;
-          if (helper) {
-            scene.remove(helper);
-            meshMapRef.current.set(id, { mesh: entry.mesh });
-          }
-        }
-      }
-      // Add/replace helpers for selected objects
-      for (const id of [...selectedIds]) {
-        const entry = meshMapRef.current.get(id);
-        if (!entry) continue;
-        // Ensure mesh is in the map
-        if (!meshMapRef.current.has(id)) {
-          const helper = new THREE.BoxHelper(entry.mesh);
-          helper.material.color.set(0xffff00);
-          scene.add(helper);
-          meshMapRef.current.set(id, { mesh: entry.mesh, helper });
+      // ---- Подсветка выбранных объектов (emissive) ----
+      const sel = selectedIdsRef.current;
+      for (const [id, entry] of meshMapRef.current) {
+        const mat = entry.mesh.material as THREE.MeshStandardMaterial;
+        if (sel.has(id)) {
+          mat.emissive.setHex(0x444466);
+          mat.emissiveIntensity = 0.5;
+        } else {
+          mat.emissive.setHex(0x000000);
+          mat.emissiveIntensity = 0;
         }
       }
     };
@@ -490,13 +479,12 @@ export default function Viewport3D({
 
   const handlePointerMove = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
-      if (!rulerMode || !pointerDownPos.current) return;
-
+      if (!pointerDownPos.current) return;
       const dx = e.clientX - pointerDownPos.current.x;
       const dy = e.clientY - pointerDownPos.current.y;
       if (Math.hypot(dx, dy) > 4) isDraggingRef.current = true;
     },
-    [rulerMode],
+    [],
   );
 
   const handlePointerUp = useCallback(
@@ -504,8 +492,44 @@ export default function Viewport3D({
       const start = pointerDownPos.current;
       pointerDownPos.current = null;
 
-      if (!start || !isDraggingRef.current) return;
+      if (!start) return;
 
+      // Если это был клик (не drag) — выбираем объект через Raycaster
+      if (!isDraggingRef.current) {
+        if (rulerMode) {
+          const point = getWorldPointFromPointer(e);
+          if (point && rulerPointsRef.current.length === 1) {
+            rulerPointsRef.current = [rulerPointsRef.current[0], point];
+            updateRulerVisuals(rulerPointsRef.current);
+            onRulerMeasure?.(rulerPointsRef.current[0].distanceTo(point));
+          }
+        } else {
+          // Raycaster для выбора объекта
+          const camera = cameraRef.current;
+          const container = containerRef.current;
+          if (camera && container) {
+            const rect = container.getBoundingClientRect();
+            const x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+            const y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+            const raycaster = new THREE.Raycaster();
+            raycaster.setFromCamera(new THREE.Vector2(x, y), camera);
+            const meshes: THREE.Mesh[] = [];
+            for (const entry of meshMapRef.current.values()) {
+              if (entry.mesh.visible) meshes.push(entry.mesh);
+            }
+            const hits = raycaster.intersectObjects(meshes, false);
+            if (hits.length > 0) {
+              const id = hits[0].object.userData.objectId as string;
+              onSelect(id, e.shiftKey);
+            } else {
+              onSelect(null, false);
+            }
+          }
+        }
+        return;
+      }
+
+      // Если это был drag (выделение рамкой)
       if (rulerMode) {
         const point = getWorldPointFromPointer(e);
         if (point && rulerPointsRef.current.length === 1) {
@@ -515,7 +539,7 @@ export default function Viewport3D({
         }
       }
     },
-    [getWorldPointFromPointer, onRulerMeasure, rulerMode, updateRulerVisuals],
+    [getWorldPointFromPointer, onRulerMeasure, onSelect, rulerMode, updateRulerVisuals],
   );
 
   // ---- Sync objects → Three.js meshes ----
@@ -529,7 +553,6 @@ export default function Viewport3D({
     for (const [id, entry] of map) {
       if (!currentIds.has(id)) {
         scene.remove(entry.mesh);
-        if (entry.helper) scene.remove(entry.helper);
         entry.mesh.geometry.dispose();
         (entry.mesh.material as THREE.Material).dispose();
         map.delete(id);
