@@ -219,9 +219,10 @@ export default function Viewport3D({
         .object;
       if (!obj) return;
       const id = obj.userData.objectId as string;
-      // obj is the pivot (container), so position/rotation are in world space
+      // obj is the pivot (container), so position/rotation/scale are in world space
       const pos = obj.position;
       const rot = obj.rotation;
+      const scl = obj.scale;
       const snap = snapValueRef.current;
       // Snap position
       const sx = snap > 0 ? Math.round(pos.x / snap) * snap : pos.x;
@@ -240,6 +241,9 @@ export default function Viewport3D({
         rotX: rx,
         rotY: ry,
         rotZ: rz,
+        scaleX: scl.x,
+        scaleY: scl.y,
+        scaleZ: scl.z,
       });
     });
     scene.add((tc as unknown as { getHelper(): THREE.Object3D }).getHelper());
@@ -651,8 +655,8 @@ export default function Viewport3D({
         }
 
         // Sync transform from store to pivot
-        // Worker now applies ONLY translation to geometry (no baked rotation).
-        // So we ALWAYS sync both position and rotation from store to pivot.
+        // Worker applies ONLY translation to geometry (no baked rotation/scale).
+        // So we ALWAYS sync position, rotation, and scale from store to pivot.
         const t = obj.transform;
         const pivotPos = existing.pivot.position;
         const eps = 0.01;
@@ -674,6 +678,14 @@ export default function Viewport3D({
             THREE.MathUtils.degToRad(t.rotY),
             THREE.MathUtils.degToRad(t.rotZ),
           );
+        }
+        const pivotScl = existing.pivot.scale;
+        if (
+          Math.abs(pivotScl.x - t.scaleX) > 0.001 ||
+          Math.abs(pivotScl.y - t.scaleY) > 0.001 ||
+          Math.abs(pivotScl.z - t.scaleZ) > 0.001
+        ) {
+          existing.pivot.scale.set(t.scaleX, t.scaleY, t.scaleZ);
         }
 
         // Update visibility
@@ -704,7 +716,7 @@ export default function Viewport3D({
         rawMesh.receiveShadow = true;
         rawMesh.userData.objectId = obj.id;
         // Центрируем геометрию и получаем pivot‑объект
-        // Worker применяет только translation к геометрии (rotation не запекается).
+        // Worker применяет только translation к геометрии (rotation/scale не запекаются).
         // Pivot.position = (0,0,0) после centerGeometry — применяем transform из store.
         const pivot = centerGeometry(rawMesh, obj.id);
         pivot.position.set(obj.transform.x, obj.transform.y, obj.transform.z);
@@ -713,6 +725,7 @@ export default function Viewport3D({
           THREE.MathUtils.degToRad(obj.transform.rotY),
           THREE.MathUtils.degToRad(obj.transform.rotZ),
         );
+        pivot.scale.set(obj.transform.scaleX, obj.transform.scaleY, obj.transform.scaleZ);
         scene.add(pivot);
         map.set(obj.id, { mesh: rawMesh, pivot });
       }

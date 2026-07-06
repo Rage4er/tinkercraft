@@ -48,6 +48,7 @@ export interface MoveOperation {
   ids: string[]
   delta: Vec3
   rotDelta?: Vec3
+  scaleDelta?: Vec3
 }
 
 export interface ResizeOperation {
@@ -99,6 +100,7 @@ export interface Vec3 { x: number; y: number; z: number }
 export interface TransformNR {
   x: number; y: number; z: number
   rotX: number; rotY: number; rotZ: number
+  scaleX: number; scaleY: number; scaleZ: number
 }
 
 export type AnchorPoint =

@@ -123,6 +123,7 @@ async function rebuildFromHistory(ops: TinkerCraftOperation[]): Promise<Record<s
     } else if (op.type === 'move') {
       const d: Vec3 = op.delta
       const rd = (op as { rotDelta?: Vec3 }).rotDelta
+      const sd = (op as { scaleDelta?: Vec3 }).scaleDelta
       for (const id of op.ids) {
         const t = transforms[id]
         if (t && meta[id]) {
@@ -132,6 +133,9 @@ async function rebuildFromHistory(ops: TinkerCraftOperation[]): Promise<Record<s
             rotX: t.rotX + (rd?.x ?? 0),
             rotY: t.rotY + (rd?.y ?? 0),
             rotZ: t.rotZ + (rd?.z ?? 0),
+            scaleX: t.scaleX + (sd?.x ?? 0),
+            scaleY: t.scaleY + (sd?.y ?? 0),
+            scaleZ: t.scaleZ + (sd?.z ?? 0),
           }
           transforms[id] = nt
           meta[id] = { ...meta[id], transform: nt }
@@ -177,7 +181,7 @@ async function rebuildFromHistory(ops: TinkerCraftOperation[]): Promise<Record<s
       const srcColor = op.ids[0] ? meta[op.ids[0]]?.color ?? '#89b4fa' : '#89b4fa'
       for (const id of op.ids) { delete meta[id]; delete transforms[id] }
       if (op.resultId) {
-        const nullT: TransformNR = { x:0,y:0,z:0,rotX:0,rotY:0,rotZ:0 }
+        const nullT: TransformNR = { x:0,y:0,z:0,rotX:0,rotY:0,rotZ:0,scaleX:1,scaleY:1,scaleZ:1 }
         meta[op.resultId]       = { color: srcColor, shapeType: 'cube', params: {}, transform: nullT }
         transforms[op.resultId] = nullT
       }
@@ -192,7 +196,7 @@ async function rebuildFromHistory(ops: TinkerCraftOperation[]): Promise<Record<s
       shapeType: info?.shapeType ?? 'cube',
       params:    info?.params    ?? {},
       color:     info?.color     ?? '#89b4fa',
-      transform: info?.transform ?? { x:0,y:0,z:0,rotX:0,rotY:0,rotZ:0 },
+      transform: info?.transform ?? { x:0,y:0,z:0,rotX:0,rotY:0,rotZ:0,scaleX:1,scaleY:1,scaleZ:1 },
       visible:   true,
       locked:    false,
       vertices:  m.vertices,
@@ -221,7 +225,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const { objects, operations, historyIndex } = get()
     const idx = Object.keys(objects).length
     const id  = nextId('obj')
-    const transform: TransformNR = { x: idx * 25, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0 }
+    const transform: TransformNR = { x: idx * 25, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
     const color = colorForIndex(idx)
     const defaultParams: ShapeParams = shapeType === 'sphere' || shapeType === 'cone'
       ? { radius: 12, height: 24 }
@@ -375,7 +379,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const t0   = performance.now()
       const mesh = await workerCsgBoolean(idA, idB, op, resultId)
       const ms   = performance.now() - t0
-      const newObj: SceneObject = { id: resultId, shapeType: 'cube', params: {}, color: objects[idA].color, transform: { x:0,y:0,z:0,rotX:0,rotY:0,rotZ:0 }, visible: true, locked: false, vertices: mesh.vertices, indices: mesh.indices }
+      const newObj: SceneObject = { id: resultId, shapeType: 'cube', params: {}, color: objects[idA].color, transform: { x:0,y:0,z:0,rotX:0,rotY:0,rotZ:0,scaleX:1,scaleY:1,scaleZ:1 }, visible: true, locked: false, vertices: mesh.vertices, indices: mesh.indices }
       const newObjects = { ...objects }; delete newObjects[idA]; delete newObjects[idB]; newObjects[resultId] = newObj
       const histOp: TinkerCraftOperation = { type: 'group', ids: [idA, idB], isHull: false, isIntersect: op === 'intersect', subtractOp: op === 'subtract', resultId } as TinkerCraftOperation
       const newOps = [...operations.slice(0, historyIndex), histOp]
@@ -390,7 +394,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     if (!obj) return
     const delta: Vec3 = { x: transform.x - obj.transform.x, y: transform.y - obj.transform.y, z: transform.z - obj.transform.z }
     const rotDelta: Vec3 = { x: transform.rotX - obj.transform.rotX, y: transform.rotY - obj.transform.rotY, z: transform.rotZ - obj.transform.rotZ }
-    const op: TinkerCraftOperation = { type: 'move', ids: [id], delta, rotDelta }
+    const scaleDelta: Vec3 = { x: transform.scaleX - obj.transform.scaleX, y: transform.scaleY - obj.transform.scaleY, z: transform.scaleZ - obj.transform.scaleZ }
+    const op: TinkerCraftOperation = { type: 'move', ids: [id], delta, rotDelta, scaleDelta }
     const newOps = [...operations.slice(0, historyIndex), op]
     set({ operations: newOps, historyIndex: newOps.length, objects: { ...objects, [id]: { ...obj, transform } }, modified: true })
   },
@@ -602,12 +607,12 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     set({ busy: true })
     try {
       const t0 = performance.now()
-      const slabT: TransformNR = { x: slabX, y: slabY, z: slabZ, rotX: 0, rotY: 0, rotZ: 0 }
+      const slabT: TransformNR = { x: slabX, y: slabY, z: slabZ, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
       const slabP: ShapeParams = { width: slabW, height: slabH, depth: slabD }
       await workerBuildShape(slabId, 'cube', slabP, slabT)
       const resultMesh = await workerCsgBoolean(id, slabId, 'union', resultId)
       const ms = performance.now() - t0
-      const newObj: SceneObject = { id: resultId, shapeType: 'cube', params: {}, color: obj.color, transform: { x:0,y:0,z:0,rotX:0,rotY:0,rotZ:0 }, visible: true, locked: false, vertices: resultMesh.vertices, indices: resultMesh.indices }
+      const newObj: SceneObject = { id: resultId, shapeType: 'cube', params: {}, color: obj.color, transform: { x:0,y:0,z:0,rotX:0,rotY:0,rotZ:0,scaleX:1,scaleY:1,scaleZ:1 }, visible: true, locked: false, vertices: resultMesh.vertices, indices: resultMesh.indices }
       const addOp: AddShapeOperation = { type: 'add_shape', id: slabId, shapeType: 'cube', params: slabP, color: obj.color, transform: slabT }
       const grpOp: TinkerCraftOperation = { type: 'group', ids: [id, slabId], isHull: false, isIntersect: false, resultId } as TinkerCraftOperation
       const newObjects = { ...objects }; delete newObjects[id]; newObjects[resultId] = newObj
