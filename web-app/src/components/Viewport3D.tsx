@@ -1,4 +1,10 @@
-import { useLayoutEffect, useEffect, useRef, useCallback, useState } from "react";
+import {
+  useLayoutEffect,
+  useEffect,
+  useRef,
+  useCallback,
+  useState,
+} from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { TransformControls } from "three/examples/jsm/controls/TransformControls.js";
@@ -45,6 +51,24 @@ function checkWebGL(): boolean {
   }
 }
 
+// Центрирует геометрию меша и возвращает контейнер (pivot), в котором находится сам меш
+function centerGeometry(mesh: THREE.Mesh, objectId: string): THREE.Object3D {
+  mesh.geometry.computeBoundingBox();
+  const box = mesh.geometry.boundingBox!;
+  const center = new THREE.Vector3();
+  box.getCenter(center);
+
+  // Смещаем геометрию так, чтобы её центр оказался в (0,0,0)
+  mesh.geometry.translate(-center.x, -center.y, -center.z);
+
+  // Создаём контейнер‑объект, в котором будет находиться сам меш
+  const container = new THREE.Object3D();
+  container.position.copy(center); // возвращаем центр в исходную позицию
+  container.userData.objectId = objectId; // важно для TransformControls
+  container.add(mesh);
+  return container;
+}
+
 export default function Viewport3D({
   objects,
   selectedIds,
@@ -70,20 +94,24 @@ export default function Viewport3D({
   const [dragRect, setDragRect] = useState<DragRect | null>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
-  const initRanRef = useRef(false);
+  const initRanRef = useRef(false); // <-- added to track initialization
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const controlsRef = useRef<OrbitControls | null>(null);
   const transformCtRef = useRef<TransformControls | null>(null);
   const meshMapRef = useRef<
-    Map<string, { mesh: THREE.Mesh }>
+    Map<
+      string,
+      { mesh: THREE.Mesh; pivot: THREE.Object3D; helper?: THREE.BoxHelper }
+    >
   >(new Map());
   const rulerLineRef = useRef<THREE.Line | null>(null);
   const rulerMarkersRef = useRef<THREE.Mesh[]>([]);
   const rulerPointsRef = useRef<THREE.Vector3[]>([]);
   const rafRef = useRef<number | null>(null);
   const fpsRef = useRef({ last: performance.now(), frames: 0 });
+  const currentMeshRef = useRef<THREE.Object3D | null>(null);
 
   const fitTargetRef = useRef<FitTarget | null>(null);
   const onTransformEndRef = useRef(onTransformEnd);
@@ -103,7 +131,6 @@ export default function Viewport3D({
 
   const pointerDownPos = useRef<{ x: number; y: number } | null>(null);
   const isDraggingRef = useRef(false);
-
 
   // ---- Init Three.js ----
   useLayoutEffect(() => {
@@ -180,6 +207,7 @@ export default function Viewport3D({
 
     const tc = new TransformControls(camera, renderer.domElement);
     tc.setSize(0.8);
+    tc.setSpace("local"); // Use local space so gizmo moves relative to object's own axes
     tc.addEventListener("dragging-changed", (e: { value: unknown }) => {
       controls.enabled = !e.value;
     });
@@ -188,20 +216,27 @@ export default function Viewport3D({
         .object;
       if (!obj) return;
       const id = obj.userData.objectId as string;
+      // obj is the pivot (container), so position/rotation are in world space
       const pos = obj.position;
       const rot = obj.rotation;
-      const scl = obj.scale;
       const snap = snapValueRef.current;
+      // Snap position
       const sx = snap > 0 ? Math.round(pos.x / snap) * snap : pos.x;
       const sy = snap > 0 ? Math.round(pos.y / snap) * snap : pos.y;
       const sz = snap > 0 ? Math.round(pos.z / snap) * snap : pos.z;
+      // Apply snap directly to pivot so there's no visual jump
+      if (snap > 0) obj.position.set(sx, sy, sz);
       // Convert Three.js radians → degrees for the store
       const rx = THREE.MathUtils.radToDeg(rot.x);
       const ry = THREE.MathUtils.radToDeg(rot.y);
       const rz = THREE.MathUtils.radToDeg(rot.z);
       onTransformEnd(id, {
-        x: sx, y: sy, z: sz,
-        rotX: rx, rotY: ry, rotZ: rz,
+        x: sx,
+        y: sy,
+        z: sz,
+        rotX: rx,
+        rotY: ry,
+        rotZ: rz,
       });
     });
     scene.add((tc as unknown as { getHelper(): THREE.Object3D }).getHelper());
@@ -294,7 +329,7 @@ export default function Viewport3D({
       return;
     }
     tc.setMode(gizmoMode);
-    tc.attach(entry.mesh);
+    tc.attach(entry.pivot);
   }, [gizmoMode, selectedIds]);
 
   // ---- FitView ----
@@ -545,7 +580,13 @@ export default function Viewport3D({
         }
       }
     },
-    [getWorldPointFromPointer, onRulerMeasure, onSelect, rulerMode, updateRulerVisuals],
+    [
+      getWorldPointFromPointer,
+      onRulerMeasure,
+      onSelect,
+      rulerMode,
+      updateRulerVisuals,
+    ],
   );
 
   // ---- Sync objects → Three.js meshes ----
@@ -558,7 +599,7 @@ export default function Viewport3D({
     // Remove meshes that no longer exist
     for (const [id, entry] of map) {
       if (!currentIds.has(id)) {
-        scene.remove(entry.mesh);
+        scene.remove(entry.pivot);
         entry.mesh.geometry.dispose();
         (entry.mesh.material as THREE.Material).dispose();
         map.delete(id);
@@ -585,10 +626,39 @@ export default function Viewport3D({
           );
           existing.mesh.geometry.computeVertexNormals();
           existing.mesh.geometry.attributes.position.needsUpdate = true;
-          if (existing.mesh.geometry.index) existing.mesh.geometry.index.needsUpdate = true;
+          if (existing.mesh.geometry.index)
+            existing.mesh.geometry.index.needsUpdate = true;
           existing.mesh.geometry.computeBoundingBox();
           existing.mesh.geometry.computeBoundingSphere();
+
+          // Re-center geometry so pivot can apply world transform
+          const box = existing.mesh.geometry.boundingBox!;
+          const center = new THREE.Vector3();
+          box.getCenter(center);
+          existing.mesh.geometry.translate(-center.x, -center.y, -center.z);
         }
+
+        // Sync transform from store to pivot (position + rotation)
+        const t = obj.transform;
+        const pivotPos = existing.pivot.position;
+        const pivotRot = existing.pivot.rotation;
+        const eps = 0.01;
+        if (
+          Math.abs(pivotPos.x - t.x) > eps ||
+          Math.abs(pivotPos.y - t.y) > eps ||
+          Math.abs(pivotPos.z - t.z) > eps ||
+          Math.abs(THREE.MathUtils.radToDeg(pivotRot.x) - t.rotX) > eps ||
+          Math.abs(THREE.MathUtils.radToDeg(pivotRot.y) - t.rotY) > eps ||
+          Math.abs(THREE.MathUtils.radToDeg(pivotRot.z) - t.rotZ) > eps
+        ) {
+          existing.pivot.position.set(t.x, t.y, t.z);
+          existing.pivot.rotation.set(
+            THREE.MathUtils.degToRad(t.rotX),
+            THREE.MathUtils.degToRad(t.rotY),
+            THREE.MathUtils.degToRad(t.rotZ),
+          );
+        }
+
         // Update visibility
         existing.mesh.visible = obj.visible !== false;
         // Update color
@@ -603,9 +673,7 @@ export default function Viewport3D({
           "position",
           new THREE.Float32BufferAttribute(obj.vertices, 3),
         );
-        geometry.setIndex(
-          new THREE.BufferAttribute(obj.indices, 1),
-        );
+        geometry.setIndex(new THREE.BufferAttribute(obj.indices, 1));
         geometry.computeVertexNormals();
 
         const material = new THREE.MeshStandardMaterial({
@@ -614,12 +682,14 @@ export default function Viewport3D({
           metalness: 0.1,
           side: THREE.DoubleSide,
         });
-        const mesh = new THREE.Mesh(geometry, material);
-        mesh.castShadow = true;
-        mesh.receiveShadow = true;
-        mesh.userData.objectId = obj.id;
-        scene.add(mesh);
-        map.set(obj.id, { mesh });
+        const rawMesh = new THREE.Mesh(geometry, material);
+        rawMesh.castShadow = true;
+        rawMesh.receiveShadow = true;
+        rawMesh.userData.objectId = obj.id;
+        // Центрируем геометрию и получаем pivot‑объект
+        const pivot = centerGeometry(rawMesh, obj.id);
+        scene.add(pivot);
+        map.set(obj.id, { mesh: rawMesh, pivot });
       }
     }
   }, [objects, sceneReady]);
@@ -628,7 +698,7 @@ export default function Viewport3D({
     <div
       ref={containerRef}
       className="viewport"
-      style={{ width: '100%', height: '100%' }}
+      style={{ width: "100%", height: "100%" }}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}

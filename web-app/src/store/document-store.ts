@@ -381,16 +381,10 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const { objects, operations, historyIndex } = get()
     const obj = objects[id]
     if (!obj) return
-    set({ busy: true })
-    try {
-      const t0   = performance.now()
-      const mesh = await workerBuildShape(id, obj.shapeType, obj.params, transform)
-      const ms   = performance.now() - t0
-      const delta: Vec3 = { x: transform.x - obj.transform.x, y: transform.y - obj.transform.y, z: transform.z - obj.transform.z }
-      const op: TinkerCraftOperation = { type: 'move', ids: [id], delta }
-      const newOps = [...operations.slice(0, historyIndex), op]
-      set({ operations: newOps, historyIndex: newOps.length, objects: { ...objects, [id]: { ...obj, transform, vertices: mesh.vertices, indices: mesh.indices } }, modified: true, busy: false, lastCsgMs: ms })
-    } catch (e) { set({ busy: false }); console.error('moveObject:', e) }
+    const delta: Vec3 = { x: transform.x - obj.transform.x, y: transform.y - obj.transform.y, z: transform.z - obj.transform.z }
+    const op: TinkerCraftOperation = { type: 'move', ids: [id], delta }
+    const newOps = [...operations.slice(0, historyIndex), op]
+    set({ operations: newOps, historyIndex: newOps.length, objects: { ...objects, [id]: { ...obj, transform } }, modified: true })
   },
 
   // ── Color ──
