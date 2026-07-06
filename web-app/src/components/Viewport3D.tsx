@@ -51,7 +51,10 @@ function checkWebGL(): boolean {
   }
 }
 
-// Центрирует геометрию меша и возвращает контейнер (pivot), в котором находится сам меш
+// Центрирует геометрию меша и возвращает контейнер (pivot), в котором находится сам меш.
+// Worker применяет только translation к геометрии (rotation не запекается).
+// Pivot.position устанавливается в (0,0,0) — sync-effect позже установит
+// правильную позицию из store (obj.transform).
 function centerGeometry(mesh: THREE.Mesh, objectId: string): THREE.Object3D {
   mesh.geometry.computeBoundingBox();
   const box = mesh.geometry.boundingBox!;
@@ -63,7 +66,7 @@ function centerGeometry(mesh: THREE.Mesh, objectId: string): THREE.Object3D {
 
   // Создаём контейнер‑объект, в котором будет находиться сам меш
   const container = new THREE.Object3D();
-  container.position.copy(center); // возвращаем центр в исходную позицию
+  // Pivot остаётся в (0,0,0) — sync-effect установит позицию из store
   container.userData.objectId = objectId; // важно для TransformControls
   container.add(mesh);
   return container;
@@ -613,10 +616,14 @@ export default function Viewport3D({
         // Update geometry if vertices changed
         const pos = existing.mesh.geometry.attributes.position
           .array as Float32Array;
-        if (
-          pos.length !== obj.vertices.length ||
-          pos.some((v, i) => v !== obj.vertices[i])
-        ) {
+        // Use cached centered vertices for comparison to avoid infinite loop
+        const cachedVerts = existing.mesh.userData.cachedVertices as Float32Array | undefined;
+        const vertsChanged = cachedVerts
+          ? pos.length !== cachedVerts.length ||
+            pos.some((v, i) => v !== cachedVerts[i])
+          : pos.length !== obj.vertices.length ||
+            pos.some((v, i) => v !== obj.vertices[i]);
+        if (vertsChanged) {
           existing.mesh.geometry.setAttribute(
             "position",
             new THREE.Float32BufferAttribute(obj.vertices, 3),
@@ -636,22 +643,32 @@ export default function Viewport3D({
           const center = new THREE.Vector3();
           box.getCenter(center);
           existing.mesh.geometry.translate(-center.x, -center.y, -center.z);
+
+          // Cache the centered vertices for future comparison
+          const newPos = existing.mesh.geometry.attributes.position
+            .array as Float32Array;
+          existing.mesh.userData.cachedVertices = new Float32Array(newPos);
         }
 
-        // Sync transform from store to pivot (position + rotation)
+        // Sync transform from store to pivot
+        // Worker now applies ONLY translation to geometry (no baked rotation).
+        // So we ALWAYS sync both position and rotation from store to pivot.
         const t = obj.transform;
         const pivotPos = existing.pivot.position;
-        const pivotRot = existing.pivot.rotation;
         const eps = 0.01;
         if (
           Math.abs(pivotPos.x - t.x) > eps ||
           Math.abs(pivotPos.y - t.y) > eps ||
-          Math.abs(pivotPos.z - t.z) > eps ||
+          Math.abs(pivotPos.z - t.z) > eps
+        ) {
+          existing.pivot.position.set(t.x, t.y, t.z);
+        }
+        const pivotRot = existing.pivot.rotation;
+        if (
           Math.abs(THREE.MathUtils.radToDeg(pivotRot.x) - t.rotX) > eps ||
           Math.abs(THREE.MathUtils.radToDeg(pivotRot.y) - t.rotY) > eps ||
           Math.abs(THREE.MathUtils.radToDeg(pivotRot.z) - t.rotZ) > eps
         ) {
-          existing.pivot.position.set(t.x, t.y, t.z);
           existing.pivot.rotation.set(
             THREE.MathUtils.degToRad(t.rotX),
             THREE.MathUtils.degToRad(t.rotY),
@@ -687,7 +704,15 @@ export default function Viewport3D({
         rawMesh.receiveShadow = true;
         rawMesh.userData.objectId = obj.id;
         // Центрируем геометрию и получаем pivot‑объект
+        // Worker применяет только translation к геометрии (rotation не запекается).
+        // Pivot.position = (0,0,0) после centerGeometry — применяем transform из store.
         const pivot = centerGeometry(rawMesh, obj.id);
+        pivot.position.set(obj.transform.x, obj.transform.y, obj.transform.z);
+        pivot.rotation.set(
+          THREE.MathUtils.degToRad(obj.transform.rotX),
+          THREE.MathUtils.degToRad(obj.transform.rotY),
+          THREE.MathUtils.degToRad(obj.transform.rotZ),
+        );
         scene.add(pivot);
         map.set(obj.id, { mesh: rawMesh, pivot });
       }

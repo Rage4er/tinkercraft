@@ -107,6 +107,11 @@ function buildPrimitiveWithFillet(
   return buildPrimitive(shapeType, params);
 }
 
+/**
+ * Apply ONLY translation to the manifold geometry.
+ * Rotation is NOT baked into geometry — it is applied via pivot.rotation in Three.js.
+ * This avoids double-rotation problems when syncing from store to scene.
+ */
 function applyTransform(
   manifold: M,
   t: {
@@ -118,42 +123,12 @@ function applyTransform(
     rotZ: number;
   },
 ): M {
-  const rx = t.rotX * (Math.PI / 180);
-  const ry = t.rotY * (Math.PI / 180);
-  const rz = t.rotZ * (Math.PI / 180);
-  const cx = Math.cos(rx),
-    sx = Math.sin(rx);
-  const cy = Math.cos(ry),
-    sy = Math.sin(ry);
-  const cz = Math.cos(rz),
-    sz = Math.sin(rz);
-  // FIX: Mat4 requires 16 values in column-major order.
-  // The original 12-element array was in row-major 3x4 layout:
-  //   [R00, R01, R02, T0, R10, R11, R12, T1, R20, R21, R22, T2]
-  // We must transpose to column-major 4x4:
-  //   Col0=[R00, R10, R20, 0], Col1=[R01, R11, R21, 0],
-  //   Col2=[R02, R12, R22, 0], Col3=[T0,  T1,  T2,  1]
+  // Translation-only matrix (identity rotation, position from t)
   const m: number[] = [
-    // Column 0 (X-axis)
-    cy * cz,
-    sx * sy * cz - cx * sz,
-    cx * sy * cz + sx * sz,
-    0,
-    // Column 1 (Y-axis)
-    cy * sz,
-    sx * sy * sz + cx * cz,
-    cx * sy * sz - sx * cz,
-    0,
-    // Column 2 (Z-axis)
-    -sy,
-    sx * cy,
-    cx * cy,
-    0,
-    // Column 3 (Translation)
-    t.x,
-    t.y,
-    t.z,
-    1,
+    1, 0, 0, 0,  // Column 0
+    0, 1, 0, 0,  // Column 1
+    0, 0, 1, 0,  // Column 2
+    t.x, t.y, t.z, 1,  // Column 3 (Translation)
   ];
   return manifold.transform(m);
 }
@@ -469,11 +444,18 @@ self.addEventListener("message", async (e: MessageEvent) => {
             }
           } else if (op.type === "move") {
             const d = op.delta as { x: number; y: number; z: number };
+            const rd = (op as { rotDelta?: { x: number; y: number; z: number } }).rotDelta;
             for (const id of op.ids as string[]) {
               const info = shapeInfos.get(id);
               const t = currentTransforms.get(id);
               if (t) {
-                const nt = { ...t, x: t.x + d.x, y: t.y + d.y, z: t.z + d.z };
+                const nt = {
+                  ...t,
+                  x: t.x + d.x, y: t.y + d.y, z: t.z + d.z,
+                  rotX: t.rotX + (rd?.x ?? 0),
+                  rotY: t.rotY + (rd?.y ?? 0),
+                  rotZ: t.rotZ + (rd?.z ?? 0),
+                };
                 currentTransforms.set(id, nt);
                 if (info) {
                   // Примитив — пересобираем из базовой формы

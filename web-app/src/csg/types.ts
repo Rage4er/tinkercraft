@@ -47,6 +47,7 @@ export interface MoveOperation {
   type: 'move'
   ids: string[]
   delta: Vec3
+  rotDelta?: Vec3
 }
 
 export interface ResizeOperation {

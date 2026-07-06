@@ -122,10 +122,17 @@ async function rebuildFromHistory(ops: TinkerCraftOperation[]): Promise<Record<s
 
     } else if (op.type === 'move') {
       const d: Vec3 = op.delta
+      const rd = (op as { rotDelta?: Vec3 }).rotDelta
       for (const id of op.ids) {
         const t = transforms[id]
         if (t && meta[id]) {
-          const nt: TransformNR = { ...t, x: t.x + d.x, y: t.y + d.y, z: t.z + d.z }
+          const nt: TransformNR = {
+            ...t,
+            x: t.x + d.x, y: t.y + d.y, z: t.z + d.z,
+            rotX: t.rotX + (rd?.x ?? 0),
+            rotY: t.rotY + (rd?.y ?? 0),
+            rotZ: t.rotZ + (rd?.z ?? 0),
+          }
           transforms[id] = nt
           meta[id] = { ...meta[id], transform: nt }
         }
@@ -382,7 +389,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const obj = objects[id]
     if (!obj) return
     const delta: Vec3 = { x: transform.x - obj.transform.x, y: transform.y - obj.transform.y, z: transform.z - obj.transform.z }
-    const op: TinkerCraftOperation = { type: 'move', ids: [id], delta }
+    const rotDelta: Vec3 = { x: transform.rotX - obj.transform.rotX, y: transform.rotY - obj.transform.rotY, z: transform.rotZ - obj.transform.rotZ }
+    const op: TinkerCraftOperation = { type: 'move', ids: [id], delta, rotDelta }
     const newOps = [...operations.slice(0, historyIndex), op]
     set({ operations: newOps, historyIndex: newOps.length, objects: { ...objects, [id]: { ...obj, transform } }, modified: true })
   },
