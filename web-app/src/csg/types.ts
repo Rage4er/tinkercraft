@@ -49,6 +49,8 @@ export interface MoveOperation {
   delta: Vec3
   rotDelta?: Vec3
   scaleDelta?: Vec3
+  /** Hint for history display — which component primarily changed */
+  kind?: 'translate' | 'rotate' | 'scale'
 }
 
 export interface ResizeOperation {

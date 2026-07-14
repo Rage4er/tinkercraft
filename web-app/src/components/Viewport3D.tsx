@@ -40,6 +40,7 @@ interface Props {
   snapValue: number;
   rulerMode?: boolean;
   onRulerMeasure?: (dist: number) => void;
+  cameraMode?: 'perspective' | 'orthographic';
 }
 
 function checkWebGL(): boolean {
@@ -52,7 +53,7 @@ function checkWebGL(): boolean {
 }
 
 // Центрирует геометрию меша и возвращает контейнер (pivot), в котором находится сам меш.
-// Worker применяет только translation к геометрии (rotation не запекается).
+// Worker применяет полный TRS к геометрии (translation + rotation + scale запекаются в Manifold).
 // Pivot.position устанавливается в (0,0,0) — sync-effect позже установит
 // правильную позицию из store (obj.transform).
 function centerGeometry(mesh: THREE.Mesh, objectId: string): THREE.Object3D {
@@ -87,6 +88,7 @@ export default function Viewport3D({
   onRulerMeasure,
   busy,
   workerOk,
+  cameraMode = 'perspective',
 }: Props) {
   const [webglOk] = useState<boolean>(() => checkWebGL());
   const [sceneReady, setSceneReady] = useState(false);
@@ -101,6 +103,9 @@ export default function Viewport3D({
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
+  const orthoCameraRef = useRef<THREE.OrthographicCamera | null>(null);
+  const cameraModeRef = useRef<'perspective' | 'orthographic'>(cameraMode);
+  const activeCameraRef = useRef<THREE.Camera | null>(null);
   const controlsRef = useRef<OrbitControls | null>(null);
   const transformCtRef = useRef<TransformControls | null>(null);
   const meshMapRef = useRef<
@@ -117,6 +122,11 @@ export default function Viewport3D({
   const currentMeshRef = useRef<THREE.Object3D | null>(null);
 
   const fitTargetRef = useRef<FitTarget | null>(null);
+  // Keep cameraModeRef in sync with prop
+  useEffect(() => {
+    cameraModeRef.current = cameraMode;
+  }, [cameraMode]);
+
   const onTransformEndRef = useRef(onTransformEnd);
   useEffect(() => {
     onTransformEndRef.current = onTransformEnd;
@@ -161,15 +171,25 @@ export default function Viewport3D({
     const scene = new THREE.Scene();
     sceneRef.current = scene;
 
+    // Z-up coordinate system: X=right, Y=forward/depth, Z=up (height)
     const camera = new THREE.PerspectiveCamera(45, w / h, 0.1, 10000);
-    camera.position.set(80, 80, 120);
+    camera.up.set(0, 0, 1);
+    camera.position.set(150, -200, 120);
     camera.lookAt(0, 0, 0);
     cameraRef.current = camera;
+
+    // Orthographic camera — frustum set dynamically each frame from persp distance
+    const ortho = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 10000);
+    ortho.up.set(0, 0, 1);
+    ortho.position.set(150, -200, 120);
+    orthoCameraRef.current = ortho;
+    activeCameraRef.current = camera;
 
     scene.add(new THREE.AmbientLight(0xffffff, 0.45));
 
     const sun = new THREE.DirectionalLight(0xffffff, 1.2);
-    sun.position.set(100, 200, 150);
+    // Z-up: high Z = above, Y = depth
+    sun.position.set(100, -80, 200);
     sun.castShadow = true;
     sun.shadow.mapSize.width = sun.shadow.mapSize.height = 2048;
     sun.shadow.camera.left = sun.shadow.camera.bottom = -200;
@@ -179,23 +199,26 @@ export default function Viewport3D({
     scene.add(sun);
 
     const fill = new THREE.DirectionalLight(0x8888ff, 0.4);
-    fill.position.set(-100, 50, -80);
+    fill.position.set(-100, 80, 50);
     scene.add(fill);
 
+    // Grid in XY plane (Z=0 is the work surface in Z-up world)
     const grid = new THREE.GridHelper(400, 40, 0x3a3a5c, 0x2a2a4a);
-    grid.position.y = -0.5;
+    grid.rotation.x = Math.PI / 2; // rotate from XZ to XY plane
+    grid.position.z = -0.5;
     scene.add(grid);
 
+    // Shadow receiver: PlaneGeometry is already in XY plane — no rotation needed in Z-up
     const groundGeo = new THREE.PlaneGeometry(400, 400);
     const groundMat = new THREE.ShadowMaterial({ opacity: 0.25 });
     const ground = new THREE.Mesh(groundGeo, groundMat);
-    ground.rotation.x = -Math.PI / 2;
-    ground.position.y = -0.5;
+    ground.position.z = -0.5;
     ground.receiveShadow = true;
     scene.add(ground);
 
+    // Axes helper on the XY work plane
     const axes = new THREE.AxesHelper(20);
-    axes.position.set(-170, -0.4, -170);
+    axes.position.set(-170, -170, -0.4);
     scene.add(axes);
 
     const controls = new OrbitControls(camera, renderer.domElement);
@@ -203,7 +226,7 @@ export default function Viewport3D({
     controls.dampingFactor = 0.08;
     controls.minDistance = 10;
     controls.maxDistance = 2000;
-    controls.maxPolarAngle = Math.PI / 2 + 0.1;
+    controls.maxPolarAngle = Math.PI - 0.01; // allow full rotation including bottom view
     controlsRef.current = controls;
     setCubeCamera(camera);
     setCubeCtrl(controls);
@@ -255,6 +278,7 @@ export default function Viewport3D({
       renderer.setSize(cw, ch);
       camera.aspect = cw / ch;
       camera.updateProjectionMatrix();
+      // ortho frustum is recomputed each frame, no action needed here
     });
     ro.observe(container);
 
@@ -276,7 +300,25 @@ export default function Viewport3D({
       } else {
         controls.update();
       }
-      renderer.render(scene, camera);
+
+      // Pick active camera and sync ortho from persp each frame
+      let activeCam: THREE.Camera = camera;
+      if (cameraModeRef.current === 'orthographic' && orthoCameraRef.current) {
+        const orthoC = orthoCameraRef.current;
+        orthoC.position.copy(camera.position);
+        orthoC.quaternion.copy(camera.quaternion);
+        const dist = camera.position.distanceTo(controls.target);
+        const halfH = dist * Math.tan(THREE.MathUtils.degToRad(22.5)); // FOV 45
+        const aspect = renderer.domElement.width / Math.max(1, renderer.domElement.height);
+        orthoC.left   = -halfH * aspect;
+        orthoC.right  =  halfH * aspect;
+        orthoC.top    =  halfH;
+        orthoC.bottom = -halfH;
+        orthoC.updateProjectionMatrix();
+        activeCam = orthoC;
+      }
+      activeCameraRef.current = activeCam;
+      renderer.render(scene, activeCam);
       const now = performance.now();
       fpsRef.current.frames++;
       if (now - fpsRef.current.last >= 500) {
@@ -349,7 +391,7 @@ export default function Viewport3D({
       if (!camera || !controls) return;
       if (map.size === 0) {
         fitTargetRef.current = {
-          camPos: new THREE.Vector3(80, 80, 120),
+          camPos: new THREE.Vector3(150, -200, 120),
           target: new THREE.Vector3(0, 0, 0),
         };
         return;
@@ -366,11 +408,12 @@ export default function Viewport3D({
       box.getCenter(center);
       box.getSize(size);
       const dist = Math.max(size.x, size.y, size.z, 1) * 2.5;
+      // Z-up: camera comes from front (-Y) and above (+Z)
       fitTargetRef.current = {
         camPos: new THREE.Vector3(
-          center.x + dist * 0.6,
-          center.y + dist * 0.5,
-          center.z + dist * 0.8,
+          center.x + dist * 0.5,
+          center.y - dist * 0.9,
+          center.z + dist * 0.6,
         ),
         target: center.clone(),
       };
@@ -382,7 +425,7 @@ export default function Viewport3D({
     if (!resetViewRef) return;
     resetViewRef.current = () => {
       fitTargetRef.current = {
-        camPos: new THREE.Vector3(80, 80, 120),
+        camPos: new THREE.Vector3(150, -200, 120),
         target: new THREE.Vector3(0, 0, 0),
       };
     };
@@ -553,7 +596,7 @@ export default function Viewport3D({
           }
         } else {
           // Raycaster для выбора объекта
-          const camera = cameraRef.current;
+          const camera = activeCameraRef.current ?? cameraRef.current;
           const container = containerRef.current;
           if (camera && container) {
             const rect = container.getBoundingClientRect();
@@ -617,17 +660,19 @@ export default function Viewport3D({
     for (const obj of objects) {
       const existing = map.get(obj.id);
       if (existing) {
-        // Update geometry if vertices changed
-        const pos = existing.mesh.geometry.attributes.position
-          .array as Float32Array;
-        // Use cached centered vertices for comparison to avoid infinite loop
-        const cachedVerts = existing.mesh.userData.cachedVertices as Float32Array | undefined;
-        const vertsChanged = cachedVerts
-          ? pos.length !== cachedVerts.length ||
-            pos.some((v, i) => v !== cachedVerts[i])
-          : pos.length !== obj.vertices.length ||
-            pos.some((v, i) => v !== obj.vertices[i]);
+        // Update geometry if raw vertices from store changed.
+        // We cache the RAW (pre-centering) vertices so the comparison is
+        // always against the same source as obj.vertices — not the
+        // post-centering buffer, which always equals the cache.
+        const cachedRaw = existing.mesh.userData.cachedRawVertices as Float32Array | undefined;
+        const vertsChanged =
+          !cachedRaw ||
+          cachedRaw.length !== obj.vertices.length ||
+          obj.indices.length !== (existing.mesh.geometry.index?.count ?? 0) ||
+          cachedRaw.some((v, i) => v !== obj.vertices[i]);
         if (vertsChanged) {
+          existing.mesh.userData.cachedRawVertices = new Float32Array(obj.vertices);
+
           existing.mesh.geometry.setAttribute(
             "position",
             new THREE.Float32BufferAttribute(obj.vertices, 3),
@@ -636,27 +681,21 @@ export default function Viewport3D({
             new THREE.BufferAttribute(obj.indices, 1),
           );
           existing.mesh.geometry.computeVertexNormals();
-          existing.mesh.geometry.attributes.position.needsUpdate = true;
-          if (existing.mesh.geometry.index)
-            existing.mesh.geometry.index.needsUpdate = true;
           existing.mesh.geometry.computeBoundingBox();
           existing.mesh.geometry.computeBoundingSphere();
 
-          // Re-center geometry so pivot can apply world transform
+          // Re-center geometry so pivot applies world transform correctly
           const box = existing.mesh.geometry.boundingBox!;
           const center = new THREE.Vector3();
           box.getCenter(center);
           existing.mesh.geometry.translate(-center.x, -center.y, -center.z);
-
-          // Cache the centered vertices for future comparison
-          const newPos = existing.mesh.geometry.attributes.position
-            .array as Float32Array;
-          existing.mesh.userData.cachedVertices = new Float32Array(newPos);
+          existing.mesh.geometry.computeBoundingBox();
+          existing.mesh.geometry.computeBoundingSphere();
         }
 
         // Sync transform from store to pivot
-        // Worker applies ONLY translation to geometry (no baked rotation/scale).
-        // So we ALWAYS sync position, rotation, and scale from store to pivot.
+        // Worker bakes full TRS into Manifold geometry, but Three.js pivot
+        // still carries the visual transform for gizmo interaction.
         const t = obj.transform;
         const pivotPos = existing.pivot.position;
         const eps = 0.01;
@@ -716,7 +755,7 @@ export default function Viewport3D({
         rawMesh.receiveShadow = true;
         rawMesh.userData.objectId = obj.id;
         // Центрируем геометрию и получаем pivot‑объект
-        // Worker применяет только translation к геометрии (rotation/scale не запекаются).
+        // Worker запекает полный TRS в геометрию Manifold.
         // Pivot.position = (0,0,0) после centerGeometry — применяем transform из store.
         const pivot = centerGeometry(rawMesh, obj.id);
         pivot.position.set(obj.transform.x, obj.transform.y, obj.transform.z);

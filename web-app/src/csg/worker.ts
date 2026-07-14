@@ -58,6 +58,36 @@ function buildPrimitive(shapeType: string, params: Record<string, number>): M {
         params.segments ?? 32,
         true,
       );
+    case "torus": {
+      const torusRadius = params.torusRadius ?? 15;
+      const tubeRadius  = params.tubeRadius  ?? 4;
+      const segments    = Math.max(8,  Math.round(params.segments     ?? 32));
+      const tubeSegs    = Math.max(4,  Math.round(params.tubeSegments ?? 16));
+      const { CrossSection } = wasm;
+      const circle     = CrossSection.circle(tubeRadius, tubeSegs);
+      const translated = circle.translate([torusRadius, 0]);
+      return wasm.Manifold.revolve(translated, segments);
+    }
+    case "prism": {
+      const sides = Math.max(3, Math.round(params.sides ?? 6));
+      return Manifold.cylinder(
+        params.height ?? 20,
+        params.radius ?? 12,
+        params.radius ?? 12,
+        sides,
+        true,
+      );
+    }
+    case "pyramid": {
+      const sides = Math.max(3, Math.round(params.sides ?? 4));
+      return Manifold.cylinder(
+        params.height ?? 20,
+        params.radius ?? 12,
+        0,
+        sides,
+        true,
+      );
+    }
     default:
       return Manifold.cube([20, 20, 20], true);
   }
@@ -112,25 +142,69 @@ function buildPrimitiveWithFillet(
  * Rotation is NOT baked into geometry — it is applied via pivot.rotation in Three.js.
  * This avoids double-rotation problems when syncing from store to scene.
  */
+// Translation-only: Viewport3D applies rotation/scale visually via pivot,
+// so we must NOT bake them here (would double-apply on every rebuild).
 function applyTransform(
   manifold: M,
-  t: {
-    x: number;
-    y: number;
-    z: number;
-    rotX: number;
-    rotY: number;
-    rotZ: number;
-  },
+  t: { x: number; y: number; z: number; [k: string]: unknown },
 ): M {
-  // Translation-only matrix (identity rotation, position from t)
   const m: number[] = [
-    1, 0, 0, 0,  // Column 0
-    0, 1, 0, 0,  // Column 1
-    0, 0, 1, 0,  // Column 2
-    t.x, t.y, t.z, 1,  // Column 3 (Translation)
+    1, 0, 0, 0,
+    0, 1, 0, 0,
+    0, 0, 1, 0,
+    t.x, t.y, t.z, 1,
   ];
   return manifold.transform(m);
+}
+
+// Apply scale+rotation around the object's own world-space center before CSG.
+// The cached geometry has translation baked in (vertices at world coords), so
+// applying RS around the world origin would shift the shape. The correct matrix
+// is T(pos) × RS × T(-pos), whose translation column is: pos − RS·pos.
+//
+// rotX/Y/Z in degrees; Euler XYZ (Three.js default): R = Rz·Ry·Rx; column-major.
+type FullSRT = {
+  x: number; y: number; z: number;
+  rotX: number; rotY: number; rotZ: number;
+  scaleX: number; scaleY: number; scaleZ: number;
+};
+
+function applySRAroundCenter(manifold: M, t: FullSRT): M {
+  const { x: px, y: py, z: pz } = t;
+  const Sx = t.scaleX, Sy = t.scaleY, Sz = t.scaleZ;
+  const rx = t.rotX * (Math.PI / 180);
+  const ry = t.rotY * (Math.PI / 180);
+  const rz = t.rotZ * (Math.PI / 180);
+  const cx = Math.cos(rx), sx_ = Math.sin(rx);
+  const cy = Math.cos(ry), sy_ = Math.sin(ry);
+  const cz = Math.cos(rz), sz_ = Math.sin(rz);
+
+  // RS matrix elements (row-indexed: r<row><col>)
+  const r00 = cz*cy*Sx,                    r01 = (cz*sy_*sx_ - sz_*cx)*Sy,  r02 = (cz*sy_*cx + sz_*sx_)*Sz;
+  const r10 = sz_*cy*Sx,                   r11 = (sz_*sy_*sx_ + cz*cx)*Sy,  r12 = (sz_*sy_*cx - cz*sx_)*Sz;
+  const r20 = -sy_*Sx,                     r21 = cy*sx_*Sy,                  r22 = cy*cx*Sz;
+
+  // Translation = pos − RS·pos  (so RS is applied around the object center)
+  const tx = px - (r00*px + r01*py + r02*pz);
+  const ty = py - (r10*px + r11*py + r12*pz);
+  const tz = pz - (r20*px + r21*py + r22*pz);
+
+  // Column-major 4×4
+  const m: number[] = [
+    r00, r10, r20, 0,   // col 0
+    r01, r11, r21, 0,   // col 1
+    r02, r12, r22, 0,   // col 2
+    tx,  ty,  tz,  1,   // col 3
+  ];
+  return manifold.transform(m);
+}
+
+// Returns true when the transform has non-trivial rotation or scale
+function hasSR(t: { rotX: number; rotY: number; rotZ: number; scaleX: number; scaleY: number; scaleZ: number }): boolean {
+  return (
+    Math.abs(t.rotX) > 1e-6 || Math.abs(t.rotY) > 1e-6 || Math.abs(t.rotZ) > 1e-6 ||
+    Math.abs(t.scaleX - 1) > 1e-6 || Math.abs(t.scaleY - 1) > 1e-6 || Math.abs(t.scaleZ - 1) > 1e-6
+  );
 }
 
 function getMirrorMatrix(plane: string): number[] {
@@ -189,12 +263,9 @@ self.addEventListener("message", async (e: MessageEvent) => {
         const shapeType = msg.shapeType as string;
         const params = msg.params as Record<string, number>;
         const transform = msg.transform as {
-          x: number;
-          y: number;
-          z: number;
-          rotX: number;
-          rotY: number;
-          rotZ: number;
+          x: number; y: number; z: number;
+          rotX: number; rotY: number; rotZ: number;
+          scaleX?: number; scaleY?: number; scaleZ?: number;
         };
 
         let m: M;
@@ -234,12 +305,9 @@ self.addEventListener("message", async (e: MessageEvent) => {
         const params = msg.params as Record<string, number>;
         const radius = msg.radius as number;
         const transform = msg.transform as {
-          x: number;
-          y: number;
-          z: number;
-          rotX: number;
-          rotY: number;
-          rotZ: number;
+          x: number; y: number; z: number;
+          rotX: number; rotY: number; rotZ: number;
+          scaleX?: number; scaleY?: number; scaleZ?: number;
         };
 
         let m = buildPrimitiveWithFillet(shapeType, params, radius);
@@ -310,10 +378,19 @@ self.addEventListener("message", async (e: MessageEvent) => {
       // ── CSG булева ──
       case "csgBoolean": {
         const t0 = performance.now();
-        const a = cache.get(msg.idA as string);
-        const b = cache.get(msg.idB as string);
+        let a = cache.get(msg.idA as string);
+        let b = cache.get(msg.idB as string);
         if (!a || !b)
           throw new Error(`Objects not found: ${msg.idA}, ${msg.idB}`);
+
+        // Apply scale+rotation around each object's own center so CSG sees
+        // the correctly-oriented geometry. The cache has translation-only geometry;
+        // scale/rotation live on the Three.js pivot and are supplied by the caller.
+        const tA = msg.transformA as FullSRT | undefined;
+        const tB = msg.transformB as FullSRT | undefined;
+        if (tA && hasSR(tA)) a = applySRAroundCenter(a, tA);
+        if (tB && hasSR(tB)) b = applySRAroundCenter(b, tB);
+
         let result: M;
         switch (msg.op) {
           case "union":
@@ -374,30 +451,27 @@ self.addEventListener("message", async (e: MessageEvent) => {
         cache.clear();
 
         const shapeInfos: Map<string, ShapeInfo> = new Map();
-        const currentTransforms: Map<
-          string,
-          {
-            x: number;
-            y: number;
-            z: number;
-            rotX: number;
-            rotY: number;
-            rotZ: number;
-          }
-        > = new Map();
+        type FullTransform = {
+          x: number; y: number; z: number;
+          rotX: number; rotY: number; rotZ: number;
+          scaleX: number; scaleY: number; scaleZ: number;
+        };
+        const currentTransforms: Map<string, FullTransform> = new Map();
 
         type Op = Record<string, unknown>;
         const ops = msg.operations as Op[];
 
         for (const op of ops) {
           if (op.type === "add_shape") {
-            const t = op.transform as {
-              x: number;
-              y: number;
-              z: number;
-              rotX: number;
-              rotY: number;
-              rotZ: number;
+            const raw = op.transform as {
+              x: number; y: number; z: number;
+              rotX: number; rotY: number; rotZ: number;
+              scaleX?: number; scaleY?: number; scaleZ?: number;
+            };
+            const t: FullTransform = {
+              x: raw.x, y: raw.y, z: raw.z,
+              rotX: raw.rotX, rotY: raw.rotY, rotZ: raw.rotZ,
+              scaleX: raw.scaleX ?? 1, scaleY: raw.scaleY ?? 1, scaleZ: raw.scaleZ ?? 1,
             };
             const st = op.shapeType as string;
             const par = op.params as Record<string, number>;
@@ -443,18 +517,22 @@ self.addEventListener("message", async (e: MessageEvent) => {
               cache.set(id, m);
             }
           } else if (op.type === "move") {
-            const d = op.delta as { x: number; y: number; z: number };
-            const rd = (op as { rotDelta?: { x: number; y: number; z: number } }).rotDelta;
+            const d  = op.delta    as { x: number; y: number; z: number };
+            const rd = (op as { rotDelta?:   { x: number; y: number; z: number } }).rotDelta;
+            const sd = (op as { scaleDelta?: { x: number; y: number; z: number } }).scaleDelta;
             for (const id of op.ids as string[]) {
               const info = shapeInfos.get(id);
               const t = currentTransforms.get(id);
               if (t) {
-                const nt = {
+                const nt: FullTransform = {
                   ...t,
                   x: t.x + d.x, y: t.y + d.y, z: t.z + d.z,
                   rotX: t.rotX + (rd?.x ?? 0),
                   rotY: t.rotY + (rd?.y ?? 0),
                   rotZ: t.rotZ + (rd?.z ?? 0),
+                  scaleX: t.scaleX + (sd?.x ?? 0),
+                  scaleY: t.scaleY + (sd?.y ?? 0),
+                  scaleZ: t.scaleZ + (sd?.z ?? 0),
                 };
                 currentTransforms.set(id, nt);
                 if (info) {
@@ -547,9 +625,15 @@ self.addEventListener("message", async (e: MessageEvent) => {
             }
           } else if (op.type === "group") {
             const ids = op.ids as string[];
-            const a = cache.get(ids[0]);
-            const b = cache.get(ids[1]);
+            let a = cache.get(ids[0]);
+            let b = cache.get(ids[1]);
             if (a && b) {
+              // Apply scale+rotation from accumulated currentTransforms so the
+              // boolean op sees the correctly-oriented geometry.
+              const tA = currentTransforms.get(ids[0]);
+              const tB = currentTransforms.get(ids[1]);
+              if (tA && hasSR(tA)) a = applySRAroundCenter(a, tA);
+              if (tB && hasSR(tB)) b = applySRAroundCenter(b, tB);
               let result: M;
               const isIntersect = op.isIntersect as boolean;
               const subtractOp = op.subtractOp as boolean | undefined;

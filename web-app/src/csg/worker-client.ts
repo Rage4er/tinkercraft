@@ -99,9 +99,11 @@ export async function workerBuildImportedMesh(
 
 export async function workerCsgBoolean(
   idA: string, idB: string, op: CsgBooleanOp, resultId: string,
+  transformA?: { x: number; y: number; z: number; rotX: number; rotY: number; rotZ: number; scaleX: number; scaleY: number; scaleZ: number },
+  transformB?: { x: number; y: number; z: number; rotX: number; rotY: number; rotZ: number; scaleX: number; scaleY: number; scaleZ: number },
 ): Promise<MeshResult> {
   await waitReady()
-  return send<MeshResult>('csgBoolean', { idA, idB, op, resultId })
+  return send<MeshResult>('csgBoolean', { idA, idB, op, resultId, transformA, transformB })
 }
 
 export async function workerMirrorObject(

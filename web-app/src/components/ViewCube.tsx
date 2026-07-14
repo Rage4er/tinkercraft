@@ -1,6 +1,7 @@
 // ============================================================
 // ViewCube — навигационный куб в углу вьюпорта
 // Клик на грань → анимированный перелёт камеры
+// Drag → плавное вращение основной камеры (Z-up)
 // ============================================================
 
 import { useEffect, useRef, useCallback } from 'react'
@@ -11,13 +12,17 @@ interface Props {
   mainControls: { target: THREE.Vector3; update: () => void } | null
 }
 
+// Z-up coordinate system:
+//   X = right, Y = depth (forward), Z = up (height)
+// normal = direction FROM WHICH the camera looks at origin
+// up     = camera.up at that view
 const FACES: { label: string; normal: [number, number, number]; up: [number, number, number]; color: string }[] = [
-  { label: 'Перед',  normal: [0,  0,  1], up: [0, 1, 0], color: '#4a9eff' },
-  { label: 'Зад',    normal: [0,  0, -1], up: [0, 1, 0], color: '#3a8eef' },
-  { label: 'Лево',   normal: [-1, 0,  0], up: [0, 1, 0], color: '#5ba8ff' },
-  { label: 'Право',  normal: [1,  0,  0], up: [0, 1, 0], color: '#5ba8ff' },
-  { label: 'Верх',   normal: [0,  1,  0], up: [0, 0, -1], color: '#6abcff' },
-  { label: 'Низ',    normal: [0, -1,  0], up: [0, 0,  1], color: '#3a8eef' },
+  { label: 'Перед',  normal: [0,  1,  0], up: [0, 0, 1], color: '#4a9eff' },
+  { label: 'Зад',    normal: [0, -1,  0], up: [0, 0, 1], color: '#3a8eef' },
+  { label: 'Лево',   normal: [-1, 0,  0], up: [0, 0, 1], color: '#5ba8ff' },
+  { label: 'Право',  normal: [1,  0,  0], up: [0, 0, 1], color: '#5ba8ff' },
+  { label: 'Верх',   normal: [0,  0,  1], up: [0, 1, 0], color: '#6abcff' },
+  { label: 'Низ',    normal: [0,  0, -1], up: [0, 1, 0], color: '#3a8eef' },
 ]
 
 function animateTo(
@@ -54,7 +59,13 @@ export default function ViewCube({ mainCamera, mainControls }: Props) {
   const rafRef     = useRef<number | null>(null)
   const hoverRef   = useRef<THREE.Mesh | null>(null)
 
-  // Храним актуальные refs — избегаем stale closure в рендер-лупе
+  // Drag state
+  const pointerDownRef  = useRef(false)
+  const isDraggingRef   = useRef(false)
+  const dragLastRef     = useRef({ x: 0, y: 0 })
+  const dragStartRef    = useRef({ x: 0, y: 0 })
+
+  // Stable refs for main camera / controls (avoid stale closures in RAF loop)
   const mainCameraRef   = useRef(mainCamera)
   const mainControlsRef = useRef(mainControls)
   useEffect(() => { mainCameraRef.current   = mainCamera },   [mainCamera])
@@ -72,15 +83,16 @@ export default function ViewCube({ mainCamera, mainControls }: Props) {
     const scene = new THREE.Scene()
     sceneRef.current = scene
 
+    // Mini camera — position doesn't matter much; quaternion is copied from main each frame
     const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100)
-    camera.position.set(0, 0, 3.5)
-    camera.up.set(0, 1, 0)
+    camera.up.set(0, 0, 1)
+    camera.position.set(0, -3.5, 0)
     camera.lookAt(0, 0, 0)
     cubeCamRef.current = camera
 
     scene.add(new THREE.AmbientLight(0xffffff, 0.7))
     const dir = new THREE.DirectionalLight(0xffffff, 0.8)
-    dir.position.set(3, 5, 3)
+    dir.position.set(3, -2, 5)
     scene.add(dir)
 
     const meshes: THREE.Mesh[] = []
@@ -94,9 +106,9 @@ export default function ViewCube({ mainCamera, mainControls }: Props) {
       const [nx, ny, nz] = face.normal
       mesh.position.set(nx * 0.5, ny * 0.5, nz * 0.5)
 
-      // Orient face panel perpendicular to its normal using quaternion
+      // Orient face panel perpendicular to its normal
       const faceNormal = new THREE.Vector3(nx, ny, nz)
-      const defaultNormal = new THREE.Vector3(0, 0, 1) // BoxGeometry faces +Z by default
+      const defaultNormal = new THREE.Vector3(0, 0, 1)
       mesh.quaternion.setFromUnitVectors(defaultNormal, faceNormal)
 
       scene.add(mesh)
@@ -114,10 +126,8 @@ export default function ViewCube({ mainCamera, mainControls }: Props) {
       rafRef.current = requestAnimationFrame(loop)
       const mc = mainCameraRef.current
       if (mc) {
-        // ---- Правильная синхронизация: копируем кватернион ----
-        // Это исключает gimbal lock при виде сверху/снизу
+        // Copy main camera quaternion so the cube mirrors the viewport orientation
         camera.quaternion.copy(mc.quaternion)
-        // Располагаем мини-камеру на расстоянии 3.5 по направлению взгляда основной
         const back = new THREE.Vector3(0, 0, 1).applyQuaternion(mc.quaternion)
         camera.position.copy(back).multiplyScalar(3.5)
       }
@@ -131,7 +141,35 @@ export default function ViewCube({ mainCamera, mainControls }: Props) {
     }
   }, [])
 
-  const handleClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+  // ---- Hover helper ----
+  const updateHover = useCallback((clientX: number, clientY: number) => {
+    const canvas = canvasRef.current
+    const camera = cubeCamRef.current
+    const scene  = sceneRef.current
+    if (!canvas || !camera || !scene) return
+
+    const rect = canvas.getBoundingClientRect()
+    const ndc  = new THREE.Vector2(
+      ((clientX - rect.left) / rect.width)  * 2 - 1,
+      -((clientY - rect.top) / rect.height) * 2 + 1,
+    )
+    const ray = new THREE.Raycaster()
+    ray.setFromCamera(ndc, camera)
+    const hits = ray.intersectObjects(meshesRef.current, false)
+
+    if (hoverRef.current) {
+      (hoverRef.current.material as THREE.MeshStandardMaterial).emissive.setHex(0x000000)
+      hoverRef.current = null
+    }
+    if (hits.length) {
+      const mesh = hits[0].object as THREE.Mesh
+      ;(mesh.material as THREE.MeshStandardMaterial).emissive.setHex(0x446688)
+      hoverRef.current = mesh
+    }
+  }, [])
+
+  // ---- Click: animate camera to clicked face ----
+  const triggerFaceClick = useCallback((clientX: number, clientY: number) => {
     const canvas   = canvasRef.current
     const camera   = cubeCamRef.current
     const scene    = sceneRef.current
@@ -141,8 +179,8 @@ export default function ViewCube({ mainCamera, mainControls }: Props) {
 
     const rect = canvas.getBoundingClientRect()
     const ndc  = new THREE.Vector2(
-      ((e.clientX - rect.left) / rect.width)  * 2 - 1,
-      -((e.clientY - rect.top) / rect.height) * 2 + 1,
+      ((clientX - rect.left) / rect.width)  * 2 - 1,
+      -((clientY - rect.top) / rect.height) * 2 + 1,
     )
     const ray = new THREE.Raycaster()
     ray.setFromCamera(ndc, camera)
@@ -160,33 +198,78 @@ export default function ViewCube({ mainCamera, mainControls }: Props) {
     animateTo(mc, controls, toPos, toUp)
   }, [])
 
-  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current
-    const camera = cubeCamRef.current
-    const scene  = sceneRef.current
-    if (!canvas || !camera || !scene) return
+  // ---- Drag: rotate main camera in Z-up spherical coordinates ----
+  const applyDragDelta = useCallback((dx: number, dy: number) => {
+    const mc       = mainCameraRef.current
+    const controls = mainControlsRef.current
+    if (!mc || !controls) return
 
-    const rect = canvas.getBoundingClientRect()
-    const ndc  = new THREE.Vector2(
-      ((e.clientX - rect.left) / rect.width)  * 2 - 1,
-      -((e.clientY - rect.top) / rect.height) * 2 + 1,
+    const sensitivity = 0.007
+    const offset = mc.position.clone().sub(controls.target)
+    const r = offset.length()
+    if (r < 0.001) return
+
+    // Z-up spherical: θ = azimuth around Z, φ = elevation above XY plane
+    const phi   = Math.asin(Math.max(-1, Math.min(1, offset.z / r)))
+    const theta = Math.atan2(offset.y, offset.x)
+
+    const newTheta = theta - dx * sensitivity
+    // Drag up (negative dy on screen) → clientY decreases → ddy < 0 → phi + ddy decreases
+    // Invert: phi - ddy so dragging up raises the camera (phi increases)
+    const newPhi = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, phi + dy * sensitivity))
+
+    mc.position.set(
+      controls.target.x + r * Math.cos(newPhi) * Math.cos(newTheta),
+      controls.target.y + r * Math.cos(newPhi) * Math.sin(newTheta),
+      controls.target.z + r * Math.sin(newPhi),
     )
-    const ray = new THREE.Raycaster()
-    ray.setFromCamera(ndc, camera)
-    const hits = ray.intersectObjects(meshesRef.current, false)
+    mc.up.set(0, 0, 1)
+    mc.lookAt(controls.target)
+    controls.update()
+  }, [])
 
+  // ---- Pointer events ----
+  const handlePointerDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    ;(e.target as HTMLCanvasElement).setPointerCapture(e.pointerId)
+    pointerDownRef.current = true
+    isDraggingRef.current  = false
+    dragStartRef.current   = { x: e.clientX, y: e.clientY }
+    dragLastRef.current    = { x: e.clientX, y: e.clientY }
+  }, [])
+
+  const handlePointerMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!pointerDownRef.current) {
+      updateHover(e.clientX, e.clientY)
+      return
+    }
+    const dx = e.clientX - dragStartRef.current.x
+    const dy = e.clientY - dragStartRef.current.y
+    if (!isDraggingRef.current && Math.sqrt(dx * dx + dy * dy) > 4) {
+      isDraggingRef.current = true
+    }
+    if (isDraggingRef.current) {
+      const ddx = e.clientX - dragLastRef.current.x
+      const ddy = e.clientY - dragLastRef.current.y
+      applyDragDelta(ddx, ddy)
+      dragLastRef.current = { x: e.clientX, y: e.clientY }
+    }
+  }, [updateHover, applyDragDelta])
+
+  const handlePointerUp = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    const wasDragging = isDraggingRef.current
+    pointerDownRef.current = false
+    isDraggingRef.current  = false
+    if (!wasDragging) {
+      triggerFaceClick(e.clientX, e.clientY)
+    }
+    // Clear hover highlight on release
     if (hoverRef.current) {
       (hoverRef.current.material as THREE.MeshStandardMaterial).emissive.setHex(0x000000)
       hoverRef.current = null
     }
-    if (hits.length) {
-      const mesh = hits[0].object as THREE.Mesh
-      ;(mesh.material as THREE.MeshStandardMaterial).emissive.setHex(0x446688)
-      hoverRef.current = mesh
-    }
-  }, [])
+  }, [triggerFaceClick])
 
-  const handleMouseLeave = useCallback(() => {
+  const handlePointerLeave = useCallback(() => {
     if (hoverRef.current) {
       (hoverRef.current.material as THREE.MeshStandardMaterial).emissive.setHex(0x000000)
       hoverRef.current = null
@@ -198,20 +281,24 @@ export default function ViewCube({ mainCamera, mainControls }: Props) {
       position: 'absolute', bottom: 40, right: 8, width: 100, height: 100,
       borderRadius: 8, overflow: 'hidden',
       border: '1px solid rgba(58,58,92,0.6)', background: 'rgba(19,19,31,0.7)',
-      cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.4)', zIndex: 10,
+      cursor: 'grab', boxShadow: '0 2px 8px rgba(0,0,0,0.4)', zIndex: 10,
     }}>
-      <canvas ref={canvasRef} width={100} height={100}
-        onClick={handleClick} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave}
+      <canvas
+        ref={canvasRef}
+        width={100}
+        height={100}
         style={{ display: 'block' }}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerLeave={handlePointerLeave}
       />
       <div style={{
         position: 'absolute', bottom: 0, left: 0, right: 0,
         textAlign: 'center', fontSize: 9, color: 'rgba(137,180,250,0.8)',
         padding: '2px 0', background: 'rgba(19,19,31,0.5)', letterSpacing: '0.05em',
+        pointerEvents: 'none',
       }}>
-        {FACES.map((f, i) => (
-          <span key={i} style={{ display: 'none' }}>{f.label}</span>
-        ))}
         ViewCube
       </div>
     </div>

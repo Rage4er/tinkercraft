@@ -15,15 +15,19 @@ import type {
 
 // ---- Фигуры ----
 const ALL_SHAPES: {
-  type: ShapeType;
+  type: ShapeType | "text";
   label: string;
   icon: string;
   category: string;
 }[] = [
-  { type: "cube", label: "Куб", icon: "⬛", category: "Основные" },
-  { type: "sphere", label: "Сфера", icon: "🔵", category: "Основные" },
+  { type: "cube",     label: "Куб",     icon: "⬛", category: "Основные" },
+  { type: "sphere",   label: "Сфера",   icon: "🔵", category: "Основные" },
   { type: "cylinder", label: "Цилиндр", icon: "🥫", category: "Основные" },
-  { type: "cone", label: "Конус", icon: "🔺", category: "Основные" },
+  { type: "cone",     label: "Конус",   icon: "🔺", category: "Основные" },
+  { type: "torus",    label: "Тор",     icon: "⭕", category: "Основные" },
+  { type: "prism",    label: "Призма",  icon: "◬",  category: "Основные" },
+  { type: "pyramid",  label: "Пирамида",icon: "▲",  category: "Основные" },
+  { type: "text",     label: "Текст",   icon: "T",  category: "Особые"   },
 ];
 
 const SNAP_VALUES: { label: string; value: number }[] = [
@@ -56,8 +60,10 @@ function opIcon(op: TinkerCraftOperation): string {
       return "⊕";
     case "import_mesh":
       return "📥";
-    case "move":
-      return "⤢";
+    case "move": {
+      const k = (op as { kind?: string }).kind;
+      return k === "scale" ? "⤡" : k === "rotate" ? "↻" : "⤢";
+    }
     case "resize":
       return "⤡";
     case "resize_dims":
@@ -93,8 +99,10 @@ function opLabel(op: TinkerCraftOperation): string {
       return `Добавить ${op.shapeType}`;
     case "import_mesh":
       return `Импорт ${(op as { name?: string }).name ?? "STL"}`;
-    case "move":
-      return "Переместить";
+    case "move": {
+      const k = (op as { kind?: string }).kind;
+      return k === "scale" ? "Масштаб" : k === "rotate" ? "Повернуть" : "Переместить";
+    }
     case "resize_dims":
       return "Изменить размер";
     case "fillet":
@@ -129,6 +137,7 @@ function NumInput({
   disabled,
   unit = "мм",
   min,
+  step,
   onChange,
 }: {
   label: string;
@@ -136,12 +145,14 @@ function NumInput({
   disabled?: boolean;
   unit?: string;
   min?: number;
+  step?: number;
   onChange: (v: number) => void;
 }) {
-  const [draft, setDraft] = useState(value.toFixed(1));
+  const decimals = step !== undefined && step < 1 ? Math.ceil(-Math.log10(step)) : 1;
+  const [draft, setDraft] = useState(value.toFixed(decimals));
   useEffect(() => {
-    setDraft(value.toFixed(1));
-  }, [value]);
+    setDraft(value.toFixed(decimals));
+  }, [value, decimals]);
   return (
     <div className="props-row">
       <span className="props-label">{label}</span>
@@ -149,7 +160,7 @@ function NumInput({
         <input
           className="props-input"
           type="number"
-          step="1"
+          step={step ?? 1}
           value={draft}
           disabled={disabled}
           onChange={(e) => setDraft(e.target.value)}
@@ -287,6 +298,11 @@ export default function App() {
   const [extrudeAxis, setExtrudeAxis] = useState<"X" | "Y" | "Z">("Y");
   const [extrudeDepth, setExtrudeDepth] = useState(10);
   const [activeTab, setActiveTab] = useState<"objects" | "tree">("objects");
+  const [cameraMode, setCameraMode] = useState<"perspective" | "orthographic">("perspective");
+  const [showTextModal, setShowTextModal] = useState(false);
+  const [textInput, setTextInput] = useState("Text");
+  const [textSize, setTextSize] = useState(10);
+  const [textDepth, setTextDepth] = useState(5);
 
   const fitViewRef = useRef<(() => void) | null>(null);
   const resetViewRef = useRef<(() => void) | null>(null);
@@ -304,6 +320,7 @@ export default function App() {
     clipboard,
     currentProjectId,
     addShape,
+    addRawMesh,
     importStl,
     deleteSelected,
     selectObjects,
@@ -472,6 +489,39 @@ export default function App() {
     setTimeout(() => setRulerDist(null), 4500);
   }, []);
 
+  const handleAddText = useCallback(async () => {
+    setShowTextModal(false);
+    try {
+      const [{ FontLoader }, { TextGeometry }] = await Promise.all([
+        import("three/examples/jsm/loaders/FontLoader.js"),
+        import("three/examples/jsm/geometries/TextGeometry.js"),
+      ]);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const fontData = (await import("three/examples/fonts/helvetiker_regular.typeface.json")) as any;
+      const loader = new FontLoader();
+      const font = loader.parse(fontData.default ?? fontData);
+      const geo = new TextGeometry(textInput.trim() || "Text", {
+        font,
+        size: textSize,
+        depth: textDepth,
+        curveSegments: 4,
+        bevelEnabled: false,
+      });
+      geo.computeBoundingBox();
+      const posAttr = geo.attributes.position;
+      const vertices = Array.from(posAttr.array as Float32Array);
+      let indices: number[];
+      if (geo.index) {
+        indices = Array.from(geo.index.array).map(Number);
+      } else {
+        indices = Array.from({ length: posAttr.count }, (_, i) => i);
+      }
+      await addRawMesh(`Текст: ${textInput}`, vertices, indices);
+    } catch (err) {
+      console.error("Ошибка генерации текста:", err);
+    }
+  }, [textInput, textSize, textDepth, addRawMesh]);
+
   const objectList = useMemo(() => Object.values(objects), [objects]);
   const selSet = new Set(selectedIds);
   const firstSelected = selectedIds.length > 0 ? objects[selectedIds[0]] : null;
@@ -506,6 +556,16 @@ export default function App() {
         moveObject(firstSelected.id, {
           ...firstSelected.transform,
           [axis]: val,
+        });
+    },
+    [firstSelected, moveObject],
+  );
+  const handleScaleAxis = useCallback(
+    (axis: "scaleX" | "scaleY" | "scaleZ", val: number) => {
+      if (firstSelected)
+        moveObject(firstSelected.id, {
+          ...firstSelected.transform,
+          [axis]: Math.max(0.01, val),
         });
     },
     [firstSelected, moveObject],
@@ -557,6 +617,135 @@ export default function App() {
       {rulerDist !== null && (
         <div className="ruler-display">
           📏 Расстояние: <strong>{rulerDist.toFixed(2)} мм</strong>
+        </div>
+      )}
+
+      {/* ── Text Modal ── */}
+      {showTextModal && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.55)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 999,
+          }}
+          onClick={() => setShowTextModal(false)}
+        >
+          <div
+            style={{
+              background: "var(--bg-panel)",
+              border: "1px solid var(--border)",
+              borderRadius: 8,
+              padding: 20,
+              minWidth: 300,
+              boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              style={{
+                fontWeight: 600,
+                fontSize: 14,
+                marginBottom: 12,
+                color: "var(--text-primary)",
+              }}
+            >
+              ✚ 3D Текст
+            </div>
+            <input
+              style={{
+                width: "100%",
+                boxSizing: "border-box",
+                padding: "6px 8px",
+                fontSize: 14,
+                background: "var(--bg-input,#2a2a3c)",
+                border: "1px solid var(--border)",
+                borderRadius: 4,
+                color: "var(--text-primary)",
+                outline: "none",
+              }}
+              type="text"
+              value={textInput}
+              placeholder="Введите текст…"
+              autoFocus
+              onChange={(e) => setTextInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void handleAddText();
+                if (e.key === "Escape") setShowTextModal(false);
+              }}
+            />
+            <div
+              style={{
+                display: "flex",
+                gap: 12,
+                marginTop: 10,
+                fontSize: 12,
+                color: "var(--text-muted)",
+              }}
+            >
+              <label style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                Размер
+                <input
+                  type="number"
+                  value={textSize}
+                  min={1}
+                  max={200}
+                  style={{
+                    width: 54,
+                    marginLeft: 4,
+                    padding: "2px 4px",
+                    background: "var(--bg-input,#2a2a3c)",
+                    border: "1px solid var(--border)",
+                    borderRadius: 3,
+                    color: "var(--text-primary)",
+                    fontSize: 12,
+                  }}
+                  onChange={(e) => setTextSize(Number(e.target.value))}
+                />
+                мм
+              </label>
+              <label style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                Глубина
+                <input
+                  type="number"
+                  value={textDepth}
+                  min={0.5}
+                  max={100}
+                  style={{
+                    width: 54,
+                    marginLeft: 4,
+                    padding: "2px 4px",
+                    background: "var(--bg-input,#2a2a3c)",
+                    border: "1px solid var(--border)",
+                    borderRadius: 3,
+                    color: "var(--text-primary)",
+                    fontSize: 12,
+                  }}
+                  onChange={(e) => setTextDepth(Number(e.target.value))}
+                />
+                мм
+              </label>
+            </div>
+            <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+              <button
+                className="btn primary"
+                style={{ flex: 1 }}
+                disabled={busy || !workerOk}
+                onClick={() => void handleAddText()}
+              >
+                ✚ Добавить
+              </button>
+              <button
+                className="btn"
+                onClick={() => setShowTextModal(false)}
+              >
+                Отмена
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -682,6 +871,17 @@ export default function App() {
             title="Сброс вида (H)"
           >
             🏠 Home
+          </button>
+          <button
+            className={`btn${cameraMode === "orthographic" ? " active" : ""}`}
+            onClick={() =>
+              setCameraMode((m) =>
+                m === "perspective" ? "orthographic" : "perspective",
+              )
+            }
+            title="Перспектива ↔ Ортография"
+          >
+            {cameraMode === "perspective" ? "⬡ Persp" : "⬡ Ortho"}
           </button>
         </div>
 
@@ -887,7 +1087,11 @@ export default function App() {
                   className="shape-btn"
                   title={`Добавить ${s.label}`}
                   disabled={!workerOk || busy}
-                  onClick={() => addShape(s.type)}
+                  onClick={() =>
+                    s.type === "text"
+                      ? setShowTextModal(true)
+                      : addShape(s.type as ShapeType)
+                  }
                 >
                   <span className="shape-icon">{s.icon}</span>
                   <span className="shape-lbl">{s.label}</span>
@@ -1020,6 +1224,7 @@ export default function App() {
               onRulerMeasure={handleRulerMeasure}
               busy={busy}
               workerOk={workerOk}
+              cameraMode={cameraMode}
             />
           </ErrorBoundary>
 
@@ -1141,6 +1346,35 @@ export default function App() {
                 onChange={(v) => handleRotAxis("rotZ", v)}
               />
 
+              <div className="props-section-title">Масштаб</div>
+              <NumInput
+                label="X"
+                unit="×"
+                min={0.01}
+                step={0.1}
+                value={Math.round(firstSelected.transform.scaleX * 1000) / 1000}
+                disabled={busy}
+                onChange={(v) => handleScaleAxis("scaleX", v)}
+              />
+              <NumInput
+                label="Y"
+                unit="×"
+                min={0.01}
+                step={0.1}
+                value={Math.round(firstSelected.transform.scaleY * 1000) / 1000}
+                disabled={busy}
+                onChange={(v) => handleScaleAxis("scaleY", v)}
+              />
+              <NumInput
+                label="Z"
+                unit="×"
+                min={0.01}
+                step={0.1}
+                value={Math.round(firstSelected.transform.scaleZ * 1000) / 1000}
+                disabled={busy}
+                onChange={(v) => handleScaleAxis("scaleZ", v)}
+              />
+
               {/* Resize dims — только для примитивов */}
               {canResize && firstSelected.shapeType !== "import_mesh" && (
                 <div className="csg-group">
@@ -1208,6 +1442,61 @@ export default function App() {
                           resizeObject(firstSelected.id, {
                             height: Math.max(0.1, v),
                           })
+                        }
+                      />
+                    </>
+                  )}
+                  {firstSelected.shapeType === "torus" && (
+                    <>
+                      <NumInput
+                        label="Радиус тора"
+                        min={1}
+                        value={firstSelected.params.torusRadius ?? 15}
+                        disabled={busy}
+                        onChange={(v) =>
+                          resizeObject(firstSelected.id, { torusRadius: Math.max(1, v) })
+                        }
+                      />
+                      <NumInput
+                        label="Радиус трубки"
+                        min={0.5}
+                        value={firstSelected.params.tubeRadius ?? 4}
+                        disabled={busy}
+                        onChange={(v) =>
+                          resizeObject(firstSelected.id, { tubeRadius: Math.max(0.5, v) })
+                        }
+                      />
+                    </>
+                  )}
+                  {(firstSelected.shapeType === "prism" ||
+                    firstSelected.shapeType === "pyramid") && (
+                    <>
+                      <NumInput
+                        label="Радиус"
+                        min={0.5}
+                        value={firstSelected.params.radius ?? 12}
+                        disabled={busy}
+                        onChange={(v) =>
+                          resizeObject(firstSelected.id, { radius: Math.max(0.5, v) })
+                        }
+                      />
+                      <NumInput
+                        label="Высота"
+                        min={0.1}
+                        value={firstSelected.params.height ?? 20}
+                        disabled={busy}
+                        onChange={(v) =>
+                          resizeObject(firstSelected.id, { height: Math.max(0.1, v) })
+                        }
+                      />
+                      <NumInput
+                        label="Граней"
+                        unit=""
+                        min={3}
+                        value={firstSelected.params.sides ?? (firstSelected.shapeType === "prism" ? 6 : 4)}
+                        disabled={busy}
+                        onChange={(v) =>
+                          resizeObject(firstSelected.id, { sides: Math.max(3, Math.round(v)) })
                         }
                       />
                     </>

@@ -14,6 +14,26 @@ import {
   workerApplyFillet, workerBuildImportedMesh,
 } from '../csg/worker-client'
 import { parseDoodle, serializeDoodle, openDoodleFilePicker, downloadBlob } from '../io/doodle-io'
+
+// Computes the bbox center of a vertex buffer, shifts all vertices so the
+// center is at the origin, and returns the center offset.  Used to normalise
+// CSG result geometry so the Three.js pivot can be placed at the true world
+// position of the result instead of always being at (0,0,0).
+function extractAndCenter(vertices: Float32Array): { cx: number; cy: number; cz: number } {
+  if (vertices.length === 0) return { cx: 0, cy: 0, cz: 0 }
+  let minX = Infinity, minY = Infinity, minZ = Infinity
+  let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity
+  for (let i = 0; i < vertices.length; i += 3) {
+    if (vertices[i]   < minX) minX = vertices[i];   if (vertices[i]   > maxX) maxX = vertices[i]
+    if (vertices[i+1] < minY) minY = vertices[i+1]; if (vertices[i+1] > maxY) maxY = vertices[i+1]
+    if (vertices[i+2] < minZ) minZ = vertices[i+2]; if (vertices[i+2] > maxZ) maxZ = vertices[i+2]
+  }
+  const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2, cz = (minZ + maxZ) / 2
+  for (let i = 0; i < vertices.length; i += 3) {
+    vertices[i] -= cx; vertices[i+1] -= cy; vertices[i+2] -= cz
+  }
+  return { cx, cy, cz }
+}
 import { saveProject as pmSave, updateProject as pmUpdate, loadProject as pmLoad } from '../io/project-manager'
 import { downloadStl } from '../io/stl-export'
 import { openStlFilePicker, parseStlFile } from '../io/stl-import'
@@ -70,6 +90,7 @@ export interface DocumentStore {
 
   // Actions
   addShape:        (shapeType: ShapeType, params?: ShapeParams) => Promise<void>
+  addRawMesh:      (name: string, vertices: number[], indices: number[]) => Promise<void>
   importStl:       () => Promise<void>
   deleteSelected:  () => Promise<void>
   selectObjects:   (ids: string[], add: boolean) => void
@@ -106,6 +127,7 @@ async function rebuildFromHistory(ops: TinkerCraftOperation[]): Promise<Record<s
 
   const meta: Record<string, { color: string; shapeType: ShapeType; params: ShapeParams; transform: TransformNR }> = {}
   const transforms: Record<string, TransformNR> = {}
+  const csgResultIds = new Set<string>()
 
   for (const op of ops) {
     if (op.type === 'add_shape') {
@@ -184,7 +206,20 @@ async function rebuildFromHistory(ops: TinkerCraftOperation[]): Promise<Record<s
         const nullT: TransformNR = { x:0,y:0,z:0,rotX:0,rotY:0,rotZ:0,scaleX:1,scaleY:1,scaleZ:1 }
         meta[op.resultId]       = { color: srcColor, shapeType: 'cube', params: {}, transform: nullT }
         transforms[op.resultId] = nullT
+        csgResultIds.add(op.resultId)
       }
+    }
+  }
+
+  // For CSG results the worker returns geometry at world positions.  Center
+  // each result's vertices and store the bbox offset as the pivot position,
+  // matching what the direct csgBoolean action does.
+  const meshByObjId = new Map(result.results.map(m => [m.objId, m]))
+  for (const id of csgResultIds) {
+    const m = meshByObjId.get(id)
+    if (m && meta[id]) {
+      const { cx, cy, cz } = extractAndCenter(m.vertices)
+      meta[id] = { ...meta[id], transform: { ...meta[id].transform, x: cx, y: cy, z: cz } }
     }
   }
 
@@ -227,8 +262,12 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const id  = nextId('obj')
     const transform: TransformNR = { x: idx * 25, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
     const color = colorForIndex(idx)
-    const defaultParams: ShapeParams = shapeType === 'sphere' || shapeType === 'cone'
-      ? { radius: 12, height: 24 }
+    const defaultParams: ShapeParams =
+      shapeType === 'sphere'   ? { radius: 12, segments: 32 }
+      : shapeType === 'cone'   ? { radius: 10, height: 24, segments: 32 }
+      : shapeType === 'torus'  ? { torusRadius: 15, tubeRadius: 4, segments: 32, tubeSegments: 16 }
+      : shapeType === 'prism'  ? { radius: 12, height: 20, sides: 6 }
+      : shapeType === 'pyramid'? { radius: 12, height: 20, sides: 4 }
       : { width: 20, height: 20, depth: 20 }
     const finalParams = params ?? defaultParams
     const op: AddShapeOperation = { type: 'add_shape', id, shapeType, params: finalParams, color, transform }
@@ -241,6 +280,24 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const newOps = [...operations.slice(0, historyIndex), op]
       set({ operations: newOps, historyIndex: newOps.length, objects: { ...objects, [id]: obj }, modified: true, busy: false, lastCsgMs: ms })
     } catch (e) { set({ busy: false }); console.error('addShape:', e) }
+  },
+
+  // ── Добавить произвольный меш (текст, и т.д.) ──
+  addRawMesh: async (name, vertices, indices) => {
+    const { objects, operations, historyIndex } = get()
+    const id    = nextId('txt')
+    const color = colorForIndex(Object.keys(objects).length)
+    const transform: TransformNR = { x: Object.keys(objects).length * 25, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
+    set({ busy: true })
+    try {
+      const t0     = performance.now()
+      const result = await workerBuildImportedMesh(id, vertices, indices)
+      const ms     = performance.now() - t0
+      const obj: SceneObject = { id, shapeType: 'import_mesh', params: {}, color, transform, visible: true, locked: false, vertices: result.vertices, indices: result.indices }
+      const op: ImportMeshOperation = { type: 'import_mesh', id, name, color, transform, vertices, indices }
+      const newOps = [...operations.slice(0, historyIndex), op]
+      set({ operations: newOps, historyIndex: newOps.length, objects: { ...objects, [id]: obj }, selectedIds: [id], modified: true, busy: false, lastCsgMs: ms })
+    } catch (e) { set({ busy: false }); console.error('addRawMesh:', e) }
   },
 
   // ── Импорт STL ──
@@ -377,9 +434,18 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     set({ busy: true })
     try {
       const t0   = performance.now()
-      const mesh = await workerCsgBoolean(idA, idB, op, resultId)
+      // Pass scale+rotation of each operand so the worker can apply them
+      // temporarily before the boolean op (cached geometry has translation only).
+      const srOf = (id: string) => {
+        const t = objects[id].transform
+        return { x: t.x, y: t.y, z: t.z, rotX: t.rotX, rotY: t.rotY, rotZ: t.rotZ, scaleX: t.scaleX, scaleY: t.scaleY, scaleZ: t.scaleZ }
+      }
+      const mesh = await workerCsgBoolean(idA, idB, op, resultId, srOf(idA), srOf(idB))
       const ms   = performance.now() - t0
-      const newObj: SceneObject = { id: resultId, shapeType: 'cube', params: {}, color: objects[idA].color, transform: { x:0,y:0,z:0,rotX:0,rotY:0,rotZ:0,scaleX:1,scaleY:1,scaleZ:1 }, visible: true, locked: false, vertices: mesh.vertices, indices: mesh.indices }
+      // Center result geometry at origin so the Three.js pivot can be placed at
+      // the true world position (bbox center of the boolean result).
+      const { cx, cy, cz } = extractAndCenter(mesh.vertices)
+      const newObj: SceneObject = { id: resultId, shapeType: 'cube', params: {}, color: objects[idA].color, transform: { x:cx,y:cy,z:cz,rotX:0,rotY:0,rotZ:0,scaleX:1,scaleY:1,scaleZ:1 }, visible: true, locked: false, vertices: mesh.vertices, indices: mesh.indices }
       const newObjects = { ...objects }; delete newObjects[idA]; delete newObjects[idB]; newObjects[resultId] = newObj
       const histOp: TinkerCraftOperation = { type: 'group', ids: [idA, idB], isHull: false, isIntersect: op === 'intersect', subtractOp: op === 'subtract', resultId } as TinkerCraftOperation
       const newOps = [...operations.slice(0, historyIndex), histOp]
@@ -395,7 +461,12 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const delta: Vec3 = { x: transform.x - obj.transform.x, y: transform.y - obj.transform.y, z: transform.z - obj.transform.z }
     const rotDelta: Vec3 = { x: transform.rotX - obj.transform.rotX, y: transform.rotY - obj.transform.rotY, z: transform.rotZ - obj.transform.rotZ }
     const scaleDelta: Vec3 = { x: transform.scaleX - obj.transform.scaleX, y: transform.scaleY - obj.transform.scaleY, z: transform.scaleZ - obj.transform.scaleZ }
-    const op: TinkerCraftOperation = { type: 'move', ids: [id], delta, rotDelta, scaleDelta }
+    const eps = 1e-6
+    const hasPos   = Math.abs(delta.x) > eps || Math.abs(delta.y) > eps || Math.abs(delta.z) > eps
+    const hasRot   = Math.abs(rotDelta.x) > eps || Math.abs(rotDelta.y) > eps || Math.abs(rotDelta.z) > eps
+    const hasScale = Math.abs(scaleDelta.x) > eps || Math.abs(scaleDelta.y) > eps || Math.abs(scaleDelta.z) > eps
+    const kind = hasScale && !hasPos && !hasRot ? 'scale' : hasRot && !hasPos && !hasScale ? 'rotate' : 'translate'
+    const op: TinkerCraftOperation = { type: 'move', ids: [id], delta, rotDelta, scaleDelta, kind }
     const newOps = [...operations.slice(0, historyIndex), op]
     set({ operations: newOps, historyIndex: newOps.length, objects: { ...objects, [id]: { ...obj, transform } }, modified: true })
   },
@@ -612,7 +683,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       await workerBuildShape(slabId, 'cube', slabP, slabT)
       const resultMesh = await workerCsgBoolean(id, slabId, 'union', resultId)
       const ms = performance.now() - t0
-      const newObj: SceneObject = { id: resultId, shapeType: 'cube', params: {}, color: obj.color, transform: { x:0,y:0,z:0,rotX:0,rotY:0,rotZ:0,scaleX:1,scaleY:1,scaleZ:1 }, visible: true, locked: false, vertices: resultMesh.vertices, indices: resultMesh.indices }
+      const { cx: ex, cy: ey, cz: ez } = extractAndCenter(resultMesh.vertices)
+      const newObj: SceneObject = { id: resultId, shapeType: 'cube', params: {}, color: obj.color, transform: { x:ex,y:ey,z:ez,rotX:0,rotY:0,rotZ:0,scaleX:1,scaleY:1,scaleZ:1 }, visible: true, locked: false, vertices: resultMesh.vertices, indices: resultMesh.indices }
       const addOp: AddShapeOperation = { type: 'add_shape', id: slabId, shapeType: 'cube', params: slabP, color: obj.color, transform: slabT }
       const grpOp: TinkerCraftOperation = { type: 'group', ids: [id, slabId], isHull: false, isIntersect: false, resultId } as TinkerCraftOperation
       const newObjects = { ...objects }; delete newObjects[id]; newObjects[resultId] = newObj
