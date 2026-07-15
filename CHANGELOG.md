@@ -1,0 +1,70 @@
+# Changelog
+
+Все заметные изменения в этом проекте документируются в этом файле.
+
+Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/),
+версионирование следует [SemVer](https://semver.org/lang/ru/).
+
+---
+
+## [Unreleased]
+
+### Added — код-ревью раунд 1 (2025-07-15)
+
+- Toast-уведомления: `store/notifications.ts`, `components/ToastContainer.tsx`
+- 15 unit-тестов: `stl-import.test.ts`, `stl-export.test.ts`, `document-store.test.ts`
+- Валидация входных данных в воркере: `clamp()`, `sanitizeParams()`
+- Типобезопасные WASM-интерфейсы в `worker.ts` (`ManifoldAPI`, `ManifoldObject`, `ManifoldMesh`)
+
+### Changed
+
+- `alert()` заменён на toast-уведомления во всём проекте
+- `selSet` и `totalTris` обёрнуты в `useMemo` (PERF-2, PERF-3)
+- Keyboard `useEffect` стабилизирован через паттерн `kbRef` (WARN-1)
+- Убраны `eslint-disable` suppressions в `App.tsx` (WARN-2)
+
+### Removed
+
+- `csg/engine.ts` — мёртвый код, 0 импортов (WARN-5)
+
+### Fixed — скрытые баги, обнаруженные при типизации
+
+- `nullT` в `rebuildScene` — отсутствовали `scaleX/scaleY/scaleZ`
+- Итерация кэша в `rebuildScene` — не пропускала `null` (non-manifold) записи
+- `TransformNR` литералы в `types.test.ts` и `stl-import.ts` — без полей scale
+
+---
+
+## [0.0.1] — MVP (Фазы 0–6)
+
+### Added
+
+- **Фаза 0:** Vite + React + TypeScript scaffold, Zustand store, Three.js вьюпорт
+- **Фаза 1:** Базовый 3D вьюпорт с орбитальной камерой, освещение, сетка
+- **Фаза 2:** 7 примитивов (куб, сфера, цилиндр, конус, тор, призма, пирамида) через manifold-3d WASM Worker
+- **Фаза 2:** Скругление (fillet) для кубов через `refine()` + `warp()`
+- **Фаза 3:** Выделение объектов (raycaster), гизмо TransformControls, drag-перемещение
+- **Фаза 3:** ViewCube с drag-вращением и snap к граням
+- **Фаза 3:** Компонент-дерево сцены, панель свойств, тулбар
+- **Фаза 4:** Булевы операции CSG (Union, Subtract, Intersect) с центрированием результатов
+- **Фаза 4:** История операций с undo/redo, таймлайн с фильтрацией
+- **Фаза 4:** Зеркало по осям, выравнивание (align) по 3 осям
+- **Фаза 5:** Импорт/экспорт STL (бинарный + ASCII)
+- **Фаза 5:** Формат `.doodle` (ZIP + JSON) с совместимостью с Java-оригиналом
+- **Фаза 5:** Автосохранение в IndexedDB, восстановление сессии
+- **Фаза 5:** Менеджер проектов (несколько проектов в IndexedDB)
+- **Фаза 5:** 3D-текст через TextGeometry (opentype.js)
+- **Фаза 5:** Линейка для измерения расстояний
+- **Фаза 5:** Переключение перспективная ↔ ортографическая камера
+- **Фаза 6:** Тёмная/светлая темы, PWA-манифест, COOP/COEP заголовки
+- **Фаза 6:** ErrorBoundary, WebGLFallback
+- **Фаза 6:** 20 type-level тестов (`types.test.ts`)
+- **Фаза 6:** Тесты менеджера проектов (`project-manager.test.ts`)
+
+### Known Limitations
+
+- Скругление работает только для кубов
+- Undo/redo выполняет полный rebuild (без кэша snapshots)
+- `App.tsx` — 1809 строк (God Component, кандидат на разделение)
+- Нет импорта SVG и 3MF
+- Robot Lab не реализован

@@ -3,25 +3,95 @@
 // Хранит Map<id, ManifoldObj> в памяти воркера.
 // ============================================================
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type M = any;
+// ---- Type-safe Manifold WASM interface ----
 
-let wasm: M = null;
+interface ManifoldMesh {
+  numProp: number;
+  vertProperties: Float32Array;
+  triVerts: ArrayBuffer;
+}
+
+interface ManifoldObject {
+  transform(matrix: number[]): ManifoldObject;
+  add(other: ManifoldObject): ManifoldObject;
+  subtract(other: ManifoldObject): ManifoldObject;
+  intersect(other: ManifoldObject): ManifoldObject;
+  getMesh(): ManifoldMesh;
+  refine(recursions: number): ManifoldObject;
+  warp(fn: (v: number[]) => void): ManifoldObject;
+}
+
+interface CrossSection {
+  translate(offset: [number, number]): CrossSection;
+}
+
+interface ManifoldConstructor {
+  new (mesh: {
+    vertProperties: Float32Array;
+    triVerts: Uint32Array | ArrayBuffer;
+    numProp: number;
+  }): ManifoldObject;
+  cube(size: [number, number, number], center: boolean): ManifoldObject;
+  sphere(radius: number, segments: number): ManifoldObject;
+  cylinder(
+    height: number,
+    radiusTop: number,
+    radiusBottom: number,
+    segments: number,
+    center: boolean,
+  ): ManifoldObject;
+  revolve(crossSection: CrossSection, segments: number): ManifoldObject;
+}
+
+interface CrossSectionConstructor {
+  circle(radius: number, segments: number): CrossSection;
+}
+
+interface ManifoldAPI {
+  Manifold: ManifoldConstructor;
+  CrossSection: CrossSectionConstructor;
+  setup(): void;
+}
+
+type M = ManifoldObject;
+
+// Definite assignment: wasm is initialised inside initPromise (awaited before
+// any message handler runs), so it is never null when functions use it.
+let wasm!: ManifoldAPI;
 
 const initPromise: Promise<void> = (async () => {
   const Module = await import("manifold-3d");
-  wasm = await Module.default();
+  wasm = await Module.default() as unknown as ManifoldAPI;
   wasm.setup();
   self.postMessage({ type: "ready" });
 })();
 
-// Кэш manifold-объектов по id
-const cache = new Map<string, M>();
+// Кэш manifold-объектов по id (null = non-manifold import, CSG not supported)
+const cache = new Map<string, ManifoldObject | null>();
 
 interface ShapeInfo {
   shapeType: string;
   params: Record<string, number>;
   filletRadius: number;
+}
+
+// ---- Валидация входных данных (SEC-1) ----
+
+/** Clamp a value to [min, max]; returns min for NaN/Infinity. */
+function clamp(v: number, min: number, max: number): number {
+  if (!Number.isFinite(v)) return min;
+  return Math.max(min, Math.min(max, v));
+}
+
+/** Sanitise user-supplied params: drop non-numbers, clamp to ±1e6. */
+function sanitizeParams(params: Record<string, unknown>): Record<string, number> {
+  const result: Record<string, number> = {};
+  for (const [key, val] of Object.entries(params)) {
+    if (key.startsWith('_')) continue; // skip internal fields (_verts, _tris)
+    const n = typeof val === 'number' ? val : NaN;
+    result[key] = Number.isFinite(n) ? clamp(n, -1e6, 1e6) : 0;
+  }
+  return result;
 }
 
 // ---- Утилиты ----
@@ -278,7 +348,8 @@ self.addEventListener("message", async (e: MessageEvent) => {
             triVerts: tris,
           });
         } else {
-          m = buildPrimitive(shapeType, params);
+          const safeP = sanitizeParams(params);
+          m = buildPrimitive(shapeType, safeP);
           m = applyTransform(m, transform);
         }
         cache.set(msg.objId as string, m);
@@ -310,7 +381,7 @@ self.addEventListener("message", async (e: MessageEvent) => {
           scaleX?: number; scaleY?: number; scaleZ?: number;
         };
 
-        let m = buildPrimitiveWithFillet(shapeType, params, radius);
+        let m = buildPrimitiveWithFillet(shapeType, sanitizeParams(params), clamp(radius, 0, 1e4));
         m = applyTransform(m, transform);
         cache.set(msg.objId as string, m);
         const { vertices, indices, tris } = extractMesh(m);
@@ -500,7 +571,7 @@ self.addEventListener("message", async (e: MessageEvent) => {
                 params: {},
                 filletRadius: 0,
               });
-              const nullT = { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0 };
+              const nullT: FullTransform = { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 };
               currentTransforms.set(op.id as string, nullT);
             } catch (ie) {
               console.warn("import_mesh rebuild error:", ie);
@@ -662,6 +733,7 @@ self.addEventListener("message", async (e: MessageEvent) => {
         }> = [];
         const transfers: ArrayBuffer[] = [];
         for (const [objId, m] of cache) {
+          if (!m) continue; // skip non-manifold imports
           const { vertices, indices, tris } = extractMesh(m);
           results.push({ objId, vertices, indices, tris });
           transfers.push(

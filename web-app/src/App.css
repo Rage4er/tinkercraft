@@ -486,3 +486,23 @@ body {
 .proj-name { font-size: 12px; font-weight: 500; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .proj-meta { font-size: 10px; color: var(--text-muted); margin-top: 2px; }
 .proj-actions { display: flex; gap: 4px; flex-shrink: 0; }
+
+/* ---- Toast notifications (SEC-2) ---- */
+.toast-container {
+  position: fixed; top: 48px; right: 12px; z-index: 3000;
+  display: flex; flex-direction: column; gap: 6px;
+  pointer-events: auto; max-width: 360px;
+}
+.toast {
+  display: flex; align-items: center; gap: 8px; padding: 8px 14px;
+  background: var(--bg-panel); border: 1px solid var(--border);
+  border-left: 3px solid var(--accent); border-radius: var(--radius-sm);
+  font-size: 12px; color: var(--text-primary);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.35);
+  cursor: pointer; animation: toastIn 0.2s ease;
+  transition: opacity 0.2s, transform 0.2s;
+}
+.toast:hover { opacity: 0.85; }
+.toast-icon { font-size: 14px; flex-shrink: 0; }
+.toast-msg { flex: 1; word-break: break-word; }
+@keyframes toastIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }

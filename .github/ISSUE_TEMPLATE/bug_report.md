@@ -1,35 +1,37 @@
 ---
 name: Bug Report
 about: Report something that isn't working correctly
-title: "[BUG] <you put your summary here>"
+title: "[BUG] <краткое описание>"
 labels: bug
 assignees: ''
 ---
 
-### Bug Description - <You put clear and concise description of what the bug is here>
+### Описание бага
 
-### Environment
-CadDoodle Version: <You put the version here >
-Operating System: <you fill in your operating system information here>
+<!-- Чёткое и краткое описание что не работает -->
 
-### Steps to Reproduce - Provide a step-by-step description of how to reproduce the bug
+### Окружение
+
+- **Браузер:** (например, Chrome 126, Firefox 127)
+- **ОС:** (например, Windows 11, Ubuntu 24.04, macOS 14)
+- **Версия TinkerCraft:** (см. package.json или вкладка About)
+
+### Шаги воспроизведения
+
 1. 
 2. 
 3. 
-4. 
-5.
 
+### Ожидаемое поведение
 
-### Expected Behavior - What you expected to happen?
+<!-- Что должно было произойти -->
 
+### Фактическое поведение
 
-### Actual Behavior - What actually happened
+<!-- Что произошло на самом деле -->
 
+### Скриншоты / логи консоли
 
-### Screenshots / Logs / Additional information or comments
-
-* Required *
-
-Attach the cadoodleLog.txt file found in ~/Documments/Cadoodle-workspace/ 
+<!-- Приложите скриншот или текст из DevTools Console (F12 → Console) -->
   
 

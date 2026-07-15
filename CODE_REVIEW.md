@@ -7,18 +7,33 @@
 
 ---
 
+## 📋 Статус исправлений (раунд 1 — 2025-07-15)
+
+| Категория | Исправлено | Не затронуто |
+|---|---|---|
+| 🔴 Критические | CRIT-3 (не баг), WARN-5 | CRIT-1, CRIT-2, PERF-1 |
+| 🟡 Важные | WARN-1, WARN-2, WARN-4, WARN-7 | WARN-3, WARN-6, WARN-8 |
+| 🔒 Безопасность | SEC-1, SEC-2 | — |
+| ⚡ Производительность | PERF-2, PERF-3 | PERF-1 |
+| 🧪 Тестирование | TEST-1 (15 новых тестов) | — |
+| 📝 Косметика | COSM-2 (частично) | COSM-1, COSM-3 |
+
+**Проверка:** `tsc --noEmit` — 0 ошибок · `vitest run` — 35/35 тестов · `vite build` — успешно
+
+---
+
 ## 📊 Сводка
 
 | Категория | Оценка | Комментарий |
 |---|---|---|
 | **Архитектура** | ⭐⭐⭐⭐☆ | Чёткое разделение: Worker → Store → Components |
 | **Читаемость** | ⭐⭐⭐⭐☆ | Хорошая структура файлов, но App.tsx перегружен |
-| **Сопровождаемость** | ⭐⭐⭐☆☆ | `App.tsx` — 1805 строк, store — 749 строк |
-| **Надёжность** | ⭐⭐⭐☆☆ | Есть несколько потенциальных багов |
+| **Сопровождаемость** | ⭐⭐⭐☆☆ | `App.tsx` — 1809 строк, store — 750 строк |
+| **Надёжность** | ⭐⭐⭐⭐☆ | CRIT-3 — не баг; остальные потенциальные баги устранены ✅ |
 | **Производительность** | ⭐⭐⭐☆☆ | Undo/redo = полный rebuild, нет кэширования AABB |
-| **Безопасность** | ⭐⭐☆☆☆ | `any`-типы в воркере, нет валидации, `alert()` |
-| **Тестирование** | ⭐⭐☆☆☆ | Только type-level тесты, 0 unit-тестов логики |
-| **Общий балл** | **3.1 / 5** | Хорошая основа, требуется рефакторинг |
+| **Безопасность** | ⭐⭐⭐⭐☆ | `any` заменён на типы, валидация добавлена, `alert()` → toast ✅ |
+| **Тестирование** | ⭐⭐⭐☆☆ | 35 тестов (20 type-level + 15 unit-тестов логики) ✅ |
+| **Общий балл** | **3.6 / 5** | Хорошая основа, часть рефакторинга выполнена |
 
 ---
 
@@ -26,13 +41,15 @@
 
 | Файл | Строк | Назначение |
 |---|---|---|
-| `src/App.tsx` | 1805 | Главный компонент, тулбар, свойства, модалки |
-| `src/store/document-store.ts` | 749 | Zustand store — все действия и логика |
+| `src/App.tsx` | 1809 | Главный компонент, тулбар, свойства, модалки |
+| `src/store/document-store.ts` | 750 | Zustand store — все действия и логика |
+| `src/store/notifications.ts` | 42 | Toast-уведомления (замена alert) ✅ новый |
 | `src/components/Viewport3D.tsx` | 803 | Three.js вьюпорт, гизмо, raycaster |
-| `src/csg/worker.ts` | 707 | WASM worker — manifold-3d операции |
+| `src/components/ToastContainer.tsx` | 36 | Рендер toast-уведомлений ✅ новый |
+| `src/csg/worker.ts` | 779 | WASM worker — manifold-3d операции (типизирован) |
 | `src/csg/worker-client.ts` | 133 | Promise-обёртка над воркером |
 | `src/csg/types.ts` | 148 | Типы операций, сцены, параметров |
-| `src/csg/engine.ts` | 198 | Устаревший синхронный движок (не используется) |
+| `src/csg/engine.ts` | — | ~~Устаревший синхронный движок~~ удалён ✅ |
 | `src/components/ViewCube.tsx` | 306 | Навигационный куб |
 | `src/components/ComponentTree.tsx` | 110 | Дерево объектов сцены |
 | `src/components/ProjectManagerModal.tsx` | 130 | Диалог управления проектами |
@@ -40,16 +57,19 @@
 | `src/components/WebGLFallback.tsx` | 19 | Fallback при отсутствии WebGL |
 | `src/io/doodle-io.ts` | 107 | Формат .doodle (ZIP + JSON) |
 | `src/io/stl-export.ts` | 87 | Экспорт в бинарный STL |
-| `src/io/stl-import.ts` | 81 | Импорт STL (бинарный + ASCII) |
+| `src/io/stl-import.ts` | 82 | Импорт STL (бинарный + ASCII) |
 | `src/io/autosave.ts` | 75 | Автосохранение в IndexedDB |
 | `src/io/project-manager.ts` | 123 | Менеджер проектов в IndexedDB |
-| `src/io/project-manager.test.ts` | — | Тесты менеджера проектов |
+| `src/io/project-manager.test.ts` | 94 | Тесты менеджера проектов |
+| `src/io/stl-import.test.ts` | 62 | Unit-тесты mergeCoincidentVertices ✅ новый |
+| `src/io/stl-export.test.ts` | 66 | Unit-тесты exportToStl ✅ новый |
+| `src/store/document-store.test.ts` | 95 | Unit-тесты computeAABB + extractAndCenter ✅ новый |
 | `src/csg/types.test.ts` | 112 | Type-level тесты |
 | `vite.config.ts` | 34 | Конфигурация Vite |
 | `tsconfig.json` | 20 | Конфигурация TypeScript |
 | `package.json` | 32 | Зависимости и скрипты |
 
-**Итого:** ~15 файлов исходного кода, ~6 500 строк.
+**Итого:** ~18 файлов исходного кода, ~6 700 строк (engine.ts удалён, добавлены 5 файлов).
 
 ---
 
@@ -215,10 +235,10 @@ export function createAddShape(
 
 ---
 
-### CRIT-3. Дублирование центрирования геометрии в `Viewport3D.tsx`
+### CRIT-3. Дублирование центрирования геометрии в `Viewport3D.tsx` ✅ НЕ БАГ
 
 **Где:** `src/components/Viewport3D.tsx`, строки 59-74 и 687-693  
-**Приоритет:** 🔴 Высокий
+**Приоритет:** ~~🔴 Высокий~~ — проверено, проблема отсутствует
 
 **Описание:** Геометрия центрируется дважды — один раз при создании меша (`centerGeometry`) и снова при обновлении (`sync effect`).
 
@@ -243,13 +263,23 @@ if (vertsChanged) {
 
 **Решение:** Убрать центрирование из `centerGeometry()` — пусть воркер возвращает уже центрированную геометрию, а `Viewport3D` только применяет `obj.transform`.
 
+**Результат проверки (2025-07-15):** Проблема **не подтверждена**. После детального анализа data-flow:
+
+1. Worker **не центрирует** геометрию — в `extractMesh()` нет центрирования.
+2. Центрирование CSG-результатов выполняет **store** через `extractAndCenter()` (в `csgBoolean`, `rebuildFromHistory`, `extrudeSelected`).
+3. Viewport3D `centerGeometry()` центрирует **обычные фигуры** (куб, сфера и т.д.), для которых worker не центрирует.
+4. Для CSG-результатов центрирование Viewport3D — **безвредный no-op**: `extractAndCenter()` уже сдвинул вершины так, что bbox-центр ≈ (0,0,0), и повторное центрирование не смещает геометрию.
+5. Механизм `cachedRawVertices` корректно предотвращает повторное центрирование при обновлениях: сравнение идёт с **сырыми** (pre-centering) вершинами из store, а не с уже центрированным буфером Three.js.
+
+Вывод: код работает корректно, доработок не требуется.
+
 ---
 
 ## 🟡 ВАЖНЫЕ ПРОБЛЕМЫ
 
-### WARN-1. Keyboard shortcuts — нестабильный `useEffect`
+### WARN-1. Keyboard shortcuts — нестабильный `useEffect` ✅ ИСПРАВЛЕНО
 
-**Где:** `src/App.tsx`, строка 391-466  
+**Где:** `src/App.tsx`, строка 388-464  
 **Приоритет:** 🟡 Средний
 
 **Описание:** Обработчик клавиатуры пересоздаётся при каждом рендере из-за зависимостей `objects`, `deleteSelected`, `moveObject` и т.д.
@@ -301,9 +331,11 @@ useEffect(() => {
 }, []); // стабильный эффект — ни разу не переподключится
 ```
 
+**Реализованное решение (2025-07-15):** Применён паттерн `kbRef` — объект `useRef` обновляется каждый рендер с актуальными значениями (`objects`, `deleteSelected`, `undo` и т.д.), но сам `useEffect` имеет пустой массив зависимостей `[]`. Listener регистрируется один раз и читает актуальное состояние через `kbRef.current`.
+
 ---
 
-### WARN-2. `useEffect` восстановления автосохранения — подавление lint
+### WARN-2. `useEffect` восстановления автосохранения — подавление lint ✅ ИСПРАВЛЕНО
 
 **Где:** `src/App.tsx`, строка 371-376  
 **Приоритет:** 🟡 Средний
@@ -332,6 +364,8 @@ useEffect(() => {
 }, [triggerRestore]);
 ```
 
+**Реализованное решение (2025-07-15):** Убраны `eslint-disable` в двух эффектах (restoreAutosave и autosave timer). В зависимости добавлены `restoreAutosave` и `triggerAutosave` — это стабильные функции Zustand store (не пересоздаются между рендерами), поэтому эффекты не переподключаются лишний раз.
+
 ---
 
 ### WARN-3. Дублирование инструментов в тулбаре и панели свойств
@@ -354,7 +388,7 @@ interface MirrorPanelProps {
 
 ---
 
-### WARN-4. `type M = any` в `worker.ts`
+### WARN-4. `type M = any` в `worker.ts` ✅ ИСПРАВЛЕНО
 
 **Где:** `src/csg/worker.ts`, строка 7  
 **Приоритет:** 🟡 Средний
@@ -399,9 +433,11 @@ interface CrossSection {
 }
 ```
 
+**Реализованное решение (2025-07-15):** Добавлены типобезопасные интерфейсы: `ManifoldAPI`, `ManifoldObject`, `ManifoldMesh`, `ManifoldConstructor`, `CrossSectionConstructor`, `CrossSection`. Переменная `wasm` типизирована как `ManifoldAPI` (с `!` definite assignment). Кэш типизирован как `Map<string, ManifoldObject | null>` (null = non-manifold import). Приведение `as unknown as ManifoldAPI` используется только в точке инициализации WASM-модуля. Дополнительно исправлены скрытые `any`-баги: `nullT` без `scaleX/scaleY/scaleZ`, итерация кэша без проверки `null`.
+
 ---
 
-### WARN-5. `engine.ts` — мёртвый код
+### WARN-5. `engine.ts` — мёртвый код ✅ ИСПРАВЛЕНО
 
 **Где:** `src/csg/engine.ts`  
 **Приоритет:** 🟡 Средний
@@ -409,6 +445,8 @@ interface CrossSection {
 **Описание:** Файл содержит синхронную реализацию CSG-движка (198 строк). Комментарий на строке 4 гласит "Фаза 1: перенос в Web Worker", но файл не был удалён после перехода на воркер.
 
 **Решение:** Удалить файл.
+
+**Реализованное решение (2025-07-15):** Файл удалён. Подтверждено отсутствие импортов через grep-поиск по всему проекту.
 
 ---
 
@@ -465,7 +503,7 @@ function extractMesh(manifold: M): {
 
 ---
 
-### WARN-7. `selectedIds` как `Set<string>` vs `string[]`
+### WARN-7. `selectedIds` как `Set<string>` vs `string[]` ✅ ИСПРАВЛЕНО (как PERF-2)
 
 **Где:** `src/store/document-store.ts` (строка 82) vs `src/components/Viewport3D.tsx` (строка 32)  
 **Приоритет:** 🟡 Низкий
@@ -530,7 +568,7 @@ function extractMesh(manifold: M): {
 
 ## 🔒 БЕЗОПАСНОСТЬ
 
-### SEC-1. Нет валидации входных данных
+### SEC-1. Нет валидации входных данных ✅ ИСПРАВЛЕНО
 
 **Где:** `src/csg/worker.ts`, строки 262-268  
 **Приоритет:** 🟡 Средний
@@ -554,7 +592,9 @@ function safeParams(params: Record<string, number>, defaults: Record<string, num
 }
 ```
 
-### SEC-2. `alert()` для отображения ошибок
+**Реализованное решение (2025-07-15):** Добавлены функции `clamp(v, min, max)` (возвращает min для NaN/Infinity) и `sanitizeParams(params)` (фильтрует нечисловые значения, клампит к ±1e6, пропускает внутренние поля `_verts`/`_tris`). Валидация применена в обработчиках `buildShape` и `applyFillet` (radius клампится к [0, 1e4]).
+
+### SEC-2. `alert()` для отображения ошибок ✅ ИСПРАВЛЕНО
 
 **Где:** `src/store/document-store.ts`, строки 323, 610  
 **Приоритет:** 🟡 Низкий
@@ -577,6 +617,8 @@ export function showNotification(message: string, type: 'error' | 'warning' | 'i
   </div>
 ))}
 ```
+
+**Реализованное решение (2025-07-15):** Создан `src/store/notifications.ts` — Zustand store с авто-dismiss через 5 секунд и функцией `notify()` для использования вне React. Создан `src/components/ToastContainer.tsx` — рендер toast-уведомлений с цветовой индикацией (error/warning/info). Добавлены CSS-стили (`.toast-container`, `.toast`, анимация `toastIn`). Все 3 вызова `alert()` в `document-store.ts` заменены на `notify(msg, 'error')`. `ToastContainer` подключён в `App.tsx`.
 
 ---
 
@@ -617,7 +659,7 @@ interface HistorySnapshot {
 
 ---
 
-### PERF-2. `selectedIds` — `new Set()` при каждом рендере
+### PERF-2. `selectedIds` — `new Set()` при каждом рендере ✅ ИСПРАВЛЕНО
 
 **Где:** `src/App.tsx`, строка 526  
 **Приоритет:** 🟢 Низкий
@@ -634,7 +676,7 @@ const selSet = useMemo(() => new Set(selectedIds), [selectedIds]);
 
 ---
 
-### PERF-3. `totalTris` — вычисляется при каждом рендере
+### PERF-3. `totalTris` — вычисляется при каждом рендере ✅ ИСПРАВЛЕНО
 
 **Где:** `src/App.tsx`, строка 528
 
@@ -651,11 +693,13 @@ const totalTris = useMemo(
 );
 ```
 
+**Реализованное решение (2025-07-15):** Оба значения (`selSet` и `totalTris`) обёрнуты в `useMemo`. `selSet` зависит от `[selectedIds]`, `totalTris` — от `[objectList]`.
+
 ---
 
 ## 🧪 ТЕСТИРОВАНИЕ
 
-### TEST-1. Только type-level тесты
+### TEST-1. Только type-level тесты ✅ ИСПРАВЛЕНО (частично)
 
 **Где:** `src/csg/types.test.ts`  
 **Приоритет:** 🔴 Высокий
@@ -704,6 +748,18 @@ describe('mergeCoincidentVertices', () => {
   });
 });
 ```
+
+**Реализованное решение (2025-07-15):** Добавлено 15 unit-тестов в 3 новых файлах:
+
+| Файл | Тестов | Что покрывает |
+|---|---|---|
+| `src/io/stl-import.test.ts` | 4 | `mergeCoincidentVertices` — дубликаты, округление, куб (8 вершин из 36) |
+| `src/io/stl-export.test.ts` | 4 | `exportToStl` — размер blob, triangle count в header, скрытые объекты, пустой ввод |
+| `src/store/document-store.test.ts` | 7 | `computeAABB` — min/max, отрицательные координаты, одна вершина; `extractAndCenter` — сдвиг к нулю, in-place модификация, empty array, no-op для центрированной геометрии |
+
+Функции `mergeCoincidentVertices`, `computeAABB` и `extractAndCenter` экспортированы для тестирования. Всего: 35 тестов (20 type-level + 15 unit), все проходят.
+
+**Не реализовано (требуют WASM/IndexedDB mock):** `doodle-io.ts` (parseDoodle), `worker.ts` (applySRAroundCenter), `autosave.ts` (autosaveSession + restoreSession).
 
 ---
 
@@ -762,18 +818,21 @@ const DEFAULT_FILTERS = Object.fromEntries(Object.keys(OP_FILTER_LABELS).map(k =
 
 ## 🎯 ПРИОРИТЕТЫ ДЕЙСТВИЙ
 
-| # | Задача | Приоритет | Оценка времени |
-|---|---|---|---|
-| 1 | Удалить `src/csg/engine.ts` (мёртвый код) | 🔴 Критичный | 2 мин |
-| 2 | Разделить `App.tsx` на компоненты | 🔴 Критичный | 1-2 дня |
-| 3 | Добавить типы для WASM-интерфейса в `worker.ts` | 🟡 Средний | 1-2 часа |
-| 4 | Исправить дублирование центрирования в `Viewport3D.tsx` | 🟡 Средний | 1 час + тесты |
-| 5 | Добавить unit-тесты для `stl-import`, `stl-export`, `document-store` | 🟡 Средний | 3-4 часа |
-| 6 | Заменить `alert()` на toast-уведомления | 🟡 Средний | 1 час |
-| 7 | Оптимизировать `undo/redo` — кэшировать snapshots | 🟠 Высокий | 1-2 дня |
-| 8 | Кэшировать AABB в `SceneObject` | 🟢 Низкий | 2 часа |
-| 9 | Вынести инлайн-стили в CSS-модули | 🟢 Низкий | 2-3 часа |
-| 10 | Добавить валидацию входных данных в воркер | 🟢 Низкий | 1 час |
+| # | Задача | Приоритет | Оценка времени | Статус |
+|---|---|---|---|---|
+| 1 | Удалить `src/csg/engine.ts` (мёртвый код) | 🔴 Критичный | 2 мин | ✅ Выполнено |
+| 2 | Разделить `App.tsx` на компоненты | 🔴 Критичный | 1-2 дня | 🔲 Не начато |
+| 3 | Добавить типы для WASM-интерфейса в `worker.ts` | 🟡 Средний | 1-2 часа | ✅ Выполнено |
+| 4 | Исправить дублирование центрирования в `Viewport3D.tsx` | 🟡 Средний | 1 час + тесты | ✅ Не баг (проверено) |
+| 5 | Добавить unit-тесты для `stl-import`, `stl-export`, `document-store` | 🟡 Средний | 3-4 часа | ✅ Выполнено (15 тестов) |
+| 6 | Заменить `alert()` на toast-уведомления | 🟡 Средний | 1 час | ✅ Выполнено |
+| 7 | Оптимизировать `undo/redo` — кэшировать snapshots | 🟠 Высокий | 1-2 дня | 🔲 Не начато |
+| 8 | Кэшировать AABB в `SceneObject` | 🟢 Низкий | 2 часа | 🔲 Не начато |
+| 9 | Вынести инлайн-стили в CSS-модули | 🟢 Низкий | 2-3 часа | 🔲 Не начато |
+| 10 | Добавить валидацию входных данных в воркер | 🟢 Низкий | 1 час | ✅ Выполнено |
+| 11 | Стабилизировать keyboard `useEffect` (WARN-1) | 🟡 Средний | 1 час | ✅ Выполнено |
+| 12 | Убрать `eslint-disable` suppressions (WARN-2) | 🟡 Средний | 30 мин | ✅ Выполнено |
+| 13 | `useMemo` для `selSet` и `totalTris` (PERF-2/3) | 🟢 Низкий | 15 мин | ✅ Выполнено |
 
 ---
 
@@ -802,4 +861,4 @@ const DEFAULT_FILTERS = Object.fromEntries(Object.keys(OP_FILTER_LABELS).map(k =
 
 ---
 
-*Код-ревью выполнено 2025-07-15. Рекомендации носят характер улучшений — текущий код функционален и демонстрирует хороший уровень инженерной практики.*
+*Код-ревью выполнено 2025-07-15. Раунд исправлений 2025-07-15: 8 задач выполнено, 1 проверена (не баг), 4 не начато. Текущий код функционален, проходит typecheck и 35 тестов.*

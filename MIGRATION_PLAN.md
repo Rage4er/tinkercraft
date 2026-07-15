@@ -9,9 +9,9 @@
 |---|---|
 | Исходный код (CaDoodle) | ~17 600 строк Java |
 | Зависимость BowlerStudio | ~100 000+ строк Java |
-| Текущий объём TS/TSX кода | ~8 500 строк |
-| Прогресс | **Фазы 0–6 завершены** ✅ |
-| Статус | MVP готов, Фаза 7 — будущие улучшения |
+| Текущий объём TS/TSX кода | ~6 700 строк (18 файлов) |
+| Прогресс | **Фазы 0–6 завершены, Фаза 7 — код-ревью раунд 1** ✅ |
+| Статус | MVP готов, Фаза 7 — исправления и улучшения |
 
 ---
 
@@ -195,13 +195,58 @@
 
 ---
 
+#### ✅ Код-ревью раунд 1 (2025-07-15)
+
+Полное код-ревью проекта выполнено, результаты зафиксированы в `CODE_REVIEW.md`. Из 22 выявленных проблем 8 исправлены, 1 проверена (не баг), 13 отложены (требуют масштабного рефакторинга).
+
+**Исправленные проблемы:**
+
+| # | Проблема | Файлы | Что сделано |
+|---|---|---|---|
+| WARN-5 | Мёртвый код `engine.ts` | `csg/engine.ts` | Удалён (198 строк, 0 импортов) |
+| WARN-4 | `type M = any` в воркере | `csg/worker.ts` | Типобезопасные интерфейсы `ManifoldAPI`, `ManifoldObject`, `ManifoldMesh` и др. |
+| WARN-1 | Нестабильный keyboard `useEffect` | `App.tsx` | Паттерн `kbRef` — listener регистрируется один раз (`[]` deps) |
+| WARN-2 | `eslint-disable` подавления | `App.tsx` | Убраны 2 suppressions, добавлены корректные deps |
+| SEC-1 | Нет валидации входных данных | `csg/worker.ts` | `clamp()` + `sanitizeParams()` в `buildShape` и `applyFillet` |
+| SEC-2 | `alert()` блокирует UI | `store/notifications.ts`, `components/ToastContainer.tsx`, `document-store.ts`, `App.tsx`, `App.css` | Toast-уведомления с авто-dismiss, 3 вызова заменены |
+| TEST-1 | Только type-level тесты | `io/stl-import.test.ts`, `io/stl-export.test.ts`, `store/document-store.test.ts` | 15 unit-тестов (всего 35) |
+| PERF-2/3 | `new Set()` + `reduce` каждый рендер | `App.tsx` | `useMemo` для `selSet` и `totalTris` |
+
+**Проверено — не баг:**
+
+| # | Проблема | Вывод |
+|---|---|---|
+| CRIT-3 | Двойное центрирование геометрии | Worker не центрирует; store центрирует CSG-результаты через `extractAndCenter()`; Viewport3D центрирует обычные фигуры. Для CSG-результатов центрирование Viewport3D — безвредный no-op. `cachedRawVertices` предотвращает повторное центрирование. |
+
+**Скрытые баги, обнаруженные при типизации (были скрыты `any`):**
+- `nullT` в `rebuildScene` (worker.ts) — отсутствовали `scaleX/scaleY/scaleZ`
+- Итерация кэша в `rebuildScene` — не пропускала `null` (non-manifold) записи
+- `TransformNR` объекты в `types.test.ts` и `stl-import.ts` — без полей scale
+
+**Отложенные задачи (требуют много дней рефакторинга):**
+
+| # | Задача | Причина откладывания |
+|---|---|---|
+| CRIT-1 | Разделение `App.tsx` (1809 строк) на ~12 компонентов | 1-2 дня рефакторинга |
+| CRIT-2 | Разделение `document-store.ts` (750 строк) на модули actions/ | 1-2 дня рефакторинга |
+| PERF-1 | Кэширование snapshots для undo/redo | Архитектурное изменение |
+| WARN-3 | Дублирование инструментов в тулбаре и панели свойств | Зависит от CRIT-1 |
+| WARN-6 | Нормали для CSG-геометрии в STL-экспорте | Требует изменения `SceneObject` + worker |
+| WARN-8 | Кэширование AABB в `SceneObject` | Требует изменения типов + worker |
+| COSM-1 | Инлайн-стили в CSS-модули | 2-3 часа, низкий приоритет |
+| COSM-3 | `Object.fromEntries` для `DEFAULT_FILTERS` | Косметика |
+
+**Проверка:** `tsc --noEmit` — 0 ошибок · `vitest run` — 35/35 тестов · `vite build` — успешно
+
+---
+
 **Приоритетные задачи Фазы 7:**
 
 | Задача | Приоритет | Сложность | Статус |
 |---|---|---|---|
-| Тор, призма, пирамида | Высокий | Средняя | 🔲 |
-| Текст → 3D экструзия (opentype.js) | Высокий | Средняя | 🔲 |
-| Переключение перспектива ↔ ортография | Средний | Низкая | 🔲 |
+| Тор, призма, пирамида | Высокий | Средняя | ✅ Реализовано (worker.ts: buildPrimitive) |
+| Текст → 3D экструзия (opentype.js) | Высокий | Средняя | ✅ Реализовано (App.tsx: handleAddText, TextGeometry) |
+| Переключение перспектива ↔ ортография | Средний | Низкая | ✅ Реализовано (Viewport3D.tsx: orthoCameraRef) |
 | Импорт SVG (2D → 3D экструзия) | Средний | Средняя | 🔲 |
 | Импорт 3MF | Средний | Средняя | 🔲 |
 | Экспорт STEP / IGES (OpenCascade.js) | Низкий | Высокая | 🔲 |
@@ -218,55 +263,65 @@
 |---|---|
 | UI / Состояние | React 18 + Zustand 5 |
 | 3D Рендеринг | Three.js r170 |
-| CSG | manifold-3d 3.0.1 (WASM, выделенный Worker) |
+| CSG | manifold-3d 3.0.1+ (WASM, выделенный Worker, типобезопасный интерфейс) |
 | Персистентность | IndexedDB (автосохранение + несколько проектов), JSZip (.doodle) |
 | PWA | Vite + manifest.json + COOP/COEP заголовки |
 | Сборка | Vite + pnpm workspace |
+| Тестирование | Vitest 4.1 (35 тестов: type-level + unit) |
 
 ---
 
 ## Структура файлов
 
+> **Примечание:** Изначальный план предполагал монорепозиторий `packages/` (csg-engine, three-viewport, ui).
+> Фактически проект реализован в едином `web-app/` — структура ниже отражает реальное состояние.
+
 ```
-tinkercraft-web/
-├── packages/
-│   ├── csg-engine/           # manifold-3d обёртка + Web Worker
-│   │   └── src/
-│   │       ├── worker.ts          # Web Worker с manifold-3d
-│   │       ├── worker-client.ts   # типизированный RPC клиент
-│   │       ├── types.ts           # все типы операций
-│   │       └── operations/        # реализация всех операций
+tinkercraft/
+├── web-app/                       # Единое приложение (Vite + React)
+│   ├── src/
+│   │   ├── App.tsx                # главный UI (1809 строк — кандидат на разделение)
+│   │   ├── App.css                # CSS переменные тёмной/светлой темы + toast
+│   │   ├── main.tsx               # React корень
+│   │   │
+│   │   ├── csg/                   # manifold-3d обёртка + Web Worker
+│   │   │   ├── worker.ts          # Web Worker с manifold-3d (типизирован)
+│   │   │   ├── worker-client.ts   # типизированный RPC клиент
+│   │   │   ├── types.ts           # все типы операций
+│   │   │   ├── types.test.ts      # type-level тесты
+│   │   │   └── (engine.ts)        # удалён — мёртвый код
+│   │   │
+│   │   ├── store/
+│   │   │   ├── document-store.ts  # Zustand store (750 строк)
+│   │   │   ├── document-store.test.ts  # unit-тесты computeAABB + extractAndCenter
+│   │   │   └── notifications.ts   # toast-уведомления (замена alert)
+│   │   │
+│   │   ├── components/
+│   │   │   ├── Viewport3D.tsx     # Three.js canvas, гизмо, raycaster
+│   │   │   ├── ViewCube.tsx       # навигационный куб
+│   │   │   ├── ComponentTree.tsx  # дерево объектов
+│   │   │   ├── ProjectManagerModal.tsx
+│   │   │   ├── ToastContainer.tsx # toast рендер
+│   │   │   ├── ErrorBoundary.tsx
+│   │   │   └── WebGLFallback.tsx
+│   │   │
+│   │   └── io/
+│   │       ├── doodle-io.ts       # .doodle сериализация (JSZip)
+│   │       ├── stl-export.ts      # STL экспорт (бинарный)
+│   │       ├── stl-export.test.ts # unit-тесты
+│   │       ├── stl-import.ts      # STL импорт (бинарный + ASCII)
+│   │       ├── stl-import.test.ts # unit-тесты mergeCoincidentVertices
+│   │       ├── autosave.ts        # IndexedDB автосохранение
+│   │       └── project-manager.ts # IndexedDB CRUD
 │   │
-│   ├── three-viewport/       # Three.js сцена + инструменты
-│   │   └── src/
-│   │       ├── Viewport.ts        # основной рендерер
-│   │       ├── ViewCube.tsx       # навигационный куб
-│   │       └── tools/             # гизмо, линейка
-│   │
-│   └── ui/                   # React приложение (главный пакет)
-│       └── src/
-│           ├── App.tsx            # главный UI
-│           ├── App.css            # CSS переменные тёмной/светлой темы
-│           ├── main.tsx           # React корень
-│           ├── store/
-│           │   └── document-store.ts  # Zustand store
-│           ├── components/
-│           │   ├── Viewport3D.tsx     # Three.js canvas
-│           │   ├── ViewCube.tsx       # ViewCube наложение
-│           │   ├── ComponentTree.tsx  # дерево объектов
-│           │   ├── ProjectManagerModal.tsx
-│           │   ├── ErrorBoundary.tsx
-│           │   └── WebGLFallback.tsx
-│           └── io/
-│               ├── doodle-io.ts       # .doodle сериализация
-│               ├── stl-export.ts      # STL экспорт
-│               ├── stl-import.ts      # STL импорт
-│               ├── autosave.ts        # IndexedDB автосохранение
-│               └── project-manager.ts # IndexedDB CRUD
+│   ├── vite.config.ts
+│   ├── tsconfig.json
+│   ├── package.json
+│   └── pnpm-workspace.yaml
 │
-├── vite.config.ts
-├── tsconfig.json
-└── pnpm-workspace.yaml
+├── CODE_REVIEW.md                 # Код-ревью и статус исправлений
+├── MIGRATION_PLAN.md              # Этот файл
+└── README.md
 ```
 
 ---
@@ -291,7 +346,16 @@ tinkercraft-web/
 | Нет импорта SVG | 🔲 | Фаза 7 |
 | Нет импорта 3MF | 🔲 | Фаза 7 |
 | Нет Robot Lab | 🔲 | Фаза 7 (опционально) |
-| Медленная регенерация при >50 операциях | ⚠️ | Оптимизировать в Фазе 7 |
+| Медленная регенерация при >50 операциях | ⚠️ | Оптимизировать в Фазе 7 (PERF-1: кэш snapshots) |
+| `App.tsx` — God Component (1809 строк) | ⚠️ | CRIT-1: разделить на ~12 компонентов |
+| `document-store.ts` — 750 строк в одном файле | ⚠️ | CRIT-2: разделить на модули actions/ |
+| `any`-типы в воркере | ✅ Исправлено | WARN-4: типобезопасные интерфейсы |
+| Нет валидации входных данных | ✅ Исправлено | SEC-1: `clamp()` + `sanitizeParams()` |
+| `alert()` блокирует UI | ✅ Исправлено | SEC-2: toast-уведомления |
+| Только type-level тесты | ✅ Исправлено | TEST-1: 15 unit-тестов добавлено |
+| Мёртвый код `engine.ts` | ✅ Исправлено | WARN-5: файл удалён |
+| Нестабильный keyboard `useEffect` | ✅ Исправлено | WARN-1: паттерн `kbRef` |
+| `new Set()` + `reduce` каждый рендер | ✅ Исправлено | PERF-2/3: `useMemo` |
 
 ---
 
@@ -299,8 +363,8 @@ tinkercraft-web/
 
 ```bash
 # Клонировать репозиторий
-git clone https://github.com/your-org/tinkercraft-web.git
-cd tinkercraft-web
+git clone https://github.com/Rage4er/tinkercraft.git
+cd tinkercraft/web-app
 
 # Установить зависимости
 pnpm install
@@ -311,8 +375,11 @@ pnpm dev
 # Собрать production-версию
 pnpm build
 
-# Запустить тесты
+# Запустить тесты (35 тестов: 20 type-level + 15 unit)
 pnpm test
+
+# Проверка типов
+pnpm typecheck
 ```
 
 ---

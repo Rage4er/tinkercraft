@@ -6,19 +6,24 @@ labels: question
 assignees: ''
 ---
 
-### Question - What would you like to know?
+### Вопрос
 
+<!-- Что вы хотите узнать? -->
 
-### Context - Provide any relevant context (e.g., what you're trying to achieve)
+### Контекст
 
+<!-- Что вы пытаетесь сделать? -->
 
-### Application environment
-CadDoodle Version: e.g., 0.30.17
-Operating System:  e.g., Windows 11 23H2, Ubuntu 22.04, macOS 14.2
+### Окружение
 
+- **Браузер:** (например, Chrome 126, Firefox 127)
+- **ОС:** (например, Windows 11, Ubuntu 24.04, macOS 14)
 
-### What I've Tried - Describe any documentation you've already checked or solutions you've attempted
+### Что уже попробовали
 
+<!-- Какую документацию или решения уже проверили? -->
 
-### Additional Information - Any other details that might help answer your question
+### Дополнительная информация
+
+<!-- Любые детали, которые помогут ответить на вопрос -->
 

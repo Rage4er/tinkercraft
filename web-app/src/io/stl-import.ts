@@ -16,8 +16,9 @@ export interface ImportedMesh {
 /**
  * Слить совпадающие вершины (STL хранит каждый треугольник отдельно).
  * Без слияния manifold-3d не создаст валидный solid.
+ * Exported for unit testing.
  */
-function mergeCoincidentVertices(
+export function mergeCoincidentVertices(
   positions: Float32Array,
 ): { vertices: number[]; indices: number[] } {
   const vertMap = new Map<string, number>()
@@ -71,7 +72,7 @@ export async function parseStlFile(file: File): Promise<ImportedMesh | null> {
       throw new Error('STL: слишком мало данных')
     }
 
-    const defaultTransform: TransformNR = { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0 }
+    const defaultTransform: TransformNR = { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
 
     return { vertices, indices, transform: defaultTransform, name: file.name }
   } catch (e) {

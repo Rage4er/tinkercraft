@@ -4,6 +4,7 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import WebGLFallback from "./components/WebGLFallback";
 import ComponentTree from "./components/ComponentTree";
 import ProjectManagerModal from "./components/ProjectManagerModal";
+import ToastContainer from "./components/ToastContainer";
 import { useDocumentStore } from "./store/document-store";
 import { isWorkerReady } from "./csg/worker-client";
 import type {
@@ -372,8 +373,7 @@ export default function App() {
     restoreAutosave().then((ok) => {
       if (ok) setRestoreMsg(false);
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [restoreAutosave]);
 
   useEffect(() => {
     if (operations.length === 0) return;
@@ -384,45 +384,55 @@ export default function App() {
     return () => {
       if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [operations, historyIndex]);
+  }, [operations, historyIndex, triggerAutosave]);
 
-  // Клавиатурные сочетания
+  // Клавиатурные сочетания — стабильный listener через ref (WARN-1 fix).
+  // ref обновляется каждый рендер, но сам listener не переподключается.
+  const kbRef = useRef({
+    objects, deleteSelected, undo, redo, selectObjects,
+    saveDoodle, openDoodle, clearSelection, copySelected, pasteClipboard,
+  });
+  kbRef.current = {
+    objects, deleteSelected, undo, redo, selectObjects,
+    saveDoodle, openDoodle, clearSelection, copySelected, pasteClipboard,
+  };
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const ctrl = e.ctrlKey || e.metaKey;
       if ((e.target as HTMLElement).tagName === "INPUT") return;
+      const kb = kbRef.current;
       if (e.key === "Delete" || e.key === "Backspace") {
         e.preventDefault();
-        deleteSelected();
+        kb.deleteSelected();
       }
       if (ctrl && e.key === "z" && !e.shiftKey) {
         e.preventDefault();
-        undo();
+        kb.undo();
       }
       if (ctrl && (e.key === "y" || (e.key === "z" && e.shiftKey))) {
         e.preventDefault();
-        redo();
+        kb.redo();
       }
       if (ctrl && e.key === "a") {
         e.preventDefault();
-        selectObjects(Object.keys(objects), false);
+        kb.selectObjects(Object.keys(kb.objects), false);
       }
       if (ctrl && e.key === "s") {
         e.preventDefault();
-        saveDoodle();
+        kb.saveDoodle();
       }
       if (ctrl && e.key === "o") {
         e.preventDefault();
-        openDoodle();
+        kb.openDoodle();
       }
       if (ctrl && e.key === "c") {
         e.preventDefault();
-        copySelected();
+        kb.copySelected();
       }
       if (ctrl && e.key === "v") {
         e.preventDefault();
-        pasteClipboard();
+        kb.pasteClipboard();
       }
       if (!ctrl && e.key === "f") {
         e.preventDefault();
@@ -446,24 +456,13 @@ export default function App() {
       }
       if (e.key === "Escape") {
         setGizmoMode(null);
-        clearSelection();
+        kb.clearSelection();
         setRulerActive(false);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [
-    objects,
-    deleteSelected,
-    undo,
-    redo,
-    selectObjects,
-    saveDoodle,
-    openDoodle,
-    clearSelection,
-    copySelected,
-    pasteClipboard,
-  ]);
+  }, []);
 
   const handleTransformEnd = useCallback(
     (id: string, t: TransformNR) => {
@@ -523,9 +522,12 @@ export default function App() {
   }, [textInput, textSize, textDepth, addRawMesh]);
 
   const objectList = useMemo(() => Object.values(objects), [objects]);
-  const selSet = new Set(selectedIds);
+  const selSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const firstSelected = selectedIds.length > 0 ? objects[selectedIds[0]] : null;
-  const totalTris = objectList.reduce((s, o) => s + o.indices.length / 3, 0);
+  const totalTris = useMemo(
+    () => objectList.reduce((s, o) => s + o.indices.length / 3, 0),
+    [objectList],
+  );
   const canUndo = historyIndex > 0;
   const canRedo = historyIndex < operations.length;
   const canCsg = selectedIds.length === 2 && !busy;
@@ -594,6 +596,8 @@ export default function App() {
 
   return (
     <div className="app">
+      <ToastContainer />
+
       {/* ── Restore banner ── */}
       {restoreMsg && (
         <div className="restore-banner">

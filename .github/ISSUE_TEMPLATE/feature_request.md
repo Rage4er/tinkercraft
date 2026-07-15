@@ -1,31 +1,36 @@
 ---
 name: Feature Request
 about: Suggest an idea for this project
-title: "[FR] (feature summary)"
+title: "[FR] <краткое описание>"
 labels: enhancement
 assignees: ''
 ---
 
-### Feature Description - A clear and concise description of the feature you'd like to see
+### Описание фичи
 
+<!-- Чёткое и краткое описание того, что вы хотите видеть -->
 
-### Use Case - Describe a specific scenario where this feature would be useful
+### Сценарий использования
 
+<!-- Конкретная ситуация, где эта функция была бы полезна -->
 
-### Current situation
+### Текущая ситуация
 
+<!-- Как сейчас обстоят дела? -->
 
-### Desired outcome
+### Желаемый результат
 
+<!-- Что должно получиться? -->
 
-### Benefits
+### Предлагаемое решение
 
+<!-- Как вы видите реализацию этой функции? -->
 
-### Proposed Solution - Describe how you envision this feature working
+### Альтернативы
 
+<!-- Рассматривали ли альтернативные решения или обходные пути? -->
 
-### Alternatives Considered - Have you considered any alternative solutions or workarounds?
+### Дополнительный контекст
 
-
-### Additional Context - Add any other context, mockups, or examples here
+<!-- Мокапы, примеры из других CAD, ссылки -->
 

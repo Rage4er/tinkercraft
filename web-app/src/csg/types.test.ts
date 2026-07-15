@@ -8,7 +8,7 @@ import type {
   RenameOperation, GroupOperation, ShapeParams, SceneObject, TransformNR,
 } from './types'
 
-const DEFAULT_TRANSFORM: TransformNR = { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0 }
+const DEFAULT_TRANSFORM: TransformNR = { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
 const DEFAULT_PARAMS: ShapeParams     = { width: 20, height: 20, depth: 20 }
 
 function makeSceneObject(overrides: Partial<SceneObject> = {}): SceneObject {

@@ -14,12 +14,14 @@ import {
   workerApplyFillet, workerBuildImportedMesh,
 } from '../csg/worker-client'
 import { parseDoodle, serializeDoodle, openDoodleFilePicker, downloadBlob } from '../io/doodle-io'
+import { notify } from './notifications'
 
 // Computes the bbox center of a vertex buffer, shifts all vertices so the
 // center is at the origin, and returns the center offset.  Used to normalise
 // CSG result geometry so the Three.js pivot can be placed at the true world
 // position of the result instead of always being at (0,0,0).
-function extractAndCenter(vertices: Float32Array): { cx: number; cy: number; cz: number } {
+// Exported for unit testing.
+export function extractAndCenter(vertices: Float32Array): { cx: number; cy: number; cz: number } {
   if (vertices.length === 0) return { cx: 0, cy: 0, cz: 0 }
   let minX = Infinity, minY = Infinity, minZ = Infinity
   let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity
@@ -50,8 +52,8 @@ const PALETTE = [
 ]
 function colorForIndex(n: number): string { return PALETTE[n % PALETTE.length] }
 
-// ---- AABB ----
-function computeAABB(vertices: Float32Array) {
+// ---- AABB (exported for unit testing) ----
+export function computeAABB(vertices: Float32Array) {
   let minX = Infinity, maxX = -Infinity
   let minY = Infinity, maxY = -Infinity
   let minZ = Infinity, maxZ = -Infinity
@@ -305,7 +307,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const file = await openStlFilePicker()
     if (!file) return
     const mesh = await parseStlFile(file)
-    if (!mesh) { alert('Не удалось прочитать STL файл'); return }
+    if (!mesh) { notify('Не удалось прочитать STL файл', 'error'); return }
 
     const { objects, operations, historyIndex } = get()
     const id    = nextId('stl')
@@ -320,7 +322,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const op: ImportMeshOperation = { type: 'import_mesh', id, name: mesh.name, color, transform: mesh.transform, vertices: mesh.vertices, indices: mesh.indices }
       const newOps = [...operations.slice(0, historyIndex), op]
       set({ operations: newOps, historyIndex: newOps.length, objects: { ...objects, [id]: obj }, selectedIds: [id], modified: true, busy: false, lastCsgMs: ms })
-    } catch (e) { set({ busy: false }); alert(`Ошибка импорта STL:\n${e}`) }
+    } catch (e) { set({ busy: false }); notify(`Ошибка импорта STL: ${e}`, 'error') }
   },
 
   // ── Fillet ──
@@ -607,7 +609,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const t0 = performance.now()
       const newObjects = await rebuildFromHistory(doc.operations)
       set({ operations: doc.operations, historyIndex: doc.operations.length, objects: newObjects, selectedIds: [], fileName: picked.file.name, modified: false, busy: false, lastCsgMs: performance.now() - t0 })
-    } catch (e) { set({ busy: false }); alert(`Ошибка открытия:\n${e}`) }
+    } catch (e) { set({ busy: false }); notify(`Ошибка открытия: ${e}`, 'error') }
   },
 
   // ── Save .doodle ──
