@@ -7,6 +7,8 @@ import JSZip from 'jszip'
 import type { TinkerCraftFile, TinkerCraftOperation } from '../csg/types'
 
 const FORMAT_VERSION = '1.0.0'
+/** Максимальный размер model.json (5 МБ) для защиты от DoS */
+const MAX_MODEL_JSON_SIZE = 5 * 1024 * 1024
 
 // ---- Разобрать .doodle файл ----
 
@@ -17,6 +19,25 @@ export async function parseDoodle(buffer: ArrayBuffer): Promise<TinkerCraftFile>
   if (!modelFile) throw new Error('Некорректный .doodle: model.json не найден')
 
   const json = await modelFile.async('string')
+
+  // SEC-4: Валидация размера и содержимого JSON для защиты от DoS / Prototype Pollution
+  if (typeof json !== 'string') {
+    throw new Error('Некорректный model.json: не является строкой')
+  }
+  if (json.length > MAX_MODEL_JSON_SIZE) {
+    throw new Error(
+      `Некорректный model.json: размер ${json.length} байт превышает лимит ${MAX_MODEL_JSON_SIZE} байт`,
+    )
+  }
+  // Prototype pollution: проверяем наличие ключевых слов в JSON
+  if (
+    json.includes('__proto__') ||
+    json.includes('constructor') ||
+    json.includes('prototype')
+  ) {
+    throw new Error('Некорректный model.json: обнаружен подозрительный контент')
+  }
+
   const raw = JSON.parse(json)
 
   // Поддержка обоих форматов: { version, operations } или просто массив операций
@@ -95,11 +116,14 @@ export function openDoodleFilePicker(): Promise<{ file: File; buffer: ArrayBuffe
 
 export function downloadBlob(blob: Blob, fileName: string): void {
   const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = fileName
-  a.click()
-  URL.revokeObjectURL(url)
+  try {
+    const a = document.createElement('a')
+    a.href = url
+    a.download = fileName
+    a.click()
+  } finally {
+    URL.revokeObjectURL(url)
+  }
 }
 
 // 1×1 прозрачный PNG в base64

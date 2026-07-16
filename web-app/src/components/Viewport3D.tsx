@@ -56,12 +56,13 @@ function checkWebGL(): boolean {
  * FIX (PERF-R3-1): Fast hash for vertex array comparison.
  * Replaces O(n) vertex-by-vertex comparison with O(1) hash comparison.
  * Uses a simple sum-of-products hash — sufficient for detecting changes.
+ * Step=3 aligned to vertex boundaries (3 floats per vertex).
  */
 function computeVertsHash(vertices: Float32Array): number {
   let hash = 0;
   const len = vertices.length;
-  // Hash every 4th vertex to speed up large meshes
-  for (let i = 0; i < len; i += 4) {
+  // Hash every vertex (step=3 aligned to xyz boundaries)
+  for (let i = 0; i < len; i += 3) {
     hash = ((hash << 5) - hash + vertices[i] * 31 + vertices[i + 1] * 17 + vertices[i + 2] * 7) | 0;
   }
   return hash;

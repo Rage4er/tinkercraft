@@ -9,6 +9,19 @@
 
 ## [Unreleased]
 
+### Fixed — исправления раунда 4 (2026-07-16)
+
+- **CRIT-R4-2:** Валидация `JSON.parse` в `parseDoodle` — проверка размера (5МБ лимит), prototype pollution (`doodle-io.ts`)
+- **CRIT-R4-3:** DRY rebuild — вынесена общая логика transform в `csg/rebuildOps.ts`: `applyMoveDelta`, `applyMirrorToTransform`, `applyAlignToTransform`, `makeDefaultTransform`
+  - `rebuild.ts` использует общие функции вместо дублированной логики
+  - `worker.ts` использует `RebuildTransform` вместо локального `FullTransform`
+  - Удалено дублирование ~60 строк логики transform
+- **WARN-R4-2:** `computeVertsHash` — шаг 4 → 3 (выровнен по границам вершин 3 float/vertex)
+- **WARN-R4-5:** Runtime-валидация manifold API — проверка `setup`, `Manifold`, `CrossSection` перед инициализацией (`worker.ts`)
+- **LOW-R4-3:** `URL.createObjectURL` в `try/finally` — гарантированное освобождение памяти (`doodle-io.ts`)
+- **Добавлено:** 18 новых тестов для `clamp()` и `sanitizeParams()` (`worker-sanitize.test.ts`)
+- **Итого:** 65 тестов (все проходят), 0 ошибок typecheck
+
 ### Added — код-ревью раунд 4 (2026-07-16)
 
 - Документация глубокого код-ревью (раунд 4) в `CODE_REVIEW.md`:

@@ -951,7 +951,8 @@ function applyTransformToVertices(
 **Ревьюер:** Koda AI  
 **Общий балл:** 3.8 / 5  
 **Дата:** 2026-07-16  
-**Перепроверка:** 2026-07-16 — 2 проблемы отозваны (CRIT-R4-1, WARN-R4-6), 2 уточнены (WARN-R4-2, WARN-R4-4)
+**Перепроверка:** 2026-07-16 — 2 проблемы отозваны (CRIT-R4-1, WARN-R4-6), 2 уточнены (WARN-R4-2, WARN-R4-4)  
+**Исправлено:** 2026-07-16 — 6 задач исправлено (CRIT-R4-2, CRIT-R4-3, WARN-R4-2, WARN-R4-5, LOW-R4-3, новые тесты)
 
 ### 📊 Сводка
 
@@ -1243,23 +1244,23 @@ useEffect(() => {
 
 ---
 
-### 🎯 ПЛАН ДЕЙСТВИЙ РАУНДА 4 (после перепроверки)
+### 🎯 ПЛАН ДЕЙСТВИЙ РАУНДА 4 (после перепроверки и исправлений)
 
 | # | Задача | Приоритет | Оценка | Файлы | Статус |
 |---|---|---|---|---|---|
 | ~~1~~ | ~~Исправить `scaleDelta`~~ | ~~🔴~~ | — | — | ✅ НЕ БАГ |
-| 2 | Добавить валидацию `JSON.parse` в `parseDoodle` | 🔴 Критичный | 30 мин | `doodle-io.ts` | 🔲 |
-| 3 | Унифицировать логику rebuild (DRY) | 🔴 Критичный | 3-4 часа | `rebuild.ts`, `worker.ts`, новый `rebuildOps.ts` | 🔲 |
-| 4 | Добавить тесты для `sanitizeParams()`, `clamp()` | 🔴 Критичный | 1 час | `worker.ts` | 🔲 |
+| ~~2~~ | ~~Добавить валидацию `JSON.parse` в `parseDoodle`~~ | ~~🔴~~ | ~~30 мин~~ | ~~`doodle-io.ts`~~ | ✅ **ИСПРАВЛЕНО** |
+| ~~3~~ | ~~Унифицировать логику rebuild (DRY)~~ | ~~🔴~~ | ~~3-4 часа~~ | ~~`rebuild.ts`, `worker.ts`, новый `rebuildOps.ts`~~ | ✅ **ИСПРАВЛЕНО** |
+| ~~4~~ | ~~Добавить тесты для `sanitizeParams()`, `clamp()`~~ | ~~🔴~~ | ~~1 час~~ | ~~`worker.ts`~~ | ✅ **ИСПРАВЛЕНО** (18 тестов) |
 | 5 | Рефакторинг switch в worker.ts на Map handlers | 🟡 Средний | 3-4 часа | `worker.ts` | 🔲 |
-| 6 | Исправить `computeVertsHash` — шаг 3 вместо 4 | 🟡 Средний | 15 мин | `Viewport3D.tsx` | 🔲 |
+| ~~6~~ | ~~Исправить `computeVertsHash` — шаг 3 вместо 4~~ | ~~🟡~~ | ~~15 мин~~ | ~~`Viewport3D.tsx`~~ | ✅ **ИСПРАВЛЕНО** |
 | 7 | Унифицировать `centerGeometry` / `extractAndCenter` | 🟡 Средний | 1 час | `Viewport3D.tsx`, `helpers.ts` | 🔲 |
-| 8 | Удалить `FullTransform` в worker.ts, использовать `FullSRT` | 🟡 Средний | 10 мин | `worker.ts` | 🔲 |
-| 9 | Runtime-валидация manifold API | 🟡 Средний | 30 мин | `worker.ts` | 🔲 |
-| ~~10~~ | ~~Добавить guard `sceneRef.current`~~ | ~~🟡~~ | — | — | ✅ НЕ БАГ (guard уже есть) |
+| ~~8~~ | ~~Удалить `FullTransform` в worker.ts, использовать `RebuildTransform`~~ | ~~🟡~~ | ~~10 мин~~ | ~~`worker.ts`~~ | ✅ **ИСПРАВЛЕНО** |
+| ~~9~~ | ~~Runtime-валидация manifold API~~ | ~~🟡~~ | ~~30 мин~~ | ~~`worker.ts`~~ | ✅ **ИСПРАВЛЕНО** |
+| ~~10~~ | ~~Добавить guard `sceneRef.current`~~ | ~~🟡~~ | — | — | ✅ НЕ БАГ |
 | 11 | Добавить интеграционные тесты: add → move → fillet → union → undo | 🟡 Средний | 2-3 часа | новый тест | 🔲 |
 | 12 | Унифицировать язык комментариев | 🟢 Низкий | 1 час | весь проект | 🔲 |
-| 13 | Вынести `URL.createObjectURL` в try/finally | 🟢 Низкий | 10 мин | `doodle-io.ts` | 🔲 |
+| ~~13~~ | ~~Вынести `URL.createObjectURL` в try/finally~~ | ~~🟢~~ | ~~10 мин~~ | ~~`doodle-io.ts`~~ | ✅ **ИСПРАВЛЕНО** |
 
 ---
 
@@ -1290,4 +1291,4 @@ useEffect(() => {
 
 ---
 
-*Код-ревью раунд 4 выполнено 2026-07-16. Перепроверено 2026-07-16. Общий балл: 3.8/5 (повышен с 3.3 после перепроверки). Из 13 задач: 2 отозваны (CRIT-R4-1 scaleDelta — не баг, WARN-R4-6 sceneReady — не баг), 2 уточнены (WARN-R4-2 misaligned reads, WARN-R4-4 дублирование внутри worker.ts). Осталось 11 актуальных задач: 3 критических (JSON.parse валидация, DRY rebuild, тесты worker.ts), 5 средних, 3 низких. Критические модули (worker.ts, Viewport3D.tsx, rebuild.ts, snapshots.ts) не покрыты тестами.*
+*Код-ревью раунд 4 выполнено 2026-07-16. Перепроверено 2026-07-16. Исправления 2026-07-16. Общий балл: 3.8/5. Из 13 задач: 2 отозваны (CRIT-R4-1 scaleDelta — не баг, WARN-R4-6 sceneReady — не баг), 2 уточнены (WARN-R4-2 misaligned reads, WARN-R4-4 дублирование внутри worker.ts), 7 исправлено (CRIT-R4-2 JSON validation, CRIT-R4-3 DRY rebuild + rebuildOps.ts, WARN-R4-2 computeVertsHash, WARN-R4-5 manifold API validation, LOW-R4-3 try/finally, 18 новых тестов). Осталось 4 задачи: рефакторинг switch в worker.ts, унификация centerGeometry, интеграционные тесты, унификация комментариев.*

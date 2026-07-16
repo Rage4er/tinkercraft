@@ -1,5 +1,6 @@
 // ============================================================
 // Rebuild helper — reconstructs scene objects from operation history
+// Использует общие функции из csg/rebuildOps.ts для transform-логики.
 // ============================================================
 
 import type {
@@ -8,6 +9,13 @@ import type {
 } from '../csg/types'
 import { workerRebuildScene } from '../csg/worker-client'
 import { extractAndCenter, makeObject } from './helpers'
+import {
+  applyMoveDelta,
+  applyMirrorToTransform,
+  applyAlignToTransform,
+  makeDefaultTransform,
+  type RebuildTransform,
+} from '../csg/rebuildOps'
 
 export async function rebuildFromHistory(
   ops: TinkerCraftOperation[],
@@ -38,16 +46,7 @@ export async function rebuildFromHistory(
       for (const id of op.ids) {
         const t = transforms[id]
         if (t && meta[id]) {
-          const nt: TransformNR = {
-            ...t,
-            x: t.x + d.x, y: t.y + d.y, z: t.z + d.z,
-            rotX: t.rotX + (rd?.x ?? 0),
-            rotY: t.rotY + (rd?.y ?? 0),
-            rotZ: t.rotZ + (rd?.z ?? 0),
-            scaleX: t.scaleX + (sd?.x ?? 0),
-            scaleY: t.scaleY + (sd?.y ?? 0),
-            scaleZ: t.scaleZ + (sd?.z ?? 0),
-          }
+          const nt = applyMoveDelta(t as unknown as RebuildTransform, d, rd, sd) as TransformNR
           transforms[id] = nt
           meta[id] = { ...meta[id], transform: nt }
         }
@@ -57,10 +56,7 @@ export async function rebuildFromHistory(
       for (const id of op.ids) {
         const t = transforms[id]
         if (t && meta[id]) {
-          const nt: TransformNR = { ...t }
-          if (op.plane === 'YZ') nt.x = -nt.x
-          if (op.plane === 'XZ') nt.y = -nt.y
-          if (op.plane === 'XY') nt.z = -nt.z
+          const nt = applyMirrorToTransform(t as unknown as RebuildTransform, op.plane) as TransformNR
           transforms[id] = nt
           meta[id] = { ...meta[id], transform: nt }
         }
@@ -73,7 +69,7 @@ export async function rebuildFromHistory(
         for (const [id, delta] of Object.entries(deltas)) {
           const t = transforms[id]
           if (t && meta[id]) {
-            const nt: TransformNR = { ...t, [axis]: t[axis] + delta }
+            const nt = applyAlignToTransform(t as unknown as RebuildTransform, axis, delta) as TransformNR
             transforms[id] = nt
             meta[id] = { ...meta[id], transform: nt }
           }
@@ -92,7 +88,7 @@ export async function rebuildFromHistory(
       const srcColor = op.ids[0] ? meta[op.ids[0]]?.color ?? '#89b4fa' : '#89b4fa'
       for (const id of op.ids) { delete meta[id]; delete transforms[id] }
       if (op.resultId) {
-        const nullT: TransformNR = { x:0,y:0,z:0,rotX:0,rotY:0,rotZ:0,scaleX:1,scaleY:1,scaleZ:1 }
+        const nullT = makeDefaultTransform() as TransformNR
         meta[op.resultId]       = { color: srcColor, shapeType: 'cube', params: {}, transform: nullT }
         transforms[op.resultId] = nullT
         csgResultIds.add(op.resultId)
@@ -120,7 +116,7 @@ export async function rebuildFromHistory(
       shapeType: info?.shapeType ?? 'cube',
       params:    info?.params    ?? {},
       color:     info?.color     ?? '#89b4fa',
-      transform: info?.transform ?? { x:0,y:0,z:0,rotX:0,rotY:0,rotZ:0,scaleX:1,scaleY:1,scaleZ:1 },
+      transform: info?.transform ?? makeDefaultTransform() as TransformNR,
       visible:   true,
       locked:    false,
       vertices:  m.vertices,

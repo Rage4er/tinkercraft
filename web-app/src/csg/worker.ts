@@ -6,6 +6,7 @@
 // ---- Type-safe Manifold WASM interface ----
 
 import { buildSRTMatrixAroundCenter } from './worker-matrix'
+import { applyMoveDelta, applyMirrorToTransform, applyAlignToTransform, makeDefaultTransform, type RebuildTransform } from './rebuildOps'
 
 interface ManifoldMesh {
   numProp: number;
@@ -63,7 +64,15 @@ let wasm!: ManifoldAPI;
 
 const initPromise: Promise<void> = (async () => {
   const Module = await import("manifold-3d");
-  wasm = await Module.default() as unknown as ManifoldAPI;
+  const rawApi = await Module.default();
+
+  // Runtime validation: ensure manifold API has expected methods
+  if (!rawApi?.setup || !rawApi?.Manifold || !rawApi?.CrossSection) {
+    throw new Error(
+      'Invalid manifold API: missing setup, Manifold, or CrossSection',
+    );
+  }
+  wasm = rawApi as unknown as ManifoldAPI;
   wasm.setup();
   self.postMessage({ type: "ready" });
 })();
@@ -239,7 +248,7 @@ function buildPrimitiveWithFillet(
 // so we must NOT bake them here (would double-apply on every rebuild).
 function applyTransform(
   manifold: M,
-  t: { x: number; y: number; z: number; [k: string]: unknown },
+  t: { x: number; y: number; z: number },
 ): M {
   const m: number[] = [
     1, 0, 0, 0,
@@ -554,12 +563,7 @@ self.addEventListener("message", async (e: MessageEvent) => {
         cache.clear();
 
         const shapeInfos: Map<string, ShapeInfo> = new Map();
-        type FullTransform = {
-          x: number; y: number; z: number;
-          rotX: number; rotY: number; rotZ: number;
-          scaleX: number; scaleY: number; scaleZ: number;
-        };
-        const currentTransforms: Map<string, FullTransform> = new Map();
+        const currentTransforms: Map<string, RebuildTransform> = new Map();
 
         type Op = Record<string, unknown>;
         const ops = msg.operations as Op[];
@@ -571,7 +575,7 @@ self.addEventListener("message", async (e: MessageEvent) => {
               rotX: number; rotY: number; rotZ: number;
               scaleX?: number; scaleY?: number; scaleZ?: number;
             };
-            const t: FullTransform = {
+            const t: RebuildTransform = {
               x: raw.x, y: raw.y, z: raw.z,
               rotX: raw.rotX, rotY: raw.rotY, rotZ: raw.rotZ,
               scaleX: raw.scaleX ?? 1, scaleY: raw.scaleY ?? 1, scaleZ: raw.scaleZ ?? 1,
@@ -603,7 +607,7 @@ self.addEventListener("message", async (e: MessageEvent) => {
                 params: {},
                 filletRadius: 0,
               });
-              const nullT: FullTransform = { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 };
+              const nullT: RebuildTransform = { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 };
               currentTransforms.set(op.id as string, nullT);
             } catch (ie) {
               console.warn("import_mesh rebuild error:", ie);
@@ -627,16 +631,7 @@ self.addEventListener("message", async (e: MessageEvent) => {
               const info = shapeInfos.get(id);
               const t = currentTransforms.get(id);
               if (t) {
-                const nt: FullTransform = {
-                  ...t,
-                  x: t.x + d.x, y: t.y + d.y, z: t.z + d.z,
-                  rotX: t.rotX + (rd?.x ?? 0),
-                  rotY: t.rotY + (rd?.y ?? 0),
-                  rotZ: t.rotZ + (rd?.z ?? 0),
-                  scaleX: t.scaleX + (sd?.x ?? 0),
-                  scaleY: t.scaleY + (sd?.y ?? 0),
-                  scaleZ: t.scaleZ + (sd?.z ?? 0),
-                };
+                const nt = applyMoveDelta(t, d, rd, sd) as RebuildTransform;
                 currentTransforms.set(id, nt);
                 if (info) {
                   // Примитив — пересобираем из базовой формы
@@ -649,12 +644,12 @@ self.addEventListener("message", async (e: MessageEvent) => {
                   cache.set(id, m);
                 }
               } else {
-              const cm = cache.get(id);
-              if (cm)
-                cache.set(
-                  id,
-                  cm.transform([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, d.x, d.y, d.z, 1]),
-                );
+                const cm = cache.get(id);
+                if (cm)
+                  cache.set(
+                    id,
+                    cm.transform([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, d.x, d.y, d.z, 1]),
+                  );
             }
             }
           } else if (op.type === "mirror") {
@@ -664,11 +659,7 @@ self.addEventListener("message", async (e: MessageEvent) => {
               if (cm) cache.set(id, cm.transform(flip));
               const t = currentTransforms.get(id);
               if (t) {
-                const nt = { ...t };
-                const plane = op.plane as string;
-                if (plane === "YZ") nt.x = -nt.x;
-                if (plane === "XZ") nt.y = -nt.y;
-                if (plane === "XY") nt.z = -nt.z;
+                const nt = applyMirrorToTransform(t, op.plane as 'XY' | 'XZ' | 'YZ');
                 currentTransforms.set(id, nt);
               }
             }
