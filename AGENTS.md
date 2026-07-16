@@ -23,7 +23,7 @@
 cd web-app
 pnpm dev          # dev-сервер (порт 5000)
 pnpm build        # production-сборка
-pnpm test         # запуск тестов (35 тестов)
+pnpm test         # запуск тестов (104 теста)
 pnpm typecheck    # tsc --noEmit
 ```
 

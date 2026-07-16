@@ -32,7 +32,7 @@
 | CSG | manifold-3d (WASM, выделенный Web Worker) |
 | Персистентность | IndexedDB + JSZip (.doodle) |
 | Сборка | Vite 6 + pnpm |
-| Тестирование | Vitest (35 тестов) |
+| Тестирование | Vitest (104 теста) |
 | Язык | TypeScript 5.7 (strict) |
 
 ---
@@ -49,7 +49,7 @@ pnpm dev          # dev-сервер на http://localhost:5000
 
 ```bash
 pnpm build        # production-сборка в dist/
-pnpm test         # запуск тестов (35 тестов)
+pnpm test         # запуск тестов (104 теста)
 pnpm typecheck    # проверка типов TypeScript
 ```
 

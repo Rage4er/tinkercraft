@@ -6,7 +6,10 @@
       "Bash(npx *)",
       "Bash(pnpm test *)",
       "Bash(do *)",
-      "Bash(done)"
+      "Bash(done)",
+      "Bash(pnpm *)",
+      "Bash(node *)",
+      "Bash(mv *)"
     ]
   },
   "$version": 4

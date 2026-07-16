@@ -209,7 +209,7 @@
 | WARN-2 | `eslint-disable` подавления | `App.tsx` | Убраны 2 suppressions, добавлены корректные deps |
 | SEC-1 | Нет валидации входных данных | `csg/worker.ts` | `clamp()` + `sanitizeParams()` в `buildShape` и `applyFillet` |
 | SEC-2 | `alert()` блокирует UI | `store/notifications.ts`, `components/ToastContainer.tsx`, `document-store.ts`, `App.tsx`, `App.css` | Toast-уведомления с авто-dismiss, 3 вызова заменены |
-| TEST-1 | Только type-level тесты | `io/stl-import.test.ts`, `io/stl-export.test.ts`, `store/document-store.test.ts` | 15 unit-тестов (всего 35) |
+| TEST-1 | Только type-level тесты | `io/stl-import.test.ts`, `io/stl-export.test.ts`, `store/document-store.test.ts` | 15 unit-тестов (всего 104) |
 | PERF-2/3 | `new Set()` + `reduce` каждый рендер | `App.tsx` | `useMemo` для `selSet` и `totalTris` |
 
 **Проверено — не баг:**
@@ -236,7 +236,7 @@
 | ~~COSM-1~~ | ~~Инлайн-стили в CSS-модули~~ | ~~2-3 часа, низкий приоритет~~ | ✅ Выполнено (utility-классы + CSS-классы в App.css) |
 | ~~COSM-3~~ | ~~`Object.fromEntries` для `DEFAULT_FILTERS`~~ | ~~Косметика~~ | ✅ Выполнено |
 
-**Проверка:** `tsc --noEmit` — 0 ошибок · `vitest run` — 35/35 тестов · `vite build` — успешно
+**Проверка:** `tsc --noEmit` — 0 ошибок · `vitest run` — 104/104 теста · `vite build` — успешно
 
 ---
 
@@ -267,7 +267,7 @@
 | Персистентность | IndexedDB (автосохранение + несколько проектов), JSZip (.doodle) |
 | PWA | Vite + manifest.json + COOP/COEP заголовки |
 | Сборка | Vite + pnpm workspace |
-| Тестирование | Vitest 4.1 (35 тестов: type-level + unit) |
+| Тестирование | Vitest 4.1 (104 теста: type-level + unit) |
 
 ---
 
@@ -394,7 +394,7 @@ pnpm dev
 # Собрать production-версию
 pnpm build
 
-# Запустить тесты (35 тестов: 20 type-level + 15 unit)
+# Запустить тесты (104 теста)
 pnpm test
 
 # Проверка типов

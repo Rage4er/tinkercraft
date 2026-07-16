@@ -18,7 +18,7 @@
 | 🧪 Тестирование | TEST-1 (15 новых тестов) | — |
 | 📝 Косметика | COSM-1, COSM-2, COSM-3 | — |
 
-**Проверка:** `tsc --noEmit` — 0 ошибок · `vitest run` — 35/35 тестов · `vite build` — успешно
+**Проверка:** `tsc --noEmit` — 0 ошибок · `vitest run` — 104/104 теста · `vite build` — успешно
 
 ---
 
@@ -32,7 +32,7 @@
 | **Надёжность** | ⭐⭐⭐⭐☆ | CRIT-3 — не баг; остальные потенциальные баги устранены ✅ |
 | **Производительность** | ⭐⭐⭐⭐⭐ | Snapshot cache (PERF-1), AABB кэширование, useMemo ✅ |
 | **Безопасность** | ⭐⭐⭐⭐☆ | `any` заменён на типы, валидация добавлена, `alert()` → toast ✅ |
-| **Тестирование** | ⭐⭐⭐☆☆ | 35 тестов (20 type-level + 15 unit-тестов логики) ✅ |
+| **Тестирование** | ⭐⭐⭐☆☆ | 104 теста (20 type-level + ~84 unit-тестов логики) ✅ |
 | **Общий балл** | **4.8 / 5** | Все задачи код-ревью закрыты ✅ |
 
 ---
@@ -136,7 +136,7 @@
 - `document-store.ts`: 757 → 500 строк (−34%)
 - Утилиты и типы теперь в отдельных тестопригодных модулях
 - `computeAABB` и `extractAndCenter` реэкспортируются из `document-store.ts` для обратной совместимости с тестами
-- `tsc --noEmit` — 0 ошибок, `vitest run` — 35/35 тестов, `vite build` — успешно
+- `tsc --noEmit` — 0 ошибок, `vitest run` — 104/104 теста, `vite build` — успешно
 
 ---
 
@@ -489,7 +489,7 @@ export function showNotification(message: string, type: 'error' | 'warning' | 'i
 **Результат:**
 - Undo/redo после первой операции — мгновенны (O(1) lookup вместо O(n) WASM rebuild)
 - Память: только ссылки на immutable-объекты (не копии Float32Array)
-- `tsc --noEmit` — 0 ошибок, `vitest run` — 35/35 тестов, `vite build` — успешно
+- `tsc --noEmit` — 0 ошибок, `vitest run` — 104/104 теста, `vite build` — успешно
 
 ---
 
@@ -591,7 +591,7 @@ describe('mergeCoincidentVertices', () => {
 | `src/io/stl-export.test.ts` | 4 | `exportToStl` — размер blob, triangle count в header, скрытые объекты, пустой ввод |
 | `src/store/document-store.test.ts` | 7 | `computeAABB` — min/max, отрицательные координаты, одна вершина; `extractAndCenter` — сдвиг к нулю, in-place модификация, empty array, no-op для центрированной геометрии |
 
-Функции `mergeCoincidentVertices`, `computeAABB` и `extractAndCenter` экспортированы для тестирования. Всего: 35 тестов (20 type-level + 15 unit), все проходят.
+Функции `mergeCoincidentVertices`, `computeAABB` и `extractAndCenter` экспортированы для тестирования. Всего: 104 теста, все проходят.
 
 **Не реализовано (требуют WASM/IndexedDB mock):** `doodle-io.ts` (parseDoodle), `worker.ts` (applySRAroundCenter), `autosave.ts` (autosaveSession + restoreSession).
 
@@ -689,7 +689,7 @@ describe('mergeCoincidentVertices', () => {
 
 ---
 
-*Код-ревью выполнено 2025-07-15. Раунд 1 (2025-07-15): 8 задач выполнено, 1 проверена (не баг). Раунд 2 (2025-07-16): CRIT-1 (App.tsx → 8 компонентов), CRIT-2 (store → 4 модуля), WARN-3 (3 переиспользуемых компонента), WARN-6 (CSG normals), WARN-8 (AABB caching), PERF-1 (snapshot cache), COSM-1 (inline styles → CSS), COSM-3 (DEFAULT_FILTERS). Все задачи код-ревью закрыты. Текущий код функционален, проходит typecheck и 35 тестов. Общий балл: 4.8/5.*
+*Код-ревью выполнено 2025-07-15. Раунд 1 (2025-07-15): 8 задач выполнено, 1 проверена (не баг). Раунд 2 (2025-07-16): CRIT-1 (App.tsx → 8 компонентов), CRIT-2 (store → 4 модуля), WARN-3 (3 переиспользуемых компонента), WARN-6 (CSG normals), WARN-8 (AABB caching), PERF-1 (snapshot cache), COSM-1 (inline styles → CSS), COSM-3 (DEFAULT_FILTERS). Все задачи код-ревью закрыты. Текущий код функционален, проходит typecheck и 104 теста. Общий балл: 4.8/5.*
 
 ---
 
@@ -735,7 +735,7 @@ describe('mergeCoincidentVertices', () => {
 | **Надёжность** | ⭐⭐⭐⭐☆ | Хорошая обработка ошибок, но есть race conditions и утечки памяти |
 | **Производительность** | ⭐⭐⭐⭐☆ | Snapshot cache, useMemo, worker-параллелизм, но есть узкие места в animate loop |
 | **Безопасность** | ⭐⭐⭐⭐☆ | Санитайзер параметров, но нет валидации размера STL и версионирования IndexedDB |
-| **Тестирование** | ⭐⭐⭐☆☆ | 35 тестов — критические пути математики не покрыты |
+| **Тестирование** | ⭐⭐⭐☆☆ | 104 теста — критические пути математики не покрыты |
 
 ### 🔴 КРИТИЧЕСКИЕ ПРОБЛЕМЫ
 
