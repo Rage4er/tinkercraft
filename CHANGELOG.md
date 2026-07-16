@@ -9,6 +9,26 @@
 
 ## [Unreleased]
 
+### Fixed — Раунд 8: Критические исправления (Фаза A) (2026-07-16)
+
+- **CRIT-R8-1:** Утечка WASM-памяти — ManifoldObject теперь освобождается через `delete()` при удалении из кэша воркера
+  - Добавлены `delete()` методы в интерфейсы `ManifoldObject` и `CrossSection` (`worker-handlers.ts`)
+  - Созданы helper-функции `setCached()`, `disposeCached()`, `disposeAllCached()` для безопасной замены/удаления (`worker-handlers.ts`)
+  - Все `cache.set/delete/clear` в handler-функциях заменены на безопасные аналоги (`worker-handlers.ts`, `worker.ts`)
+  - Промежуточные объекты (cube→refine→warp, CrossSection в torus) освобождаются после использования
+  - `applyTransform()` и `applySRAroundCenter()` освобождают исходный объект после трансформации
+- **CRIT-R8-2:** Race condition — добавлен `busy` guard во все async actions (`document-store.ts`)
+  - 18 async actions теперь проверяют `get().busy` перед началом и возвращают early, если воркер занят
+  - Защищает от потери данных при быстрых повторных вызовах (горячие клавиши, double-click)
+- **CRIT-R8-3:** Prototype Pollution — ложные срабатывания исправлены (`doodle-io.ts`)
+  - Подстроковая проверка `json.includes('constructor')` заменена на рекурсивную валидацию ключей `validateObjectKeys()` после `JSON.parse`
+  - Легитимные имена объектов (например, `my_constructor_block`) больше не блокируются
+  - Функция проверяет ключи объектов рекурсивно, включая массивы
+
+### Changed — Раунд 8: DRY рефакторинг (2026-07-16)
+
+- `handleBuildShape` и `handleApplyFillet` используют `buildPrimitive()` / `buildPrimitiveWithFillet()` вместо дублирующих switch (WARN-R8-3, частично)
+
 ### Added — Раунд 8: Верификация код-ревью (2026-07-16)
 
 - **CODE_REVIEW_ROUND8.md:** Верификация каждого утверждения Раунда 8 против исходного кода

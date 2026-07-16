@@ -54,6 +54,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
 
   // ── Добавить фигуру ──
   addShape: async (shapeType, params) => {
+    if (get().busy) return
     const { objects, operations, historyIndex } = get()
     const idx = Object.keys(objects).length
     const id = nextId('obj')
@@ -83,6 +84,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
 
   // ── Добавить произвольный меш (текст, и т.д.) ──
   addRawMesh: async (name, vertices, indices) => {
+    if (get().busy) return
     const { objects, operations, historyIndex } = get()
     const id = nextId('txt')
     const color = colorForIndex(Object.keys(objects).length)
@@ -103,6 +105,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
 
   // ── Импорт STL ──
   importStl: async () => {
+    if (get().busy) return
     const file = await openStlFilePicker()
     if (!file) return
     const mesh = await parseStlFile(file)
@@ -128,6 +131,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
 
   // ── Fillet ──
   applyFillet: async (id, radius) => {
+    if (get().busy) return
     const { objects, operations, historyIndex } = get()
     const obj = objects[id]
     if (!obj) return
@@ -176,6 +180,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
 
   // ── Paste ──
   pasteClipboard: async () => {
+    if (get().busy) return
     const { clipboard, objects, operations, historyIndex } = get()
     if (clipboard.length === 0) return
     set({ busy: true })
@@ -220,6 +225,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
 
   // ── Delete ──
   deleteSelected: async () => {
+    if (get().busy) return
     const { selectedIds, objects, operations, historyIndex } = get()
     const ids = selectedIds.filter(id => objects[id])
     if (ids.length === 0) return
@@ -253,6 +259,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
 
   // ── CSG ──
   csgBoolean: async (op) => {
+    if (get().busy) return
     const { selectedIds, objects, operations, historyIndex } = get()
     if (selectedIds.length !== 2) return
     const [idA, idB] = selectedIds
@@ -286,6 +293,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
 
   // ── Move ──
   moveObject: async (id, transform) => {
+    if (get().busy) return
     const { objects, operations, historyIndex } = get()
     const obj = objects[id]
     if (!obj) return
@@ -335,6 +343,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
 
   // ── Mirror ──
   mirrorSelected: async (plane) => {
+    if (get().busy) return
     const { selectedIds, objects, operations, historyIndex } = get()
     const ids = selectedIds.filter(id => objects[id])
     if (ids.length === 0) return
@@ -372,6 +381,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
 
   // ── Align ──
   alignSelected: async (axis, anchor) => {
+    if (get().busy) return
     const { selectedIds, objects, operations, historyIndex } = get()
     const ids = selectedIds.filter(id => objects[id])
     if (ids.length < 2) return
@@ -410,6 +420,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
 
   // ── Undo ──
   undo: async () => {
+    if (get().busy) return
     const { historyIndex, operations } = get()
     if (historyIndex === 0) return
     const newIdx = historyIndex - 1
@@ -425,6 +436,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
 
   // ── Redo ──
   redo: async () => {
+    if (get().busy) return
     const { historyIndex, operations } = get()
     if (historyIndex >= operations.length) return
     const newIdx = historyIndex + 1
@@ -440,6 +452,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
 
   // ── Jump to history ──
   jumpToHistory: async (index) => {
+    if (get().busy) return
     const { historyIndex, operations } = get()
     const newIdx = Math.max(0, Math.min(index, operations.length))
     if (newIdx === historyIndex) return
@@ -455,6 +468,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
 
   // ── Clear ──
   clearScene: async () => {
+    if (get().busy) return
     await workerClearAll()
     clearSnapshots()
     set({ operations: [], historyIndex: 0, objects: {}, selectedIds: [], modified: false, fileName: null, lastCsgMs: null })
@@ -462,6 +476,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
 
   // ── Open .doodle ──
   openDoodle: async () => {
+    if (get().busy) return
     const picked = await openDoodleFilePicker()
     if (!picked) return
     set({ busy: true })
@@ -493,6 +508,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
 
   // ── Resize dims ──
   resizeObject: async (id, params) => {
+    if (get().busy) return
     const { objects, operations, historyIndex } = get()
     const obj = objects[id]
     if (!obj || obj.shapeType === 'import_mesh') return
@@ -512,6 +528,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
 
   // ── Extrude ──
   extrudeSelected: async (axis, depth) => {
+    if (get().busy) return
     const { selectedIds, objects, operations, historyIndex } = get()
     if (selectedIds.length !== 1) return
     const id = selectedIds[0]
@@ -578,11 +595,14 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
 
   // ── Autosave ──
   triggerAutosave: async () => {
+    if (get().busy) return
     const { operations, historyIndex, fileName } = get()
     await autosaveSession(operations.slice(0, historyIndex), historyIndex, fileName)
   },
 
+  // ── Restore autosave ──
   restoreAutosave: async () => {
+    if (get().busy) return false
     const entry = await restoreSession()
     if (!entry || entry.operations.length === 0) return false
     await workerClearAll()
@@ -611,6 +631,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   },
 
   loadFromProject: async (id) => {
+    if (get().busy) return
     const record = await pmLoad(id)
     if (!record) return
     await workerClearAll()

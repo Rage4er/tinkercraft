@@ -375,6 +375,9 @@ tinkercraft/
 | Нормали CSG для STL экспорта | ✅ Исправлено | WARN-6: per-vertex normals из manifold |
 | AABB вычисляется каждый раз | ✅ Исправлено | WARN-8: кэширование в `SceneObject.aabb` |
 | `DEFAULT_FILTERS` без типизации | ✅ Исправлено | COSM-3: `as Record<string, boolean>` |
+| WASM-утечка памяти (ManifoldObject не освобождаются) | ✅ Исправлено | CRIT-R8-1: `delete()` + helper-функции `setCached/disposeCached/disposeAllCached` |
+| Race condition (concurrent async actions) | ✅ Исправлено | CRIT-R8-2: `busy` guard во всех 18 async actions |
+| Prototype Pollution — ложные срабатывания | ✅ Исправлено | CRIT-R8-3: рекурсивная валидация ключей вместо подстроковой проверки |
 
 ---
 

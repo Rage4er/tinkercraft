@@ -13,7 +13,8 @@ import {
   handleRebuildScene,
   handleSyncObjects,
   safePostMessage,
-  cache,
+  disposeCached,
+  disposeAllCached,
   initWasm,
 } from './worker-handlers'
 
@@ -33,11 +34,11 @@ self.addEventListener('message', async (e: MessageEvent) => {
       case 'rebuildScene': await handleRebuildScene(msg as unknown as import('./worker-handlers').RebuildSceneMessage); break
       case 'syncObjects': await handleSyncObjects(msg as unknown as import('./worker-handlers').SyncObjectsMessage); break
       case 'deleteObjects':
-        for (const id of (msg.ids as string[])) cache.delete(id)
+        for (const id of (msg.ids as string[])) disposeCached(id)
         safePostMessage({ reqId: msg.reqId, type: 'ok' })
         break
       case 'clearAll':
-        cache.clear()
+        disposeAllCached()
         safePostMessage({ reqId: msg.reqId, type: 'ok' })
         break
       default: safePostMessage({ reqId: msg.reqId, type: 'error', message: `Unknown: ${msg.type}` })

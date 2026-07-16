@@ -25,10 +25,14 @@ export interface ManifoldObject {
   getMesh(): ManifoldMesh
   refine(recursions: number): ManifoldObject
   warp(fn: (v: number[]) => void): ManifoldObject
+  /** Frees the WASM memory — must be called when the object is no longer needed. */
+  delete(): void
 }
 
 export interface CrossSection {
   translate(offset: [number, number]): CrossSection
+  /** Frees the WASM memory — must be called when the object is no longer needed. */
+  delete(): void
 }
 
 export interface ManifoldConstructor {
@@ -90,6 +94,32 @@ export async function initWasm(): Promise<void> {
 
 /** Кэш manifold-объектов по id (null = non-manifold import, CSG not supported) */
 export const cache = new Map<string, ManifoldObject | null>()
+
+// --- Cache disposal helpers (CRIT-R8-1: prevent WASM memory leaks) ---
+
+/** Safely delete a ManifoldObject's WASM memory. Ignores already-disposed objects. */
+function safeDelete(m: ManifoldObject | null | undefined): void {
+  if (!m) return
+  try { m.delete() } catch { /* already disposed */ }
+}
+
+/** Replace a cache entry, disposing the previous object if it exists. */
+export function setCached(id: string, m: ManifoldObject | null): void {
+  safeDelete(cache.get(id))
+  cache.set(id, m)
+}
+
+/** Dispose a cached manifold object and remove it from cache. */
+export function disposeCached(id: string): void {
+  safeDelete(cache.get(id))
+  cache.delete(id)
+}
+
+/** Dispose all cached manifold objects and clear the cache. */
+export function disposeAllCached(): void {
+  for (const m of cache.values()) safeDelete(m)
+  cache.clear()
+}
 
 // --- ShapeInfo for rebuild ---
 export interface ShapeInfo {
@@ -178,11 +208,14 @@ export function buildPrimitive(shapeType: string, params: Record<string, number>
       const tubeRadius = params.tubeRadius ?? 4
       const segments = Math.max(8, Math.round(params.segments ?? 32))
       const tubeSegs = Math.max(4, Math.round(params.tubeSegments ?? 16))
-      const wasm = getWasm()
       const { CrossSection } = wasm
       const circle = CrossSection.circle(tubeRadius, tubeSegs)
       const translated = circle.translate([torusRadius, 0])
-      return Manifold.revolve(translated, segments)
+      const result = Manifold.revolve(translated, segments)
+      // Dispose intermediate CrossSection WASM objects
+      translated.delete()
+      circle.delete()
+      return result
     }
     case 'prism': {
       const sides = Math.max(3, Math.round(params.sides ?? 6))
@@ -221,8 +254,9 @@ export function buildRoundedBox(w: number, h: number, d: number, r: number): Man
 
   const cube = Manifold.cube([w, h, d], true)
   const refined = cube.refine(6)
+  cube.delete()
 
-  return refined.warp((v: number[]) => {
+  const warped = refined.warp((v: number[]) => {
     const x = v[0], y = v[1], z = v[2]
     const ex = Math.max(0, Math.abs(x) - hw)
     const ey = Math.max(0, Math.abs(y) - hh)
@@ -234,6 +268,8 @@ export function buildRoundedBox(w: number, h: number, d: number, r: number): Man
     v[1] = Math.sign(y) * hh + ey * s * Math.sign(y || 1)
     v[2] = Math.sign(z) * hd + ez * s * Math.sign(z || 1)
   })
+  refined.delete()
+  return warped
 }
 
 /** Build primitive with optional fillet (only works for cube). */
@@ -255,7 +291,7 @@ export function buildPrimitiveWithFillet(
 
 // --- Transform helpers ---
 
-/** Apply only translation to manifold geometry. */
+/** Apply only translation to manifold geometry. Disposes the source object. */
 export function applyTransform(
   manifold: ManifoldObject,
   t: { x: number; y: number; z: number },
@@ -266,17 +302,21 @@ export function applyTransform(
     0, 0, 1, 0,
     t.x, t.y, t.z, 1,
   ]
-  return manifold.transform(m)
+  const result = manifold.transform(m)
+  manifold.delete()
+  return result
 }
 
-/** Apply scale+rotation around the object's own world-space center before CSG. */
+/** Apply scale+rotation around the object's own world-space center before CSG. Disposes the source. */
 export function applySRAroundCenter(manifold: ManifoldObject, t: RebuildTransform): ManifoldObject {
   const matrix = buildSRTMatrixAroundCenter(
     { x: t.x, y: t.y, z: t.z },
     { rotX: t.rotX, rotY: t.rotY, rotZ: t.rotZ },
     { scaleX: t.scaleX, scaleY: t.scaleY, scaleZ: t.scaleZ },
   )
-  return manifold.transform(matrix)
+  const result = manifold.transform(matrix)
+  manifold.delete()
+  return result
 }
 
 /** Returns true when the transform has non-trivial rotation or scale. */
@@ -425,63 +465,21 @@ export interface ClearAllMessage {
 
 /** Handle buildShape message. */
 export async function handleBuildShape(msg: BuildShapeMessage): Promise<void> {
-  const wasm = getWasm()
-  const { Manifold } = wasm
   const t0 = performance.now()
   const shapeType = msg.shapeType
   const safeP = sanitizeParams(msg.params)
 
-  // Rebuild primitive using the imported Manifold constructor
-  let m: ManifoldObject
-  switch (shapeType) {
-    case 'cube': {
-      let width = safeP.width, height = safeP.height, depth = safeP.depth
-      if (!width || width <= 0) width = 20
-      if (!height || height <= 0) height = 20
-      if (!depth || depth <= 0) depth = 20
-      m = Manifold.cube([width, height, depth], true)
-      break
-    }
-    case 'sphere':
-      m = Manifold.sphere(safeP.radius ?? 12, safeP.segments ?? 32)
-      break
-    case 'cylinder':
-      m = Manifold.cylinder(safeP.height ?? 30, safeP.radius ?? 10, safeP.radius ?? 10, safeP.segments ?? 32, true)
-      break
-    case 'cone':
-      m = Manifold.cylinder(safeP.height ?? 30, safeP.radius ?? 10, 0, safeP.segments ?? 32, true)
-      break
-    case 'torus': {
-      const torusRadius = safeP.torusRadius ?? 15
-      const tubeRadius = safeP.tubeRadius ?? 4
-      const segments = Math.max(8, Math.round(safeP.segments ?? 32))
-      const tubeSegs = Math.max(4, Math.round(safeP.tubeSegments ?? 16))
-      const { CrossSection } = wasm
-      const circle = CrossSection.circle(tubeRadius, tubeSegs)
-      const translated = circle.translate([torusRadius, 0])
-      m = Manifold.revolve(translated, segments)
-      break
-    }
-    case 'prism': {
-      const sides = Math.max(3, Math.round(safeP.sides ?? 6))
-      m = Manifold.cylinder(safeP.height ?? 20, safeP.radius ?? 12, safeP.radius ?? 12, sides, true)
-      break
-    }
-    case 'pyramid': {
-      const sides = Math.max(3, Math.round(safeP.sides ?? 4))
-      m = Manifold.cylinder(safeP.height ?? 20, safeP.radius ?? 12, 0, sides, true)
-      break
-    }
-    default:
-      m = Manifold.cube([20, 20, 20], true)
-  }
+  // Rebuild primitive using buildPrimitive (DRY: WARN-R8-3)
+  let m = buildPrimitive(shapeType, safeP)
 
   // Apply translation
   const t = msg.transform
   const transformMatrix = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, t.x, t.y, t.z, 1]
-  m = m.transform(transformMatrix)
+  const transformed = m.transform(transformMatrix)
+  m.delete()
+  m = transformed
 
-  cache.set(msg.objId, m)
+  setCached(msg.objId, m)
 
   const mesh = extractMesh(m)
   safePostMessage(
@@ -501,64 +499,22 @@ export async function handleBuildShape(msg: BuildShapeMessage): Promise<void> {
 
 /** Handle applyFillet message. */
 export async function handleApplyFillet(msg: ApplyFilletMessage): Promise<void> {
-  const wasm = getWasm()
-  const { Manifold } = wasm
   const t0 = performance.now()
   const shapeType = msg.shapeType
   const safeP = sanitizeParams(msg.params)
   const radius = clamp(msg.radius, 0, 1e4)
 
-  let m: ManifoldObject
-  if (radius > 0 && shapeType === 'cube') {
-    // Build rounded box via warp + refine
-    const w = safeP.width ?? 20, h = safeP.height ?? 20, d = safeP.depth ?? 20
-    const maxR = Math.min(w, h, d) / 2 - 0.1
-    const cr = Math.max(0.01, Math.min(radius, maxR))
-    const hw = w / 2 - cr, hh = h / 2 - cr, hd = d / 2 - cr
-    const cube = Manifold.cube([w, h, d], true)
-    const refined = cube.refine(6)
-    m = refined.warp((v: number[]) => {
-      const x = v[0], y = v[1], z = v[2]
-      const ex = Math.max(0, Math.abs(x) - hw)
-      const ey = Math.max(0, Math.abs(y) - hh)
-      const ez = Math.max(0, Math.abs(z) - hd)
-      const len = Math.sqrt(ex * ex + ey * ey + ez * ez)
-      if (len < 1e-9) return
-      const s = cr / len
-      v[0] = Math.sign(x) * hw + ex * s * Math.sign(x || 1)
-      v[1] = Math.sign(y) * hh + ey * s * Math.sign(y || 1)
-      v[2] = Math.sign(z) * hd + ez * s * Math.sign(z || 1)
-    })
-  } else {
-    // Build primitive without fillet
-    switch (shapeType) {
-      case 'cube': {
-        let width = safeP.width, height = safeP.height, depth = safeP.depth
-        if (!width || width <= 0) width = 20
-        if (!height || height <= 0) height = 20
-        if (!depth || depth <= 0) depth = 20
-        m = Manifold.cube([width, height, depth], true)
-        break
-      }
-      case 'sphere':
-        m = Manifold.sphere(safeP.radius ?? 12, safeP.segments ?? 32)
-        break
-      case 'cylinder':
-        m = Manifold.cylinder(safeP.height ?? 30, safeP.radius ?? 10, safeP.radius ?? 10, safeP.segments ?? 32, true)
-        break
-      case 'cone':
-        m = Manifold.cylinder(safeP.height ?? 30, safeP.radius ?? 10, 0, safeP.segments ?? 32, true)
-        break
-      default:
-        m = Manifold.cube([20, 20, 20], true)
-    }
-  }
+  // DRY: use buildPrimitiveWithFillet instead of duplicated switch (WARN-R8-3)
+  let m = buildPrimitiveWithFillet(shapeType, safeP, radius)
 
+  // Apply translation
   const t = msg.transform
   const transformMatrix = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, t.x, t.y, t.z, 1]
-  m = m.transform(transformMatrix)
+  const transformed = m.transform(transformMatrix)
+  m.delete()
+  m = transformed
 
-  cache.set(msg.objId, m)
+  setCached(msg.objId, m)
 
   const mesh = extractMesh(m)
   safePostMessage(
@@ -588,7 +544,7 @@ export async function handleBuildImportedMesh(msg: BuildImportedMeshMessage): Pr
       vertProperties: verts,
       triVerts: tris,
     })
-    cache.set(msg.objId, m)
+    setCached(msg.objId, m)
     const mesh = extractMesh(m)
     safePostMessage(
       {
@@ -606,7 +562,7 @@ export async function handleBuildImportedMesh(msg: BuildImportedMeshMessage): Pr
   } catch (me) {
     // Non-manifold STL — return raw mesh without CSG support
     const mesh = { vertices: verts, indices: tris, normals: null, tris: tris.length / 3 }
-    cache.set(msg.objId, null)
+    setCached(msg.objId, null)
     safePostMessage(
       {
         reqId: msg.reqId,
@@ -628,7 +584,7 @@ export async function handleBuildImportedMesh(msg: BuildImportedMeshMessage): Pr
 /** Full rebuild from operation history. Requires wasm to be initialized. */
 export async function handleRebuildScene(msg: RebuildSceneMessage): Promise<void> {
   const t0 = performance.now()
-  cache.clear()
+  disposeAllCached()
 
   const wasm = getWasm()
   const shapeInfos: Map<string, { shapeType: string; params: Record<string, number>; filletRadius: number }> = new Map()
@@ -650,7 +606,7 @@ export async function handleRebuildScene(msg: RebuildSceneMessage): Promise<void
       const st = op.shapeType as string
       const par = op.params as Record<string, number>
       const m = applyTransform(buildPrimitive(st, sanitizeParams(par)), t)
-      cache.set(op.id as string, m)
+      setCached(op.id as string, m)
       shapeInfos.set(op.id as string, { shapeType: st, params: par, filletRadius: 0 })
       currentTransforms.set(op.id as string, { ...t })
     } else if (op.type === 'import_mesh') {
@@ -665,7 +621,7 @@ export async function handleRebuildScene(msg: RebuildSceneMessage): Promise<void
         const r = op.radius as number
         info.filletRadius = r
         const m = applyTransform(buildPrimitiveWithFillet(info.shapeType, info.params, r), t)
-        cache.set(id, m)
+        setCached(id, m)
       }
     } else if (op.type === 'move') {
       const d = op.delta as { x: number; y: number; z: number }
@@ -679,18 +635,18 @@ export async function handleRebuildScene(msg: RebuildSceneMessage): Promise<void
           currentTransforms.set(id, nt)
           if (info) {
             const m = applyTransform(buildPrimitiveWithFillet(info.shapeType, info.params, info.filletRadius), nt)
-            cache.set(id, m)
+            setCached(id, m)
           }
         } else {
           const cm = cache.get(id)
-          if (cm) cache.set(id, cm.transform([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, d.x, d.y, d.z, 1]))
+          if (cm) setCached(id, cm.transform([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, d.x, d.y, d.z, 1]))
         }
       }
     } else if (op.type === 'mirror') {
       const flip = getMirrorMatrix(op.plane as string)
       for (const id of op.ids as string[]) {
         const cm = cache.get(id)
-        if (cm) cache.set(id, cm.transform(flip))
+        if (cm) setCached(id, cm.transform(flip))
         const t = currentTransforms.get(id)
         if (t) {
           const nt = applyMirrorToTransform(t, op.plane as 'XY' | 'XZ' | 'YZ')
@@ -709,13 +665,13 @@ export async function handleRebuildScene(msg: RebuildSceneMessage): Promise<void
             currentTransforms.set(id, nt)
             if (info) {
               const m = applyTransform(buildPrimitiveWithFillet(info.shapeType, info.params, info.filletRadius), nt)
-              cache.set(id, m)
+              setCached(id, m)
             } else {
               const dx = axis === 'x' ? delta : 0
               const dy = axis === 'y' ? delta : 0
               const dz = axis === 'z' ? delta : 0
               const cm = cache.get(id)
-              if (cm) cache.set(id, cm.transform([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, dx, dy, dz, 1]))
+              if (cm) setCached(id, cm.transform([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, dx, dy, dz, 1]))
             }
           } else {
             const cm = cache.get(id)
@@ -723,7 +679,7 @@ export async function handleRebuildScene(msg: RebuildSceneMessage): Promise<void
               const dx = axis === 'x' ? delta : 0
               const dy = axis === 'y' ? delta : 0
               const dz = axis === 'z' ? delta : 0
-              cache.set(id, cm.transform([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, dx, dy, dz, 1]))
+              setCached(id, cm.transform([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, dx, dy, dz, 1]))
             }
           }
         }
@@ -736,7 +692,7 @@ export async function handleRebuildScene(msg: RebuildSceneMessage): Promise<void
       if (info && t) {
         info.params = { ...info.params, ...np }
         const m = applyTransform(buildPrimitiveWithFillet(info.shapeType, info.params, info.filletRadius), t)
-        cache.set(id, m)
+        setCached(id, m)
       }
     } else if (op.type === 'group') {
       const ids = op.ids as string[]
@@ -753,13 +709,13 @@ export async function handleRebuildScene(msg: RebuildSceneMessage): Promise<void
         if (isIntersect) result = a.intersect(b)
         else if (subtractOp) result = a.subtract(b)
         else result = a.add(b)
-        cache.delete(ids[0])
-        cache.delete(ids[1])
-        cache.set(op.resultId as string, result)
+        disposeCached(ids[0])
+        disposeCached(ids[1])
+        setCached(op.resultId as string, result)
       }
     } else if (op.type === 'delete') {
       for (const id of op.ids as string[]) {
-        cache.delete(id)
+        disposeCached(id)
         shapeInfos.delete(id)
         currentTransforms.delete(id)
       }
@@ -812,9 +768,9 @@ export async function handleCsgBoolean(msg: CsgBooleanMessage): Promise<void> {
       result = a.intersect(b)
   }
 
-  cache.delete(msg.idA)
-  cache.delete(msg.idB)
-  cache.set(msg.resultId, result)
+  disposeCached(msg.idA)
+  disposeCached(msg.idB)
+  setCached(msg.resultId, result)
 
   const mesh = extractMesh(result)
   safePostMessage(
@@ -863,7 +819,7 @@ export async function handleSyncObjects(msg: SyncObjectsMessage): Promise<void> 
       { scaleX: e.transform.scaleX, scaleY: e.transform.scaleY, scaleZ: e.transform.scaleZ },
     )
     const tm = m.transform(fullMatrix)
-    cache.set(e.objId, tm)
+    setCached(e.objId, tm)
   }
 
   safePostMessage({ reqId: msg.reqId, type: 'ok' })
@@ -900,7 +856,7 @@ export async function handleCsgBooleanSync(msg: CsgBooleanSyncMessage): Promise<
       { rotX: msg.transformA.rotX, rotY: msg.transformA.rotY, rotZ: msg.transformA.rotZ },
       { scaleX: msg.transformA.scaleX, scaleY: msg.transformA.scaleY, scaleZ: msg.transformA.scaleZ },
     )
-    cache.set(msg.idA, m.transform(fullMatrix))
+    setCached(msg.idA, m.transform(fullMatrix))
   }
   // Sync operand B
   if (msg.shapeB) {
@@ -911,7 +867,7 @@ export async function handleCsgBooleanSync(msg: CsgBooleanSyncMessage): Promise<
       { rotX: msg.transformB.rotX, rotY: msg.transformB.rotY, rotZ: msg.transformB.rotZ },
       { scaleX: msg.transformB.scaleX, scaleY: msg.transformB.scaleY, scaleZ: msg.transformB.scaleZ },
     )
-    cache.set(msg.idB, m.transform(fullMatrix))
+    setCached(msg.idB, m.transform(fullMatrix))
   }
 
   // Perform boolean
@@ -926,9 +882,9 @@ export async function handleCsgBooleanSync(msg: CsgBooleanSyncMessage): Promise<
     default: result = a.intersect(b)
   }
 
-  cache.delete(msg.idA)
-  cache.delete(msg.idB)
-  cache.set(msg.resultId, result)
+  disposeCached(msg.idA)
+  disposeCached(msg.idB)
+  setCached(msg.resultId, result)
 
   const mesh = extractMesh(result)
   safePostMessage(
@@ -952,7 +908,7 @@ export async function handleMirrorObject(msg: MirrorObjectMessage): Promise<void
   const src = cache.get(msg.objId)
   if (!src) throw new Error(`Object not found: ${msg.objId}`)
   const m = src.transform(getMirrorMatrix(msg.plane))
-  cache.set(msg.objId, m)
+  setCached(msg.objId, m)
 
   const mesh = extractMesh(m)
   safePostMessage(

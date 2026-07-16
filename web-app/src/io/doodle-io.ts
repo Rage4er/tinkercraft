@@ -10,6 +10,30 @@ const FORMAT_VERSION = '1.0.0'
 /** Максимальный размер model.json (5 МБ) для защиты от DoS */
 const MAX_MODEL_JSON_SIZE = 5 * 1024 * 1024
 
+/** Ключи, которые могут привести к prototype pollution через JSON.parse. */
+const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype'])
+
+/**
+ * CRIT-R8-3: Рекурсивная валидация ключей объекта после JSON.parse.
+ * Проверяет именно ключи объектов, а не подстроки в тексте,
+ * чтобы избежать ложных срабатываний на легитимных данных.
+ */
+function validateObjectKeys(obj: unknown, path: string): void {
+  if (typeof obj !== 'object' || obj === null) return
+  if (Array.isArray(obj)) {
+    for (let i = 0; i < obj.length; i++) {
+      validateObjectKeys(obj[i], `${path}[${i}]`)
+    }
+    return
+  }
+  for (const key of Object.keys(obj as Record<string, unknown>)) {
+    if (UNSAFE_KEYS.has(key)) {
+      throw new Error(`Некорректный model.json: обнаружен небезопасный ключ "${key}" по пути "${path}"`)
+    }
+    validateObjectKeys((obj as Record<string, unknown>)[key], path ? `${path}.${key}` : key)
+  }
+}
+
 // ---- Разобрать .doodle файл ----
 
 export async function parseDoodle(buffer: ArrayBuffer): Promise<TinkerCraftFile> {
@@ -20,7 +44,7 @@ export async function parseDoodle(buffer: ArrayBuffer): Promise<TinkerCraftFile>
 
   const json = await modelFile.async('string')
 
-  // SEC-4: Валидация размера и содержимого JSON для защиты от DoS / Prototype Pollution
+  // SEC-4: Валидация размера JSON для защиты от DoS
   if (typeof json !== 'string') {
     throw new Error('Некорректный model.json: не является строкой')
   }
@@ -29,16 +53,12 @@ export async function parseDoodle(buffer: ArrayBuffer): Promise<TinkerCraftFile>
       `Некорректный model.json: размер ${json.length} байт превышает лимит ${MAX_MODEL_JSON_SIZE} байт`,
     )
   }
-  // Prototype pollution: проверяем наличие ключевых слов в JSON
-  if (
-    json.includes('__proto__') ||
-    json.includes('constructor') ||
-    json.includes('prototype')
-  ) {
-    throw new Error('Некорректный model.json: обнаружен подозрительный контент')
-  }
 
   const raw = JSON.parse(json)
+
+  // CRIT-R8-3: Prototype Pollution — проверяем ключи после парсинга, а не подстроки в тексте.
+  // Подстроковая проверка давала ложные срабатывания на легитимных именах вроде "constructor_block".
+  validateObjectKeys(raw, '')
 
   // Support both formats: { version, operations } or just an operations array
   let operations: TinkerCraftOperation[]
