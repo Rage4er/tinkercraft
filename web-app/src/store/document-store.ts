@@ -1,253 +1,37 @@
 // ============================================================
 // Zustand store — TinkerCraftDocument с полным undo/redo
 // ============================================================
+//
+// Утилиты (computeAABB, extractAndCenter, makeObject, nextId, colorForIndex)
+// вынесены в ./helpers.ts
+// Интерфейс DocumentStore — в ./types.ts
+// rebuildFromHistory — в ./rebuild.ts
+// Реэкспорт computeAABB и extractAndCenter — для unit-тестов.
 
 import { create } from 'zustand/react'
 import type {
   TinkerCraftOperation, AddShapeOperation, ImportMeshOperation,
   FilletOperation, MirrorOperation, AlignOperation, ResizeDimsOperation,
-  SceneObject, ShapeType, ShapeParams, TransformNR, CsgBooleanOp, Vec3,
+  SceneObject, ShapeParams, TransformNR, Vec3,
 } from '../csg/types'
 import {
-  workerBuildShape, workerCsgBoolean, workerRebuildScene,
+  workerBuildShape, workerCsgBoolean,
   workerClearAll, workerDeleteObjects, workerMirrorObject,
   workerApplyFillet, workerBuildImportedMesh,
 } from '../csg/worker-client'
 import { parseDoodle, serializeDoodle, openDoodleFilePicker, downloadBlob } from '../io/doodle-io'
 import { notify } from './notifications'
-
-// Computes the bbox center of a vertex buffer, shifts all vertices so the
-// center is at the origin, and returns the center offset.  Used to normalise
-// CSG result geometry so the Three.js pivot can be placed at the true world
-// position of the result instead of always being at (0,0,0).
-// Exported for unit testing.
-export function extractAndCenter(vertices: Float32Array): { cx: number; cy: number; cz: number } {
-  if (vertices.length === 0) return { cx: 0, cy: 0, cz: 0 }
-  let minX = Infinity, minY = Infinity, minZ = Infinity
-  let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity
-  for (let i = 0; i < vertices.length; i += 3) {
-    if (vertices[i]   < minX) minX = vertices[i];   if (vertices[i]   > maxX) maxX = vertices[i]
-    if (vertices[i+1] < minY) minY = vertices[i+1]; if (vertices[i+1] > maxY) maxY = vertices[i+1]
-    if (vertices[i+2] < minZ) minZ = vertices[i+2]; if (vertices[i+2] > maxZ) maxZ = vertices[i+2]
-  }
-  const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2, cz = (minZ + maxZ) / 2
-  for (let i = 0; i < vertices.length; i += 3) {
-    vertices[i] -= cx; vertices[i+1] -= cy; vertices[i+2] -= cz
-  }
-  return { cx, cy, cz }
-}
 import { saveProject as pmSave, updateProject as pmUpdate, loadProject as pmLoad } from '../io/project-manager'
 import { downloadStl } from '../io/stl-export'
 import { openStlFilePicker, parseStlFile } from '../io/stl-import'
 import { autosaveSession, restoreSession } from '../io/autosave'
 
-// ---- ID генератор ----
-let _idCounter = 0
-function nextId(prefix = 'obj'): string { return `${prefix}_${++_idCounter}` }
-
-// ---- Цвета ----
-const PALETTE = [
-  '#89b4fa','#a6e3a1','#f9e2af','#cba6f7',
-  '#f38ba8','#94e2d5','#fab387','#74c7ec',
-]
-function colorForIndex(n: number): string { return PALETTE[n % PALETTE.length] }
-
-// ---- AABB (exported for unit testing) ----
-export function computeAABB(vertices: Float32Array): { min: Vec3; max: Vec3 } {
-  let minX = Infinity, maxX = -Infinity
-  let minY = Infinity, maxY = -Infinity
-  let minZ = Infinity, maxZ = -Infinity
-  for (let i = 0; i < vertices.length; i += 3) {
-    if (vertices[i]   < minX) minX = vertices[i];   if (vertices[i]   > maxX) maxX = vertices[i]
-    if (vertices[i+1] < minY) minY = vertices[i+1]; if (vertices[i+1] > maxY) maxY = vertices[i+1]
-    if (vertices[i+2] < minZ) minZ = vertices[i+2]; if (vertices[i+2] > maxZ) maxZ = vertices[i+2]
-  }
-  return { min: { x: minX, y: minY, z: minZ }, max: { x: maxX, y: maxY, z: maxZ } }
-}
-
-/** Creates a SceneObject with cached AABB. Use everywhere a new object is created. */
-function makeObject(partial: Omit<SceneObject, 'aabb'>): SceneObject {
-  return { ...partial, aabb: computeAABB(partial.vertices) }
-}
-
-// ---- Clipboard entry ----
-interface ClipEntry {
-  shapeType: ShapeType
-  params: ShapeParams
-  color: string
-  transform: TransformNR
-  // For import_mesh:
-  importVertices?: number[]
-  importIndices?: number[]
-}
-
-// ---- Типы store ----
-export interface DocumentStore {
-  operations:   TinkerCraftOperation[]
-  historyIndex: number
-  objects:      Record<string, SceneObject>
-  selectedIds:  string[]
-  clipboard:    ClipEntry[]
-  fileName:     null | string
-  modified:     boolean
-  busy:         boolean
-  lastCsgMs:    null | number
-
-  currentProjectId: string | null
-
-  // Actions
-  addShape:        (shapeType: ShapeType, params?: ShapeParams) => Promise<void>
-  addRawMesh:      (name: string, vertices: number[], indices: number[]) => Promise<void>
-  importStl:       () => Promise<void>
-  deleteSelected:  () => Promise<void>
-  selectObjects:   (ids: string[], add: boolean) => void
-  clearSelection:  () => void
-  csgBoolean:      (op: CsgBooleanOp) => Promise<void>
-  moveObject:      (id: string, transform: TransformNR) => Promise<void>
-  resizeObject:    (id: string, params: ShapeParams) => Promise<void>
-  extrudeSelected: (axis: 'X'|'Y'|'Z', depth: number) => Promise<void>
-  renameObject:    (id: string, name: string) => void
-  setColor:        (id: string, color: string) => void
-  toggleVisible:   (id: string) => void
-  mirrorSelected:  (plane: 'XY' | 'XZ' | 'YZ') => Promise<void>
-  alignSelected:   (axis: 'X' | 'Y' | 'Z', anchor: 'min' | 'center' | 'max') => Promise<void>
-  applyFillet:     (id: string, radius: number) => Promise<void>
-  copySelected:    () => void
-  pasteClipboard:  () => Promise<void>
-  undo:            () => Promise<void>
-  redo:            () => Promise<void>
-  jumpToHistory:   (index: number) => Promise<void>
-  clearScene:      () => Promise<void>
-  openDoodle:      () => Promise<void>
-  saveDoodle:      () => Promise<void>
-  exportStl:       () => void
-  triggerAutosave: () => Promise<void>
-  restoreAutosave: () => Promise<boolean>
-  saveToProject:   (name: string) => Promise<void>
-  loadFromProject: (id: string) => Promise<void>
-}
-
-// ---- Rebuild helper ----
-
-async function rebuildFromHistory(ops: TinkerCraftOperation[]): Promise<Record<string, SceneObject>> {
-  const result = await workerRebuildScene(ops)
-
-  const meta: Record<string, { color: string; shapeType: ShapeType; params: ShapeParams; transform: TransformNR }> = {}
-  const transforms: Record<string, TransformNR> = {}
-  const csgResultIds = new Set<string>()
-
-  for (const op of ops) {
-    if (op.type === 'add_shape') {
-      meta[op.id]       = { color: op.color, shapeType: op.shapeType, params: op.params, transform: { ...op.transform } }
-      transforms[op.id] = { ...op.transform }
-
-    } else if (op.type === 'import_mesh') {
-      const t: TransformNR = { ...op.transform }
-      meta[op.id]       = { color: op.color, shapeType: 'import_mesh', params: {}, transform: t }
-      transforms[op.id] = t
-
-    } else if (op.type === 'fillet') {
-      if (meta[op.id]) meta[op.id] = { ...meta[op.id], params: { ...meta[op.id].params, filletRadius: op.radius } }
-
-    } else if (op.type === 'move') {
-      const d: Vec3 = op.delta
-      const rd = (op as { rotDelta?: Vec3 }).rotDelta
-      const sd = (op as { scaleDelta?: Vec3 }).scaleDelta
-      for (const id of op.ids) {
-        const t = transforms[id]
-        if (t && meta[id]) {
-          const nt: TransformNR = {
-            ...t,
-            x: t.x + d.x, y: t.y + d.y, z: t.z + d.z,
-            rotX: t.rotX + (rd?.x ?? 0),
-            rotY: t.rotY + (rd?.y ?? 0),
-            rotZ: t.rotZ + (rd?.z ?? 0),
-            scaleX: t.scaleX + (sd?.x ?? 0),
-            scaleY: t.scaleY + (sd?.y ?? 0),
-            scaleZ: t.scaleZ + (sd?.z ?? 0),
-          }
-          transforms[id] = nt
-          meta[id] = { ...meta[id], transform: nt }
-        }
-      }
-
-    } else if (op.type === 'mirror') {
-      for (const id of op.ids) {
-        const t = transforms[id]
-        if (t && meta[id]) {
-          const nt: TransformNR = { ...t }
-          if (op.plane === 'YZ') nt.x = -nt.x
-          if (op.plane === 'XZ') nt.y = -nt.y
-          if (op.plane === 'XY') nt.z = -nt.z
-          transforms[id] = nt
-          meta[id] = { ...meta[id], transform: nt }
-        }
-      }
-
-    } else if (op.type === 'align') {
-      const axis = op.axis.toLowerCase() as 'x' | 'y' | 'z'
-      const deltas = (op as AlignOperation & { deltas?: Record<string, number> }).deltas
-      if (deltas) {
-        for (const [id, delta] of Object.entries(deltas)) {
-          const t = transforms[id]
-          if (t && meta[id]) {
-            const nt: TransformNR = { ...t, [axis]: t[axis] + delta }
-            transforms[id] = nt
-            meta[id] = { ...meta[id], transform: nt }
-          }
-        }
-      }
-
-    } else if (op.type === 'color') {
-      for (const id of op.ids) {
-        if (meta[id]) meta[id] = { ...meta[id], color: op.color }
-      }
-
-    } else if (op.type === 'delete') {
-      for (const id of op.ids) { delete meta[id]; delete transforms[id] }
-
-    } else if (op.type === 'group') {
-      const srcColor = op.ids[0] ? meta[op.ids[0]]?.color ?? '#89b4fa' : '#89b4fa'
-      for (const id of op.ids) { delete meta[id]; delete transforms[id] }
-      if (op.resultId) {
-        const nullT: TransformNR = { x:0,y:0,z:0,rotX:0,rotY:0,rotZ:0,scaleX:1,scaleY:1,scaleZ:1 }
-        meta[op.resultId]       = { color: srcColor, shapeType: 'cube', params: {}, transform: nullT }
-        transforms[op.resultId] = nullT
-        csgResultIds.add(op.resultId)
-      }
-    }
-  }
-
-  // For CSG results the worker returns geometry at world positions.  Center
-  // each result's vertices and store the bbox offset as the pivot position,
-  // matching what the direct csgBoolean action does.
-  const meshByObjId = new Map(result.results.map(m => [m.objId, m]))
-  for (const id of csgResultIds) {
-    const m = meshByObjId.get(id)
-    if (m && meta[id]) {
-      const { cx, cy, cz } = extractAndCenter(m.vertices)
-      meta[id] = { ...meta[id], transform: { ...meta[id].transform, x: cx, y: cy, z: cz } }
-    }
-  }
-
-  const objects: Record<string, SceneObject> = {}
-  for (const m of result.results) {
-    const info = meta[m.objId]
-    objects[m.objId] = makeObject({
-      id:        m.objId,
-      shapeType: info?.shapeType ?? 'cube',
-      params:    info?.params    ?? {},
-      color:     info?.color     ?? '#89b4fa',
-      transform: info?.transform ?? { x:0,y:0,z:0,rotX:0,rotY:0,rotZ:0,scaleX:1,scaleY:1,scaleZ:1 },
-      visible:   true,
-      locked:    false,
-      vertices:  m.vertices,
-      indices:   m.indices,
-      normals:   m.normals,
-    })
-  }
-  return objects
-}
+// Re-export for backward compatibility (unit tests import from here)
+export { computeAABB, extractAndCenter } from './helpers'
+import { computeAABB, extractAndCenter, makeObject, nextId, colorForIndex } from './helpers'
+import type { ClipEntry } from './helpers'
+import type { DocumentStore } from './types'
+import { rebuildFromHistory } from './rebuild'
 
 // ---- Store ----
 

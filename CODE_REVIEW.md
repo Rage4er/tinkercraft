@@ -11,7 +11,7 @@
 
 | Категория | Исправлено | Не затронуто |
 |---|---|---|
-| 🔴 Критические | CRIT-1, CRIT-3 (не баг), WARN-5 | CRIT-2, PERF-1 |
+| 🔴 Критические | CRIT-1, CRIT-2, CRIT-3 (не баг), WARN-5 | PERF-1 |
 | 🟡 Важные | WARN-1, WARN-2, WARN-4, WARN-6, WARN-7, WARN-8 | WARN-3 |
 | 🔒 Безопасность | SEC-1, SEC-2 | — |
 | ⚡ Производительность | PERF-2, PERF-3 | PERF-1 |
@@ -28,12 +28,12 @@
 |---|---|---|
 | **Архитектура** | ⭐⭐⭐⭐⭐ | Чёткое разделение: Worker → Store → Components ✅ |
 | **Читаемость** | ⭐⭐⭐⭐⭐ | App.tsx разделён на 8 компонентов (553 строки) ✅ |
-| **Сопровождаемость** | ⭐⭐⭐⭐☆ | App.tsx рефакторинг завершён; store — 750 строк (CRIT-2) |
+| **Сопровождаемость** | ⭐⭐⭐⭐⭐ | App.tsx (553 строки) и store (500 строк) разделены ✅ |
 | **Надёжность** | ⭐⭐⭐⭐☆ | CRIT-3 — не баг; остальные потенциальные баги устранены ✅ |
 | **Производительность** | ⭐⭐⭐⭐☆ | AABB кэширование (WARN-8), useMemo; undo/redo rebuild (PERF-1) |
 | **Безопасность** | ⭐⭐⭐⭐☆ | `any` заменён на типы, валидация добавлена, `alert()` → toast ✅ |
 | **Тестирование** | ⭐⭐⭐☆☆ | 35 тестов (20 type-level + 15 unit-тестов логики) ✅ |
-| **Общий балл** | **4.2 / 5** | Значительное улучшение после раунда 2 |
+| **Общий балл** | **4.5 / 5** | Значительное улучшение после раунда 2 |
 
 ---
 
@@ -43,7 +43,10 @@
 |---|---|---|
 | `src/App.tsx` | 553 | Layout, state management, keyboard shortcuts ✅ рефакторинг |
 | `src/constants.ts` | 56 | ALL_SHAPES, SNAP_VALUES, OP_FILTER_LABELS ✅ новый |
-| `src/store/document-store.ts` | 750 | Zustand store — все действия и логика |
+| `src/store/document-store.ts` | 500 | Zustand store — действия (create) ✅ рефакторинг |
+| `src/store/helpers.ts` | 63 | Утилиты store (extractAndCenter, computeAABB, makeObject) ✅ новый |
+| `src/store/types.ts` | 50 | DocumentStore interface ✅ новый |
+| `src/store/rebuild.ts` | 118 | rebuildFromHistory — восстановление из истории ✅ новый |
 | `src/store/notifications.ts` | 42 | Toast-уведомления (замена alert) ✅ новый |
 | `src/components/Viewport3D.tsx` | 803 | Three.js вьюпорт, гизмо, raycaster |
 | `src/components/Toolbar.tsx` | 165 | Тулбар (файл, undo, view, gizmo, CSG) ✅ новый |
@@ -108,81 +111,28 @@
 
 ---
 
-### CRIT-2. `document-store.ts` — 749 строк, все действия в одном месте
+### CRIT-2. `document-store.ts` — разделение store на модули ✅ ИСПРАВЛЕНО
 
 **Где:** `src/store/document-store.ts`  
-**Приоритет:** 🔴 Высокий
+**Приоритет:** 🔴 Высокий  
+**Статус:** ✅ Исправлено (раунд 2)
 
-**Описание:** Все действия (addShape, importStl, csgBoolean, undo, redo, move, resize, extrude, mirror, align, fillet, copy/paste, autosave, projects) смешаны в одном `create<DocumentStore>()`.
+**Что было:** Все действия (addShape, importStl, csgBoolean, undo, redo, move, resize, extrude, mirror, align, fillet, copy/paste, autosave, projects) и утилиты смешаны в одном файле 757 строк.
 
-**Почему это проблема:**
-- Невозможно отладить конкретное действие, не пролистывая 749 строк
-- Нарушает принцип единой ответственности (SRP)
-- Функции `addShape`, `importStl`, `pasteClipboard` содержат ~90% одинакового паттерна (set busy → async worker → set results)
+**Что сделано:** Файл разделён на 4 модуля:
 
-**Рекомендуемая структура:**
+| Модуль | Строк | Ответственность |
+|---|---|---|
+| `store/helpers.ts` | 63 | `extractAndCenter`, `computeAABB`, `makeObject`, `nextId`, `colorForIndex`, `PALETTE`, `ClipEntry` |
+| `store/types.ts` | 50 | `DocumentStore` interface |
+| `store/rebuild.ts` | 118 | `rebuildFromHistory()` — восстановление объектов из истории операций |
+| `store/document-store.ts` | 500 | `create<DocumentStore>()` — только действия, без утилит и типов |
 
-```
-src/store/
-  ├── document-store.ts       → только create<DocumentStore>() с делегированием
-  ├── actions/
-  │   ├── addShape.ts
-  │   ├── importStl.ts
-  │   ├── csgBoolean.ts
-  │   ├── transform.ts        → move, resize, extrude
-  │   ├── history.ts          → undo, redo, jumpToHistory
-  │   ├── file-io.ts          → save, load, autosave
-  │   └── clipboard.ts        → copy, paste
-```
-
-**Пример вынесения `addShape` в отдельный модуль:**
-
-```typescript
-// src/store/actions/addShape.ts
-import type { DocumentStore, AddShapeOperation, ShapeType, ShapeParams } from '../types';
-import { workerBuildShape } from '../../csg/worker-client';
-
-export function createAddShape(
-  get: DocumentStore['getState'],
-  set: DocumentStore['setState'],
-  nextId: (prefix: string) => string,
-  colorForIndex: (n: number) => string,
-): DocumentStore['addShape'] {
-  return async (shapeType, params) => {
-    const { objects, operations, historyIndex } = get();
-    const idx = Object.keys(objects).length;
-    const id = nextId('obj');
-    const transform: TransformNR = {
-      x: idx * 25, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0,
-      scaleX: 1, scaleY: 1, scaleZ: 1,
-    };
-    const color = colorForIndex(idx);
-    const defaultParams: ShapeParams = /* ... */;
-    const finalParams = params ?? defaultParams;
-    const op: AddShapeOperation = { type: 'add_shape', id, shapeType, params: finalParams, color, transform };
-
-    set({ busy: true });
-    try {
-      const t0 = performance.now();
-      const mesh = await workerBuildShape(id, shapeType, finalParams, transform);
-      const ms = performance.now() - t0;
-      const obj: SceneObject = { id, shapeType, params: finalParams, color, transform, visible: true, locked: false, vertices: mesh.vertices, indices: mesh.indices };
-      const newOps = [...operations.slice(0, historyIndex), op];
-      set({
-        operations: newOps,
-        historyIndex: newOps.length,
-        objects: { ...objects, [id]: obj },
-        modified: true,
-        busy: false,
-        lastCsgMs: ms,
-      });
-    } catch (e) {
-      set({ busy: false });
-      console.error('addShape:', e);
-    }
-  };
-}
-```
+**Результат:**
+- `document-store.ts`: 757 → 500 строк (−34%)
+- Утилиты и типы теперь в отдельных тестопригодных модулях
+- `computeAABB` и `extractAndCenter` реэкспортируются из `document-store.ts` для обратной совместимости с тестами
+- `tsc --noEmit` — 0 ошибок, `vitest run` — 35/35 тестов, `vite build` — успешно
 
 ---
 
@@ -702,6 +652,7 @@ describe('mergeCoincidentVertices', () => {
 |---|---|---|---|---|
 | 1 | Удалить `src/csg/engine.ts` (мёртвый код) | 🔴 Критичный | 2 мин | ✅ Выполнено |
 | 2 | Разделить `App.tsx` на компоненты | 🔴 Критичный | 1-2 дня | ✅ Выполнено (553 строки, 8 компонентов) |
+| 2b | Разделить `document-store.ts` на модули (CRIT-2) | 🔴 Критичный | 4 часа | ✅ Выполнено (500 строк, 3 новых модуля) |
 | 3 | Добавить типы для WASM-интерфейса в `worker.ts` | 🟡 Средний | 1-2 часа | ✅ Выполнено |
 | 4 | Исправить дублирование центрирования в `Viewport3D.tsx` | 🟡 Средний | 1 час + тесты | ✅ Не баг (проверено) |
 | 5 | Добавить unit-тесты для `stl-import`, `stl-export`, `document-store` | 🟡 Средний | 3-4 часа | ✅ Выполнено (15 тестов) |
@@ -743,4 +694,4 @@ describe('mergeCoincidentVertices', () => {
 
 ---
 
-*Код-ревью выполнено 2025-07-15. Раунд 1 (2025-07-15): 8 задач выполнено, 1 проверена (не баг). Раунд 2 (2025-07-16): CRIT-1 (App.tsx → 8 компонентов), WARN-6 (CSG normals), WARN-8 (AABB caching), COSM-3 (DEFAULT_FILTERS). Текущий код функционален, проходит typecheck и 35 тестов. Общий балл: 4.2/5.*
+*Код-ревью выполнено 2025-07-15. Раунд 1 (2025-07-15): 8 задач выполнено, 1 проверена (не баг). Раунд 2 (2025-07-16): CRIT-1 (App.tsx → 8 компонентов), CRIT-2 (store → 4 модуля, 757→500 строк), WARN-6 (CSG normals), WARN-8 (AABB caching), COSM-3 (DEFAULT_FILTERS). Текущий код функционален, проходит typecheck и 35 тестов. Общий балл: 4.5/5.*

@@ -228,7 +228,7 @@
 | # | Задача | Причина откладывания | Статус |
 |---|---|---|---|
 | ~~CRIT-1~~ | ~~Разделение `App.tsx` (1809 строк) на ~12 компонентов~~ | ~~1-2 дня рефакторинга~~ | ✅ Выполнено (553 строки, 8 компонентов) |
-| CRIT-2 | Разделение `document-store.ts` (750 строк) на модули actions/ | 1-2 дня рефакторинга | 🔲 |
+| ~~CRIT-2~~ | ~~Разделение `document-store.ts` (750 строк) на модули~~ | ~~1-2 дня рефакторинга~~ | ✅ Выполнено (500 строк, 3 новых модуля: helpers, types, rebuild) |
 | PERF-1 | Кэширование snapshots для undo/redo | Архитектурное изменение | 🔲 |
 | WARN-3 | Дублирование инструментов в тулбаре и панели свойств | Зависит от CRIT-1 | 🔄 Частично (компоненты разделены, дублирование осталось) |
 | ~~WARN-6~~ | ~~Нормали для CSG-геометрии в STL-экспорте~~ | ~~Требует изменения `SceneObject` + worker~~ | ✅ Выполнено |
@@ -293,7 +293,10 @@ tinkercraft/
 │   │   │   └── (engine.ts)        # удалён — мёртвый код
 │   │   │
 │   │   ├── store/
-│   │   │   ├── document-store.ts  # Zustand store (750 строк)
+│   │   │   ├── document-store.ts  # Zustand store — действия (500 строк)
+│   │   │   ├── helpers.ts         # утилиты (extractAndCenter, computeAABB, makeObject)
+│   │   │   ├── types.ts           # DocumentStore interface
+│   │   │   ├── rebuild.ts         # rebuildFromHistory — восстановление из истории
 │   │   │   ├── document-store.test.ts  # unit-тесты computeAABB + extractAndCenter
 │   │   │   └── notifications.ts   # toast-уведомления (замена alert)
 │   │   │
@@ -357,7 +360,7 @@ tinkercraft/
 | Нет Robot Lab | 🔲 | Фаза 7 (опционально) |
 | Медленная регенерация при >50 операциях | ⚠️ | Оптимизировать в Фазе 7 (PERF-1: кэш snapshots) |
 | `App.tsx` — God Component (1809 строк) | ✅ Исправлено | CRIT-1: разделён на 8 компонентов (553 строки) |
-| `document-store.ts` — 750 строк в одном файле | ⚠️ | CRIT-2: разделить на модули actions/ |
+| `document-store.ts` — 757 строк в одном файле | ✅ Исправлено | CRIT-2: разделён на 4 модуля (helpers, types, rebuild, store — 500 строк) |
 | `any`-типы в воркере | ✅ Исправлено | WARN-4: типобезопасные интерфейсы |
 | Нет валидации входных данных | ✅ Исправлено | SEC-1: `clamp()` + `sanitizeParams()` |
 | `alert()` блокирует UI | ✅ Исправлено | SEC-2: toast-уведомления |

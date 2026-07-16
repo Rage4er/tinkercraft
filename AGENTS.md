@@ -42,7 +42,10 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 |---|---|
 | `src/App.tsx` | Layout, state management, keyboard shortcuts (553 строки) |
 | `src/constants.ts` | Общие константы (ALL_SHAPES, SNAP_VALUES, OP_FILTER_LABELS) |
-| `src/store/document-store.ts` | Zustand store — все действия, история, undo/redo (750 строк) |
+| `src/store/document-store.ts` | Zustand store — действия (create), 500 строк |
+| `src/store/helpers.ts` | Утилиты store (extractAndCenter, computeAABB, makeObject, nextId, colorForIndex) |
+| `src/store/types.ts` | DocumentStore interface |
+| `src/store/rebuild.ts` | rebuildFromHistory — восстановление объектов из истории операций |
 | `src/store/notifications.ts` | Toast-уведомления (замена alert) |
 | `src/csg/worker.ts` | WASM worker — manifold-3d операции, типобезопасные интерфейсы |
 | `src/csg/worker-client.ts` | Promise-обёртка над воркером |
@@ -146,7 +149,6 @@ Worker НЕ центрирует геометрию. Центрирование 
 
 - Fillet работает только для cube (требует специфичной математики для других форм)
 - Undo/redo = полный rebuild (нет кэша snapshots — PERF-1)
-- `document-store.ts` — крупный файл (CRIT-2 — отложенный рефакторинг)
 
 ## Документация
 

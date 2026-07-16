@@ -11,6 +11,9 @@
 
 ### Added — код-ревью раунд 2 (2025-07-16)
 
+- `store/helpers.ts` — утилиты store (extractAndCenter, computeAABB, makeObject, nextId, colorForIndex, PALETTE, ClipEntry)
+- `store/types.ts` — DocumentStore interface
+- `store/rebuild.ts` — rebuildFromHistory (восстановление объектов из истории операций)
 - `components/NumInput.tsx` — numeric input с draft-редактированием
 - `components/Section.tsx` — collapsible section
 - `components/Timeline.tsx` — история операций + opIcon/opLabel
@@ -33,6 +36,7 @@
 ### Changed
 
 - `App.tsx` разделён с 1809 до 553 строк (−69%) — CRIT-1
+- `document-store.ts` разделён с 757 до 500 строк (−34%) — CRIT-2: утилиты, типы и rebuild вынесены в отдельные модули
 - `extractMesh()` в `worker.ts` парсит per-vertex normals из manifold-меша (WARN-6)
 - `stl-export.ts` использует manifold normals с fallback на cross-product (WARN-6)
 - `makeObject()` helper в `document-store.ts` — авто-вычисление и кэширование AABB (WARN-8)
