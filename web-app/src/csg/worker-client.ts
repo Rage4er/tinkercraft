@@ -119,6 +119,24 @@ export async function workerBuildImportedMesh(
   return send<MeshResult>('buildImportedMesh', { objId, vertices, indices })
 }
 
+/**
+ * Rebuild objects in worker cache with current transforms.
+ * Must be called before csgBoolean / mirrorObject to ensure worker cache
+ * is in sync with the store (fixes "Objects not found" after undo/redo
+ * and incorrect coordinates from stale cached positions).
+ */
+export async function workerSyncObjects(
+  entries: Array<{
+    objId: string
+    shapeType: ShapeType
+    params: ShapeParams
+    transform: TransformNR
+  }>,
+): Promise<void> {
+  await waitReady()
+  await send<unknown>('syncObjects', { entries })
+}
+
 export async function workerCsgBoolean(
   idA: string, idB: string, op: CsgBooleanOp, resultId: string,
   transformA?: { x: number; y: number; z: number; rotX: number; rotY: number; rotZ: number; scaleX: number; scaleY: number; scaleZ: number },

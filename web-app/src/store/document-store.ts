@@ -16,8 +16,9 @@ import type {
 } from '../csg/types'
 import {
   workerBuildShape, workerCsgBoolean,
-  workerClearAll, workerDeleteObjects, workerMirrorObject,
-  workerApplyFillet, workerBuildImportedMesh,
+  workerBuildImportedMesh, workerApplyFillet,
+  workerMirrorObject, workerRebuildScene,
+  workerDeleteObjects, workerClearAll, workerSyncObjects,
 } from '../csg/worker-client'
 import { parseDoodle, serializeDoodle, openDoodleFilePicker, downloadBlob } from '../io/doodle-io'
 import { notify } from './notifications'
@@ -237,6 +238,19 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     set({ busy: true })
     try {
       const t0   = performance.now()
+      // Sync worker cache before CSG — fixes stale cache after undo/redo
+      // and incorrect positions from moveObject.
+      await workerSyncObjects(
+        [idA, idB]
+          .map(id => objects[id])
+          .filter(Boolean)
+          .map(obj => ({
+            objId: obj.id,
+            shapeType: obj.shapeType,
+            params: obj.params,
+            transform: { x: obj.transform.x, y: obj.transform.y, z: obj.transform.z, rotX: obj.transform.rotX, rotY: obj.transform.rotY, rotZ: obj.transform.rotZ, scaleX: obj.transform.scaleX, scaleY: obj.transform.scaleY, scaleZ: obj.transform.scaleZ } as const,
+          })),
+      )
       // Pass scale+rotation of each operand so the worker can apply them
       // temporarily before the boolean op (cached geometry has translation only).
       const srOf = (id: string) => {
@@ -308,6 +322,18 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     set({ busy: true })
     try {
       const t0 = performance.now()
+      // Sync worker cache before mirror — fixes stale cache after undo/redo
+      await workerSyncObjects(
+        ids.map(id => {
+          const obj = objects[id]
+          return {
+            objId: obj.id,
+            shapeType: obj.shapeType,
+            params: obj.params,
+            transform: { x: obj.transform.x, y: obj.transform.y, z: obj.transform.z, rotX: obj.transform.rotX, rotY: obj.transform.rotY, rotZ: obj.transform.rotZ, scaleX: obj.transform.scaleX, scaleY: obj.transform.scaleY, scaleZ: obj.transform.scaleZ } as const,
+          }
+        }),
+      )
       const newObjects = { ...objects }
       for (const id of ids) {
         const mesh = await workerMirrorObject(id, plane)

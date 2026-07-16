@@ -795,9 +795,9 @@ export async function handleCsgBoolean(msg: CsgBooleanMessage): Promise<void> {
   let b = cache.get(msg.idB)
   if (!a || !b) throw new Error(`Objects not found: ${msg.idA}, ${msg.idB}`)
 
-  // Apply scale+rotation around each object's center before CSG
-  if (msg.transformA && hasSR(msg.transformA)) a = applySRAroundCenter(a, msg.transformA)
-  if (msg.transformB && hasSR(msg.transformB)) b = applySRAroundCenter(b, msg.transformB)
+  // Note: caller (document-store.csgBoolean) must call workerSyncObjects() first
+  // to ensure worker cache has geometry with correct position/rotation/scale.
+  // The transformA/transformB parameters are legacy and kept for backward compat.
 
   let result: ManifoldObject
   switch (msg.op) {
@@ -829,6 +829,43 @@ export async function handleCsgBoolean(msg: CsgBooleanMessage): Promise<void> {
     },
     buildTransferList(mesh),
   )
+}
+
+// --- Sync objects (rebuild worker cache from store data) ---
+
+export interface SyncObjectsMessage {
+  reqId: string
+  type: 'syncObjects'
+  entries: Array<{
+    objId: string
+    shapeType: string
+    params: Record<string, number>
+    transform: RebuildTransform
+  }>
+}
+
+/** Rebuild worker cache entries from store data. Fixes stale cache after undo/redo and move operations. */
+export async function handleSyncObjects(msg: SyncObjectsMessage): Promise<void> {
+  // Build fresh primitives with full SRT (position + rotation + scale) around center.
+  // For imported meshes (non-manifold, cached as null) we skip.
+  for (const e of msg.entries) {
+    // Skip if already cached as non-manifold (imported mesh that couldn't be manifold-created)
+    const existing = cache.get(e.objId)
+    if (existing === null) continue
+
+    const params = sanitizeParams(e.params)
+    const m = buildPrimitive(e.shapeType, params)
+    // Apply full SRT around center (matches what handleRebuildScene does for primitives)
+    const fullMatrix = buildSRTMatrixAroundCenter(
+      { x: e.transform.x, y: e.transform.y, z: e.transform.z },
+      { rotX: e.transform.rotX, rotY: e.transform.rotY, rotZ: e.transform.rotZ },
+      { scaleX: e.transform.scaleX, scaleY: e.transform.scaleY, scaleZ: e.transform.scaleZ },
+    )
+    const tm = m.transform(fullMatrix)
+    cache.set(e.objId, tm)
+  }
+
+  safePostMessage({ reqId: msg.reqId, type: 'ok' })
 }
 
 /** Handle mirrorObject message. */

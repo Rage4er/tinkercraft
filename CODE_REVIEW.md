@@ -1583,24 +1583,20 @@ function animateTo(camera, controls, toPos, toUp, duration = 500) {
 
 **Итог:** 7 из 8 задач выполнены. CRIT-R5-2 (unit-тесты на worker-handlers) отложен — требует мок WASM для `buildPrimitive()` и `extrudeMesh()`.
 
-### 📊 ПОКРЫТИЕ ТЕСТАМИ — После исправлений
+### 🔴 КРИТИЧЕСКАЯ ПРОБЛЕМА: Worker cache рассинхронизация (найдена после Раунда 5)
 
-| Модуль | Строк | Тестов | Статус |
-|---|---|---|---|
-| `worker-handlers.ts` | 856 | 18 (`clamp`/`sanitizeParams` — теперь через импорт) | ⚠️ Частично |
-| `Viewport3D.tsx` | 827 | 0 | ❌ Не покрыт |
-| `rebuildOps.ts` | 87 | 20 | ✅ Покрыт |
-| `rebuild.ts` | 149 | 17 (`buildRebuildMeta`) | ✅ Покрыт |
-| `snapshots.ts` | 45 | 0 | ❌ Не покрыт |
-| `doodle-io.ts` | ~150 | 0 | ❌ Не покрыт |
-| `autosave.ts` | ~80 | 0 | ❌ Не покрыт |
-| `document-store.ts` | 579 | 7 (helpers) | ⚠️ Только helpers |
-| `worker-matrix.ts` | ~90 | 7 | ✅ Покрыт |
-| `stl-import.ts` | 106 | 6 | ✅ Покрыт |
-| `stl-export.ts` | 87 | 7 | ✅ Покрыт |
-| `types.ts` | 152 | 13 (type-level) | ✅ Покрыт |
+**Где:** `worker-handlers.ts`, `document-store.ts`, `worker-client.ts`
 
-**Итого:** 102 теста. `rebuildOps.ts` и `rebuild.ts` теперь покрыты (37 тестов). `worker-sanitize.test.ts` тестирует реальные функции, не копии. **Критические пробелы:** `worker-handlers.ts` (buildPrimitive, extrudeMesh — требуют WASM mock), `Viewport3D.tsx`, `doodle-io.ts`.
+**Проблема:** При undo/redo snapshot-кэш восстанавливал объекты в Zustand store, но не обновлял кэш воркера. При следующей CSG-операции объекты не находились в кэше воркера → ошибка «Objects not found: obj_4, obj_3». Также `moveObject` обновлял позицию только в store, но не в кэше → CSG выполнялся на старых координатах → фигуры улетали.
+
+**Решение:**
+1. Добавлен `workerSyncObjects()` — команда для перестроения кэша воркера из store
+2. Добавлен `handleSyncObjects()` — обрабатывает команду, перестраивает примитивы с полным SRT (position + rotation + scale) вокруг центра
+3. `csgBoolean` и `mirrorSelected` теперь вызывают `workerSyncObjects` перед операцией
+4. Удалено дублирующее `applySRAroundCenter` из `handleCsgBoolean` (теперь SRT применяется только в sync)
+5. Добавлены тесты: `worker-sync.test.ts` (2 теста)
+
+**Файлы:** `worker-client.ts`, `worker.ts`, `worker-handlers.ts`, `document-store.ts`
 
 ---
 

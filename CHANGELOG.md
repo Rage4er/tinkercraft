@@ -16,6 +16,7 @@
   - Оценка проекта: **4.4/5** (траектория: 2.4 → 3.8 → 4.4)
   - Выявлены 2 критичные проблемы тестирования, 3 важных замечания, 3 низких
   - План действий: 8 задач, приоритет на unit-тесты worker-логики
+  - **Добавлена секция про critical bug: worker cache рассинхронизация**
 
 ### Fixed — исправления раунда 5 (2026-07-16)
 
@@ -28,6 +29,14 @@
 - **LOW-R5-3:** `ViewCube.tsx` — `animateTo()` отменяет предыдущую анимацию через `cancelAnimationFrame` при повторных кликах
 - **Rebuild:** Извлечена чистая функция `buildRebuildMeta()` из `rebuildFromHistory()` для тестирования без WASM-зависимости
 - **IDEAS.md:** Создан банк идей — 17 инструментов TinkerCAD, 6 генераторов форм, приоритетный roadmap, технические заметки
+
+### Fixed — CSG worker cache рассинхронизация (2026-07-16)
+
+- **Критический баг: «Objects not found» при CSG после undo/redo:** Snapshot-кэш восстанавливал объекты в store, но не обновлял кэш воркера. Добавлен `workerSyncObjects` — перестроение кэша воркера перед CSG-операциями (`document-store.ts`, `worker-client.ts`, `worker.ts`, `worker-handlers.ts`)
+- **Сбой координат при вычитании:** `moveObject` обновлял позицию только в store, но не в кэше воркера — геометрия оставалась на старых координатах. `handleSyncObjects` перестраивает примитивы с полным SRT (position + rotation + scale) вокруг центра, аналогично `handleRebuildScene`
+- **Двойное применение SRT:** `hasSR`/`applySRAroundCenter` в `handleCsgBoolean` дублировал трансформации, уже применённые в `handleSyncObjects`. Удалено дублирование
+- **MirrorObject также фиксирован:** `mirrorSelected` теперь вызывает `workerSyncObjects` перед зеркалением
+- **worker-sync.test.ts:** Добавлены 2 unit-теста для проверки типов sync-сообщений
 
 ### Fixed — исправления раунда 4 (2026-07-16)
 
