@@ -26,15 +26,14 @@ export default function AlignButtons({
     ];
     return (
       <>
-        <div className="csg-group-title" style={{ marginTop: 8 }}>
+        <div className="csg-group-title mt-4">
           Выравнивание
         </div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+        <div className="flex-wrap">
           {buttons.map(({ axis, anchor, label }) => (
             <button
               key={`${axis}-${anchor}`}
-              className="btn"
-              style={{ flex: 1, minWidth: 36 }}
+              className="btn flex-1 min-w-36"
               disabled={disabled}
               onClick={() => onAlign(axis, anchor)}
             >

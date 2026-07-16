@@ -774,8 +774,7 @@ export default function Viewport3D({
   return (
     <div
       ref={containerRef}
-      className="viewport"
-      style={{ width: "100%", height: "100%" }}
+      className="viewport viewport-canvas"
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
@@ -783,8 +782,7 @@ export default function Viewport3D({
       {busy && (
         <div className="viewport-busy">
           <div
-            className="spinner"
-            style={{ width: 14, height: 14, borderWidth: 2 }}
+            className="spinner viewport-origin-marker"
           />
           Вычисление…
         </div>
@@ -792,7 +790,7 @@ export default function Viewport3D({
       {!workerOk && (
         <div className="viewport-loading">
           <div className="spinner" />
-          <span style={{ color: "var(--text-muted)", fontSize: 13 }}>
+          <span className="viewport-origin-label">
             Загрузка CSG (WASM)…
           </span>
         </div>

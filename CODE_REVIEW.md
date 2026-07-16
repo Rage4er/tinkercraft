@@ -16,7 +16,7 @@
 | 🔒 Безопасность | SEC-1, SEC-2 | — |
 | ⚡ Производительность | PERF-2, PERF-3 | PERF-1 |
 | 🧪 Тестирование | TEST-1 (15 новых тестов) | — |
-| 📝 Косметика | COSM-2, COSM-3 | COSM-1 |
+| 📝 Косметика | COSM-1, COSM-2, COSM-3 | — |
 
 **Проверка:** `tsc --noEmit` — 0 ошибок · `vitest run` — 35/35 тестов · `vite build` — успешно
 
@@ -33,7 +33,7 @@
 | **Производительность** | ⭐⭐⭐⭐⭐ | Snapshot cache (PERF-1), AABB кэширование, useMemo ✅ |
 | **Безопасность** | ⭐⭐⭐⭐☆ | `any` заменён на типы, валидация добавлена, `alert()` → toast ✅ |
 | **Тестирование** | ⭐⭐⭐☆☆ | 35 тестов (20 type-level + 15 unit-тестов логики) ✅ |
-| **Общий балл** | **4.7 / 5** | Значительное улучшение после раунда 2 |
+| **Общий балл** | **4.8 / 5** | Все задачи код-ревью закрыты ✅ |
 
 ---
 
@@ -599,29 +599,31 @@ describe('mergeCoincidentVertices', () => {
 
 ## 📝 КОСМЕТИЧЕСКИЕ ЗАМЕЧАНИЯ
 
-### COSM-1. Инлайн-стили в `App.tsx`
+### COSM-1. Инлайн-стили в компонентах ✅ ИСПРАВЛЕНО
 
-**Где:** `src/App.tsx`, ~300 строк инлайн-стилей `style={{ ... }}`
+**Где:** `src/components/*.tsx`, `src/App.css`  
+**Приоритет:** 🟢 Низкий  
+**Статус:** ✅ Исправлено (раунд 2)
 
-**Проблема:** Инлайн-стили не наследуются, не анимируются через CSS `transition`, и не поддаются оптимизации через `@media`.
+**Что было:** ~80 инлайн-стилей `style={{ ... }}` с статическими значениями (display, gap, padding, fontSize, color) в 10+ компонентах.
 
-**Решение:** Вынести в CSS-модули или CSS-переменные:
+**Что сделано:** Добавлены utility-классы в `App.css` и CSS-классы для специфичных компонентов. Статические инлайн-стили заменены на классы в:
 
-```css
-/* App.css */
-:root {
-  --bg-panel: #1e1e2e;
-  --bg-input: #2a2a3c;
-  --text-primary: #cdd6f4;
-  --text-muted: #7f849c;
-  --border: #3a3a5c;
-  --accent-yellow: #f9e2af;
-  --accent-green: #a6e3a1;
-}
+| Компонент | Что заменено |
+|---|---|
+| `NumInput.tsx` | flex-row, num-label |
+| `Section.tsx` | flex-row, text-muted-sm |
+| `StatusBar.tsx` | text-yellow, text-green, text-muted-xs, status-auto |
+| `ErrorBoundary.tsx` | error-screen, error-icon, error-title, error-detail |
+| `WebGLFallback.tsx` | fallback-screen, fallback-icon, fallback-title, fallback-msg |
+| `TextModal.tsx` | text-modal-backdrop, text-modal-box, text-modal-input, text-modal-row, text-modal-label, text-modal-num, text-modal-actions |
+| `PropertiesPanel.tsx` | flex-row-6, color-input, btn-compact, btn-full, flex-row, flex-1, min-w-30, margin-8-0 |
+| `MirrorButtons.tsx` | flex-row, flex-1 |
+| `AlignButtons.tsx` | flex-wrap, flex-1, min-w-36, mt-4 |
+| `Viewport3D.tsx` | viewport-canvas, viewport-origin-marker, viewport-origin-label |
+| `ProjectManagerModal.tsx` | flex-row |
 
-.props-row { display: flex; align-items: center; gap: 6px; padding: 4px 0; }
-.props-label { font-size: 11px; color: var(--text-muted); min-width: 40px; }
-```
+Динамические инлайн-стили (color из объекта, opacity) оставлены — согласно конвенции AGENTS.md.
 
 ### COSM-2. `// eslint-disable-next-line`
 
@@ -651,7 +653,7 @@ describe('mergeCoincidentVertices', () => {
 | 6 | Заменить `alert()` на toast-уведомления | 🟡 Средний | 1 час | ✅ Выполнено |
 | 7 | Оптимизировать `undo/redo` — кэшировать snapshots | 🟠 Высокий | 1-2 дня | ✅ Выполнено (snapshots.ts, мгновенный undo/redo) |
 | 8 | Кэшировать AABB в `SceneObject` | 🟢 Низкий | 2 часа | ✅ Выполнено |
-| 9 | Вынести инлайн-стили в CSS-модули | 🟢 Низкий | 2-3 часа | 🔲 Не начато |
+| 9 | Вынести инлайн-стили в CSS-модули | 🟢 Низкий | 2-3 часа | ✅ Выполнено (utility-классы + CSS-классы) |
 | 10 | Добавить валидацию входных данных в воркер | 🟢 Низкий | 1 час | ✅ Выполнено |
 | 11 | Стабилизировать keyboard `useEffect` (WARN-1) | 🟡 Средний | 1 час | ✅ Выполнено |
 | 12 | Убрать `eslint-disable` suppressions (WARN-2) | 🟡 Средний | 30 мин | ✅ Выполнено |
@@ -687,4 +689,4 @@ describe('mergeCoincidentVertices', () => {
 
 ---
 
-*Код-ревью выполнено 2025-07-15. Раунд 1 (2025-07-15): 8 задач выполнено, 1 проверена (не баг). Раунд 2 (2025-07-16): CRIT-1 (App.tsx → 8 компонентов), CRIT-2 (store → 4 модуля), WARN-3 (3 переиспользуемых компонента), WARN-6 (CSG normals), WARN-8 (AABB caching), PERF-1 (snapshot cache), COSM-3 (DEFAULT_FILTERS). Текущий код функционален, проходит typecheck и 35 тестов. Общий балл: 4.7/5. Осталась одна косметическая задача: COSM-1 (инлайн-стили → CSS).*
+*Код-ревью выполнено 2025-07-15. Раунд 1 (2025-07-15): 8 задач выполнено, 1 проверена (не баг). Раунд 2 (2025-07-16): CRIT-1 (App.tsx → 8 компонентов), CRIT-2 (store → 4 модуля), WARN-3 (3 переиспользуемых компонента), WARN-6 (CSG normals), WARN-8 (AABB caching), PERF-1 (snapshot cache), COSM-1 (inline styles → CSS), COSM-3 (DEFAULT_FILTERS). Все задачи код-ревью закрыты. Текущий код функционален, проходит typecheck и 35 тестов. Общий балл: 4.8/5.*

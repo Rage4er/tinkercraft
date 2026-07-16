@@ -43,6 +43,7 @@
 - `document-store.ts` разделён с 757 до 500 строк (−34%) — CRIT-2: утилиты, типы и rebuild вынесены в отдельные модули
 - Undo/redo использует snapshot cache вместо полного WASM rebuild — PERF-1: мгновенный undo/redo после первой операции
 - Дублирование Mirror/CSG/Align кнопок устранено — WARN-3: 3 переиспользуемых компонента с variant prop
+- Статические инлайн-стили заменены на CSS-классы — COSM-1: utility-классы + компонентные классы в App.css
 - `extractMesh()` в `worker.ts` парсит per-vertex normals из manifold-меша (WARN-6)
 - `stl-export.ts` использует manifold normals с fallback на cross-product (WARN-6)
 - `makeObject()` helper в `document-store.ts` — авто-вычисление и кэширование AABB (WARN-8)

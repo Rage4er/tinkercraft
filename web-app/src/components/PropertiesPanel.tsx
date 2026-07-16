@@ -78,33 +78,25 @@ export default function PropertiesPanel({
           для просмотра свойств
         </div>
         {objectList.length > 0 && (
-          <div
-            style={{
-              padding: "8px 12px",
-              fontSize: 11,
-              color: "var(--text-muted)",
-            }}
-          >
+          <div className="text-sm text-muted-xs" style={{ padding: "8px 12px" }}>
             В сцене:{" "}
-            <strong style={{ color: "var(--text-primary)" }}>
+            <strong className="text-primary">
               {objectList.length}
             </strong>{" "}
             объектов
           </div>
         )}
         {/* Проект */}
-        <div className="csg-group" style={{ margin: "8px 8px 0" }}>
+        <div className="csg-group margin-8-0">
           <div className="csg-group-title">Проект</div>
           <button
-            className="btn"
-            style={{ width: "100%" }}
+            className="btn btn-full"
             onClick={onShowProjects}
           >
             📁 Менеджер проектов
           </button>
           <button
-            className="btn primary"
-            style={{ width: "100%", marginTop: 4 }}
+            className="btn primary btn-full mt-2"
             disabled={operationsLength === 0}
             onClick={() =>
               onSaveToProject(
@@ -128,7 +120,7 @@ export default function PropertiesPanel({
 
       <div className="props-row">
         <span className="props-label">Цвет</span>
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <div className="flex-row-6">
           <div
             className="color-swatch"
             style={{ background: firstSelected.color }}
@@ -136,14 +128,7 @@ export default function PropertiesPanel({
           <input
             type="color"
             value={firstSelected.color}
-            style={{
-              width: 28,
-              height: 22,
-              border: "none",
-              background: "none",
-              cursor: "pointer",
-              padding: 0,
-            }}
+            className="color-input"
             onChange={(e) => onSetColor(firstSelected.id, e.target.value)}
           />
         </div>
@@ -152,8 +137,7 @@ export default function PropertiesPanel({
       <div className="props-row">
         <span className="props-label">Видим</span>
         <button
-          className="btn"
-          style={{ padding: "2px 8px", fontSize: 11 }}
+          className="btn btn-compact"
           onClick={() => onToggleVisible(firstSelected.id)}
         >
           {firstSelected.visible ? "👁 Да" : "🚫 Нет"}
@@ -395,12 +379,11 @@ export default function PropertiesPanel({
           <div className="csg-group-title">Выдавливание (Extrude)</div>
           <div className="props-row">
             <span className="props-label">Ось</span>
-            <div style={{ display: "flex", gap: 4 }}>
+            <div className="flex-row">
               {(["X", "Y", "Z"] as const).map((a) => (
                 <button
                   key={a}
-                  className={`btn${extrudeAxis === a ? " active" : ""}`}
-                  style={{ minWidth: 30 }}
+                  className={`btn${extrudeAxis === a ? " active" : ""} min-w-30`}
                   onClick={() => onSetExtrudeAxis(a)}
                 >
                   {a}
@@ -415,18 +398,16 @@ export default function PropertiesPanel({
             value={extrudeDepth}
             onChange={onSetExtrudeDepth}
           />
-          <div style={{ display: "flex", gap: 4 }}>
+          <div className="flex-row">
             <button
-              className="btn primary"
-              style={{ flex: 1 }}
+              className="btn primary flex-1"
               disabled={!canExtrude}
               onClick={() => onExtrude(extrudeAxis, extrudeDepth)}
             >
               ▲ +{extrudeAxis}
             </button>
             <button
-              className="btn"
-              style={{ flex: 1 }}
+              className="btn flex-1"
               disabled={!canExtrude}
               onClick={() => onExtrude(extrudeAxis, -extrudeDepth)}
             >

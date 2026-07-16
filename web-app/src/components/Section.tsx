@@ -17,17 +17,9 @@ export default function Section({
     <div className="section">
       <div className="section-title" onClick={() => setOpen((o) => !o)}>
         <span>{title}</span>
-        <span
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 4,
-            marginLeft: "auto",
-            marginRight: 4,
-          }}
-        >
+        <span className="flex-row" style={{ marginLeft: "auto", marginRight: 4 }}>
           {badge !== undefined && <span className="badge">{badge}</span>}
-          <span style={{ fontSize: 9, color: "var(--text-muted)" }}>
+          <span className="text-muted-sm">
             {open ? "▲" : "▼"}
           </span>
         </span>

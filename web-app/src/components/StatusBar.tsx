@@ -44,24 +44,18 @@ export default function StatusBar({
         </strong>
       </span>
       {modified && (
-        <span
-          className="status-item"
-          style={{ color: "var(--accent-yellow)" }}
-        >
+        <span className="status-item text-yellow">
           ● Не сохранено
         </span>
       )}
       {currentProjectId && (
-        <span
-          className="status-item"
-          style={{ color: "var(--accent-green)" }}
-        >
+        <span className="status-item text-green">
           ● Проект сохранён
         </span>
       )}
       {lastCsgMs !== null && (
         <span className="status-item">
-          CSG:{" "}
+          CSG:&nbsp;
           <strong className={lastCsgMs < 100 ? "status-ok" : "status-warn"}>
             {lastCsgMs.toFixed(1)} мс
           </strong>
@@ -72,13 +66,10 @@ export default function StatusBar({
           📏 Режим измерения
         </span>
       )}
-      <span className="status-item" style={{ marginLeft: "auto" }}>
+      <span className="status-item status-auto">
         FPS: <strong>{fps}</strong>
       </span>
-      <span
-        className="status-item"
-        style={{ color: "var(--text-muted)", fontSize: 10 }}
-      >
+      <span className="status-item text-muted-xs">
         Фазы 0–6 · Resize · Extrude · Ruler · ComponentTree · ProjectManager ·
         ViewCube fix
       </span>

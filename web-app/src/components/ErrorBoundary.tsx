@@ -13,14 +13,10 @@ export default class ErrorBoundary extends Component<Props, State> {
   render() {
     if (this.state.error) {
       return this.props.fallback ?? (
-        <div style={{
-          display: 'flex', flexDirection: 'column', alignItems: 'center',
-          justifyContent: 'center', height: '100%',
-          color: '#7f849c', gap: 12, padding: 24,
-        }}>
-          <span style={{ fontSize: 32 }}>⚠️</span>
-          <strong style={{ color: '#f38ba8' }}>Ошибка компонента</strong>
-          <code style={{ fontSize: 11, maxWidth: 400, textAlign: 'center', opacity: 0.7 }}>
+        <div className="error-screen" style={{ height: '100%', padding: 24 }}>
+          <span className="error-icon">⚠️</span>
+          <strong className="error-title">Ошибка компонента</strong>
+          <code className="error-detail">
             {this.state.error.message}
           </code>
         </div>

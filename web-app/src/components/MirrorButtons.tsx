@@ -20,12 +20,11 @@ export default function MirrorButtons({
     return (
       <div className="csg-group">
         <div className="csg-group-title">Зеркало</div>
-        <div style={{ display: "flex", gap: 4 }}>
+        <div className="flex-row">
           {planes.map((p) => (
             <button
               key={p}
-              className="btn"
-              style={{ flex: 1 }}
+              className="btn flex-1"
               disabled={disabled}
               onClick={() => onMirror(p)}
             >

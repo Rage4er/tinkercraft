@@ -69,7 +69,7 @@ export default function ProjectManagerModal({ onClose, onLoad, onSave, currentPr
         {/* Сохранить текущий */}
         <div className="modal-section">
           <div className="modal-section-title">Сохранить текущую сцену</div>
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <div className="flex-row" style={{ gap: 6 }}>
             <input
               className="modal-input"
               type="text"

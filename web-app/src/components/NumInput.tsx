@@ -26,7 +26,7 @@ export default function NumInput({
   return (
     <div className="props-row">
       <span className="props-label">{label}</span>
-      <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
+      <div className="flex-row" style={{ gap: 3 }}>
         <input
           className="props-input"
           type="number"
@@ -51,7 +51,7 @@ export default function NumInput({
             }
           }}
         />
-        <span style={{ fontSize: 9, color: "var(--text-muted)", width: 18 }}>
+        <span className="num-label">
           {unit}
         </span>
       </div>
