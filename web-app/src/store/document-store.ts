@@ -12,6 +12,8 @@ import { create } from 'zustand/react'
 import type {
   TinkerCraftOperation, AddShapeOperation, ImportMeshOperation,
   FilletOperation, MirrorOperation, AlignOperation, ResizeDimsOperation,
+  MoveOperation, ColorOperation, GroupOperation, RenameOperation, HideShowOperation,
+  DeleteOperation,
   SceneObject, ShapeParams, TransformNR, Vec3,
 } from '../csg/types'
 import {
@@ -34,6 +36,7 @@ import type { ClipEntry } from './helpers'
 import type { DocumentStore } from './types'
 import { rebuildFromHistory } from './rebuild'
 import { cacheSnapshot, getCachedSnapshot, clearSnapshots } from './snapshots'
+import { OBJECT_SPACING, PASTE_OFFSET, MOVE_DELTA_EPSILON } from '../constants'
 
 // ---- Store ----
 
@@ -54,7 +57,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const { objects, operations, historyIndex } = get()
     const idx = Object.keys(objects).length
     const id = nextId('obj')
-    const transform: TransformNR = { x: idx * 25, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
+    const transform: TransformNR = { x: idx * OBJECT_SPACING, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
     const color = colorForIndex(idx)
     const defaultParams: ShapeParams =
       shapeType === 'sphere' ? { radius: 12, segments: 32 }
@@ -83,7 +86,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const { objects, operations, historyIndex } = get()
     const id = nextId('txt')
     const color = colorForIndex(Object.keys(objects).length)
-    const transform: TransformNR = { x: Object.keys(objects).length * 25, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
+    const transform: TransformNR = { x: Object.keys(objects).length * OBJECT_SPACING, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
     set({ busy: true })
     try {
       const t0 = performance.now()
@@ -184,7 +187,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
 
       for (const clip of clipboard) {
         const id = nextId('obj')
-        const transform: TransformNR = { ...clip.transform, x: clip.transform.x + 15, y: clip.transform.y + 0, z: clip.transform.z + 15 }
+        const transform: TransformNR = { ...clip.transform, x: clip.transform.x + PASTE_OFFSET, y: clip.transform.y + 0, z: clip.transform.z + PASTE_OFFSET }
 
         if (clip.shapeType === 'import_mesh' && clip.importVertices && clip.importIndices) {
           const result = await workerBuildImportedMesh(id, clip.importVertices, clip.importIndices)
@@ -220,7 +223,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const { selectedIds, objects, operations, historyIndex } = get()
     const ids = selectedIds.filter(id => objects[id])
     if (ids.length === 0) return
-    const op: TinkerCraftOperation = { type: 'delete', ids }
+    const op: DeleteOperation = { type: 'delete', ids }
     const newObjects = { ...objects }
     for (const id of ids) delete newObjects[id]
     try {
@@ -284,7 +287,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const { cx, cy, cz } = extractAndCenter(mesh.vertices)
       const newObj: SceneObject = makeObject({ id: resultId, shapeType: 'cube', params: {}, color: objects[idA].color, transform: { x: cx, y: cy, z: cz, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }, visible: true, locked: false, vertices: mesh.vertices, indices: mesh.indices, normals: mesh.normals })
       const newObjects = { ...objects }; delete newObjects[idA]; delete newObjects[idB]; newObjects[resultId] = newObj
-      const histOp: TinkerCraftOperation = { type: 'group', ids: [idA, idB], isHull: false, isIntersect: op === 'intersect', subtractOp: op === 'subtract', resultId } as TinkerCraftOperation
+      const histOp: GroupOperation = { type: 'group', ids: [idA, idB], isHull: false, isIntersect: op === 'intersect', subtractOp: op === 'subtract', resultId }
       const newOps = [...operations.slice(0, historyIndex), histOp]
       set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, selectedIds: [resultId], modified: true, busy: false, lastCsgMs: ms })
       cacheSnapshot(newOps.length, newObjects)
@@ -299,12 +302,11 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const delta: Vec3 = { x: transform.x - obj.transform.x, y: transform.y - obj.transform.y, z: transform.z - obj.transform.z }
     const rotDelta: Vec3 = { x: transform.rotX - obj.transform.rotX, y: transform.rotY - obj.transform.rotY, z: transform.rotZ - obj.transform.rotZ }
     const scaleDelta: Vec3 = { x: transform.scaleX - obj.transform.scaleX, y: transform.scaleY - obj.transform.scaleY, z: transform.scaleZ - obj.transform.scaleZ }
-    const eps = 1e-6
-    const hasPos = Math.abs(delta.x) > eps || Math.abs(delta.y) > eps || Math.abs(delta.z) > eps
-    const hasRot = Math.abs(rotDelta.x) > eps || Math.abs(rotDelta.y) > eps || Math.abs(rotDelta.z) > eps
-    const hasScale = Math.abs(scaleDelta.x) > eps || Math.abs(scaleDelta.y) > eps || Math.abs(scaleDelta.z) > eps
+    const hasPos = Math.abs(delta.x) > MOVE_DELTA_EPSILON || Math.abs(delta.y) > MOVE_DELTA_EPSILON || Math.abs(delta.z) > MOVE_DELTA_EPSILON
+    const hasRot = Math.abs(rotDelta.x) > MOVE_DELTA_EPSILON || Math.abs(rotDelta.y) > MOVE_DELTA_EPSILON || Math.abs(rotDelta.z) > MOVE_DELTA_EPSILON
+    const hasScale = Math.abs(scaleDelta.x) > MOVE_DELTA_EPSILON || Math.abs(scaleDelta.y) > MOVE_DELTA_EPSILON || Math.abs(scaleDelta.z) > MOVE_DELTA_EPSILON
     const kind = hasScale && !hasPos && !hasRot ? 'scale' : hasRot && !hasPos && !hasScale ? 'rotate' : 'translate'
-    const op: TinkerCraftOperation = { type: 'move', ids: [id], delta, rotDelta, scaleDelta, kind }
+    const op: MoveOperation = { type: 'move', ids: [id], delta, rotDelta, scaleDelta, kind }
     const newOps = [...operations.slice(0, historyIndex), op]
     const newObjects = { ...objects, [id]: { ...obj, transform } }
     set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true })
@@ -315,7 +317,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   setColor: (id, color) => {
     const { objects, operations, historyIndex } = get()
     if (!objects[id]) return
-    const op: TinkerCraftOperation = { type: 'color', ids: [id], color }
+    const op: ColorOperation = { type: 'color', ids: [id], color }
     const newOps = [...operations.slice(0, historyIndex), op]
     const newObjects = { ...objects, [id]: { ...objects[id], color } }
     set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true })
@@ -327,7 +329,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const { objects, operations, historyIndex } = get()
     if (!objects[id]) return
     const newVis = !objects[id].visible
-    const op: TinkerCraftOperation = { type: 'visibility', ids: [id], visible: newVis }
+    const op: HideShowOperation = { type: 'visibility', ids: [id], visible: newVis }
     const newOps = [...operations.slice(0, historyIndex), op]
     const newObjects = { ...objects, [id]: { ...objects[id], visible: newVis } }
     set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true })
@@ -403,7 +405,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         newObjects[id] = makeObject({ ...obj, transform: nt, vertices: mesh.vertices, indices: mesh.indices, normals: mesh.normals })
       }
       const op: AlignOperation & { deltas: Record<string, number> } = { type: 'align', ids, axis, anchor, deltas }
-      const newOps = [...operations.slice(0, historyIndex), op as unknown as TinkerCraftOperation]
+      const newOps = [...operations.slice(0, historyIndex), op]
       set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true, busy: false, lastCsgMs: performance.now() - t0 })
       cacheSnapshot(newOps.length, newObjects)
     } catch (e) { set({ busy: false }); console.error('alignSelected:', e) }
@@ -555,7 +557,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const { cx: ex, cy: ey, cz: ez } = extractAndCenter(resultMesh.vertices)
       const newObj: SceneObject = makeObject({ id: resultId, shapeType: 'cube', params: {}, color: obj.color, transform: { x: ex, y: ey, z: ez, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }, visible: true, locked: false, vertices: resultMesh.vertices, indices: resultMesh.indices, normals: resultMesh.normals })
       const addOp: AddShapeOperation = { type: 'add_shape', id: slabId, shapeType: 'cube', params: slabP, color: obj.color, transform: slabT }
-      const grpOp: TinkerCraftOperation = { type: 'group', ids: [id, slabId], isHull: false, isIntersect: false, resultId } as TinkerCraftOperation
+      const grpOp: GroupOperation = { type: 'group', ids: [id, slabId], isHull: false, isIntersect: false, resultId }
       const newObjects = { ...objects }; delete newObjects[id]; newObjects[resultId] = newObj
       const newOps = [...operations.slice(0, historyIndex), addOp, grpOp]
       set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, selectedIds: [resultId], modified: true, busy: false, lastCsgMs: ms })
@@ -568,7 +570,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const { objects } = get()
     if (!objects[id]) return
     if (objects[id].name === name) return // no change — skip history entry
-    const op: TinkerCraftOperation = { type: 'rename', id, name } as TinkerCraftOperation
+    const op: RenameOperation = { type: 'rename', id, name }
     const { operations, historyIndex } = get()
     const newOps = [...operations.slice(0, historyIndex), op]
     const newObjects = { ...objects, [id]: { ...objects[id], name } }

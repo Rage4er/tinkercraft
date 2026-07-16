@@ -24,6 +24,8 @@
 - **WARN-R6-3:** `handleAddText` — модалка закрывается после успешного создания, не до (`App.tsx`)
 - **WARN-R6-4:** `pasteClipboard` — `pastedIds` вынесен из try, catch очищает worker cache от частичных объектов (`document-store.ts`)
 - **WARN-R6-5:** `renameObject` — guard `if (objects[id].name === name) return` для пропуска неизменённых имён (`document-store.ts`)
+- **Q-R6-2:** Magic numbers вынесены в `constants.ts`: `OBJECT_SPACING`, `PASTE_OFFSET`, `AUTOSAVE_DELAY_MS`, `MOVE_DELTA_EPSILON`, `FILLET_EPSILON`, `FILLET_MIN_RADIUS`, `VERTEX_MERGE_PRECISION`
+- **Q-R6-3:** `as TinkerCraftOperation` заменён на правильные типы (MoveOperation, GroupOperation, ColorOperation, HideShowOperation, RenameOperation, DeleteOperation) в `document-store.ts`
 
 ### Added — Раунд 5: Итоговый аудит (2026-07-16)
 

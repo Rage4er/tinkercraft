@@ -11,7 +11,7 @@ import LeftPanel from "./components/LeftPanel";
 import PropertiesPanel from "./components/PropertiesPanel";
 import { useDocumentStore } from "./store/document-store";
 import { isWorkerReady } from "./csg/worker-client";
-import { SNAP_VALUES, DEFAULT_FILTERS } from "./constants";
+import { SNAP_VALUES, DEFAULT_FILTERS, AUTOSAVE_DELAY_MS } from "./constants";
 import type {
   TransformNR,
   ShapeParams,
@@ -112,7 +112,7 @@ export default function App() {
     if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
     autosaveTimer.current = setTimeout(() => {
       triggerAutosave();
-    }, 3000);
+    }, AUTOSAVE_DELAY_MS);
     return () => {
       if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
     };

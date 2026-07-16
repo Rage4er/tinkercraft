@@ -4,6 +4,7 @@
 
 import * as THREE from 'three'
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js'
+import { VERTEX_MERGE_PRECISION } from '../constants'
 import type { TransformNR } from '../csg/types'
 
 /** Максимальный размер файла STL (100 МБ) */
@@ -13,7 +14,7 @@ export const MAX_STL_TRIANGLES = 5_000_000
 
 export interface ImportedMesh {
   vertices: number[]  // merged, flat array
-  indices:  number[]
+  indices: number[]
   transform: TransformNR
   name: string
 }
@@ -28,12 +29,12 @@ export function mergeCoincidentVertices(
 ): { vertices: number[]; indices: number[] } {
   const vertMap = new Map<string, number>()
   const vertices: number[] = []
-  const indices:  number[] = []
-  const precision = 1e5
+  const indices: number[] = []
+  const precision = VERTEX_MERGE_PRECISION
 
   const count = positions.length / 3
   for (let i = 0; i < count; i++) {
-    const x = Math.round(positions[i * 3]     * precision) / precision
+    const x = Math.round(positions[i * 3] * precision) / precision
     const y = Math.round(positions[i * 3 + 1] * precision) / precision
     const z = Math.round(positions[i * 3 + 2] * precision) / precision
     const key = `${x},${y},${z}`
@@ -55,8 +56,8 @@ export function openStlFilePicker(): Promise<File | null> {
     const input = document.createElement('input')
     input.type = 'file'
     input.accept = '.stl'
-    input.onchange  = () => resolve(input.files?.[0] ?? null)
-    input.oncancel  = () => resolve(null)
+    input.onchange = () => resolve(input.files?.[0] ?? null)
+    input.oncancel = () => resolve(null)
     input.click()
   })
 }
@@ -76,8 +77,8 @@ export async function parseStlFile(file: File): Promise<ImportedMesh | null> {
   }
 
   try {
-    const buffer   = await file.arrayBuffer()
-    const loader   = new STLLoader()
+    const buffer = await file.arrayBuffer()
+    const loader = new STLLoader()
     const geometry = loader.parse(buffer) as THREE.BufferGeometry
 
     const posAttr = geometry.getAttribute('position') as THREE.BufferAttribute

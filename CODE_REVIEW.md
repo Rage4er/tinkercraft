@@ -2015,8 +2015,8 @@ const op: RenameOperation = { type: 'rename', id, name }
 | 4 | `handleAddText` — UX при ошибке (WARN-R6-3) | 🟡 | 10 мин | `App.tsx` | ✅ **ИСПРАВЛЕНО** |
 | 5 | `pasteClipboard` — очистка при ошибке (WARN-R6-4) | 🟡 | 15 мин | `document-store.ts` | ✅ **ИСПРАВЛЕНО** |
 | 6 | `renameObject` — guard (WARN-R6-5) | 🟢 | 2 мин | `document-store.ts` | ✅ **ИСПРАВЛЕНО** |
-| 7 | Magic numbers → constants (Q-R6-2) | 🟢 | 20 мин | `constants.ts` | 🔲 Отложено |
-| 8 | `as TinkerCraftOperation` → типы (Q-R6-3) | 🟢 | 30 мин | `document-store.ts` | 🔲 Отложено |
+| 7 | Magic numbers → constants (Q-R6-2) | 🟢 | 20 мин | `constants.ts` | ✅ **ИСПРАВЛЕНО** |
+| 8 | `as TinkerCraftOperation` → типы (Q-R6-3) | 🟢 | 30 мин | `document-store.ts` | ✅ **ИСПРАВЛЕНО** |
 | 9 | Объединённый extractAndGetAABB (PERF-R6-1) | 🟢 | 30 мин | `helpers.ts` | 🔲 Отложено |
 
 ### 📊 ИТОГОВАЯ ТРАЕКТОРИЯ
@@ -2050,5 +2050,7 @@ const op: RenameOperation = { type: 'rename', id, name }
 | WARN-R6-3 | `handleAddText` — модалка закрывается после успешного создания, не до | ✅ Исправлено |
 | WARN-R6-4 | `pasteClipboard` — `pastedIds` вынесен из try, catch очищает worker cache | ✅ Исправлено |
 | WARN-R6-5 | `renameObject` — guard `if (objects[id].name === name) return` | ✅ Исправлено |
+| Q-R6-2 | Magic numbers → константы: `OBJECT_SPACING`, `PASTE_OFFSET`, `AUTOSAVE_DELAY_MS`, `MOVE_DELTA_EPSILON`, `FILLET_EPSILON`, `FILLET_MIN_RADIUS`, `VERTEX_MERGE_PRECISION` | ✅ Исправлено |
+| Q-R6-3 | `as TinkerCraftOperation` → правильные типы: `MoveOperation`, `GroupOperation`, `ColorOperation`, `HideShowOperation`, `RenameOperation`, `DeleteOperation` | ✅ Исправлено |
 
-**Итого:** 6 из 6 критических/важных проблем исправлены. 3 низкоприоритетных (magic numbers, типы, extractAndGetAABB) отложены.
+**Итого:** 8 из 9 задач исправлены. Только PERF-R6-1 (объединённый extractAndGetAABB) отложен.

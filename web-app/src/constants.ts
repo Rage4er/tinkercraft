@@ -7,15 +7,15 @@ export const ALL_SHAPES: {
   icon: string;
   category: string;
 }[] = [
-  { type: "cube",     label: "Куб",     icon: "⬛", category: "Основные" },
-  { type: "sphere",   label: "Сфера",   icon: "🔵", category: "Основные" },
-  { type: "cylinder", label: "Цилиндр", icon: "🥫", category: "Основные" },
-  { type: "cone",     label: "Конус",   icon: "🔺", category: "Основные" },
-  { type: "torus",    label: "Тор",     icon: "⭕", category: "Основные" },
-  { type: "prism",    label: "Призма",  icon: "◬",  category: "Основные" },
-  { type: "pyramid",  label: "Пирамида",icon: "▲",  category: "Основные" },
-  { type: "text",     label: "Текст",   icon: "T",  category: "Особые"   },
-];
+    { type: "cube", label: "Куб", icon: "⬛", category: "Основные" },
+    { type: "sphere", label: "Сфера", icon: "🔵", category: "Основные" },
+    { type: "cylinder", label: "Цилиндр", icon: "🥫", category: "Основные" },
+    { type: "cone", label: "Конус", icon: "🔺", category: "Основные" },
+    { type: "torus", label: "Тор", icon: "⭕", category: "Основные" },
+    { type: "prism", label: "Призма", icon: "◬", category: "Основные" },
+    { type: "pyramid", label: "Пирамида", icon: "▲", category: "Основные" },
+    { type: "text", label: "Текст", icon: "T", category: "Особые" },
+  ];
 
 // ---- Snap values ----
 export const SNAP_VALUES: { label: string; value: number }[] = [
@@ -47,3 +47,27 @@ export const OP_FILTER_LABELS: Record<string, string> = {
 export const DEFAULT_FILTERS = Object.fromEntries(
   Object.keys(OP_FILTER_LABELS).map((k) => [k, true]),
 );
+
+// ---- Layout / spacing ----
+/** Offset between consecutively created objects (mm) — prevents overlap. */
+export const OBJECT_SPACING = 25;
+/** Offset applied to pasted objects on XZ plane (mm). */
+export const PASTE_OFFSET = 15;
+
+// ---- Timing ----
+/** Delay before autosave triggers after last change (ms). */
+export const AUTOSAVE_DELAY_MS = 3000;
+
+// ---- Numeric epsilon ----
+/** Epsilon for detecting meaningful position/rotation/scale changes in move operations. */
+export const MOVE_DELTA_EPSILON = 1e-6;
+
+// ---- Fillet ----
+/** Safety margin subtracted from max possible fillet radius. */
+export const FILLET_EPSILON = 0.1;
+/** Minimum allowed fillet radius (mm). */
+export const FILLET_MIN_RADIUS = 0.01;
+
+// ---- Vertex merge precision (STL import) ----
+/** Rounding precision for merging coincident vertices during STL import. */
+export const VERTEX_MERGE_PRECISION = 1e5;

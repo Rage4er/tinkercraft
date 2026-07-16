@@ -5,6 +5,7 @@
 // ============================================================
 
 import { buildSRTMatrixAroundCenter } from './worker-matrix'
+import { FILLET_EPSILON, FILLET_MIN_RADIUS } from '../constants'
 import type { RebuildTransform } from './rebuildOps'
 import { applyMoveDelta, applyMirrorToTransform, applyAlignToTransform } from './rebuildOps'
 
@@ -31,7 +32,7 @@ export interface CrossSection {
 }
 
 export interface ManifoldConstructor {
-  new (mesh: {
+  new(mesh: {
     vertProperties: Float32Array
     triVerts: Uint32Array | ArrayBuffer
     numProp: number
@@ -212,8 +213,8 @@ export function buildPrimitive(shapeType: string, params: Record<string, number>
 export function buildRoundedBox(w: number, h: number, d: number, r: number): ManifoldObject {
   const wasm = getWasm()
   const { Manifold } = wasm
-  const maxR = Math.min(w, h, d) / 2 - 0.1
-  const cr = Math.max(0.01, Math.min(r, maxR))
+  const maxR = Math.min(w, h, d) / 2 - FILLET_EPSILON
+  const cr = Math.max(FILLET_MIN_RADIUS, Math.min(r, maxR))
   const hw = w / 2 - cr
   const hh = h / 2 - cr
   const hd = d / 2 - cr
@@ -477,7 +478,7 @@ export async function handleBuildShape(msg: BuildShapeMessage): Promise<void> {
 
   // Apply translation
   const t = msg.transform
-  const transformMatrix = [1,0,0,0, 0,1,0,0, 0,0,1,0, t.x, t.y, t.z, 1]
+  const transformMatrix = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, t.x, t.y, t.z, 1]
   m = m.transform(transformMatrix)
 
   cache.set(msg.objId, m)
@@ -554,7 +555,7 @@ export async function handleApplyFillet(msg: ApplyFilletMessage): Promise<void> 
   }
 
   const t = msg.transform
-  const transformMatrix = [1,0,0,0, 0,1,0,0, 0,0,1,0, t.x, t.y, t.z, 1]
+  const transformMatrix = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, t.x, t.y, t.z, 1]
   m = m.transform(transformMatrix)
 
   cache.set(msg.objId, m)
