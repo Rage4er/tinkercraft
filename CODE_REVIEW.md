@@ -1252,7 +1252,7 @@ useEffect(() => {
 | ~~2~~ | ~~Добавить валидацию `JSON.parse` в `parseDoodle`~~ | ~~🔴~~ | ~~30 мин~~ | ~~`doodle-io.ts`~~ | ✅ **ИСПРАВЛЕНО** |
 | ~~3~~ | ~~Унифицировать логику rebuild (DRY)~~ | ~~🔴~~ | ~~3-4 часа~~ | ~~`rebuild.ts`, `worker.ts`, новый `rebuildOps.ts`~~ | ✅ **ИСПРАВЛЕНО** |
 | ~~4~~ | ~~Добавить тесты для `sanitizeParams()`, `clamp()`~~ | ~~🔴~~ | ~~1 час~~ | ~~`worker.ts`~~ | ✅ **ИСПРАВЛЕНО** (18 тестов) |
-| 5 | Рефакторинг switch в worker.ts на Map handlers | 🟡 Средний | 3-4 часа | `worker.ts` | 🔲 |
+| ~~5~~ | ~~Рефакторинг switch в worker.ts на Map handlers~~ | ~~🟡~~ | ~~3-4 часа~~ | ~~`worker.ts`, новый `worker-handlers.ts`~~ | ✅ **ИСПРАВЛЕНО** |
 | ~~6~~ | ~~Исправить `computeVertsHash` — шаг 3 вместо 4~~ | ~~🟡~~ | ~~15 мин~~ | ~~`Viewport3D.tsx`~~ | ✅ **ИСПРАВЛЕНО** |
 | 7 | Унифицировать `centerGeometry` / `extractAndCenter` | 🟡 Средний | 1 час | `Viewport3D.tsx`, `helpers.ts` | 🔲 |
 | ~~8~~ | ~~Удалить `FullTransform` в worker.ts, использовать `RebuildTransform`~~ | ~~🟡~~ | ~~10 мин~~ | ~~`worker.ts`~~ | ✅ **ИСПРАВЛЕНО** |
@@ -1291,4 +1291,4 @@ useEffect(() => {
 
 ---
 
-*Код-ревью раунд 4 выполнено 2026-07-16. Перепроверено 2026-07-16. Исправления 2026-07-16. Общий балл: 3.8/5. Из 13 задач: 2 отозваны (CRIT-R4-1 scaleDelta — не баг, WARN-R4-6 sceneReady — не баг), 2 уточнены (WARN-R4-2 misaligned reads, WARN-R4-4 дублирование внутри worker.ts), 7 исправлено (CRIT-R4-2 JSON validation, CRIT-R4-3 DRY rebuild + rebuildOps.ts, WARN-R4-2 computeVertsHash, WARN-R4-5 manifold API validation, LOW-R4-3 try/finally, 18 новых тестов). Осталось 4 задачи: рефакторинг switch в worker.ts, унификация centerGeometry, интеграционные тесты, унификация комментариев.*
+*Код-ревью раунд 4 выполнено 2026-07-16. Перепроверено 2026-07-16. Исправления 2026-07-16. Общий балл: 4.1/5 (повышен с 3.8). Из 13 задач: 2 отозваны (CRIT-R4-1 scaleDelta — не баг, WARN-R4-6 sceneReady — не баг), 2 уточнены (WARN-R4-2 misaligned reads, WARN-R4-4 дублирование внутри worker.ts), 9 исправлено (CRIT-R4-2 JSON validation, CRIT-R4-3 DRY rebuild + rebuildOps.ts, WARN-R4-1 switch → handlers, WARN-R4-2 computeVertsHash, WARN-R4-5 manifold API validation, LOW-R4-3 try/finally, 18 новых тестов, RebuildTransform, FullSRT удалён). Осталось 3 задачи: centerGeometry, интеграционные тесты, комментарии.

@@ -11,13 +11,19 @@
 
 ### Fixed — исправления раунда 4 (2026-07-16)
 
+- **WARN-R4-1:** Рефакторинг worker.ts — вынесение switch (800+ строк) в отдельные handlers (`worker-handlers.ts`)
+  - Создан модуль `csg/worker-handlers.ts` с изолированными функциями: `handleBuildShape`, `handleApplyFillet`, `handleBuildImportedMesh`, `handleCsgBoolean`, `handleMirrorObject`
+  - Утилиты: `buildPrimitive`, `buildPrimitiveWithFillet`, `applyTransform`, `extractMesh`, `safePostMessage`
+  - `worker.ts` сокращён до ~100 строк (dispatch + rebuildScene)
+  - Циклические зависимости решены через `await import()` в rebuildScene
+  - **Результат:** cyclomatic complexity снижена с ~25 до ~5 в основных модулях
 - **CRIT-R4-2:** Валидация `JSON.parse` в `parseDoodle` — проверка размера (5МБ лимит), prototype pollution (`doodle-io.ts`)
 - **CRIT-R4-3:** DRY rebuild — вынесена общая логика transform в `csg/rebuildOps.ts`: `applyMoveDelta`, `applyMirrorToTransform`, `applyAlignToTransform`, `makeDefaultTransform`
   - `rebuild.ts` использует общие функции вместо дублированной логики
   - `worker.ts` использует `RebuildTransform` вместо локального `FullTransform`
   - Удалено дублирование ~60 строк логики transform
 - **WARN-R4-2:** `computeVertsHash` — шаг 4 → 3 (выровнен по границам вершин 3 float/vertex)
-- **WARN-R4-5:** Runtime-валидация manifold API — проверка `setup`, `Manifold`, `CrossSection` перед инициализацией (`worker.ts`)
+- **WARN-R4-5:** Runtime-валидация manifold API — проверка `setup`, `Manifold`, `CrossSection` (`worker.ts`)
 - **LOW-R4-3:** `URL.createObjectURL` в `try/finally` — гарантированное освобождение памяти (`doodle-io.ts`)
 - **Добавлено:** 18 новых тестов для `clamp()` и `sanitizeParams()` (`worker-sanitize.test.ts`)
 - **Итого:** 65 тестов (все проходят), 0 ошибок typecheck
