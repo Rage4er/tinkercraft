@@ -12,20 +12,20 @@
 ### Added — код-ревью раунд 4 (2026-07-16)
 
 - Документация глубокого код-ревью (раунд 4) в `CODE_REVIEW.md`:
-  - CRIT-R4-1: `scaleDelta` применяется аддитивно вместо мультипликативного — баг undo/redo для scale (`worker.ts`, `rebuild.ts`)
+  - CRIT-R4-1: `scaleDelta` применяется аддитивно — ✅ ПРОВЕРЕНО, НЕ БАГ (delta = newScale - oldScale, применяется как oldScale + delta = newScale, корректно)
   - CRIT-R4-2: `JSON.parse` без валидации в `parseDoodle` — риск DoS / Prototype Pollution (`doodle-io.ts`)
   - CRIT-R4-3: Дублирование логики rebuild между `rebuild.ts` и `worker.ts` (180+ строк продублировано)
   - WARN-R4-1: Worker переусложнён — 813 строк, switch на 460+ строк, cyclomatic complexity ~25
-  - WARN-R4-2: `computeVertsHash` пропускает 3 из 4 вершин — риск пропущенного обновления геометрии
-  - WARN-R4-3: Дублирование `centerGeometry()` / `extractAndCenter()` — идентичная логика в двух файлах
-  - WARN-R4-4: `FullSRT` тип определён дважды — в `worker.ts` и `rebuild.ts`
+  - WARN-R4-2: `computeVertsHash` — шаг 4 не выровнен по границам вершин (3 float/vertex), ~25% данных пропущено
+  - WARN-R4-3: Дублирование логики `centerGeometry()` / `extractAndCenter()` — общий алгоритм, разные интерфейсы
+  - WARN-R4-4: `FullSRT` и `FullTransform` — дублирование типов внутри `worker.ts` (не между файлами, как было указано изначально)
   - WARN-R4-5: `as unknown as ManifoldAPI` без runtime-валидации
-  - WARN-R4-6: `sceneReady` не защищает от race condition в useEffect
+  - WARN-R4-6: `sceneReady` race condition — ✅ ПРОВЕРЕНО, НЕ БАГ (guard `if (!scene) return` уже на строке 662)
   - WARN-R4-7: Смешение русского и английского в комментариях
   - Низкие: `requestAnimationFrame` работает непрерывно, `URL.createObjectURL` без try/finally, хрупкий multi-select код
-  - Тестирование: worker.ts (813 строк), Viewport3D.tsx (827 строк), rebuild.ts, snapshots.ts — 0 тестов
-  - План действий: 13 задач от 10 мин до 4 часов
-- Общий балл раунда 4: 3.3 / 5
+  - Тестирование: helpers.ts покрыт (7 тестов), но worker.ts (813 строк), Viewport3D.tsx, rebuild.ts, snapshots.ts — 0 тестов
+  - План действий: 11 актуальных задач (2 отозваны после перепроверки)
+- Общий балл раунда 4: 3.8 / 5 (повышен с 3.3 после перепроверки)
 
 ### Added — код-ревью раунд 3 (2025-07-16)
 
