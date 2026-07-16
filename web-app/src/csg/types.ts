@@ -136,6 +136,10 @@ export interface SceneObject {
   locked: boolean
   vertices: Float32Array
   indices: Uint32Array
+  /** Per-vertex normals from manifold-3d (null for simple primitives without normals) */
+  normals?: Float32Array | null
+  /** Cached axis-aligned bounding box in local space (computed from vertices) */
+  aabb?: { min: Vec3; max: Vec3 }
 }
 
 export type CsgBooleanOp = 'union' | 'subtract' | 'intersect'

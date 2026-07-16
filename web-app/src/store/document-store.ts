@@ -53,7 +53,7 @@ const PALETTE = [
 function colorForIndex(n: number): string { return PALETTE[n % PALETTE.length] }
 
 // ---- AABB (exported for unit testing) ----
-export function computeAABB(vertices: Float32Array) {
+export function computeAABB(vertices: Float32Array): { min: Vec3; max: Vec3 } {
   let minX = Infinity, maxX = -Infinity
   let minY = Infinity, maxY = -Infinity
   let minZ = Infinity, maxZ = -Infinity
@@ -63,6 +63,11 @@ export function computeAABB(vertices: Float32Array) {
     if (vertices[i+2] < minZ) minZ = vertices[i+2]; if (vertices[i+2] > maxZ) maxZ = vertices[i+2]
   }
   return { min: { x: minX, y: minY, z: minZ }, max: { x: maxX, y: maxY, z: maxZ } }
+}
+
+/** Creates a SceneObject with cached AABB. Use everywhere a new object is created. */
+function makeObject(partial: Omit<SceneObject, 'aabb'>): SceneObject {
+  return { ...partial, aabb: computeAABB(partial.vertices) }
 }
 
 // ---- Clipboard entry ----
@@ -228,7 +233,7 @@ async function rebuildFromHistory(ops: TinkerCraftOperation[]): Promise<Record<s
   const objects: Record<string, SceneObject> = {}
   for (const m of result.results) {
     const info = meta[m.objId]
-    objects[m.objId] = {
+    objects[m.objId] = makeObject({
       id:        m.objId,
       shapeType: info?.shapeType ?? 'cube',
       params:    info?.params    ?? {},
@@ -238,7 +243,8 @@ async function rebuildFromHistory(ops: TinkerCraftOperation[]): Promise<Record<s
       locked:    false,
       vertices:  m.vertices,
       indices:   m.indices,
-    }
+      normals:   m.normals,
+    })
   }
   return objects
 }
@@ -278,7 +284,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const t0   = performance.now()
       const mesh = await workerBuildShape(id, shapeType, finalParams, transform)
       const ms   = performance.now() - t0
-      const obj: SceneObject = { id, shapeType, params: finalParams, color, transform, visible: true, locked: false, vertices: mesh.vertices, indices: mesh.indices }
+      const obj: SceneObject = makeObject({ id, shapeType, params: finalParams, color, transform, visible: true, locked: false, vertices: mesh.vertices, indices: mesh.indices, normals: mesh.normals })
       const newOps = [...operations.slice(0, historyIndex), op]
       set({ operations: newOps, historyIndex: newOps.length, objects: { ...objects, [id]: obj }, modified: true, busy: false, lastCsgMs: ms })
     } catch (e) { set({ busy: false }); console.error('addShape:', e) }
@@ -295,7 +301,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const t0     = performance.now()
       const result = await workerBuildImportedMesh(id, vertices, indices)
       const ms     = performance.now() - t0
-      const obj: SceneObject = { id, shapeType: 'import_mesh', params: {}, color, transform, visible: true, locked: false, vertices: result.vertices, indices: result.indices }
+      const obj: SceneObject = makeObject({ id, shapeType: 'import_mesh', params: {}, color, transform, visible: true, locked: false, vertices: result.vertices, indices: result.indices, normals: result.normals })
       const op: ImportMeshOperation = { type: 'import_mesh', id, name, color, transform, vertices, indices }
       const newOps = [...operations.slice(0, historyIndex), op]
       set({ operations: newOps, historyIndex: newOps.length, objects: { ...objects, [id]: obj }, selectedIds: [id], modified: true, busy: false, lastCsgMs: ms })
@@ -318,7 +324,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const result = await workerBuildImportedMesh(id, mesh.vertices, mesh.indices)
       const ms     = performance.now() - t0
 
-      const obj: SceneObject = { id, shapeType: 'import_mesh', params: {}, color, transform: mesh.transform, visible: true, locked: false, vertices: result.vertices, indices: result.indices }
+      const obj: SceneObject = makeObject({ id, shapeType: 'import_mesh', params: {}, color, transform: mesh.transform, visible: true, locked: false, vertices: result.vertices, indices: result.indices })
       const op: ImportMeshOperation = { type: 'import_mesh', id, name: mesh.name, color, transform: mesh.transform, vertices: mesh.vertices, indices: mesh.indices }
       const newOps = [...operations.slice(0, historyIndex), op]
       set({ operations: newOps, historyIndex: newOps.length, objects: { ...objects, [id]: obj }, selectedIds: [id], modified: true, busy: false, lastCsgMs: ms })
@@ -381,13 +387,13 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
 
         if (clip.shapeType === 'import_mesh' && clip.importVertices && clip.importIndices) {
           const result = await workerBuildImportedMesh(id, clip.importVertices, clip.importIndices)
-          const obj: SceneObject = { id, shapeType: 'import_mesh', params: {}, color: clip.color, transform, visible: true, locked: false, vertices: result.vertices, indices: result.indices }
+          const obj: SceneObject = makeObject({ id, shapeType: 'import_mesh', params: {}, color: clip.color, transform, visible: true, locked: false, vertices: result.vertices, indices: result.indices })
           const op: ImportMeshOperation = { type: 'import_mesh', id, name: 'pasted', color: clip.color, transform, vertices: clip.importVertices, indices: clip.importIndices }
           newObjects = { ...newObjects, [id]: obj }
           newOps.push(op)
         } else {
           const mesh = await workerBuildShape(id, clip.shapeType, clip.params, transform)
-          const obj: SceneObject = { id, shapeType: clip.shapeType, params: clip.params, color: clip.color, transform, visible: true, locked: false, vertices: mesh.vertices, indices: mesh.indices }
+          const obj: SceneObject = makeObject({ id, shapeType: clip.shapeType, params: clip.params, color: clip.color, transform, visible: true, locked: false, vertices: mesh.vertices, indices: mesh.indices, normals: mesh.normals })
           const op: AddShapeOperation = { type: 'add_shape', id, shapeType: clip.shapeType, params: clip.params, color: clip.color, transform }
           newObjects = { ...newObjects, [id]: obj }
           newOps.push(op)
@@ -447,7 +453,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       // Center result geometry at origin so the Three.js pivot can be placed at
       // the true world position (bbox center of the boolean result).
       const { cx, cy, cz } = extractAndCenter(mesh.vertices)
-      const newObj: SceneObject = { id: resultId, shapeType: 'cube', params: {}, color: objects[idA].color, transform: { x:cx,y:cy,z:cz,rotX:0,rotY:0,rotZ:0,scaleX:1,scaleY:1,scaleZ:1 }, visible: true, locked: false, vertices: mesh.vertices, indices: mesh.indices }
+      const newObj: SceneObject = makeObject({ id: resultId, shapeType: 'cube', params: {}, color: objects[idA].color, transform: { x:cx,y:cy,z:cz,rotX:0,rotY:0,rotZ:0,scaleX:1,scaleY:1,scaleZ:1 }, visible: true, locked: false, vertices: mesh.vertices, indices: mesh.indices, normals: mesh.normals })
       const newObjects = { ...objects }; delete newObjects[idA]; delete newObjects[idB]; newObjects[resultId] = newObj
       const histOp: TinkerCraftOperation = { type: 'group', ids: [idA, idB], isHull: false, isIntersect: op === 'intersect', subtractOp: op === 'subtract', resultId } as TinkerCraftOperation
       const newOps = [...operations.slice(0, historyIndex), histOp]
@@ -508,7 +514,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         if (plane === 'YZ') t.x = -t.x
         if (plane === 'XZ') t.y = -t.y
         if (plane === 'XY') t.z = -t.z
-        newObjects[id] = { ...obj, transform: t, vertices: mesh.vertices, indices: mesh.indices }
+        newObjects[id] = makeObject({ ...obj, transform: t, vertices: mesh.vertices, indices: mesh.indices, normals: mesh.normals })
       }
       const op: MirrorOperation = { type: 'mirror', ids, plane }
       const newOps = [...operations.slice(0, historyIndex), op]
@@ -522,7 +528,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const ids = selectedIds.filter(id => objects[id])
     if (ids.length < 2) return
     const ax = axis.toLowerCase() as 'x' | 'y' | 'z'
-    const bboxes = ids.map(id => ({ id, bbox: computeAABB(objects[id].vertices) }))
+    const bboxes = ids.map(id => ({ id, bbox: objects[id].aabb ?? computeAABB(objects[id].vertices) }))
     let targetValue: number
     switch (anchor) {
       case 'min':    targetValue = Math.min(...bboxes.map(b => b.bbox.min[ax])); break
@@ -545,7 +551,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         const dx = axis === 'X' ? delta : 0, dy = axis === 'Y' ? delta : 0, dz = axis === 'Z' ? delta : 0
         const nt: TransformNR = { ...obj.transform, x: obj.transform.x + dx, y: obj.transform.y + dy, z: obj.transform.z + dz }
         const mesh = await workerBuildShape(id, obj.shapeType, obj.params, nt)
-        newObjects[id] = { ...obj, transform: nt, vertices: mesh.vertices, indices: mesh.indices }
+        newObjects[id] = makeObject({ ...obj, transform: nt, vertices: mesh.vertices, indices: mesh.indices, normals: mesh.normals })
       }
       const op: AlignOperation & { deltas: Record<string, number> } = { type: 'align', ids, axis, anchor, deltas }
       const newOps = [...operations.slice(0, historyIndex), op as unknown as TinkerCraftOperation]
@@ -640,7 +646,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const ms   = performance.now() - t0
       const op: ResizeDimsOperation = { type: 'resize_dims', id, params: mergedParams }
       const newOps = [...operations.slice(0, historyIndex), op]
-      set({ operations: newOps, historyIndex: newOps.length, objects: { ...objects, [id]: { ...obj, params: mergedParams, vertices: mesh.vertices, indices: mesh.indices } }, modified: true, busy: false, lastCsgMs: ms })
+      set({ operations: newOps, historyIndex: newOps.length, objects: { ...objects, [id]: makeObject({ ...obj, params: mergedParams, vertices: mesh.vertices, indices: mesh.indices, normals: mesh.normals }) }, modified: true, busy: false, lastCsgMs: ms })
     } catch (e) { set({ busy: false }); console.error('resizeObject:', e) }
   },
 
@@ -652,7 +658,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const obj = objects[id]
     if (!obj) return
 
-    const bbox = computeAABB(obj.vertices)
+    const bbox = obj.aabb ?? computeAABB(obj.vertices)
     const size = { x: bbox.max.x - bbox.min.x, y: bbox.max.y - bbox.min.y, z: bbox.max.z - bbox.min.z }
 
     let slabW: number, slabH: number, slabD: number
@@ -686,7 +692,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const resultMesh = await workerCsgBoolean(id, slabId, 'union', resultId)
       const ms = performance.now() - t0
       const { cx: ex, cy: ey, cz: ez } = extractAndCenter(resultMesh.vertices)
-      const newObj: SceneObject = { id: resultId, shapeType: 'cube', params: {}, color: obj.color, transform: { x:ex,y:ey,z:ez,rotX:0,rotY:0,rotZ:0,scaleX:1,scaleY:1,scaleZ:1 }, visible: true, locked: false, vertices: resultMesh.vertices, indices: resultMesh.indices }
+      const newObj: SceneObject = makeObject({ id: resultId, shapeType: 'cube', params: {}, color: obj.color, transform: { x:ex,y:ey,z:ez,rotX:0,rotY:0,rotZ:0,scaleX:1,scaleY:1,scaleZ:1 }, visible: true, locked: false, vertices: resultMesh.vertices, indices: resultMesh.indices, normals: resultMesh.normals })
       const addOp: AddShapeOperation = { type: 'add_shape', id: slabId, shapeType: 'cube', params: slabP, color: obj.color, transform: slabT }
       const grpOp: TinkerCraftOperation = { type: 'group', ids: [id, slabId], isHull: false, isIntersect: false, resultId } as TinkerCraftOperation
       const newObjects = { ...objects }; delete newObjects[id]; newObjects[resultId] = newObj

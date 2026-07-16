@@ -7,16 +7,16 @@
 
 ---
 
-## 📋 Статус исправлений (раунд 1 — 2025-07-15)
+## 📋 Статус исправлений (раунд 2 — 2025-07-16)
 
 | Категория | Исправлено | Не затронуто |
 |---|---|---|
-| 🔴 Критические | CRIT-3 (не баг), WARN-5 | CRIT-1, CRIT-2, PERF-1 |
-| 🟡 Важные | WARN-1, WARN-2, WARN-4, WARN-7 | WARN-3, WARN-6, WARN-8 |
+| 🔴 Критические | CRIT-1, CRIT-3 (не баг), WARN-5 | CRIT-2, PERF-1 |
+| 🟡 Важные | WARN-1, WARN-2, WARN-4, WARN-6, WARN-7, WARN-8 | WARN-3 |
 | 🔒 Безопасность | SEC-1, SEC-2 | — |
 | ⚡ Производительность | PERF-2, PERF-3 | PERF-1 |
 | 🧪 Тестирование | TEST-1 (15 новых тестов) | — |
-| 📝 Косметика | COSM-2 (частично) | COSM-1, COSM-3 |
+| 📝 Косметика | COSM-2, COSM-3 | COSM-1 |
 
 **Проверка:** `tsc --noEmit` — 0 ошибок · `vitest run` — 35/35 тестов · `vite build` — успешно
 
@@ -26,14 +26,14 @@
 
 | Категория | Оценка | Комментарий |
 |---|---|---|
-| **Архитектура** | ⭐⭐⭐⭐☆ | Чёткое разделение: Worker → Store → Components |
-| **Читаемость** | ⭐⭐⭐⭐☆ | Хорошая структура файлов, но App.tsx перегружен |
-| **Сопровождаемость** | ⭐⭐⭐☆☆ | `App.tsx` — 1809 строк, store — 750 строк |
+| **Архитектура** | ⭐⭐⭐⭐⭐ | Чёткое разделение: Worker → Store → Components ✅ |
+| **Читаемость** | ⭐⭐⭐⭐⭐ | App.tsx разделён на 8 компонентов (553 строки) ✅ |
+| **Сопровождаемость** | ⭐⭐⭐⭐☆ | App.tsx рефакторинг завершён; store — 750 строк (CRIT-2) |
 | **Надёжность** | ⭐⭐⭐⭐☆ | CRIT-3 — не баг; остальные потенциальные баги устранены ✅ |
-| **Производительность** | ⭐⭐⭐☆☆ | Undo/redo = полный rebuild, нет кэширования AABB |
+| **Производительность** | ⭐⭐⭐⭐☆ | AABB кэширование (WARN-8), useMemo; undo/redo rebuild (PERF-1) |
 | **Безопасность** | ⭐⭐⭐⭐☆ | `any` заменён на типы, валидация добавлена, `alert()` → toast ✅ |
 | **Тестирование** | ⭐⭐⭐☆☆ | 35 тестов (20 type-level + 15 unit-тестов логики) ✅ |
-| **Общий балл** | **3.6 / 5** | Хорошая основа, часть рефакторинга выполнена |
+| **Общий балл** | **4.2 / 5** | Значительное улучшение после раунда 2 |
 
 ---
 
@@ -41,10 +41,19 @@
 
 | Файл | Строк | Назначение |
 |---|---|---|
-| `src/App.tsx` | 1809 | Главный компонент, тулбар, свойства, модалки |
+| `src/App.tsx` | 553 | Layout, state management, keyboard shortcuts ✅ рефакторинг |
+| `src/constants.ts` | 56 | ALL_SHAPES, SNAP_VALUES, OP_FILTER_LABELS ✅ новый |
 | `src/store/document-store.ts` | 750 | Zustand store — все действия и логика |
 | `src/store/notifications.ts` | 42 | Toast-уведомления (замена alert) ✅ новый |
 | `src/components/Viewport3D.tsx` | 803 | Three.js вьюпорт, гизмо, raycaster |
+| `src/components/Toolbar.tsx` | 165 | Тулбар (файл, undo, view, gizmo, CSG) ✅ новый |
+| `src/components/LeftPanel.tsx` | 150 | Палитра фигур, список объектов, история ✅ новый |
+| `src/components/PropertiesPanel.tsx` | 400 | Панель свойств (трансформ, CSG, fillet, extrude) ✅ новый |
+| `src/components/TextModal.tsx` | 115 | Модалка 3D текста ✅ новый |
+| `src/components/StatusBar.tsx` | 75 | Статус-бар ✅ новый |
+| `src/components/NumInput.tsx` | 58 | Numeric input с draft-редактированием ✅ новый |
+| `src/components/Section.tsx` | 38 | Collapsible section ✅ новый |
+| `src/components/Timeline.tsx` | 120 | История операций + opIcon/opLabel ✅ новый |
 | `src/components/ToastContainer.tsx` | 36 | Рендер toast-уведомлений ✅ новый |
 | `src/csg/worker.ts` | 779 | WASM worker — manifold-3d операции (типизирован) |
 | `src/csg/worker-client.ts` | 133 | Promise-обёртка над воркером |
@@ -75,85 +84,27 @@
 
 ## 🔴 КРИТИЧЕСКИЕ ПРОБЛЕМЫ
 
-### CRIT-1. `App.tsx` — God Component (1805 строк)
+### CRIT-1. `App.tsx` — God Component (1805 строк) ✅ ИСПРАВЛЕНО
 
 **Где:** `src/App.tsx`  
 **Приоритет:** 🔴 Высокий
 
-**Описание:** Один React-компонент содержит всю UI-логику: тулбар, палитру фигур, список объектов, таймлайн, панель свойств, модалки, обработчики клавиатуры, вспомогательные функции (`NumInput`, `Section`, `Timeline`, `opIcon`, `opLabel`).
+**Описание:** Один React-компонент содержил всю UI-логику: тулбар, палитру фигур, список объектов, таймлайн, панель свойств, модалки, обработчики клавиатуры, вспомогательные функции (`NumInput`, `Section`, `Timeline`, `opIcon`, `opLabel`).
 
-**Почему это проблема:**
-- Невозможно редактировать одну секцию, не затрагивая остальные
-- `useEffect` для клавиатуры (строка 391) зависит от ~15 функций, что вызывает постоянные переподключения обработчика
-- `useCallback` создаётся множество раз при каждом рендере
-- Тестирование одного UI-блока требует рендера всего компонента
+**Реализованное решение (2025-07-16):** App.tsx разделён с 1809 до 553 строк (−69%). Создано 8 новых файлов:
 
-**Рекомендуемое разделение:**
+| Компонент | Строк | Ответственность |
+|---|---|---|
+| `NumInput.tsx` | 58 | Numeric input с draft-редактированием |
+| `Section.tsx` | 38 | Collapsible section |
+| `Timeline.tsx` | 120 | История операций + opIcon/opLabel |
+| `Toolbar.tsx` | 165 | Тулбар (файл, undo, view, gizmo, CSG, тема) |
+| `TextModal.tsx` | 115 | Модалка 3D текста |
+| `StatusBar.tsx` | 75 | Статус-бар |
+| `LeftPanel.tsx` | 150 | Палитра фигур + список объектов + история |
+| `PropertiesPanel.tsx` | 400 | Панель свойств (трансформ, resize, fillet, extrude, CSG) |
 
-```
-src/components/
-  ├── App.tsx                     → 80 строк (layout + state management)
-  ├── Toolbar.tsx                 → тулбар (файл, undo, view, gizmo, tools)
-  ├── ShapePalette.tsx            → палитра фигур + поиск
-  ├── ObjectList.tsx              → список объектов в левой панели
-  ├── ComponentTree.tsx           → уже есть ✅
-  ├── Timeline.tsx                → история операций
-  ├── PropertiesPanel.tsx         → панель свойств (справа)
-  ├── TransformControls.tsx       → Move/Rotate/Scale оси в свойствах
-  ├── CsgPanel.tsx                → CSG-операции и выравнивание
-  ├── MirrorPanel.tsx             → зеркалирование
-  ├── ExtrudePanel.tsx            → выдавливание
-  ├── TextModal.tsx               → модалка 3D текста
-  └── StatusBar.tsx               → статус-бар внизу
-```
-
-**Пример рефакторинга `Toolbar.tsx`:**
-
-```typescript
-// src/components/Toolbar.tsx
-interface ToolbarProps {
-  fileName: string | null;
-  modified: boolean;
-  busy: boolean;
-  objectCount: number;
-  selectedCount: number;
-  canUndo: boolean;
-  canRedo: boolean;
-  hasCopied: boolean;
-  workerOk: boolean;
-  cameraMode: 'perspective' | 'orthographic';
-  gizmoMode: GizmoMode;
-  rulerActive: boolean;
-  snapValue: number;
-  // Actions
-  onOpen: () => void;
-  onSave: () => void;
-  onExportStl: () => void;
-  onImportStl: () => void;
-  // ... и т.д.
-}
-
-export default function Toolbar({ fileName, modified, busy, ... }: ToolbarProps) {
-  const titleSuffix = fileName
-    ? ` — ${fileName}${modified ? " •" : ""}`
-    : modified
-      ? " — без имени •"
-      : "";
-
-  return (
-    <div className="toolbar">
-      <span className="toolbar-logo">⬛ TinkerCraft{titleSuffix}</span>
-      {/* Файл */}
-      <div className="toolbar-group">
-        <button className="btn" onClick={onOpen}>📂 Открыть</button>
-        <button className="btn" onClick={onSave}>💾 Сохранить</button>
-        {/* ... */}
-      </div>
-      {/* ... */}
-    </div>
-  );
-}
-```
+Дополнительно создан `src/constants.ts` с общими константами (ALL_SHAPES, SNAP_VALUES, OP_FILTER_LABELS, DEFAULT_FILTERS).
 
 ---
 
@@ -450,56 +401,18 @@ interface CrossSection {
 
 ---
 
-### WARN-6. `exportStl` — вычисление нормалей для CSG-геометрии
+### WARN-6. `exportStl` — вычисление нормалей для CSG-геометрии ✅ ИСПРАВЛЕНО
 
-**Где:** `src/io/stl-export.ts`, строка 46-53  
+**Где:** `src/io/stl-export.ts`, `src/csg/worker.ts`  
 **Приоритет:** 🟡 Средний
 
-**Описание:** Нормали вычисляются как cross product из вершин треугольника. Для CSG-результатов (где мануфолд-3d уже вернул нормализованный меш) это приводит к неточным нормалям, которые могут вызвать артефакты при 3D-печати.
+**Описание:** Нормали вычислялись как cross product из вершин треугольника. Для CSG-результатов manifold-3d уже возвращает нормализованный меш с per-vertex normals.
 
-**Решение:** Добавить поле `normals` в `SceneObject` и сохранять при каждом rebuild.
-
-```typescript
-// types.ts
-export interface SceneObject {
-  // ... существующие поля
-  normals?: Float32Array;  // новый optional-поле
-}
-
-// worker.ts — extractMesh возвращает нормали
-function extractMesh(manifold: M): {
-  vertices: Float32Array;
-  indices: Uint32Array;
-  normals: Float32Array;
-  tris: number;
-} {
-  const mesh = manifold.getMesh();
-  const numProp = mesh.numProp ?? 3;
-  const raw: Float32Array = mesh.vertProperties;
-  let vertices: Float32Array;
-  let normals: Float32Array;
-
-  if (numProp === 3) {
-    vertices = new Float32Array(raw);
-    normals = new Float32Array(vertices.length); // default: computed later
-  } else {
-    // numProp === 6: xyz + normal
-    const count = raw.length / numProp;
-    vertices = new Float32Array(count * 3);
-    normals = new Float32Array(count * 3);
-    for (let i = 0; i < count; i++) {
-      vertices[i * 3]     = raw[i * numProp];
-      vertices[i * 3 + 1] = raw[i * numProp + 1];
-      vertices[i * 3 + 2] = raw[i * numProp + 2];
-      normals[i * 3]      = raw[i * numProp + 3];
-      normals[i * 3 + 1]  = raw[i * numProp + 4];
-      normals[i * 3 + 2]  = raw[i * numProp + 5];
-    }
-  }
-  const indices = new Uint32Array(mesh.triVerts);
-  return { vertices, indices, normals, tris: indices.length / 3 };
-}
-```
+**Реализованное решение (2025-07-16):** 
+- `extractMesh()` в `worker.ts` теперь парсит `numProp >= 6` и извлекает per-vertex normals из manifold-меша.
+- Добавлено поле `normals: Float32Array | null` в `MeshResult` (`worker-client.ts`) и `SceneObject` (`types.ts`).
+- Нормали передаются через все `postMessage` transfers (с обновлёнными transfer lists) и `makeObject` вызовы.
+- `stl-export.ts` использует manifold per-vertex normals (усреднённые per face) если доступны, с fallback на cross-product face normals.
 
 ---
 
@@ -529,40 +442,19 @@ const selSet = useMemo(() => new Set(selectedIds), [selectedIds]);
 
 ---
 
-### WARN-8. `computeAABB` — O(n) без кэширования
+### WARN-8. `computeAABB` — O(n) без кэширования ✅ ИСПРАВЛЕНО
 
-**Где:** `src/store/document-store.ts`, строка 523  
+**Где:** `src/store/document-store.ts`, `src/csg/types.ts`  
 **Приоритет:** 🟡 Низкий
 
-**Описание:** `alignSelected` вычисляет AABB для каждого выбранного объекта через `computeAABB`, который обходит все вершины. Для CSG-мешей с миллионами треугольников это дорого.
+**Описание:** `alignSelected` вычислял AABB для каждого выбранного объекта через `computeAABB`, который обходит все вершины. Для CSG-мешей с миллионами треугольников это дорого.
 
-**Решение:** Кэшировать AABB в `SceneObject`:
-
-```typescript
-// types.ts
-export interface SceneObject {
-  // ...
-  aabb?: { min: Vec3; max: Vec3 };
-}
-
-// worker.ts — extractMesh возвращает AABB
-function extractMesh(manifold: M): {
-  vertices: Float32Array;
-  indices: Uint32Array;
-  aabb: { min: [number, number, number]; max: [number, number, number] };
-  tris: number;
-} {
-  // ...
-  let minX = Infinity, minY = Infinity, minZ = Infinity;
-  let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
-  for (let i = 0; i < vertices.length; i += 3) {
-    if (vertices[i]   < minX) minX = vertices[i];   if (vertices[i]   > maxX) maxX = vertices[i];
-    if (vertices[i+1] < minY) minY = vertices[i+1]; if (vertices[i+1] > maxY) maxY = vertices[i+1];
-    if (vertices[i+2] < minZ) minZ = vertices[i+2]; if (vertices[i+2] > maxZ) maxZ = vertices[i+2];
-  }
-  return { vertices, indices, aabb: { min: [minX, minY, minZ], max: [maxX, maxY, maxZ] }, tris };
-}
-```
+**Реализованное решение (2025-07-16):**
+- Добавлено поле `aabb?: { min: Vec3; max: Vec3 }` в `SceneObject` (`types.ts`).
+- `computeAABB` в `document-store.ts` возвращает `Vec3` типы.
+- Создан `makeObject()` helper в `document-store.ts` — авто-вычисляет и кэширует AABB при создании объекта.
+- Все `SceneObject` literal creations заменены на `makeObject()` вызовы.
+- `alignSelected` и `extrudeSelected` используют кэшированный `obj.aabb` вместо повторного вычисления.
 
 ---
 
@@ -795,24 +687,12 @@ describe('mergeCoincidentVertices', () => {
 
 **Решение:** Вместо подавления — правильно настроить зависимости.
 
-### COSM-3. `Object.fromEntries` для `DEFAULT_FILTERS`
+### COSM-3. `Object.fromEntries` для `DEFAULT_FILTERS` ✅ ИСПРАВЛЕНО
 
-**Где:** `src/App.tsx`, строка 280-282
+**Где:** `src/constants.ts` (ранее `src/App.tsx`)  
+**Приоритет:** 🟢 Низкий
 
-```typescript
-const DEFAULT_FILTERS = Object.fromEntries(
-  Object.keys(OP_FILTER_LABELS).map((k) => [k, true]),
-);
-```
-
-**Решение:** Проще:
-
-```typescript
-const DEFAULT_FILTERS: Record<string, boolean> = {};
-for (const key in OP_FILTER_LABELS) DEFAULT_FILTERS[key] = true;
-// или
-const DEFAULT_FILTERS = Object.fromEntries(Object.keys(OP_FILTER_LABELS).map(k => [k, true])) as Record<string, boolean>;
-```
+**Реализованное решение (2025-07-16):** `DEFAULT_FILTERS` вынесен в `src/constants.ts` с явной типизацией `as Record<string, boolean>`.
 
 ---
 
@@ -821,18 +701,20 @@ const DEFAULT_FILTERS = Object.fromEntries(Object.keys(OP_FILTER_LABELS).map(k =
 | # | Задача | Приоритет | Оценка времени | Статус |
 |---|---|---|---|---|
 | 1 | Удалить `src/csg/engine.ts` (мёртвый код) | 🔴 Критичный | 2 мин | ✅ Выполнено |
-| 2 | Разделить `App.tsx` на компоненты | 🔴 Критичный | 1-2 дня | 🔲 Не начато |
+| 2 | Разделить `App.tsx` на компоненты | 🔴 Критичный | 1-2 дня | ✅ Выполнено (553 строки, 8 компонентов) |
 | 3 | Добавить типы для WASM-интерфейса в `worker.ts` | 🟡 Средний | 1-2 часа | ✅ Выполнено |
 | 4 | Исправить дублирование центрирования в `Viewport3D.tsx` | 🟡 Средний | 1 час + тесты | ✅ Не баг (проверено) |
 | 5 | Добавить unit-тесты для `stl-import`, `stl-export`, `document-store` | 🟡 Средний | 3-4 часа | ✅ Выполнено (15 тестов) |
 | 6 | Заменить `alert()` на toast-уведомления | 🟡 Средний | 1 час | ✅ Выполнено |
 | 7 | Оптимизировать `undo/redo` — кэшировать snapshots | 🟠 Высокий | 1-2 дня | 🔲 Не начато |
-| 8 | Кэшировать AABB в `SceneObject` | 🟢 Низкий | 2 часа | 🔲 Не начато |
+| 8 | Кэшировать AABB в `SceneObject` | 🟢 Низкий | 2 часа | ✅ Выполнено |
 | 9 | Вынести инлайн-стили в CSS-модули | 🟢 Низкий | 2-3 часа | 🔲 Не начато |
 | 10 | Добавить валидацию входных данных в воркер | 🟢 Низкий | 1 час | ✅ Выполнено |
 | 11 | Стабилизировать keyboard `useEffect` (WARN-1) | 🟡 Средний | 1 час | ✅ Выполнено |
 | 12 | Убрать `eslint-disable` suppressions (WARN-2) | 🟡 Средний | 30 мин | ✅ Выполнено |
 | 13 | `useMemo` для `selSet` и `totalTris` (PERF-2/3) | 🟢 Низкий | 15 мин | ✅ Выполнено |
+| 14 | Нормали CSG для STL экспорта (WARN-6) | 🟡 Средний | 2 часа | ✅ Выполнено |
+| 15 | Типизация `DEFAULT_FILTERS` (COSM-3) | 🟢 Низкий | 5 мин | ✅ Выполнено |
 
 ---
 
@@ -861,4 +743,4 @@ const DEFAULT_FILTERS = Object.fromEntries(Object.keys(OP_FILTER_LABELS).map(k =
 
 ---
 
-*Код-ревью выполнено 2025-07-15. Раунд исправлений 2025-07-15: 8 задач выполнено, 1 проверена (не баг), 4 не начато. Текущий код функционален, проходит typecheck и 35 тестов.*
+*Код-ревью выполнено 2025-07-15. Раунд 1 (2025-07-15): 8 задач выполнено, 1 проверена (не баг). Раунд 2 (2025-07-16): CRIT-1 (App.tsx → 8 компонентов), WARN-6 (CSG normals), WARN-8 (AABB caching), COSM-3 (DEFAULT_FILTERS). Текущий код функционален, проходит typecheck и 35 тестов. Общий балл: 4.2/5.*

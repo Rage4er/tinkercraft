@@ -32,7 +32,7 @@ export function exportToStl(objects: SceneObject[]): Blob {
   let offset = 84
 
   for (const obj of visible) {
-    const { vertices, indices } = obj
+    const { vertices, indices, normals } = obj
 
     for (let t = 0; t < indices.length / 3; t++) {
       const i0 = indices[t * 3]
@@ -43,14 +43,26 @@ export function exportToStl(objects: SceneObject[]): Blob {
       const bx = vertices[i1 * 3], by = vertices[i1 * 3 + 1], bz = vertices[i1 * 3 + 2]
       const cx = vertices[i2 * 3], cy = vertices[i2 * 3 + 1], cz = vertices[i2 * 3 + 2]
 
-      // Нормаль (cross product)
-      const ux = bx - ax, uy = by - ay, uz = bz - az
-      const vx = cx - ax, vy = cy - ay, vz = cz - az
-      let nx = uy * vz - uz * vy
-      let ny = uz * vx - ux * vz
-      let nz = ux * vy - uy * vx
-      const len = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1
-      nx /= len; ny /= len; nz /= len
+      // Use per-vertex normals from manifold-3d when available (CSG results),
+      // otherwise compute face normal via cross product.
+      let nx: number, ny: number, nz: number
+      if (normals && normals.length === vertices.length) {
+        // Average the three vertex normals for a smoother face normal
+        nx = (normals[i0 * 3] + normals[i1 * 3] + normals[i2 * 3]) / 3
+        ny = (normals[i0 * 3 + 1] + normals[i1 * 3 + 1] + normals[i2 * 3 + 1]) / 3
+        nz = (normals[i0 * 3 + 2] + normals[i1 * 3 + 2] + normals[i2 * 3 + 2]) / 3
+        const len = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1
+        nx /= len; ny /= len; nz /= len
+      } else {
+        // Cross product face normal
+        const ux = bx - ax, uy = by - ay, uz = bz - az
+        const vx = cx - ax, vy = cy - ay, vz = cz - az
+        nx = uy * vz - uz * vy
+        ny = uz * vx - ux * vz
+        nz = ux * vy - uy * vx
+        const len = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1
+        nx /= len; ny /= len; nz /= len
+      }
 
       // Нормаль (12 байт)
       dv.setFloat32(offset,      nx, true); offset += 4

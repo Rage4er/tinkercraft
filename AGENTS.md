@@ -40,13 +40,22 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 
 | Файл | Ответственность |
 |---|---|
-| `src/App.tsx` | Главный компонент, тулбар, панель свойств, модалки (1809 строк) |
+| `src/App.tsx` | Layout, state management, keyboard shortcuts (553 строки) |
+| `src/constants.ts` | Общие константы (ALL_SHAPES, SNAP_VALUES, OP_FILTER_LABELS) |
 | `src/store/document-store.ts` | Zustand store — все действия, история, undo/redo (750 строк) |
 | `src/store/notifications.ts` | Toast-уведомления (замена alert) |
 | `src/csg/worker.ts` | WASM worker — manifold-3d операции, типобезопасные интерфейсы |
 | `src/csg/worker-client.ts` | Promise-обёртка над воркером |
 | `src/csg/types.ts` | Типы операций, сцены, параметров |
 | `src/components/Viewport3D.tsx` | Three.js вьюпорт, гизмо, raycaster |
+| `src/components/Toolbar.tsx` | Тулбар (файл, undo, view, gizmo, CSG, тема) |
+| `src/components/LeftPanel.tsx` | Палитра фигур + список объектов + история |
+| `src/components/PropertiesPanel.tsx` | Панель свойств (трансформ, resize, fillet, extrude, CSG) |
+| `src/components/TextModal.tsx` | Модалка 3D текста |
+| `src/components/StatusBar.tsx` | Статус-бар |
+| `src/components/NumInput.tsx` | Numeric input с draft-редактированием |
+| `src/components/Section.tsx` | Collapsible section |
+| `src/components/Timeline.tsx` | История операций + opIcon/opLabel |
 | `src/io/stl-import.ts` | Импорт STL (бинарный + ASCII) |
 | `src/io/stl-export.ts` | Экспорт в бинарный STL |
 | `src/io/doodle-io.ts` | Формат .doodle (ZIP + JSON) |
@@ -137,7 +146,7 @@ Worker НЕ центрирует геометрию. Центрирование 
 
 - Fillet работает только для cube (требует специфичной математики для других форм)
 - Undo/redo = полный rebuild (нет кэша snapshots — PERF-1)
-- `App.tsx` и `document-store.ts` — крупные файлы (CRIT-1, CRIT-2 — отложенный рефакторинг)
+- `document-store.ts` — крупный файл (CRIT-2 — отложенный рефакторинг)
 
 ## Документация
 

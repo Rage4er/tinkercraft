@@ -297,25 +297,40 @@ function getMirrorMatrix(plane: string): number[] {
 function extractMesh(manifold: M): {
   vertices: Float32Array;
   indices: Uint32Array;
+  normals: Float32Array | null;
   tris: number;
 } {
   const mesh = manifold.getMesh();
   const numProp = mesh.numProp ?? 3;
   const raw: Float32Array = mesh.vertProperties;
   let vertices: Float32Array;
+  let normals: Float32Array | null = null;
   if (numProp === 3) {
     vertices = new Float32Array(raw);
   } else {
+    // numProp >= 6: xyz + normal (and possibly more attributes)
     const count = raw.length / numProp;
     vertices = new Float32Array(count * 3);
-    for (let i = 0; i < count; i++) {
-      vertices[i * 3] = raw[i * numProp];
-      vertices[i * 3 + 1] = raw[i * numProp + 1];
-      vertices[i * 3 + 2] = raw[i * numProp + 2];
+    if (numProp >= 6) {
+      normals = new Float32Array(count * 3);
+      for (let i = 0; i < count; i++) {
+        vertices[i * 3]     = raw[i * numProp];
+        vertices[i * 3 + 1] = raw[i * numProp + 1];
+        vertices[i * 3 + 2] = raw[i * numProp + 2];
+        normals[i * 3]      = raw[i * numProp + 3];
+        normals[i * 3 + 1]  = raw[i * numProp + 4];
+        normals[i * 3 + 2]  = raw[i * numProp + 5];
+      }
+    } else {
+      for (let i = 0; i < count; i++) {
+        vertices[i * 3]     = raw[i * numProp];
+        vertices[i * 3 + 1] = raw[i * numProp + 1];
+        vertices[i * 3 + 2] = raw[i * numProp + 2];
+      }
     }
   }
   const indices = new Uint32Array(mesh.triVerts);
-  return { vertices, indices, tris: indices.length / 3 };
+  return { vertices, indices, normals, tris: indices.length / 3 };
 }
 
 // ---- Message handler ----
@@ -353,7 +368,9 @@ self.addEventListener("message", async (e: MessageEvent) => {
           m = applyTransform(m, transform);
         }
         cache.set(msg.objId as string, m);
-        const { vertices, indices, tris } = extractMesh(m);
+        const { vertices, indices, normals, tris } = extractMesh(m);
+        const transferList: ArrayBuffer[] = [vertices.buffer as ArrayBuffer, indices.buffer as ArrayBuffer];
+        if (normals) transferList.push(normals.buffer as ArrayBuffer);
         (self as unknown as Worker).postMessage(
           {
             reqId: msg.reqId,
@@ -361,10 +378,11 @@ self.addEventListener("message", async (e: MessageEvent) => {
             objId: msg.objId,
             vertices,
             indices,
+            normals,
             tris,
             ms: performance.now() - t0,
           },
-          [vertices.buffer, indices.buffer],
+          transferList,
         );
         break;
       }
@@ -384,7 +402,9 @@ self.addEventListener("message", async (e: MessageEvent) => {
         let m = buildPrimitiveWithFillet(shapeType, sanitizeParams(params), clamp(radius, 0, 1e4));
         m = applyTransform(m, transform);
         cache.set(msg.objId as string, m);
-        const { vertices, indices, tris } = extractMesh(m);
+        const { vertices, indices, normals, tris } = extractMesh(m);
+        const transferList: ArrayBuffer[] = [vertices.buffer as ArrayBuffer, indices.buffer as ArrayBuffer];
+        if (normals) transferList.push(normals.buffer as ArrayBuffer);
         (self as unknown as Worker).postMessage(
           {
             reqId: msg.reqId,
@@ -392,10 +412,11 @@ self.addEventListener("message", async (e: MessageEvent) => {
             objId: msg.objId,
             vertices,
             indices,
+            normals,
             tris,
             ms: performance.now() - t0,
           },
-          [vertices.buffer, indices.buffer],
+          transferList,
         );
         break;
       }
@@ -412,7 +433,9 @@ self.addEventListener("message", async (e: MessageEvent) => {
             triVerts: tris,
           });
           cache.set(msg.objId as string, m);
-          const { vertices, indices, tris: numTris } = extractMesh(m);
+          const { vertices, indices, normals, tris: numTris } = extractMesh(m);
+          const transferList: ArrayBuffer[] = [vertices.buffer as ArrayBuffer, indices.buffer as ArrayBuffer];
+          if (normals) transferList.push(normals.buffer as ArrayBuffer);
           (self as unknown as Worker).postMessage(
             {
               reqId: msg.reqId,
@@ -420,10 +443,11 @@ self.addEventListener("message", async (e: MessageEvent) => {
               objId: msg.objId,
               vertices,
               indices,
+              normals,
               tris: numTris,
               ms: performance.now() - t0,
             },
-            [vertices.buffer, indices.buffer],
+            transferList,
           );
         } catch (me) {
           // Manifold failed (non-manifold STL) — return raw mesh without CSG support
@@ -477,7 +501,9 @@ self.addEventListener("message", async (e: MessageEvent) => {
         cache.delete(msg.idA as string);
         cache.delete(msg.idB as string);
         cache.set(msg.resultId as string, result);
-        const { vertices, indices, tris } = extractMesh(result);
+        const { vertices, indices, normals, tris } = extractMesh(result);
+        const transferList: ArrayBuffer[] = [vertices.buffer as ArrayBuffer, indices.buffer as ArrayBuffer];
+        if (normals) transferList.push(normals.buffer as ArrayBuffer);
         (self as unknown as Worker).postMessage(
           {
             reqId: msg.reqId,
@@ -485,10 +511,11 @@ self.addEventListener("message", async (e: MessageEvent) => {
             objId: msg.resultId,
             vertices,
             indices,
+            normals,
             tris,
             ms: performance.now() - t0,
           },
-          [vertices.buffer, indices.buffer],
+          transferList,
         );
         break;
       }
@@ -500,7 +527,9 @@ self.addEventListener("message", async (e: MessageEvent) => {
         if (!src) throw new Error(`Object not found: ${msg.objId}`);
         const m = src.transform(getMirrorMatrix(msg.plane as string));
         cache.set(msg.objId as string, m);
-        const { vertices, indices, tris } = extractMesh(m);
+        const { vertices, indices, normals, tris } = extractMesh(m);
+        const transferList: ArrayBuffer[] = [vertices.buffer as ArrayBuffer, indices.buffer as ArrayBuffer];
+        if (normals) transferList.push(normals.buffer as ArrayBuffer);
         (self as unknown as Worker).postMessage(
           {
             reqId: msg.reqId,
@@ -508,10 +537,11 @@ self.addEventListener("message", async (e: MessageEvent) => {
             objId: msg.objId,
             vertices,
             indices,
+            normals,
             tris,
             ms: performance.now() - t0,
           },
-          [vertices.buffer, indices.buffer],
+          transferList,
         );
         break;
       }
@@ -729,17 +759,19 @@ self.addEventListener("message", async (e: MessageEvent) => {
           objId: string;
           vertices: Float32Array;
           indices: Uint32Array;
+          normals: Float32Array | null;
           tris: number;
         }> = [];
         const transfers: ArrayBuffer[] = [];
         for (const [objId, m] of cache) {
           if (!m) continue; // skip non-manifold imports
-          const { vertices, indices, tris } = extractMesh(m);
-          results.push({ objId, vertices, indices, tris });
+          const { vertices, indices, normals, tris } = extractMesh(m);
+          results.push({ objId, vertices, indices, normals, tris });
           transfers.push(
             vertices.buffer as ArrayBuffer,
             indices.buffer as ArrayBuffer,
           );
+          if (normals) transfers.push(normals.buffer as ArrayBuffer);
         }
 
         (self as unknown as Worker).postMessage(

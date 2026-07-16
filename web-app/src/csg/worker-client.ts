@@ -8,6 +8,7 @@ export interface MeshResult {
   objId: string
   vertices: Float32Array
   indices: Uint32Array
+  normals: Float32Array | null
   tris: number
   ms: number
 }

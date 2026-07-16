@@ -9,6 +9,20 @@
 
 ## [Unreleased]
 
+### Added — код-ревью раунд 2 (2025-07-16)
+
+- `components/NumInput.tsx` — numeric input с draft-редактированием
+- `components/Section.tsx` — collapsible section
+- `components/Timeline.tsx` — история операций + opIcon/opLabel
+- `components/Toolbar.tsx` — тулбар (файл, undo, view, gizmo, CSG, тема)
+- `components/TextModal.tsx` — модалка 3D текста
+- `components/StatusBar.tsx` — статус-бар
+- `components/LeftPanel.tsx` — палитра фигур + список объектов + история
+- `components/PropertiesPanel.tsx` — панель свойств (трансформ, resize, fillet, extrude, CSG)
+- `constants.ts` — общие константы (ALL_SHAPES, SNAP_VALUES, OP_FILTER_LABELS, DEFAULT_FILTERS)
+- Поле `normals: Float32Array | null` в `SceneObject` и `MeshResult` — per-vertex normals из manifold
+- Поле `aabb?: { min: Vec3; max: Vec3 }` в `SceneObject` — кэшированный AABB
+
 ### Added — код-ревью раунд 1 (2025-07-15)
 
 - Toast-уведомления: `store/notifications.ts`, `components/ToastContainer.tsx`
@@ -18,6 +32,12 @@
 
 ### Changed
 
+- `App.tsx` разделён с 1809 до 553 строк (−69%) — CRIT-1
+- `extractMesh()` в `worker.ts` парсит per-vertex normals из manifold-меша (WARN-6)
+- `stl-export.ts` использует manifold normals с fallback на cross-product (WARN-6)
+- `makeObject()` helper в `document-store.ts` — авто-вычисление и кэширование AABB (WARN-8)
+- `alignSelected` и `extrudeSelected` используют кэшированный `obj.aabb` (WARN-8)
+- `DEFAULT_FILTERS` вынесен в `constants.ts` с явной типизацией (COSM-3)
 - `alert()` заменён на toast-уведомления во всём проекте
 - `selSet` и `totalTris` обёрнуты в `useMemo` (PERF-2, PERF-3)
 - Keyboard `useEffect` стабилизирован через паттерн `kbRef` (WARN-1)
@@ -65,6 +85,6 @@
 
 - Скругление работает только для кубов
 - Undo/redo выполняет полный rebuild (без кэша snapshots)
-- `App.tsx` — 1809 строк (God Component, кандидат на разделение)
+- `document-store.ts` — 750 строк (кандидат на разделение, CRIT-2)
 - Нет импорта SVG и 3MF
 - Robot Lab не реализован

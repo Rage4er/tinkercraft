@@ -225,16 +225,16 @@
 
 **Отложенные задачи (требуют много дней рефакторинга):**
 
-| # | Задача | Причина откладывания |
-|---|---|---|
-| CRIT-1 | Разделение `App.tsx` (1809 строк) на ~12 компонентов | 1-2 дня рефакторинга |
-| CRIT-2 | Разделение `document-store.ts` (750 строк) на модули actions/ | 1-2 дня рефакторинга |
-| PERF-1 | Кэширование snapshots для undo/redo | Архитектурное изменение |
-| WARN-3 | Дублирование инструментов в тулбаре и панели свойств | Зависит от CRIT-1 |
-| WARN-6 | Нормали для CSG-геометрии в STL-экспорте | Требует изменения `SceneObject` + worker |
-| WARN-8 | Кэширование AABB в `SceneObject` | Требует изменения типов + worker |
-| COSM-1 | Инлайн-стили в CSS-модули | 2-3 часа, низкий приоритет |
-| COSM-3 | `Object.fromEntries` для `DEFAULT_FILTERS` | Косметика |
+| # | Задача | Причина откладывания | Статус |
+|---|---|---|---|
+| ~~CRIT-1~~ | ~~Разделение `App.tsx` (1809 строк) на ~12 компонентов~~ | ~~1-2 дня рефакторинга~~ | ✅ Выполнено (553 строки, 8 компонентов) |
+| CRIT-2 | Разделение `document-store.ts` (750 строк) на модули actions/ | 1-2 дня рефакторинга | 🔲 |
+| PERF-1 | Кэширование snapshots для undo/redo | Архитектурное изменение | 🔲 |
+| WARN-3 | Дублирование инструментов в тулбаре и панели свойств | Зависит от CRIT-1 | 🔄 Частично (компоненты разделены, дублирование осталось) |
+| ~~WARN-6~~ | ~~Нормали для CSG-геометрии в STL-экспорте~~ | ~~Требует изменения `SceneObject` + worker~~ | ✅ Выполнено |
+| ~~WARN-8~~ | ~~Кэширование AABB в `SceneObject`~~ | ~~Требует изменения типов + worker~~ | ✅ Выполнено |
+| COSM-1 | Инлайн-стили в CSS-модули | 2-3 часа, низкий приоритет | 🔲 |
+| ~~COSM-3~~ | ~~`Object.fromEntries` для `DEFAULT_FILTERS`~~ | ~~Косметика~~ | ✅ Выполнено |
 
 **Проверка:** `tsc --noEmit` — 0 ошибок · `vitest run` — 35/35 тестов · `vite build` — успешно
 
@@ -280,8 +280,9 @@
 tinkercraft/
 ├── web-app/                       # Единое приложение (Vite + React)
 │   ├── src/
-│   │   ├── App.tsx                # главный UI (1809 строк — кандидат на разделение)
+│   │   ├── App.tsx                # layout, state, keyboard shortcuts (553 строки)
 │   │   ├── App.css                # CSS переменные тёмной/светлой темы + toast
+│   │   ├── constants.ts           # ALL_SHAPES, SNAP_VALUES, OP_FILTER_LABELS
 │   │   ├── main.tsx               # React корень
 │   │   │
 │   │   ├── csg/                   # manifold-3d обёртка + Web Worker
@@ -300,6 +301,14 @@ tinkercraft/
 │   │   │   ├── Viewport3D.tsx     # Three.js canvas, гизмо, raycaster
 │   │   │   ├── ViewCube.tsx       # навигационный куб
 │   │   │   ├── ComponentTree.tsx  # дерево объектов
+│   │   │   ├── Toolbar.tsx        # тулбар (файл, undo, view, gizmo, CSG)
+│   │   │   ├── LeftPanel.tsx      # палитра фигур + список объектов + история
+│   │   │   ├── PropertiesPanel.tsx # панель свойств (трансформ, resize, fillet)
+│   │   │   ├── TextModal.tsx      # модалка 3D текста
+│   │   │   ├── StatusBar.tsx      # статус-бар
+│   │   │   ├── NumInput.tsx       # numeric input с draft-редактированием
+│   │   │   ├── Section.tsx        # collapsible section
+│   │   │   ├── Timeline.tsx       # история операций + opIcon/opLabel
 │   │   │   ├── ProjectManagerModal.tsx
 │   │   │   ├── ToastContainer.tsx # toast рендер
 │   │   │   ├── ErrorBoundary.tsx
@@ -347,7 +356,7 @@ tinkercraft/
 | Нет импорта 3MF | 🔲 | Фаза 7 |
 | Нет Robot Lab | 🔲 | Фаза 7 (опционально) |
 | Медленная регенерация при >50 операциях | ⚠️ | Оптимизировать в Фазе 7 (PERF-1: кэш snapshots) |
-| `App.tsx` — God Component (1809 строк) | ⚠️ | CRIT-1: разделить на ~12 компонентов |
+| `App.tsx` — God Component (1809 строк) | ✅ Исправлено | CRIT-1: разделён на 8 компонентов (553 строки) |
 | `document-store.ts` — 750 строк в одном файле | ⚠️ | CRIT-2: разделить на модули actions/ |
 | `any`-типы в воркере | ✅ Исправлено | WARN-4: типобезопасные интерфейсы |
 | Нет валидации входных данных | ✅ Исправлено | SEC-1: `clamp()` + `sanitizeParams()` |
@@ -356,6 +365,9 @@ tinkercraft/
 | Мёртвый код `engine.ts` | ✅ Исправлено | WARN-5: файл удалён |
 | Нестабильный keyboard `useEffect` | ✅ Исправлено | WARN-1: паттерн `kbRef` |
 | `new Set()` + `reduce` каждый рендер | ✅ Исправлено | PERF-2/3: `useMemo` |
+| Нормали CSG для STL экспорта | ✅ Исправлено | WARN-6: per-vertex normals из manifold |
+| AABB вычисляется каждый раз | ✅ Исправлено | WARN-8: кэширование в `SceneObject.aabb` |
+| `DEFAULT_FILTERS` без типизации | ✅ Исправлено | COSM-3: `as Record<string, boolean>` |
 
 ---
 
