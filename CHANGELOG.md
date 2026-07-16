@@ -27,6 +27,7 @@
 - **LOW-R5-2:** `constants.ts` — убран избыточный `as Record<string, boolean>`
 - **LOW-R5-3:** `ViewCube.tsx` — `animateTo()` отменяет предыдущую анимацию через `cancelAnimationFrame` при повторных кликах
 - **Rebuild:** Извлечена чистая функция `buildRebuildMeta()` из `rebuildFromHistory()` для тестирования без WASM-зависимости
+- **IDEAS.md:** Создан банк идей — 17 инструментов TinkerCAD, 6 генераторов форм, приоритетный roadmap, технические заметки
 
 ### Fixed — исправления раунда 4 (2026-07-16)
 
