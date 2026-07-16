@@ -943,3 +943,320 @@ function applyTransformToVertices(
 | 9 | Разделение `worker.ts` на модули | 🟢 | 3-4 часа |
 | 10 | Unit-тесты для `sanitizeParams` | 🟢 | 30 мин |
 | 11 | Добавить тесты для STL экспорта с non-identity transform | 🟢 | 30 мин |
+
+---
+
+## 🔍 РАУНД 4 — Глубокое ревью (2026-07-16)
+
+**Ревьюер:** Koda AI  
+**Общий балл:** 3.3 / 5  
+**Дата:** 2026-07-16
+
+### 📊 Сводка
+
+| Категория | Оценка | Комментарий |
+|---|---|---|
+| **Архитектура** | ⭐⭐⭐☆☆ | Хорошее разделение, но worker.ts переусложнён (813 строк), дублирование логики rebuild |
+| **Читаемость** | ⭐⭐⭐☆☆ | Хорошие комментарии с тегами, но гигантский switch и дублирование типов |
+| **Сопровождаемость** | ⭐⭐☆☆☆ | Критические модули не покрыты тестами, дублирование логики между rebuild.ts и worker.ts |
+| **Надёжность** | ⭐⭐⭐☆☆ | Есть реальные баги в scaleDelta (аддитивный вместо мультипликативного) |
+| **Производительность** | ⭐⭐⭐☆☆ | Hash comparison, transfer list — но computeVertsHash пропускает вершины |
+| **Безопасность** | ⭐⭐☆☆☆ | JSON.parse без валидации размера — критичный риск DoS/Prototype Pollution |
+| **Тестирование** | ⭐☆☆☆☆ | worker.ts (813 строк), Viewport3D.tsx (827 строк), rebuild.ts — 0 тестов |
+| **Общий балл** | **3.3 / 5** | Требуется рефакторинг дублирования, тесты на критических модулях, исправление багов |
+
+---
+
+### 🔴 КРИТИЧЕСКИЕ ПРОБЛЕМЫ
+
+#### CRIT-R4-1. `scaleDelta` применяется аддитивно вместо мультипликативно (БАГ)
+
+**Где:** `src/csg/worker.ts`, строки 636-638; `src/store/rebuild.ts`, строки 47-49
+
+```typescript
+// worker.ts строка 636-638
+scaleX: t.scaleX + (sd?.x ?? 0),
+scaleY: t.scaleY + (sd?.y ?? 0),
+scaleZ: t.scaleZ + (sd?.z ?? 0),
+```
+
+**Приоритет:** 🔴 Критический
+
+**Описание:** Масштаб — мультипликативная операция, но в истории операций `scaleDelta` применяется как аддитивная. При `scaleX: 1` и `scaleDelta: 0.5` результат `1.5`, но при следующей операции `scaleDelta: 0.5` будет `2.0` вместо `1.5 × 1.5 = 2.25`.
+
+**Последствия:** Undo/redo для scale работает некорректно. Объект "улетает" при повторных операциях масштабирования.
+
+**Решение:** Либо хранить абсолютный scale в истории (не delta), либо применять scale как умножение:
+```typescript
+scaleX: t.scaleX * (1 + (sd?.x ?? 0)),
+```
+
+---
+
+#### CRIT-R4-2. `JSON.parse` без валидации — риск DoS / Prototype Pollution
+
+**Где:** `src/io/doodle-io.ts`, строка 20
+
+```typescript
+const raw = JSON.parse(json)
+```
+
+**Приоритет:** 🔴 Критический
+
+**Описание:** Пользовательский файл `.doodle` парсится без валидации структуры и размера. Злоумышленник может создать файл с deeply nested объектами для DoS-атаки или прототип-отравлением.
+
+**Последствия:** Крах приложения при загрузке вредоносного файла, потенциальная утечка данных.
+
+**Решение:** Добавить валидацию до `JSON.parse`:
+```typescript
+if (typeof json !== 'string' || json.length > 50 * 1024 * 1024) {
+  throw new Error('Invalid model.json: size exceeds limit');
+}
+if (json.includes('__proto__') || json.includes('constructor')) {
+  throw new Error('Invalid model.json: suspicious content');
+}
+```
+
+---
+
+#### CRIT-R4-3. Дублирование логики rebuild между `rebuild.ts` и `worker.ts`
+
+**Где:** `src/store/rebuild.ts` (строки 21-101) и `src/csg/worker.ts` (строки 552-758)
+
+**Приоритет:** 🔴 Критический
+
+**Описание:** Функция `rebuildFromHistory()` и `case "rebuildScene"` реализуют практически идентичную логику для `move`, `mirror`, `align`, `resize_dims`, `group`. Это нарушает DRY и создаёт риск рассинхронизации.
+
+**Последствия:** Исправление бага в одном месте не попадает в другое. При добавлении нового типа операции нужно обновить оба места.
+
+**Решение:** Вынести общую логику в отдельную утилиту `rebuildOps.ts` или сделать worker единственным источником правды для rebuild.
+
+---
+
+### 🟡 ВАЖНЫЕ ПРОБЛЕМЫ
+
+#### WARN-R4-1. Worker переусложнён — 813 строк, один огромный switch
+
+**Где:** `src/csg/worker.ts`, строки 346-809
+
+**Приоритет:** 🟡 Средний
+
+**Описание:** Функция-обработчик сообщений содержит switch с 10+ ветвями. Каждая ветвь дублирует паттерн: `performance.now()` → операция → `extractMesh()` → `safePostMessage()`. Cyclomatic complexity ~25 (рекомендуемый максимум — 10).
+
+**Решение:** Разбить на отдельные обработчики:
+```typescript
+const handlers: Record<string, (msg: MessageEvent) => Promise<void>> = {
+  buildShape: handleBuildShape,
+  csgBoolean: handleCsgBoolean,
+  rebuildScene: handleRebuildScene,
+  // ...
+};
+```
+
+---
+
+#### WARN-R4-2. `computeVertsHash` пропускает 3 из 4 вершин
+
+**Где:** `src/components/Viewport3D.tsx`, строка 64
+
+```typescript
+for (let i = 0; i < len; i += 4) {
+```
+
+**Приоритет:** 🟡 Средний
+
+**Описание:** Пропуск вершин означает, что при изменении только одной вершины из четырёх хеш не изменится. Это может привести к пропуску обновления геометрии.
+
+**Решение:** Либо хешировать все вершины, либо использовать FNV-1a hash с fallback на полное сравнение при коллизии.
+
+---
+
+#### WARN-R4-3. Дублирование `centerGeometry()` и `extractAndCenter()`
+
+**Где:** `src/components/Viewport3D.tsx` (строки 74-89) и `src/store/helpers.ts` (строки 27-41)
+
+**Приоритет:** 🟡 Средний
+
+**Описание:** Обе функции выполняют идентичные вычисления AABB и центрирование. `extractAndCenter` мутирует входной буфер, `centerGeometry` делает то же через Three.js.
+
+**Решение:** Унифицировать логику. Центрирование CSG-результатов — только в `helpers.ts`. Viewport3D полагается на уже отцентрированные данные.
+
+---
+
+#### WARN-R4-4. `FullSRT` тип определён дважды
+
+**Где:** `src/csg/worker.ts`, строка 259; `src/store/rebuild.ts`, строки 36-44
+
+**Приоритет:** 🟡 Средний
+
+**Описание:** Тип трансформации с rotation+scale определяется дважды с небольшими отличиями.
+
+**Решение:** Вынести в `src/csg/types.ts`.
+
+---
+
+#### WARN-R4-5. `as unknown as ManifoldAPI` — двойной assert без валидации
+
+**Где:** `src/csg/worker.ts`, строка 66
+
+```typescript
+wasm = await Module.default() as unknown as ManifoldAPI;
+```
+
+**Приоритет:** 🟡 Средний
+
+**Описание:** Полностью отключает проверку типов. Если API WASM изменится, ошибка будет обнаружена только в рантайме.
+
+**Решение:** Добавить runtime-валидацию:
+```typescript
+const api = await Module.default();
+if (!api?.setup || !api?.Manifold) {
+  throw new Error('Invalid manifold API');
+}
+wasm = api as unknown as ManifoldAPI;
+```
+
+---
+
+#### WARN-R4-6. `sceneReady` не защищает от race condition
+
+**Где:** `src/components/Viewport3D.tsx`, строка 798
+
+```typescript
+}, [objects, sceneReady]);
+```
+
+**Приоритет:** 🟡 Средний
+
+**Описание:** Если `objects` изменится до `sceneReady`, useEffect сработает с `sceneRef.current === null`.
+
+**Решение:** Добавить guard: `if (!sceneRef.current || !sceneReady) return;`
+
+---
+
+#### WARN-R4-7. Смешение русского и английского в комментариях
+
+**Где:** Весь проект
+
+**Приоритет:** 🟢 Низкий
+
+**Описание:** Комментарии на русском (`// Зеркало in-place`), английские (`// Safe postMessage wrapper`). При росте команды это затруднит поддержку.
+
+**Решение:** Выбрать единый язык для комментариев (английский — стандарт индустрии).
+
+---
+
+### 🟢 НИЗКИЕ ЗАМЕЧАНИЯ
+
+#### LOW-R4-1. `requestAnimationFrame` работает непрерывно, даже когда не нужно
+
+**Где:** `src/components/Viewport3D.tsx`, строки 300-351
+
+**Решение:** Использовать `renderer.setAnimationLoop()` с условным рендером.
+
+---
+
+#### LOW-R4-2. `URL.createObjectURL` без `try/finally`
+
+**Где:** `src/io/doodle-io.ts`, строки 97-103
+
+**Решение:** Обернуть в `try/finally` для гарантированного `revokeObjectURL`.
+
+---
+
+#### LOW-R4-3. `meshMapRef.current.get([...selectedIds][0])` — хрупкий код
+
+**Где:** `src/components/Viewport3D.tsx`, строка 380
+
+**Описание:** При multi-select берётся произвольный (первый) элемент. Если гизмо должно работать с группой — это некорректно.
+
+---
+
+### 🧪 ТЕСТИРОВАНИЕ — Критический пробел
+
+**Проблема:** Критические модули не покрыты тестами вообще:
+
+| Модуль | Строк | Тестов | Статус |
+|---|---|---|---|
+| `worker.ts` | 813 | 0 | ❌ Не покрыт |
+| `Viewport3D.tsx` | 827 | 0 | ❌ Не покрыт |
+| `rebuild.ts` | 132 | 0 | ❌ Не покрыт |
+| `snapshots.ts` | 45 | 0 | ❌ Не покрыт |
+| `helpers.ts` | 71 | 0 (экспортированы, но тесты в другом файле) | ⚠️ Частично |
+| `worker-matrix.ts` | — | 7 | ✅ |
+| `stl-import.ts` | 106 | 6 | ✅ |
+| `stl-export.ts` | 87 | 7 | ✅ |
+
+**Приоритетные тесты:**
+
+| # | Что тестировать | Приоритет |
+|---|---|---|
+| 1 | `sanitizeParams()` — NaN, Infinity, negative, _fields | 🔴 |
+| 2 | `clamp()` — граничные значения | 🔴 |
+| 3 | `mergeCoincidentVertices()` — edge cases | 🔴 |
+| 4 | `rebuildFromHistory()` — цепочка: add → move → fillet → union → undo | 🟡 |
+| 5 | `cacheSnapshot()` / `getCachedSnapshot()` — инвалидация при new operation | 🟡 |
+| 6 | `applySRAroundCenter()` — identity, 90°, scale 2x | 🟡 |
+| 7 | `getMirrorMatrix()` — все 3 плоскости | 🟢 |
+| 8 | `parseDoodle()` — валидный/повреждённый ZIP, large file | 🟢 |
+
+---
+
+### 📝 КОСМЕТИКА И СТРУКТУРА
+
+| # | Проблема | Где | Оценка |
+|---|---|---|---|
+| COSM-R4-1 | `worker.ts` — 813 строк, switch на 460+ строк | `worker.ts` | 🟡 |
+| COSM-R4-2 | `PropertiesPanel.tsx` — 434 строки, дублирование NumInput | `PropertiesPanel.tsx` | 🟢 |
+| COSM-R4-3 | `NumInput.tsx` — `Math.log10` для step не степень 10 | `NumInput.tsx:21` | 🟢 |
+
+---
+
+### 🎯 ПЛАН ДЕЙСТВИЙ РАУНДА 4
+
+| # | Задача | Приоритет | Оценка | Файлы |
+|---|---|---|---|---|
+| 1 | Исправить `scaleDelta` — аддитивный → мультипликативный | 🔴 Критичный | 1 час | `worker.ts`, `rebuild.ts` |
+| 2 | Добавить валидацию `JSON.parse` в `parseDoodle` | 🔴 Критичный | 30 мин | `doodle-io.ts` |
+| 3 | Унифицировать логику rebuild (DRY) | 🔴 Критичный | 3-4 часа | `rebuild.ts`, `worker.ts`, новый `rebuildOps.ts` |
+| 4 | Добавить тесты для `sanitizeParams()`, `clamp()` | 🔴 Критичный | 1 час | `worker.ts` |
+| 5 | Рефакторинг switch в worker.ts на Map handlers | 🟡 Средний | 3-4 часа | `worker.ts` |
+| 6 | Исправить `computeVertsHash` — хешировать все вершины | 🟡 Средний | 30 мин | `Viewport3D.tsx` |
+| 7 | Унифицировать `centerGeometry` / `extractAndCenter` | 🟡 Средний | 1 час | `Viewport3D.tsx`, `helpers.ts` |
+| 8 | Вынести `FullSRT` в `csg/types.ts` | 🟡 Средний | 15 мин | `worker.ts`, `rebuild.ts`, `types.ts` |
+| 9 | Runtime-валидация manifold API | 🟡 Средний | 30 мин | `worker.ts` |
+| 10 | Добавить guard `sceneRef.current` в useEffect | 🟡 Средний | 15 мин | `Viewport3D.tsx` |
+| 11 | Добавить интеграционные тесты: add → move → fillet → union → undo | 🟡 Средний | 2-3 часа | новый тест |
+| 12 | Унифицировать язык комментариев | 🟢 Низкий | 1 час | весь проект |
+| 13 | Вынести `URL.createObjectURL` в try/finally | 🟢 Низкий | 10 мин | `doodle-io.ts` |
+
+---
+
+### ✅ ЧТО СТОИТ ПОХВАЛИТЬ (раунд 4)
+
+1. **Snapshot cache (snapshots.ts)** — элегантное решение для мгновенного undo/redo, использующее иммутабельность Zustand state
+2. **Transfer list в postMessage** — правильное использование Web Workers для избежания копирования ArrayBuffer
+3. **`safePostMessage`** — обработка DataCloneError для больших мешей
+4. **`sanitizeParams` + `clamp`** — защита от аномальных значений параметров
+5. **`computeVertsHash`** — идея O(1) сравнения вместо O(n), несмотря на проблему с шагом
+6. **Emissive highlight вынесен из animate loop** — правильное решение проблемы производительности
+7. **`ResizeObserver`** вместо `window.resize` — современный и надёжный подход
+8. **IndexedDB autosave с миграцией** — корректная обработка версионирования
+9. **Merged vertices при импорте STL** — критически важно для manifold-3d
+10. **Комментарии с тегами (FIX, WARN, PERF)** — отличная трассируемость изменений
+
+---
+
+### 📚 ССЫЛКИ И РЕСУРСЫ
+
+- [React Hooks exhaustive-deps](https://react.dev/reference/react/useEffect#misusing-the-effect-deps)
+- [Zustand best practices](https://zustand.docs.pmnd.rs/guides/primitive-objects-in-state)
+- [Three.js memory management](https://threejs.org/docs/index.html manual/en/introduction/How-to-update-things.html)
+- [manifold-3d documentation](https://github.com/manifold-cs/manifold)
+- [Web Worker patterns](https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Using_web_workers)
+- [JSON.parse security](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/JSON/parse#using_the_reviver_parameter)
+- [Cyclomatic complexity](https://en.wikipedia.org/wiki/Cyclomatic_complexity)
+
+---
+
+*Код-ревью раунд 4 выполнено 2026-07-16. Общий балл: 3.3/5. Найдено 3 критических проблемы (scaleDelta баг, JSON.parse без валидации, дублирование rebuild), 7 важных, 3 низких. Критические модули (worker.ts, Viewport3D.tsx, rebuild.ts) не покрыты тестами. Требуется рефакторинг дублирования логики и расширение тестового покрытия.*

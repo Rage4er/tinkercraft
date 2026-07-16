@@ -9,22 +9,23 @@
 
 ## [Unreleased]
 
-### Fixed — код-ревью раунд 3 (исправления, 2025-07-16)
+### Added — код-ревью раунд 4 (2026-07-16)
 
-- **CRIT-R3-1:** Утечка BoxHelper при удалении объектов — теперь helper dispose'ится (`Viewport3D.tsx`)
-- **WARN-R3-4:** postMessage обернут в safePostMessage() с try/catch — защита от DataCloneError для больших мешей (`worker.ts`)
-- **WARN-R3-5 / PERF-R3-2:** Emissive highlight вынесен из animate() в useEffect — больше не 6000 итераций/сек (`Viewport3D.tsx`)
-- **WARN-R3-6:** Валидация размера STL при импорте — лимиты 100МБ и 5M треугольников (`stl-import.ts`)
-- **WARN-R3-7:** IndexedDB версионирование — версия bumped до 2, добавлена миграция через onupgradeneeded (`autosave.ts`)
-- **WARN-R3-8:** STL экспорт теперь применяет трансформации (position, rotation, scale) к вершинам (`stl-export.ts`)
-  - Добавлена функция `applyTransformToVertices()` с оптимизацией для identity transform
-  - 3 новых теста: translation, scale, identity
-- **CRIT-R3-2:** Race condition WASM Worker — заменён паттерн _readyResolve на handler pattern (`worker-client.ts`)
-- **WARN-R3-3:** applySRAroundCenter покрыт тестами — извлечена математика матрицы в `worker-matrix.ts` (7 тестов)
-- **PERF-R3-1:** Кэширование хеша вершин — замена O(n) сравнения на O(1) хеш-сравнение (`Viewport3D.tsx`)
-- **WARN-R3-4:** postMessage обернут в safePostMessage() с try/catch — защита от DataCloneError для больших мешей (`worker.ts`)
-- **WARN-R3-6:** Валидация размера STL при импорте — лимиты 100МБ и 5M треугольников (`stl-import.ts`)
-- **WARN-R3-7:** IndexedDB версионирование — версия bumped до 2, добавлена миграция через onupgradeneeded (`autosave.ts`)
+- Документация глубокого код-ревью (раунд 4) в `CODE_REVIEW.md`:
+  - CRIT-R4-1: `scaleDelta` применяется аддитивно вместо мультипликативного — баг undo/redo для scale (`worker.ts`, `rebuild.ts`)
+  - CRIT-R4-2: `JSON.parse` без валидации в `parseDoodle` — риск DoS / Prototype Pollution (`doodle-io.ts`)
+  - CRIT-R4-3: Дублирование логики rebuild между `rebuild.ts` и `worker.ts` (180+ строк продублировано)
+  - WARN-R4-1: Worker переусложнён — 813 строк, switch на 460+ строк, cyclomatic complexity ~25
+  - WARN-R4-2: `computeVertsHash` пропускает 3 из 4 вершин — риск пропущенного обновления геометрии
+  - WARN-R4-3: Дублирование `centerGeometry()` / `extractAndCenter()` — идентичная логика в двух файлах
+  - WARN-R4-4: `FullSRT` тип определён дважды — в `worker.ts` и `rebuild.ts`
+  - WARN-R4-5: `as unknown as ManifoldAPI` без runtime-валидации
+  - WARN-R4-6: `sceneReady` не защищает от race condition в useEffect
+  - WARN-R4-7: Смешение русского и английского в комментариях
+  - Низкие: `requestAnimationFrame` работает непрерывно, `URL.createObjectURL` без try/finally, хрупкий multi-select код
+  - Тестирование: worker.ts (813 строк), Viewport3D.tsx (827 строк), rebuild.ts, snapshots.ts — 0 тестов
+  - План действий: 13 задач от 10 мин до 4 часов
+- Общий балл раунда 4: 3.3 / 5
 
 ### Added — код-ревью раунд 3 (2025-07-16)
 
@@ -46,8 +47,22 @@
   - COSM-R3-1: `worker.ts` — 811 строк, глубокая вложенность
   - COSM-R3-2: `PropertiesPanel.tsx` — 434 строки, дублирование NumInput
   - COSM-R3-3: `Object.fromEntries` + `as` assertion в constants.ts
-  - План действий: 9 задач от 15 мин до 4 часов
+  - План действий: 11 задач от 15 мин до 4 часов
 - Общий балл раунда 3: 4.5 / 5
+
+### Fixed — код-ревью раунд 3 (исправления, 2025-07-16)
+
+- **CRIT-R3-1:** Утечка BoxHelper при удалении объектов — теперь helper dispose'ится (`Viewport3D.tsx`)
+- **WARN-R3-4:** postMessage обернут в safePostMessage() с try/catch — защита от DataCloneError для больших мешей (`worker.ts`)
+- **WARN-R3-5 / PERF-R3-2:** Emissive highlight вынесен из animate() в useEffect — больше не 6000 итераций/сек (`Viewport3D.tsx`)
+- **WARN-R3-6:** Валидация размера STL при импорте — лимиты 100МБ и 5M треугольников (`stl-import.ts`)
+- **WARN-R3-7:** IndexedDB версионирование — версия bumped до 2, добавлена миграция через onupgradeneeded (`autosave.ts`)
+- **WARN-R3-8:** STL экспорт теперь применяет трансформации (position, rotation, scale) к вершинам (`stl-export.ts`)
+  - Добавлена функция `applyTransformToVertices()` с оптимизацией для identity transform
+  - 3 новых теста: translation, scale, identity
+- **CRIT-R3-2:** Race condition WASM Worker — заменён паттерн _readyResolve на handler pattern (`worker-client.ts`)
+- **WARN-R3-3:** applySRAroundCenter покрыт тестами — извлечена математика матрицы в `worker-matrix.ts` (7 тестов)
+- **PERF-R3-1:** Кэширование хеша вершин — замена O(n) сравнения на O(1) хеш-сравнение (`Viewport3D.tsx`)
 
 ### Added — код-ревью раунд 2 (2025-07-16)
 
