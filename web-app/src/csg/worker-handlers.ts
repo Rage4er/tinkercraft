@@ -6,6 +6,7 @@
 
 import { buildSRTMatrixAroundCenter } from './worker-matrix'
 import type { RebuildTransform } from './rebuildOps'
+import { applyMoveDelta, applyMirrorToTransform, applyAlignToTransform } from './rebuildOps'
 
 // --- Type definitions (moved from worker.ts to avoid circular deps) ---
 
@@ -59,7 +60,32 @@ export interface ManifoldAPI {
 
 // --- Worker globals (available in Web Worker context) ---
 declare const self: Worker & typeof globalThis
-declare const wasm: ManifoldAPI
+
+// WASM API — initialized in initWasm(), exported for worker.ts
+let _wasm: ManifoldAPI | null = null
+
+export function getWasm(): ManifoldAPI {
+  if (!_wasm) throw new Error('WASM not initialized — call initWasm() first')
+  return _wasm
+}
+
+export function isWasmReady(): boolean {
+  return _wasm !== null
+}
+
+/** Initialize manifold-3d WASM module. Must be called before any handler. */
+export async function initWasm(): Promise<void> {
+  const Module = await import('manifold-3d')
+  const rawApi = await Module.default()
+
+  if (!rawApi?.setup || !rawApi?.Manifold || !rawApi?.CrossSection) {
+    throw new Error('Invalid manifold API: missing setup, Manifold, or CrossSection')
+  }
+
+  _wasm = rawApi as unknown as ManifoldAPI
+  _wasm.setup()
+  self.postMessage({ type: 'ready' })
+}
 
 /** Кэш manifold-объектов по id (null = non-manifold import, CSG not supported) */
 export const cache = new Map<string, ManifoldObject | null>()
@@ -116,6 +142,7 @@ export function safePostMessage(msg: unknown, transferList?: ArrayBuffer[]): voi
 
 /** Build a manifold primitive from shape type and params. */
 export function buildPrimitive(shapeType: string, params: Record<string, number>): ManifoldObject {
+  const wasm = getWasm()
   const { Manifold } = wasm
   switch (shapeType) {
     case 'cube': {
@@ -150,6 +177,7 @@ export function buildPrimitive(shapeType: string, params: Record<string, number>
       const tubeRadius = params.tubeRadius ?? 4
       const segments = Math.max(8, Math.round(params.segments ?? 32))
       const tubeSegs = Math.max(4, Math.round(params.tubeSegments ?? 16))
+      const wasm = getWasm()
       const { CrossSection } = wasm
       const circle = CrossSection.circle(tubeRadius, tubeSegs)
       const translated = circle.translate([torusRadius, 0])
@@ -182,6 +210,7 @@ export function buildPrimitive(shapeType: string, params: Record<string, number>
 
 /** Build a rounded box via warp + refine (only for cube). */
 export function buildRoundedBox(w: number, h: number, d: number, r: number): ManifoldObject {
+  const wasm = getWasm()
   const { Manifold } = wasm
   const maxR = Math.min(w, h, d) / 2 - 0.1
   const cr = Math.max(0.01, Math.min(r, maxR))
@@ -450,6 +479,7 @@ export async function handleBuildImportedMesh(msg: BuildImportedMeshMessage): Pr
   const verts = new Float32Array(msg.vertices)
   const tris = new Uint32Array(msg.indices)
   try {
+    const wasm = getWasm()
     const m = new wasm.Manifold({
       numProp: 3,
       vertProperties: verts,
@@ -488,6 +518,172 @@ export async function handleBuildImportedMesh(msg: BuildImportedMeshMessage): Pr
       [mesh.vertices.buffer, mesh.indices.buffer],
     )
   }
+}
+
+// --- Rebuild scene handler ---
+
+/** Full rebuild from operation history. Requires wasm to be initialized. */
+export async function handleRebuildScene(msg: RebuildSceneMessage): Promise<void> {
+  const t0 = performance.now()
+  cache.clear()
+
+  const wasm = getWasm()
+  const shapeInfos: Map<string, { shapeType: string; params: Record<string, number>; filletRadius: number }> = new Map()
+  const currentTransforms: Map<string, RebuildTransform> = new Map()
+  const ops = msg.operations as Record<string, unknown>[]
+
+  for (const op of ops) {
+    if (op.type === 'add_shape') {
+      const raw = op.transform as {
+        x: number; y: number; z: number
+        rotX: number; rotY: number; rotZ: number
+        scaleX?: number; scaleY?: number; scaleZ?: number
+      }
+      const t: RebuildTransform = {
+        x: raw.x, y: raw.y, z: raw.z,
+        rotX: raw.rotX, rotY: raw.rotY, rotZ: raw.rotZ,
+        scaleX: raw.scaleX ?? 1, scaleY: raw.scaleY ?? 1, scaleZ: raw.scaleZ ?? 1,
+      }
+      const st = op.shapeType as string
+      const par = op.params as Record<string, number>
+      const m = applyTransform(buildPrimitive(st, sanitizeParams(par)), t)
+      cache.set(op.id as string, m)
+      shapeInfos.set(op.id as string, { shapeType: st, params: par, filletRadius: 0 })
+      currentTransforms.set(op.id as string, { ...t })
+    } else if (op.type === 'import_mesh') {
+      const t: RebuildTransform = { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
+      currentTransforms.set(op.id as string, t)
+      shapeInfos.set(op.id as string, { shapeType: 'import_mesh', params: {}, filletRadius: 0 })
+    } else if (op.type === 'fillet') {
+      const id = op.id as string
+      const info = shapeInfos.get(id)
+      const t = currentTransforms.get(id)
+      if (info && t && info.shapeType !== 'import_mesh') {
+        const r = op.radius as number
+        info.filletRadius = r
+        const m = applyTransform(buildPrimitiveWithFillet(info.shapeType, info.params, r), t)
+        cache.set(id, m)
+      }
+    } else if (op.type === 'move') {
+      const d = op.delta as { x: number; y: number; z: number }
+      const rd = (op as { rotDelta?: { x: number; y: number; z: number } }).rotDelta
+      const sd = (op as { scaleDelta?: { x: number; y: number; z: number } }).scaleDelta
+      for (const id of op.ids as string[]) {
+        const info = shapeInfos.get(id)
+        const t = currentTransforms.get(id)
+        if (t) {
+          const nt = applyMoveDelta(t, d, rd, sd)
+          currentTransforms.set(id, nt)
+          if (info) {
+            const m = applyTransform(buildPrimitiveWithFillet(info.shapeType, info.params, info.filletRadius), nt)
+            cache.set(id, m)
+          }
+        } else {
+          const cm = cache.get(id)
+          if (cm) cache.set(id, cm.transform([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, d.x, d.y, d.z, 1]))
+        }
+      }
+    } else if (op.type === 'mirror') {
+      const flip = getMirrorMatrix(op.plane as string)
+      for (const id of op.ids as string[]) {
+        const cm = cache.get(id)
+        if (cm) cache.set(id, cm.transform(flip))
+        const t = currentTransforms.get(id)
+        if (t) {
+          const nt = applyMirrorToTransform(t, op.plane as 'XY' | 'XZ' | 'YZ')
+          currentTransforms.set(id, nt)
+        }
+      }
+    } else if (op.type === 'align') {
+      const deltas = op.deltas as Record<string, number> | undefined
+      if (deltas) {
+        const axis = (op.axis as string).toLowerCase() as 'x' | 'y' | 'z'
+        for (const [id, delta] of Object.entries(deltas)) {
+          const info = shapeInfos.get(id)
+          const t = currentTransforms.get(id)
+          if (t) {
+            const nt = applyAlignToTransform(t, axis, delta)
+            currentTransforms.set(id, nt)
+            if (info) {
+              const m = applyTransform(buildPrimitiveWithFillet(info.shapeType, info.params, info.filletRadius), nt)
+              cache.set(id, m)
+            } else {
+              const dx = axis === 'x' ? delta : 0
+              const dy = axis === 'y' ? delta : 0
+              const dz = axis === 'z' ? delta : 0
+              const cm = cache.get(id)
+              if (cm) cache.set(id, cm.transform([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, dx, dy, dz, 1]))
+            }
+          } else {
+            const cm = cache.get(id)
+            if (cm) {
+              const dx = axis === 'x' ? delta : 0
+              const dy = axis === 'y' ? delta : 0
+              const dz = axis === 'z' ? delta : 0
+              cache.set(id, cm.transform([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, dx, dy, dz, 1]))
+            }
+          }
+        }
+      }
+    } else if (op.type === 'resize_dims') {
+      const id = op.id as string
+      const np = op.params as Record<string, number>
+      const info = shapeInfos.get(id)
+      const t = currentTransforms.get(id)
+      if (info && t) {
+        info.params = { ...info.params, ...np }
+        const m = applyTransform(buildPrimitiveWithFillet(info.shapeType, info.params, info.filletRadius), t)
+        cache.set(id, m)
+      }
+    } else if (op.type === 'group') {
+      const ids = op.ids as string[]
+      let a = cache.get(ids[0])
+      let b = cache.get(ids[1])
+      if (a && b) {
+        const tA = currentTransforms.get(ids[0])
+        const tB = currentTransforms.get(ids[1])
+        if (tA && hasSR(tA)) a = applySRAroundCenter(a, tA)
+        if (tB && hasSR(tB)) b = applySRAroundCenter(b, tB)
+        let result: ManifoldObject
+        const isIntersect = op.isIntersect as boolean
+        const subtractOp = op.subtractOp as boolean | undefined
+        if (isIntersect) result = a.intersect(b)
+        else if (subtractOp) result = a.subtract(b)
+        else result = a.add(b)
+        cache.delete(ids[0])
+        cache.delete(ids[1])
+        cache.set(op.resultId as string, result)
+      }
+    } else if (op.type === 'delete') {
+      for (const id of op.ids as string[]) {
+        cache.delete(id)
+        shapeInfos.delete(id)
+        currentTransforms.delete(id)
+      }
+    }
+    // visibility / color — no geometry change
+  }
+
+  const results: Array<{
+    objId: string
+    vertices: Float32Array
+    indices: Uint32Array
+    normals: Float32Array | null
+    tris: number
+  }> = []
+  const transfers: ArrayBuffer[] = []
+  for (const [objId, m] of cache) {
+    if (!m) continue
+    const { vertices, indices, normals, tris } = extractMesh(m)
+    results.push({ objId, vertices, indices, normals, tris })
+    transfers.push(vertices.buffer as ArrayBuffer, indices.buffer as ArrayBuffer)
+    if (normals) transfers.push(normals.buffer as ArrayBuffer)
+  }
+
+  safePostMessage(
+    { reqId: msg.reqId, type: 'sceneBuilt', results, ms: performance.now() - t0 },
+    transfers,
+  )
 }
 
 /** Handle csgBoolean message. */
