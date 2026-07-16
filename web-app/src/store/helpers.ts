@@ -12,9 +12,9 @@ export function computeAABB(vertices: Float32Array): { min: Vec3; max: Vec3 } {
   let minY = Infinity, maxY = -Infinity
   let minZ = Infinity, maxZ = -Infinity
   for (let i = 0; i < vertices.length; i += 3) {
-    if (vertices[i]   < minX) minX = vertices[i];   if (vertices[i]   > maxX) maxX = vertices[i]
-    if (vertices[i+1] < minY) minY = vertices[i+1]; if (vertices[i+1] > maxY) maxY = vertices[i+1]
-    if (vertices[i+2] < minZ) minZ = vertices[i+2]; if (vertices[i+2] > maxZ) maxZ = vertices[i+2]
+    if (vertices[i] < minX) minX = vertices[i]; if (vertices[i] > maxX) maxX = vertices[i]
+    if (vertices[i + 1] < minY) minY = vertices[i + 1]; if (vertices[i + 1] > maxY) maxY = vertices[i + 1]
+    if (vertices[i + 2] < minZ) minZ = vertices[i + 2]; if (vertices[i + 2] > maxZ) maxZ = vertices[i + 2]
   }
   return { min: { x: minX, y: minY, z: minZ }, max: { x: maxX, y: maxY, z: maxZ } }
 }
@@ -25,15 +25,52 @@ export function computeCenter(vertices: Float32Array): Vec3 {
   return { x: (min.x + max.x) / 2, y: (min.y + max.y) / 2, z: (min.z + max.z) / 2 }
 }
 
-// Computes the bbox center of a vertex buffer, shifts all vertices so the
-// center is at the origin, and returns the center offset.
+/** Shifts vertices so bbox center is at origin; returns the offset. */
 export function extractAndCenter(vertices: Float32Array): { cx: number; cy: number; cz: number } {
   if (vertices.length === 0) return { cx: 0, cy: 0, cz: 0 }
   const c = computeCenter(vertices)
   for (let i = 0; i < vertices.length; i += 3) {
-    vertices[i] -= c.x; vertices[i+1] -= c.y; vertices[i+2] -= c.z
+    vertices[i] -= c.x; vertices[i + 1] -= c.y; vertices[i + 2] -= c.z
   }
   return { cx: c.x, cy: c.y, cz: c.z }
+}
+
+// Computes the bbox center of a vertex buffer, shifts all vertices so the
+// center is at the origin, returns the offset, and returns the AABB of
+// the CENTERED geometry (after shifting). Single-pass: O(n).
+//
+// Prefer this over extractAndCenter() + makeObject() (two passes) for
+// CSG results where both centering and AABB-caching are needed.
+export function extractAndCenterGetAABB(vertices: Float32Array): {
+  cx: number; cy: number; cz: number
+  aabb: { min: Vec3; max: Vec3 }
+} {
+  if (vertices.length === 0) return { cx: 0, cy: 0, cz: 0, aabb: { min: { x: 0, y: 0, z: 0 }, max: { x: 0, y: 0, z: 0 } } }
+
+  // Single pass: find bbox center, then shift + compute centered AABB
+  let minX = Infinity, maxX = -Infinity
+  let minY = Infinity, maxY = -Infinity
+  let minZ = Infinity, maxZ = -Infinity
+  for (let i = 0; i < vertices.length; i += 3) {
+    if (vertices[i] < minX) minX = vertices[i]; if (vertices[i] > maxX) maxX = vertices[i]
+    if (vertices[i + 1] < minY) minY = vertices[i + 1]; if (vertices[i + 1] > maxY) maxY = vertices[i + 1]
+    if (vertices[i + 2] < minZ) minZ = vertices[i + 2]; if (vertices[i + 2] > maxZ) maxZ = vertices[i + 2]
+  }
+  const cx = (minX + maxX) / 2
+  const cy = (minY + maxY) / 2
+  const cz = (minZ + maxZ) / 2
+
+  // Shift + compute centered AABB in one pass
+  let cMinX = Infinity, cMaxX = -Infinity
+  let cMinY = Infinity, cMaxY = -Infinity
+  let cMinZ = Infinity, cMaxZ = -Infinity
+  for (let i = 0; i < vertices.length; i += 3) {
+    vertices[i] -= cx; if (vertices[i] < cMinX) cMinX = vertices[i]; if (vertices[i] > cMaxX) cMaxX = vertices[i]
+    vertices[i + 1] -= cy; if (vertices[i + 1] < cMinY) cMinY = vertices[i + 1]; if (vertices[i + 1] > cMaxY) cMaxY = vertices[i + 1]
+    vertices[i + 2] -= cz; if (vertices[i + 2] < cMinZ) cMinZ = vertices[i + 2]; if (vertices[i + 2] > cMaxZ) cMaxZ = vertices[i + 2]
+  }
+
+  return { cx, cy, cz, aabb: { min: { x: cMinX, y: cMinY, z: cMinZ }, max: { x: cMaxX, y: cMaxY, z: cMaxZ } } }
 }
 
 /** Creates a SceneObject with cached AABB. Use everywhere a new object is created. */
@@ -50,8 +87,8 @@ export function resetIdCounter(): void { _idCounter = 0 }
 
 // ---- Colors ----
 export const PALETTE = [
-  '#89b4fa','#a6e3a1','#f9e2af','#cba6f7',
-  '#f38ba8','#94e2d5','#fab387','#74c7ec',
+  '#89b4fa', '#a6e3a1', '#f9e2af', '#cba6f7',
+  '#f38ba8', '#94e2d5', '#fab387', '#74c7ec',
 ]
 export function colorForIndex(n: number): string { return PALETTE[n % PALETTE.length] }
 

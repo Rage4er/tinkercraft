@@ -23,6 +23,8 @@ export interface RebuildMeta {
   shapeType: ShapeType
   params: ShapeParams
   transform: TransformNR
+  visible: boolean
+  name?: string
 }
 
 /**
@@ -40,12 +42,12 @@ export function buildRebuildMeta(ops: TinkerCraftOperation[]): {
 
   for (const op of ops) {
     if (op.type === 'add_shape') {
-      meta[op.id]       = { color: op.color, shapeType: op.shapeType, params: op.params, transform: { ...op.transform } }
+      meta[op.id] = { color: op.color, shapeType: op.shapeType, params: op.params, transform: { ...op.transform }, visible: true }
       transforms[op.id] = { ...op.transform }
 
     } else if (op.type === 'import_mesh') {
       const t: TransformNR = { ...op.transform }
-      meta[op.id]       = { color: op.color, shapeType: 'import_mesh', params: {}, transform: t }
+      meta[op.id] = { color: op.color, shapeType: 'import_mesh', params: {}, transform: t, visible: true, name: op.name }
       transforms[op.id] = t
 
     } else if (op.type === 'fillet') {
@@ -88,10 +90,23 @@ export function buildRebuildMeta(ops: TinkerCraftOperation[]): {
         }
       }
 
+    } else if (op.type === 'resize_dims') {
+      // Update params for resized object — fixes missing dimensions after undo/redo (WARN-R6-1)
+      if (meta[op.id]) meta[op.id] = { ...meta[op.id], params: { ...meta[op.id].params, ...op.params } }
+
     } else if (op.type === 'color') {
       for (const id of op.ids) {
         if (meta[id]) meta[id] = { ...meta[id], color: op.color }
       }
+
+    } else if (op.type === 'visibility') {
+      // Track visibility — fixes hidden objects becoming visible after undo/redo (WARN-R6-6)
+      for (const id of op.ids) {
+        if (meta[id]) meta[id] = { ...meta[id], visible: op.visible }
+      }
+
+    } else if (op.type === 'rename') {
+      if (meta[op.id]) meta[op.id] = { ...meta[op.id], name: op.name }
 
     } else if (op.type === 'delete') {
       for (const id of op.ids) { delete meta[id]; delete transforms[id] }
@@ -101,7 +116,7 @@ export function buildRebuildMeta(ops: TinkerCraftOperation[]): {
       for (const id of op.ids) { delete meta[id]; delete transforms[id] }
       if (op.resultId) {
         const nullT = makeDefaultTransform() as TransformNR
-        meta[op.resultId]       = { color: srcColor, shapeType: 'cube', params: {}, transform: nullT }
+        meta[op.resultId] = { color: srcColor, shapeType: 'cube', params: {}, transform: nullT, visible: true }
         transforms[op.resultId] = nullT
         csgResultIds.add(op.resultId)
       }
@@ -133,16 +148,17 @@ export async function rebuildFromHistory(
   for (const m of result.results) {
     const info = meta[m.objId]
     objects[m.objId] = makeObject({
-      id:        m.objId,
+      id: m.objId,
+      name: info?.name,
       shapeType: info?.shapeType ?? 'cube',
-      params:    info?.params    ?? {},
-      color:     info?.color     ?? '#89b4fa',
+      params: info?.params ?? {},
+      color: info?.color ?? '#89b4fa',
       transform: info?.transform ?? makeDefaultTransform() as TransformNR,
-      visible:   true,
-      locked:    false,
-      vertices:  m.vertices,
-      indices:   m.indices,
-      normals:   m.normals,
+      visible: info?.visible ?? true,
+      locked: false,
+      vertices: m.vertices,
+      indices: m.indices,
+      normals: m.normals,
     })
   }
   return objects

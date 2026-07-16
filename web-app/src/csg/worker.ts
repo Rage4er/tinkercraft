@@ -8,6 +8,7 @@ import {
   handleApplyFillet,
   handleBuildImportedMesh,
   handleCsgBoolean,
+  handleCsgBooleanSync,
   handleMirrorObject,
   handleRebuildScene,
   handleSyncObjects,
@@ -20,13 +21,14 @@ const initPromise = initWasm()
 
 self.addEventListener('message', async (e: MessageEvent) => {
   await initPromise
-  const msg = e.data as { reqId: string; type: string; [k: string]: unknown }
+  const msg = e.data as { reqId: string; type: string;[k: string]: unknown }
   try {
     switch (msg.type) {
       case 'buildShape': await handleBuildShape(msg as unknown as import('./worker-handlers').BuildShapeMessage); break
       case 'applyFillet': await handleApplyFillet(msg as unknown as import('./worker-handlers').ApplyFilletMessage); break
       case 'buildImportedMesh': await handleBuildImportedMesh(msg as unknown as import('./worker-handlers').BuildImportedMeshMessage); break
       case 'csgBoolean': await handleCsgBoolean(msg as unknown as import('./worker-handlers').CsgBooleanMessage); break
+      case 'csgBooleanSync': await handleCsgBooleanSync(msg as unknown as import('./worker-handlers').CsgBooleanSyncMessage); break
       case 'mirrorObject': await handleMirrorObject(msg as unknown as import('./worker-handlers').MirrorObjectMessage); break
       case 'rebuildScene': await handleRebuildScene(msg as unknown as import('./worker-handlers').RebuildSceneMessage); break
       case 'syncObjects': await handleSyncObjects(msg as unknown as import('./worker-handlers').SyncObjectsMessage); break

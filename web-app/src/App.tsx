@@ -10,8 +10,9 @@ import StatusBar from "./components/StatusBar";
 import LeftPanel from "./components/LeftPanel";
 import PropertiesPanel from "./components/PropertiesPanel";
 import { useDocumentStore } from "./store/document-store";
+import { useUiStore } from "./store/ui-store";
 import { isWorkerReady } from "./csg/worker-client";
-import { SNAP_VALUES, DEFAULT_FILTERS, AUTOSAVE_DELAY_MS } from "./constants";
+import { SNAP_VALUES, AUTOSAVE_DELAY_MS } from "./constants";
 import type {
   TransformNR,
   ShapeParams,
@@ -19,24 +20,41 @@ import type {
 
 // ---- App ----
 export default function App() {
-  const [fps, setFps] = useState(0);
-  const [workerOk, setWorkerOk] = useState(false);
-  const [gizmoMode, setGizmoMode] = useState<GizmoMode>(null);
-  const [snapValue, setSnapValue] = useState(1);
-  const [theme, setTheme] = useState<"dark" | "light">("dark");
-  const [tlFilters, setTlFilters] =
-    useState<Record<string, boolean>>(DEFAULT_FILTERS);
-  const [filletRadius, setFilletRadius] = useState(2);
+  // UI state — moved to ui-store (Q-R6-1)
+  const fps = useUiStore(s => s.fps);
+  const setFps = useUiStore(s => s.setFps);
+  const workerOk = useUiStore(s => s.workerOk);
+  const setWorkerOk = useUiStore(s => s.setWorkerOk);
+  const gizmoMode = useUiStore(s => s.gizmoMode);
+  const setGizmoMode = useUiStore(s => s.setGizmoMode);
+  const snapValue = useUiStore(s => s.snapValue);
+  const setSnapValue = useUiStore(s => s.setSnapValue);
+  const theme = useUiStore(s => s.theme);
+  const setTheme = useUiStore(s => s.setTheme);
+  const tlFilters = useUiStore(s => s.tlFilters);
+  const setTlFilter = useUiStore(s => s.setTlFilter);
+  const filletRadius = useUiStore(s => s.filletRadius);
+  const setFilletRadius = useUiStore(s => s.setFilletRadius);
+  const shapeSearch = useUiStore(s => s.shapeSearch);
+  const setShapeSearch = useUiStore(s => s.setShapeSearch);
+  const rulerActive = useUiStore(s => s.rulerActive);
+  const setRulerActive = useUiStore(s => s.setRulerActive);
+  const rulerDist = useUiStore(s => s.rulerDist);
+  const setRulerDist = useUiStore(s => s.setRulerDist);
+  const showPM = useUiStore(s => s.showPM);
+  const setShowPM = useUiStore(s => s.setShowPM);
+  const extrudeAxis = useUiStore(s => s.extrudeAxis);
+  const setExtrudeAxis = useUiStore(s => s.setExtrudeAxis);
+  const extrudeDepth = useUiStore(s => s.extrudeDepth);
+  const setExtrudeDepth = useUiStore(s => s.setExtrudeDepth);
+  const activeTab = useUiStore(s => s.activeTab);
+  const setActiveTab = useUiStore(s => s.setActiveTab);
+  const cameraMode = useUiStore(s => s.cameraMode);
+  const setCameraMode = useUiStore(s => s.setCameraMode);
+  const showTextModal = useUiStore(s => s.showTextModal);
+  const setShowTextModal = useUiStore(s => s.setShowTextModal);
 
-  const [shapeSearch, setShapeSearch] = useState("");
-  const [rulerActive, setRulerActive] = useState(false);
-  const [rulerDist, setRulerDist] = useState<number | null>(null);
-  const [showPM, setShowPM] = useState(false);
-  const [extrudeAxis, setExtrudeAxis] = useState<"X" | "Y" | "Z">("Y");
-  const [extrudeDepth, setExtrudeDepth] = useState(10);
-  const [activeTab, setActiveTab] = useState<"objects" | "tree">("objects");
-  const [cameraMode, setCameraMode] = useState<"perspective" | "orthographic">("perspective");
-  const [showTextModal, setShowTextModal] = useState(false);
+  // Text modal form state — stays local (form-only, not shared)
   const [textInput, setTextInput] = useState("Text");
   const [textSize, setTextSize] = useState(10);
   const [textDepth, setTextDepth] = useState(5);
@@ -403,7 +421,7 @@ export default function App() {
         onMirror={mirrorSelected}
         onAlign={alignSelected}
         onCsg={csgBoolean}
-        onToggleTheme={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
+        onToggleTheme={() => setTheme(theme === "dark" ? "light" : "dark")}
         onClearScene={clearScene}
       />
 
@@ -432,7 +450,7 @@ export default function App() {
           operations={operations}
           tlFilters={tlFilters}
           onFilterChange={(key, checked) =>
-            setTlFilters((f) => ({ ...f, [key]: checked }))
+            setTlFilter(key, checked)
           }
           onJumpHistory={jumpToHistory}
         />

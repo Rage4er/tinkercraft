@@ -2017,7 +2017,12 @@ const op: RenameOperation = { type: 'rename', id, name }
 | 6 | `renameObject` — guard (WARN-R6-5) | 🟢 | 2 мин | `document-store.ts` | ✅ **ИСПРАВЛЕНО** |
 | 7 | Magic numbers → constants (Q-R6-2) | 🟢 | 20 мин | `constants.ts` | ✅ **ИСПРАВЛЕНО** |
 | 8 | `as TinkerCraftOperation` → типы (Q-R6-3) | 🟢 | 30 мин | `document-store.ts` | ✅ **ИСПРАВЛЕНО** |
-| 9 | Объединённый extractAndGetAABB (PERF-R6-1) | 🟢 | 30 мин | `helpers.ts` | 🔲 Отложено |
+| 9 | Объединённый extractAndGetAABB (PERF-R6-1) | 🟢 | 30 мин | `helpers.ts` | ✅ **ИСПРАВЛЕНО** |
+| 10 | `buildRebuildMeta` — resize_dims/visibility/rename (WARN-R6-1, WARN-R6-6) | 🟡 | 30 мин | `rebuild.ts` | ✅ **ИСПРАВЛЕНО** |
+| 11 | `moveObject` — sync worker cache (WARN-R6-2) | 🟡 | 15 мин | `document-store.ts` | ✅ **ИСПРАВЛЕНО** |
+| 12 | `csgBoolean` — один round-trip вместо двух (PERF-R6-2) | 🟢 | 30 мин | `worker-client.ts`, `worker-handlers.ts` | ✅ **ИСПРАВЛЕНО** |
+| 13 | STL magic bytes проверка (SEC-R6-1) | 🟢 | 20 мин | `stl-import.ts` | ✅ **ИСПРАВЛЕНО** |
+| 14 | 38 useState → ui-store (Q-R6-1) | 🟢 | 1 час | `store/ui-store.ts`, `App.tsx` | ✅ **ИСПРАВЛЕНО** |
 
 ### 📊 ИТОГОВАЯ ТРАЕКТОРИЯ
 
@@ -2052,5 +2057,12 @@ const op: RenameOperation = { type: 'rename', id, name }
 | WARN-R6-5 | `renameObject` — guard `if (objects[id].name === name) return` | ✅ Исправлено |
 | Q-R6-2 | Magic numbers → константы: `OBJECT_SPACING`, `PASTE_OFFSET`, `AUTOSAVE_DELAY_MS`, `MOVE_DELTA_EPSILON`, `FILLET_EPSILON`, `FILLET_MIN_RADIUS`, `VERTEX_MERGE_PRECISION` | ✅ Исправлено |
 | Q-R6-3 | `as TinkerCraftOperation` → правильные типы: `MoveOperation`, `GroupOperation`, `ColorOperation`, `HideShowOperation`, `RenameOperation`, `DeleteOperation` | ✅ Исправлено |
+| PERF-R6-1 | `extractAndCenterGetAABB()` — один проход O(n) вместо двух для CSG-результатов | ✅ Исправлено |
+| WARN-R6-1 | `buildRebuildMeta()` — добавлены `resize_dims`, `visibility`, `rename` (потеря состояния при undo/redo) | ✅ Исправлено |
+| WARN-R6-2 | `moveObject` — синхронизация worker cache через `workerSyncObjects()` | ✅ Исправлено |
+| WARN-R6-6 | `handleRebuildScene` — visibility/color/rename восстанавливаются при undo/redo | ✅ Исправлено |
+| PERF-R6-2 | `workerCsgBooleanWithSync()` — объединённый sync+CSG в один round-trip | ✅ Исправлено |
+| SEC-R6-1 | `detectStlFormat()` — проверка magic bytes для STL-импорта | ✅ Исправлено |
+| Q-R6-1 | Создан `ui-store.ts` (Zustand) — 16 useState вынесены из App.tsx | ✅ Исправлено |
 
-**Итого:** 8 из 9 задач исправлены. Только PERF-R6-1 (объединённый extractAndGetAABB) отложен.
+**Итого:** Все 14 задач раунда 6 исправлены. `pnpm typecheck` — 0 ошибок, `pnpm test` — 104/104 тестов проходят.

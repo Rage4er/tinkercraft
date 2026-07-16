@@ -19,7 +19,7 @@ export interface SceneMeshResult {
 }
 
 type PendingResolve = (v: unknown) => void
-type PendingReject  = (r: unknown) => void
+type PendingReject = (r: unknown) => void
 
 let _worker: Worker | null = null
 let _ready = false
@@ -144,6 +144,22 @@ export async function workerCsgBoolean(
 ): Promise<MeshResult> {
   await waitReady()
   return send<MeshResult>('csgBoolean', { idA, idB, op, resultId, transformA, transformB })
+}
+
+/**
+ * Combined sync + CSG boolean in a single round-trip (PERF-R6-2).
+ * Sends operand metadata so the worker can rebuild cache entries AND
+ * perform the boolean in one message, avoiding a separate syncObjects call.
+ */
+export async function workerCsgBooleanWithSync(
+  idA: string, idB: string, op: CsgBooleanOp, resultId: string,
+  transformA: { x: number; y: number; z: number; rotX: number; rotY: number; rotZ: number; scaleX: number; scaleY: number; scaleZ: number },
+  transformB: { x: number; y: number; z: number; rotX: number; rotY: number; rotZ: number; scaleX: number; scaleY: number; scaleZ: number },
+  shapeA?: { shapeType: ShapeType; params: ShapeParams },
+  shapeB?: { shapeType: ShapeType; params: ShapeParams },
+): Promise<MeshResult> {
+  await waitReady()
+  return send<MeshResult>('csgBooleanSync', { idA, idB, op, resultId, transformA, transformB, shapeA, shapeB })
 }
 
 export async function workerMirrorObject(

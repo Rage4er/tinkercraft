@@ -40,10 +40,11 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 
 | Файл | Ответственность |
 |---|---|
-| `src/App.tsx` | Layout, state management, keyboard shortcuts (553 строки) |
-| `src/constants.ts` | Общие константы (ALL_SHAPES, SNAP_VALUES, OP_FILTER_LABELS) |
+| `src/App.tsx` | Layout, keyboard shortcuts, text modal form state |
+| `src/constants.ts` | Общие константы (ALL_SHAPES, SNAP_VALUES, OP_FILTER_LABELS, spacing, epsilon) |
 | `src/store/document-store.ts` | Zustand store — действия (create), 500 строк |
-| `src/store/helpers.ts` | Утилиты store (extractAndCenter, computeAABB, makeObject, nextId, colorForIndex) |
+| `src/store/ui-store.ts` | Zustand store — UI state (gizmo, theme, camera, modals, etc.) |
+| `src/store/helpers.ts` | Утилиты store (extractAndCenter, extractAndCenterGetAABB, computeAABB, makeObject, nextId, colorForIndex) |
 | `src/store/types.ts` | DocumentStore interface |
 | `src/store/rebuild.ts` | rebuildFromHistory — восстановление объектов из истории операций |
 | `src/store/snapshots.ts` | Snapshot cache для мгновенного undo/redo (PERF-1) |
@@ -78,7 +79,7 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 - Zustand store функции стабильны — можно использовать в deps без пересоздания
 
 ### Состояние (Zustand)
-- Один store: `document-store.ts`
+- Два store: `document-store.ts` (документ/сцена) и `ui-store.ts` (UI state)
 - Actions возвращают Promise при вызове воркера
 - История операций — массив `history[]` с фильтрацией
 - Undo/redo через `rebuildFromHistory()` с snapshot cache (`snapshots.ts`) — мгновенный undo/redo при наличии кэша, fallback на WASM rebuild

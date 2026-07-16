@@ -17,7 +17,7 @@ import type {
   SceneObject, ShapeParams, TransformNR, Vec3,
 } from '../csg/types'
 import {
-  workerBuildShape, workerCsgBoolean,
+  workerBuildShape, workerCsgBoolean, workerCsgBooleanWithSync,
   workerBuildImportedMesh, workerApplyFillet,
   workerMirrorObject, workerRebuildScene,
   workerDeleteObjects, workerClearAll, workerSyncObjects,
@@ -30,8 +30,8 @@ import { openStlFilePicker, parseStlFile } from '../io/stl-import'
 import { autosaveSession, restoreSession } from '../io/autosave'
 
 // Re-export for backward compatibility (unit tests import from here)
-export { computeAABB, extractAndCenter } from './helpers'
-import { computeAABB, extractAndCenter, makeObject, nextId, colorForIndex } from './helpers'
+export { computeAABB, extractAndCenter, extractAndCenterGetAABB } from './helpers'
+import { computeAABB, extractAndCenter, extractAndCenterGetAABB, makeObject, nextId, colorForIndex } from './helpers'
 import type { ClipEntry } from './helpers'
 import type { DocumentStore } from './types'
 import { rebuildFromHistory } from './rebuild'
@@ -261,31 +261,21 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     set({ busy: true })
     try {
       const t0 = performance.now()
-      // Sync worker cache before CSG — fixes stale cache after undo/redo
-      // and incorrect positions from moveObject.
-      await workerSyncObjects(
-        [idA, idB]
-          .map(id => objects[id])
-          .filter(Boolean)
-          .map(obj => ({
-            objId: obj.id,
-            shapeType: obj.shapeType,
-            params: obj.params,
-            transform: { x: obj.transform.x, y: obj.transform.y, z: obj.transform.z, rotX: obj.transform.rotX, rotY: obj.transform.rotY, rotZ: obj.transform.rotZ, scaleX: obj.transform.scaleX, scaleY: obj.transform.scaleY, scaleZ: obj.transform.scaleZ } as const,
-          })),
-      )
-      // Pass scale+rotation of each operand so the worker can apply them
-      // temporarily before the boolean op (cached geometry has translation only).
+      // Single-call sync + CSG: rebuild operands in worker cache and
+      // perform the boolean in one round-trip (PERF-R6-2).
       const srOf = (id: string) => {
         const t = objects[id].transform
         return { x: t.x, y: t.y, z: t.z, rotX: t.rotX, rotY: t.rotY, rotZ: t.rotZ, scaleX: t.scaleX, scaleY: t.scaleY, scaleZ: t.scaleZ }
       }
-      const mesh = await workerCsgBoolean(idA, idB, op, resultId, srOf(idA), srOf(idB))
+      const mesh = await workerCsgBooleanWithSync(
+        idA, idB, op, resultId, srOf(idA), srOf(idB),
+        { shapeType: objects[idA].shapeType, params: objects[idA].params },
+        { shapeType: objects[idB].shapeType, params: objects[idB].params },
+      )
       const ms = performance.now() - t0
-      // Center result geometry at origin so the Three.js pivot can be placed at
-      // the true world position (bbox center of the boolean result).
-      const { cx, cy, cz } = extractAndCenter(mesh.vertices)
-      const newObj: SceneObject = makeObject({ id: resultId, shapeType: 'cube', params: {}, color: objects[idA].color, transform: { x: cx, y: cy, z: cz, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }, visible: true, locked: false, vertices: mesh.vertices, indices: mesh.indices, normals: mesh.normals })
+      // Single-pass: center geometry at origin + compute AABB (PERF-R6-1)
+      const { cx, cy, cz, aabb } = extractAndCenterGetAABB(mesh.vertices)
+      const newObj: SceneObject = { id: resultId, shapeType: 'cube', params: {}, color: objects[idA].color, transform: { x: cx, y: cy, z: cz, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }, visible: true, locked: false, vertices: mesh.vertices, indices: mesh.indices, normals: mesh.normals, aabb }
       const newObjects = { ...objects }; delete newObjects[idA]; delete newObjects[idB]; newObjects[resultId] = newObj
       const histOp: GroupOperation = { type: 'group', ids: [idA, idB], isHull: false, isIntersect: op === 'intersect', subtractOp: op === 'subtract', resultId }
       const newOps = [...operations.slice(0, historyIndex), histOp]
@@ -311,6 +301,13 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const newObjects = { ...objects, [id]: { ...obj, transform } }
     set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true })
     cacheSnapshot(newOps.length, newObjects)
+    // Sync worker cache so subsequent CSG/mirror operations use correct position (WARN-R6-2)
+    workerSyncObjects([{
+      objId: id,
+      shapeType: obj.shapeType,
+      params: obj.params,
+      transform: { x: transform.x, y: transform.y, z: transform.z, rotX: transform.rotX, rotY: transform.rotY, rotZ: transform.rotZ, scaleX: transform.scaleX, scaleY: transform.scaleY, scaleZ: transform.scaleZ },
+    }]).catch(e => console.error('moveObject sync:', e))
   },
 
   // ── Color ──
@@ -554,8 +551,9 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       await workerBuildShape(slabId, 'cube', slabP, slabT)
       const resultMesh = await workerCsgBoolean(id, slabId, 'union', resultId)
       const ms = performance.now() - t0
-      const { cx: ex, cy: ey, cz: ez } = extractAndCenter(resultMesh.vertices)
-      const newObj: SceneObject = makeObject({ id: resultId, shapeType: 'cube', params: {}, color: obj.color, transform: { x: ex, y: ey, z: ez, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }, visible: true, locked: false, vertices: resultMesh.vertices, indices: resultMesh.indices, normals: resultMesh.normals })
+      // Single-pass: center geometry at origin + compute AABB (PERF-R6-1)
+      const { cx: ex, cy: ey, cz: ez, aabb } = extractAndCenterGetAABB(resultMesh.vertices)
+      const newObj: SceneObject = { id: resultId, shapeType: 'cube', params: {}, color: obj.color, transform: { x: ex, y: ey, z: ez, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }, visible: true, locked: false, vertices: resultMesh.vertices, indices: resultMesh.indices, normals: resultMesh.normals, aabb }
       const addOp: AddShapeOperation = { type: 'add_shape', id: slabId, shapeType: 'cube', params: slabP, color: obj.color, transform: slabT }
       const grpOp: GroupOperation = { type: 'group', ids: [id, slabId], isHull: false, isIntersect: false, resultId }
       const newObjects = { ...objects }; delete newObjects[id]; newObjects[resultId] = newObj

@@ -62,6 +62,32 @@ export function openStlFilePicker(): Promise<File | null> {
   })
 }
 
+/**
+ * Detect STL format by magic bytes (SEC-R6-1).
+ * Binary STL: 80-byte header + 4-byte triangle count, then triangle data.
+ * ASCII STL: starts with "solid" keyword.
+ * Returns 'binary' | 'ascii' | 'unknown'.
+ */
+export function detectStlFormat(buffer: ArrayBuffer): 'binary' | 'ascii' | 'unknown' {
+  if (buffer.byteLength < 84) return 'unknown'
+  const header = new Uint8Array(buffer, 0, 5)
+  const headerStr = String.fromCharCode(...header).toLowerCase()
+
+  // ASCII STL starts with "solid"
+  if (headerStr === 'solid') {
+    // But some binary STL also starts with "solid" — check if the triangle
+    // count at offset 80 is plausible vs file size
+    const view = new DataView(buffer)
+    const triCount = view.getUint32(80, true)
+    const expectedSize = 84 + triCount * 50 // 50 bytes per triangle
+    // If file size matches binary format, treat as binary even with "solid" header
+    if (Math.abs(expectedSize - buffer.byteLength) <= 1) return 'binary'
+    return 'ascii'
+  }
+
+  return 'binary'
+}
+
 export async function parseStlFile(file: File): Promise<ImportedMesh | null> {
   // FIX (WARN-R3-6): Validate file size before processing
   if (file.size > MAX_STL_FILE_SIZE) {
@@ -78,6 +104,13 @@ export async function parseStlFile(file: File): Promise<ImportedMesh | null> {
 
   try {
     const buffer = await file.arrayBuffer()
+
+    // SEC-R6-1: Validate STL format via magic bytes before parsing
+    const format = detectStlFormat(buffer)
+    if (format === 'unknown') {
+      throw new Error('STL: unrecognized format (not valid ASCII or binary STL)')
+    }
+
     const loader = new STLLoader()
     const geometry = loader.parse(buffer) as THREE.BufferGeometry
 

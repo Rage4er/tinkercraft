@@ -26,6 +26,13 @@
 - **WARN-R6-5:** `renameObject` — guard `if (objects[id].name === name) return` для пропуска неизменённых имён (`document-store.ts`)
 - **Q-R6-2:** Magic numbers вынесены в `constants.ts`: `OBJECT_SPACING`, `PASTE_OFFSET`, `AUTOSAVE_DELAY_MS`, `MOVE_DELTA_EPSILON`, `FILLET_EPSILON`, `FILLET_MIN_RADIUS`, `VERTEX_MERGE_PRECISION`
 - **Q-R6-3:** `as TinkerCraftOperation` заменён на правильные типы (MoveOperation, GroupOperation, ColorOperation, HideShowOperation, RenameOperation, DeleteOperation) в `document-store.ts`
+- **PERF-R6-1:** `extractAndCenterGetAABB()` — один проход O(n) вместо двух (extractAndCenter + computeAABB) для CSG-результатов (`helpers.ts`, `document-store.ts`)
+- **WARN-R6-1:** `buildRebuildMeta()` теперь обрабатывает `resize_dims`, `visibility`, `rename` — ранее потеря состояния при undo/redo (`rebuild.ts`)
+- **WARN-R6-2:** `moveObject` синхронизирует worker cache через `workerSyncObjects()` — устраняет stale cache (`document-store.ts`)
+- **WARN-R6-6:** `handleRebuildScene` — visibility/color/rename теперь восстанавливаются корректно при undo/redo (`rebuild.ts`)
+- **PERF-R6-2:** `workerCsgBooleanWithSync()` — объединённый sync+CSG в один round-trip вместо двух postMessage (`worker-client.ts`, `worker-handlers.ts`, `worker.ts`)
+- **SEC-R6-1:** `detectStlFormat()` — проверка magic bytes для STL-импорта (бинарный vs ASCII) перед парсингом (`stl-import.ts`)
+- **Q-R6-1:** Создан `ui-store.ts` (Zustand) — 16 useState из App.tsx вынесены в отдельный store (`store/ui-store.ts`, `App.tsx`)
 
 ### Added — Раунд 5: Итоговый аудит (2026-07-16)
 

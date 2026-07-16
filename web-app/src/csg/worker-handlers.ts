@@ -869,6 +869,83 @@ export async function handleSyncObjects(msg: SyncObjectsMessage): Promise<void> 
   safePostMessage({ reqId: msg.reqId, type: 'ok' })
 }
 
+// --- Combined sync + CSG boolean (PERF-R6-2: single round-trip) ---
+
+export interface CsgBooleanSyncMessage {
+  reqId: string
+  type: 'csgBooleanSync'
+  idA: string
+  idB: string
+  op: string
+  resultId: string
+  transformA: RebuildTransform
+  transformB: RebuildTransform
+  shapeA?: { shapeType: string; params: Record<string, number> }
+  shapeB?: { shapeType: string; params: Record<string, number> }
+}
+
+/**
+ * Combined sync + CSG boolean in one handler (PERF-R6-2).
+ * Rebuilds both operands in cache with fresh SRT, then performs the boolean.
+ */
+export async function handleCsgBooleanSync(msg: CsgBooleanSyncMessage): Promise<void> {
+  const t0 = performance.now()
+
+  // Sync operand A
+  if (msg.shapeA) {
+    const params = sanitizeParams(msg.shapeA.params)
+    const m = buildPrimitive(msg.shapeA.shapeType, params)
+    const fullMatrix = buildSRTMatrixAroundCenter(
+      { x: msg.transformA.x, y: msg.transformA.y, z: msg.transformA.z },
+      { rotX: msg.transformA.rotX, rotY: msg.transformA.rotY, rotZ: msg.transformA.rotZ },
+      { scaleX: msg.transformA.scaleX, scaleY: msg.transformA.scaleY, scaleZ: msg.transformA.scaleZ },
+    )
+    cache.set(msg.idA, m.transform(fullMatrix))
+  }
+  // Sync operand B
+  if (msg.shapeB) {
+    const params = sanitizeParams(msg.shapeB.params)
+    const m = buildPrimitive(msg.shapeB.shapeType, params)
+    const fullMatrix = buildSRTMatrixAroundCenter(
+      { x: msg.transformB.x, y: msg.transformB.y, z: msg.transformB.z },
+      { rotX: msg.transformB.rotX, rotY: msg.transformB.rotY, rotZ: msg.transformB.rotZ },
+      { scaleX: msg.transformB.scaleX, scaleY: msg.transformB.scaleY, scaleZ: msg.transformB.scaleZ },
+    )
+    cache.set(msg.idB, m.transform(fullMatrix))
+  }
+
+  // Perform boolean
+  const a = cache.get(msg.idA)
+  const b = cache.get(msg.idB)
+  if (!a || !b) throw new Error(`Objects not found: ${msg.idA}, ${msg.idB}`)
+
+  let result: ManifoldObject
+  switch (msg.op) {
+    case 'union': result = a.add(b); break
+    case 'subtract': result = a.subtract(b); break
+    default: result = a.intersect(b)
+  }
+
+  cache.delete(msg.idA)
+  cache.delete(msg.idB)
+  cache.set(msg.resultId, result)
+
+  const mesh = extractMesh(result)
+  safePostMessage(
+    {
+      reqId: msg.reqId,
+      type: 'mesh',
+      objId: msg.resultId,
+      vertices: mesh.vertices,
+      indices: mesh.indices,
+      normals: mesh.normals,
+      tris: mesh.tris,
+      ms: performance.now() - t0,
+    },
+    buildTransferList(mesh),
+  )
+}
+
 /** Handle mirrorObject message. */
 export async function handleMirrorObject(msg: MirrorObjectMessage): Promise<void> {
   const t0 = performance.now()
