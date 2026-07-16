@@ -6,6 +6,11 @@ import * as THREE from 'three'
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js'
 import type { TransformNR } from '../csg/types'
 
+/** Максимальный размер файла STL (100 МБ) */
+export const MAX_STL_FILE_SIZE = 100 * 1024 * 1024
+/** Максимальное количество треугольников (5 млн) */
+export const MAX_STL_TRIANGLES = 5_000_000
+
 export interface ImportedMesh {
   vertices: number[]  // merged, flat array
   indices:  number[]
@@ -57,6 +62,19 @@ export function openStlFilePicker(): Promise<File | null> {
 }
 
 export async function parseStlFile(file: File): Promise<ImportedMesh | null> {
+  // FIX (WARN-R3-6): Validate file size before processing
+  if (file.size > MAX_STL_FILE_SIZE) {
+    console.error(`[STL Import] File too large: ${Math.round(file.size / 1024 / 1024)}MB (max ${MAX_STL_FILE_SIZE / 1024 / 1024}MB)`)
+    return null
+  }
+
+  // Quick check: binary STL has 80-byte header + 4-byte triangle count
+  // If it's too small to be valid, reject early
+  if (file.size < 84) {
+    console.error('[STL Import] File too small to be valid STL')
+    return null
+  }
+
   try {
     const buffer   = await file.arrayBuffer()
     const loader   = new STLLoader()
@@ -67,6 +85,12 @@ export async function parseStlFile(file: File): Promise<ImportedMesh | null> {
 
     const positions = posAttr.array as Float32Array
     const { vertices, indices } = mergeCoincidentVertices(positions)
+
+    const triangleCount = indices.length / 3
+    if (triangleCount > MAX_STL_TRIANGLES) {
+      console.error(`[STL Import] Too many triangles: ${triangleCount.toLocaleString()} (max ${MAX_STL_TRIANGLES.toLocaleString()})`)
+      return null
+    }
 
     if (vertices.length < 9 || indices.length < 3) {
       throw new Error('STL: слишком мало данных')

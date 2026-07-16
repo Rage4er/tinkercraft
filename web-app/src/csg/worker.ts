@@ -5,6 +5,8 @@
 
 // ---- Type-safe Manifold WASM interface ----
 
+import { buildSRTMatrixAroundCenter } from './worker-matrix'
+
 interface ManifoldMesh {
   numProp: number;
   vertProperties: Float32Array;
@@ -95,6 +97,27 @@ function sanitizeParams(params: Record<string, unknown>): Record<string, number>
 }
 
 // ---- Утилиты ----
+
+/**
+ * Safe postMessage wrapper (FIX WARN-R3-4).
+ * postMessage with transferList can throw DataCloneError for very large meshes.
+ */
+function safePostMessage(msg: unknown, transferList?: ArrayBuffer[]): void {
+  try {
+    if (transferList && transferList.length > 0) {
+      (self as unknown as Worker).postMessage(msg, transferList as Transferable[]);
+    } else {
+      (self as unknown as Worker).postMessage(msg);
+    }
+  } catch (err) {
+    console.error('[Worker] postMessage failed:', err);
+    // Send error message without transfer list
+    self.postMessage({
+      type: "error",
+      message: `postMessage failed: ${String(err)}`,
+    });
+  }
+}
 
 function buildPrimitive(shapeType: string, params: Record<string, number>): M {
   const { Manifold } = wasm;
@@ -240,33 +263,12 @@ type FullSRT = {
 };
 
 function applySRAroundCenter(manifold: M, t: FullSRT): M {
-  const { x: px, y: py, z: pz } = t;
-  const Sx = t.scaleX, Sy = t.scaleY, Sz = t.scaleZ;
-  const rx = t.rotX * (Math.PI / 180);
-  const ry = t.rotY * (Math.PI / 180);
-  const rz = t.rotZ * (Math.PI / 180);
-  const cx = Math.cos(rx), sx_ = Math.sin(rx);
-  const cy = Math.cos(ry), sy_ = Math.sin(ry);
-  const cz = Math.cos(rz), sz_ = Math.sin(rz);
-
-  // RS matrix elements (row-indexed: r<row><col>)
-  const r00 = cz*cy*Sx,                    r01 = (cz*sy_*sx_ - sz_*cx)*Sy,  r02 = (cz*sy_*cx + sz_*sx_)*Sz;
-  const r10 = sz_*cy*Sx,                   r11 = (sz_*sy_*sx_ + cz*cx)*Sy,  r12 = (sz_*sy_*cx - cz*sx_)*Sz;
-  const r20 = -sy_*Sx,                     r21 = cy*sx_*Sy,                  r22 = cy*cx*Sz;
-
-  // Translation = pos − RS·pos  (so RS is applied around the object center)
-  const tx = px - (r00*px + r01*py + r02*pz);
-  const ty = py - (r10*px + r11*py + r12*pz);
-  const tz = pz - (r20*px + r21*py + r22*pz);
-
-  // Column-major 4×4
-  const m: number[] = [
-    r00, r10, r20, 0,   // col 0
-    r01, r11, r21, 0,   // col 1
-    r02, r12, r22, 0,   // col 2
-    tx,  ty,  tz,  1,   // col 3
-  ];
-  return manifold.transform(m);
+  const matrix = buildSRTMatrixAroundCenter(
+    { x: t.x, y: t.y, z: t.z },
+    { rotX: t.rotX, rotY: t.rotY, rotZ: t.rotZ },
+    { scaleX: t.scaleX, scaleY: t.scaleY, scaleZ: t.scaleZ },
+  )
+  return manifold.transform(matrix)
 }
 
 // Returns true when the transform has non-trivial rotation or scale
@@ -371,7 +373,7 @@ self.addEventListener("message", async (e: MessageEvent) => {
         const { vertices, indices, normals, tris } = extractMesh(m);
         const transferList: ArrayBuffer[] = [vertices.buffer as ArrayBuffer, indices.buffer as ArrayBuffer];
         if (normals) transferList.push(normals.buffer as ArrayBuffer);
-        (self as unknown as Worker).postMessage(
+        safePostMessage(
           {
             reqId: msg.reqId,
             type: "mesh",
@@ -405,7 +407,7 @@ self.addEventListener("message", async (e: MessageEvent) => {
         const { vertices, indices, normals, tris } = extractMesh(m);
         const transferList: ArrayBuffer[] = [vertices.buffer as ArrayBuffer, indices.buffer as ArrayBuffer];
         if (normals) transferList.push(normals.buffer as ArrayBuffer);
-        (self as unknown as Worker).postMessage(
+        safePostMessage(
           {
             reqId: msg.reqId,
             type: "mesh",
@@ -436,7 +438,7 @@ self.addEventListener("message", async (e: MessageEvent) => {
           const { vertices, indices, normals, tris: numTris } = extractMesh(m);
           const transferList: ArrayBuffer[] = [vertices.buffer as ArrayBuffer, indices.buffer as ArrayBuffer];
           if (normals) transferList.push(normals.buffer as ArrayBuffer);
-          (self as unknown as Worker).postMessage(
+          safePostMessage(
             {
               reqId: msg.reqId,
               type: "mesh",
@@ -453,7 +455,7 @@ self.addEventListener("message", async (e: MessageEvent) => {
           // Manifold failed (non-manifold STL) — return raw mesh without CSG support
           const { vertices, indices } = { vertices: verts, indices: tris };
           cache.set(msg.objId as string, null);
-          (self as unknown as Worker).postMessage(
+          safePostMessage(
             {
               reqId: msg.reqId,
               type: "mesh",
@@ -504,7 +506,7 @@ self.addEventListener("message", async (e: MessageEvent) => {
         const { vertices, indices, normals, tris } = extractMesh(result);
         const transferList: ArrayBuffer[] = [vertices.buffer as ArrayBuffer, indices.buffer as ArrayBuffer];
         if (normals) transferList.push(normals.buffer as ArrayBuffer);
-        (self as unknown as Worker).postMessage(
+        safePostMessage(
           {
             reqId: msg.reqId,
             type: "mesh",
@@ -530,7 +532,7 @@ self.addEventListener("message", async (e: MessageEvent) => {
         const { vertices, indices, normals, tris } = extractMesh(m);
         const transferList: ArrayBuffer[] = [vertices.buffer as ArrayBuffer, indices.buffer as ArrayBuffer];
         if (normals) transferList.push(normals.buffer as ArrayBuffer);
-        (self as unknown as Worker).postMessage(
+        safePostMessage(
           {
             reqId: msg.reqId,
             type: "mesh",
@@ -774,7 +776,7 @@ self.addEventListener("message", async (e: MessageEvent) => {
           if (normals) transfers.push(normals.buffer as ArrayBuffer);
         }
 
-        (self as unknown as Worker).postMessage(
+        safePostMessage(
           {
             reqId: msg.reqId,
             type: "sceneBuilt",

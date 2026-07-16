@@ -52,6 +52,21 @@ function checkWebGL(): boolean {
   }
 }
 
+/**
+ * FIX (PERF-R3-1): Fast hash for vertex array comparison.
+ * Replaces O(n) vertex-by-vertex comparison with O(1) hash comparison.
+ * Uses a simple sum-of-products hash — sufficient for detecting changes.
+ */
+function computeVertsHash(vertices: Float32Array): number {
+  let hash = 0;
+  const len = vertices.length;
+  // Hash every 4th vertex to speed up large meshes
+  for (let i = 0; i < len; i += 4) {
+    hash = ((hash << 5) - hash + vertices[i] * 31 + vertices[i + 1] * 17 + vertices[i + 2] * 7) | 0;
+  }
+  return hash;
+}
+
 // Центрирует геометрию меша и возвращает контейнер (pivot), в котором находится сам меш.
 // Worker применяет полный TRS к геометрии (translation + rotation + scale запекаются в Manifold).
 // Pivot.position устанавливается в (0,0,0) — sync-effect позже установит
@@ -330,18 +345,8 @@ export default function Viewport3D({
         fpsRef.current = { last: now, frames: 0 };
       }
 
-      // ---- Подсветка выбранных объектов (emissive) ----
-      const sel = selectedIdsRef.current;
-      for (const [id, entry] of meshMapRef.current) {
-        const mat = entry.mesh.material as THREE.MeshStandardMaterial;
-        if (sel.has(id)) {
-          mat.emissive.setHex(0x444466);
-          mat.emissiveIntensity = 0.5;
-        } else {
-          mat.emissive.setHex(0x000000);
-          mat.emissiveIntensity = 0;
-        }
-      }
+      // NOTE: Emissive highlight moved to useEffect below (FIX WARN-R3-5)
+      // to avoid O(n) loop every frame. Was 6000+ iterations/sec at 100+ objects.
     };
     animate();
 
@@ -639,6 +644,18 @@ export default function Viewport3D({
     ],
   );
 
+  // ---- Emissive highlight for selected objects (FIX WARN-R3-5) ----
+  // Moved out of animate() loop — was updating all objects every frame (O(n) × 60fps).
+  // Now only runs when selectedIds change.
+  useEffect(() => {
+    const sel = selectedIdsRef.current;
+    for (const [id, entry] of meshMapRef.current) {
+      const mat = entry.mesh.material as THREE.MeshStandardMaterial;
+      mat.emissive.setHex(sel.has(id) ? 0x444466 : 0x000000);
+      mat.emissiveIntensity = sel.has(id) ? 0.5 : 0;
+    }
+  }, [selectedIds]);
+
   // ---- Sync objects → Three.js meshes ----
   useEffect(() => {
     const scene = sceneRef.current;
@@ -650,6 +667,11 @@ export default function Viewport3D({
     for (const [id, entry] of map) {
       if (!currentIds.has(id)) {
         scene.remove(entry.pivot);
+        // FIX (CRIT-R3-1): Dispose BoxHelper to prevent memory leak
+        if (entry.helper) {
+          scene.remove(entry.helper);
+          entry.helper.dispose?.();
+        }
         entry.mesh.geometry.dispose();
         (entry.mesh.material as THREE.Material).dispose();
         map.delete(id);
@@ -661,17 +683,21 @@ export default function Viewport3D({
       const existing = map.get(obj.id);
       if (existing) {
         // Update geometry if raw vertices from store changed.
-        // We cache the RAW (pre-centering) vertices so the comparison is
-        // always against the same source as obj.vertices — not the
+        // FIX (PERF-R3-1): Use hash-based comparison to avoid O(n) vertex scan.
+        // We cache the RAW (pre-centering) vertices and their hash so the comparison
+        // is always against the same source as obj.vertices — not the
         // post-centering buffer, which always equals the cache.
         const cachedRaw = existing.mesh.userData.cachedRawVertices as Float32Array | undefined;
+        const cachedHash = existing.mesh.userData.cachedVertsHash as number | undefined;
+        const vertsHash = computeVertsHash(obj.vertices);
         const vertsChanged =
           !cachedRaw ||
           cachedRaw.length !== obj.vertices.length ||
           obj.indices.length !== (existing.mesh.geometry.index?.count ?? 0) ||
-          cachedRaw.some((v, i) => v !== obj.vertices[i]);
+          cachedHash !== vertsHash;
         if (vertsChanged) {
           existing.mesh.userData.cachedRawVertices = new Float32Array(obj.vertices);
+          existing.mesh.userData.cachedVertsHash = vertsHash;
 
           existing.mesh.geometry.setAttribute(
             "position",

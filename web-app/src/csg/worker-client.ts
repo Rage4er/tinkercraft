@@ -23,12 +23,35 @@ type PendingReject  = (r: unknown) => void
 
 let _worker: Worker | null = null
 let _ready = false
-let _readyResolve: (() => void) | null = null
-const _readyPromise = new Promise<void>(res => { _readyResolve = res })
+let _readyPromise: Promise<void> | null = null
 const _pending = new Map<string, [PendingResolve, PendingReject]>()
 let _reqCounter = 0
 
 function nextReqId(): string { return `r${++_reqCounter}` }
+
+/**
+ * FIX (CRIT-R3-2): Safe worker initialization with handler pattern.
+ * Replaces the _readyResolve pattern which could leak on hot-reload.
+ * The ready promise is recreated on each call if _ready is false,
+ * and the listener is removed after receiving the 'ready' message.
+ */
+function getReadyPromise(): Promise<void> {
+  if (_ready) return Promise.resolve()
+  if (!_readyPromise) {
+    _readyPromise = new Promise<void>((resolve) => {
+      const handler = (e: MessageEvent) => {
+        if (e.data?.type === 'ready') {
+          _ready = true
+          _readyPromise = null
+          _worker?.removeEventListener('message', handler)
+          resolve()
+        }
+      }
+      _worker?.addEventListener('message', handler)
+    })
+  }
+  return _readyPromise
+}
 
 function getWorker(): Worker {
   if (_worker) return _worker
@@ -38,11 +61,9 @@ function getWorker(): Worker {
   _worker.addEventListener('message', (e: MessageEvent) => {
     const msg = e.data as { reqId?: string; type: string }
 
-    if (msg.type === 'ready') {
-      _ready = true
-      _readyResolve?.()
-      return
-    }
+    // Ready message is handled by getReadyPromise() — skip here
+    if (msg.type === 'ready') return
+
     if (!msg.reqId) return
     const entry = _pending.get(msg.reqId)
     if (!entry) return
@@ -71,8 +92,8 @@ function send<T>(type: string, data: Record<string, unknown>): Promise<T> {
 
 async function waitReady(): Promise<void> {
   getWorker()
-  if (_ready) return
-  return _readyPromise
+  const p = getReadyPromise()
+  if (p) await p
 }
 
 // ---- Public API ----

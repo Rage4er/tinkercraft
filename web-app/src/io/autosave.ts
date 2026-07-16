@@ -5,6 +5,7 @@
 import type { TinkerCraftOperation } from '../csg/types'
 
 const DB_NAME    = 'tinkercraft-v1'
+const DB_VERSION = 2 // bumped from 1 to support migration
 const STORE_NAME = 'autosave'
 const KEY        = 'session'
 
@@ -17,9 +18,16 @@ interface AutosaveEntry {
 
 function openDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 1)
-    req.onupgradeneeded = () => {
-      req.result.createObjectStore(STORE_NAME)
+    const req = indexedDB.open(DB_NAME, DB_VERSION)
+    req.onupgradeneeded = (e) => {
+      const db = req.result
+      // Migration from v1 to v2: recreate store if needed
+      if (!e.oldVersion || e.oldVersion < 2) {
+        if (db.objectStoreNames.contains(STORE_NAME)) {
+          db.deleteObjectStore(STORE_NAME)
+        }
+        db.createObjectStore(STORE_NAME)
+      }
     }
     req.onsuccess = () => resolve(req.result)
     req.onerror   = () => reject(req.error)

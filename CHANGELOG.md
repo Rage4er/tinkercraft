@@ -9,6 +9,23 @@
 
 ## [Unreleased]
 
+### Fixed — код-ревью раунд 3 (исправления, 2025-07-16)
+
+- **CRIT-R3-1:** Утечка BoxHelper при удалении объектов — теперь helper dispose'ится (`Viewport3D.tsx`)
+- **WARN-R3-4:** postMessage обернут в safePostMessage() с try/catch — защита от DataCloneError для больших мешей (`worker.ts`)
+- **WARN-R3-5 / PERF-R3-2:** Emissive highlight вынесен из animate() в useEffect — больше не 6000 итераций/сек (`Viewport3D.tsx`)
+- **WARN-R3-6:** Валидация размера STL при импорте — лимиты 100МБ и 5M треугольников (`stl-import.ts`)
+- **WARN-R3-7:** IndexedDB версионирование — версия bumped до 2, добавлена миграция через onupgradeneeded (`autosave.ts`)
+- **WARN-R3-8:** STL экспорт теперь применяет трансформации (position, rotation, scale) к вершинам (`stl-export.ts`)
+  - Добавлена функция `applyTransformToVertices()` с оптимизацией для identity transform
+  - 3 новых теста: translation, scale, identity
+- **CRIT-R3-2:** Race condition WASM Worker — заменён паттерн _readyResolve на handler pattern (`worker-client.ts`)
+- **WARN-R3-3:** applySRAroundCenter покрыт тестами — извлечена математика матрицы в `worker-matrix.ts` (7 тестов)
+- **PERF-R3-1:** Кэширование хеша вершин — замена O(n) сравнения на O(1) хеш-сравнение (`Viewport3D.tsx`)
+- **WARN-R3-4:** postMessage обернут в safePostMessage() с try/catch — защита от DataCloneError для больших мешей (`worker.ts`)
+- **WARN-R3-6:** Валидация размера STL при импорте — лимиты 100МБ и 5M треугольников (`stl-import.ts`)
+- **WARN-R3-7:** IndexedDB версионирование — версия bumped до 2, добавлена миграция через onupgradeneeded (`autosave.ts`)
+
 ### Added — код-ревью раунд 3 (2025-07-16)
 
 - Документация глубокого код-ревью (раунд 3) в `CODE_REVIEW.md`:

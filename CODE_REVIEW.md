@@ -693,6 +693,33 @@ describe('mergeCoincidentVertices', () => {
 
 ---
 
+## ✅ РАУНД 3 — Исправления (2025-07-16)
+
+**Статус:** 12 из 12 задач исправлено ✅ · Все тесты пройдены
+
+### ✅ Исправлено
+
+| # | Проблема | Статус | Файл |
+|---|---|---|---|
+| CRIT-R3-1 | Утечка BoxHelper при удалении | ✅ Исправлено | `Viewport3D.tsx:650-657` |
+| CRIT-R3-2 | Race condition WASM Worker | ✅ Исправлено | `worker-client.ts:24-50` (handler pattern) |
+| WARN-R3-3 | applySRAroundCenter без тестов | ✅ Исправлено | `worker-matrix.ts` + 7 тестов |
+| WARN-R3-4 | postMessage без try/catch | ✅ Исправлено | `worker.ts:99-117` (safePostMessage) |
+| WARN-R3-5 / PERF-R3-2 | Emissive highlight в animate() | ✅ Исправлено | `Viewport3D.tsx:333-344, 631-641` |
+| WARN-R3-6 | Нет валидации размера STL | ✅ Исправлено | `stl-import.ts:11-12, 59-73` |
+| WARN-R3-7 | IndexedDB без версионирования | ✅ Исправлено | `autosave.ts:8, 21-31` |
+| WARN-R3-8 | STL экспорт игнорирует трансформации | ✅ Исправлено | `stl-export.ts:11-70` |
+| PERF-R3-1 | O(n) сравнение вершин | ✅ Исправлено | `Viewport3D.tsx:46-60, 677-681` |
+| TEST | Тесты STL трансформаций | ✅ Добавлено | `stl-export.test.ts:67-121` (3 теста) |
+| TEST | Тесты applySRAroundCenter | ✅ Добавлено | `worker-matrix.test.ts` (7 тестов) |
+| TEST | Тесты STL лимитов | ✅ Добавлено | `stl-import.test.ts:68-73` (2 теста) |
+
+**Итого:** 12 проблем исправлено · 38 → 47 тестов · 0 ошибок typecheck · билд успешен
+
+### ✅ Все задачи раунда 3 выполнены
+
+---
+
 ## 🔍 РАУНД 3 — Глубокое ревью (2025-07-16)
 
 **Ревьюер:** Koda AI  

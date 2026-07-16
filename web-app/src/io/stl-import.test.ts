@@ -3,7 +3,7 @@
 // ============================================================
 
 import { describe, it, expect } from 'vitest'
-import { mergeCoincidentVertices } from './stl-import'
+import { mergeCoincidentVertices, MAX_STL_FILE_SIZE, MAX_STL_TRIANGLES } from './stl-import'
 
 describe('mergeCoincidentVertices', () => {
   it('merges identical vertices', () => {
@@ -63,5 +63,15 @@ describe('mergeCoincidentVertices', () => {
     const result = mergeCoincidentVertices(positions)
     expect(result.vertices).toHaveLength(24) // 8 vertices × 3
     expect(result.indices).toHaveLength(36)  // 12 triangles × 3
+  })
+})
+
+describe('STL import limits', () => {
+  it('exports MAX_STL_FILE_SIZE constant (100 MB)', () => {
+    expect(MAX_STL_FILE_SIZE).toBe(100 * 1024 * 1024)
+  })
+
+  it('exports MAX_STL_TRIANGLES constant (5 million)', () => {
+    expect(MAX_STL_TRIANGLES).toBe(5_000_000)
   })
 })
