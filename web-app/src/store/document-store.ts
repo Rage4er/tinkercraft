@@ -38,38 +38,38 @@ import { cacheSnapshot, getCachedSnapshot, clearSnapshots } from './snapshots'
 // ---- Store ----
 
 export const useDocumentStore = create<DocumentStore>((set, get) => ({
-  operations:       [],
-  historyIndex:     0,
-  objects:          {},
-  selectedIds:      [],
-  clipboard:        [],
-  fileName:         null,
-  modified:         false,
-  busy:             false,
-  lastCsgMs:        null,
+  operations: [],
+  historyIndex: 0,
+  objects: {},
+  selectedIds: [],
+  clipboard: [],
+  fileName: null,
+  modified: false,
+  busy: false,
+  lastCsgMs: null,
   currentProjectId: null,
 
   // ── Добавить фигуру ──
   addShape: async (shapeType, params) => {
     const { objects, operations, historyIndex } = get()
     const idx = Object.keys(objects).length
-    const id  = nextId('obj')
+    const id = nextId('obj')
     const transform: TransformNR = { x: idx * 25, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
     const color = colorForIndex(idx)
     const defaultParams: ShapeParams =
-      shapeType === 'sphere'   ? { radius: 12, segments: 32 }
-      : shapeType === 'cone'   ? { radius: 10, height: 24, segments: 32 }
-      : shapeType === 'torus'  ? { torusRadius: 15, tubeRadius: 4, segments: 32, tubeSegments: 16 }
-      : shapeType === 'prism'  ? { radius: 12, height: 20, sides: 6 }
-      : shapeType === 'pyramid'? { radius: 12, height: 20, sides: 4 }
-      : { width: 20, height: 20, depth: 20 }
+      shapeType === 'sphere' ? { radius: 12, segments: 32 }
+        : shapeType === 'cone' ? { radius: 10, height: 24, segments: 32 }
+          : shapeType === 'torus' ? { torusRadius: 15, tubeRadius: 4, segments: 32, tubeSegments: 16 }
+            : shapeType === 'prism' ? { radius: 12, height: 20, sides: 6 }
+              : shapeType === 'pyramid' ? { radius: 12, height: 20, sides: 4 }
+                : { width: 20, height: 20, depth: 20 }
     const finalParams = params ?? defaultParams
     const op: AddShapeOperation = { type: 'add_shape', id, shapeType, params: finalParams, color, transform }
     set({ busy: true })
     try {
-      const t0   = performance.now()
+      const t0 = performance.now()
       const mesh = await workerBuildShape(id, shapeType, finalParams, transform)
-      const ms   = performance.now() - t0
+      const ms = performance.now() - t0
       const obj: SceneObject = makeObject({ id, shapeType, params: finalParams, color, transform, visible: true, locked: false, vertices: mesh.vertices, indices: mesh.indices, normals: mesh.normals })
       const newOps = [...operations.slice(0, historyIndex), op]
       const newObjects = { ...objects, [id]: obj }
@@ -81,14 +81,14 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   // ── Добавить произвольный меш (текст, и т.д.) ──
   addRawMesh: async (name, vertices, indices) => {
     const { objects, operations, historyIndex } = get()
-    const id    = nextId('txt')
+    const id = nextId('txt')
     const color = colorForIndex(Object.keys(objects).length)
     const transform: TransformNR = { x: Object.keys(objects).length * 25, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
     set({ busy: true })
     try {
-      const t0     = performance.now()
+      const t0 = performance.now()
       const result = await workerBuildImportedMesh(id, vertices, indices)
-      const ms     = performance.now() - t0
+      const ms = performance.now() - t0
       const obj: SceneObject = makeObject({ id, shapeType: 'import_mesh', params: {}, color, transform, visible: true, locked: false, vertices: result.vertices, indices: result.indices, normals: result.normals })
       const op: ImportMeshOperation = { type: 'import_mesh', id, name, color, transform, vertices, indices }
       const newOps = [...operations.slice(0, historyIndex), op]
@@ -106,13 +106,13 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     if (!mesh) { notify('Не удалось прочитать STL файл', 'error'); return }
 
     const { objects, operations, historyIndex } = get()
-    const id    = nextId('stl')
+    const id = nextId('stl')
     const color = colorForIndex(Object.keys(objects).length)
     set({ busy: true })
     try {
-      const t0     = performance.now()
+      const t0 = performance.now()
       const result = await workerBuildImportedMesh(id, mesh.vertices, mesh.indices)
-      const ms     = performance.now() - t0
+      const ms = performance.now() - t0
 
       const obj: SceneObject = makeObject({ id, shapeType: 'import_mesh', params: {}, color, transform: mesh.transform, visible: true, locked: false, vertices: result.vertices, indices: result.indices })
       const op: ImportMeshOperation = { type: 'import_mesh', id, name: mesh.name, color, transform: mesh.transform, vertices: mesh.vertices, indices: mesh.indices }
@@ -130,12 +130,19 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     if (!obj) return
     set({ busy: true })
     try {
-      const t0   = performance.now()
+      const t0 = performance.now()
       const mesh = await workerApplyFillet(id, obj.shapeType, obj.params, radius, obj.transform)
-      const ms   = performance.now() - t0
+      const ms = performance.now() - t0
       const op: FilletOperation = { type: 'fillet', id, radius }
       const newOps = [...operations.slice(0, historyIndex), op]
-      const newObjects = { ...objects, [id]: { ...obj, params: { ...obj.params, filletRadius: radius }, vertices: mesh.vertices, indices: mesh.indices } }
+      const newObj = makeObject({
+        ...obj,
+        params: { ...obj.params, filletRadius: radius },
+        vertices: mesh.vertices,
+        indices: mesh.indices,
+        normals: mesh.normals,
+      })
+      const newObjects = { ...objects, [id]: newObj }
       set({
         operations: newOps,
         historyIndex: newOps.length,
@@ -157,7 +164,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const entry: ClipEntry = { shapeType: obj.shapeType, params: obj.params, color: obj.color, transform: obj.transform }
       if (obj.shapeType === 'import_mesh') {
         entry.importVertices = Array.from(obj.vertices)
-        entry.importIndices  = Array.from(obj.indices)
+        entry.importIndices = Array.from(obj.indices)
       }
       return [entry]
     })
@@ -169,14 +176,14 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const { clipboard, objects, operations, historyIndex } = get()
     if (clipboard.length === 0) return
     set({ busy: true })
+    const pastedIds: string[] = []
     try {
       const t0 = performance.now()
       let newObjects = { ...objects }
       const newOps = [...operations.slice(0, historyIndex)]
-      const pastedIds: string[] = []
 
       for (const clip of clipboard) {
-        const id        = nextId('obj')
+        const id = nextId('obj')
         const transform: TransformNR = { ...clip.transform, x: clip.transform.x + 15, y: clip.transform.y + 0, z: clip.transform.z + 15 }
 
         if (clip.shapeType === 'import_mesh' && clip.importVertices && clip.importIndices) {
@@ -198,7 +205,14 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const ms = performance.now() - t0
       set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, selectedIds: pastedIds, modified: true, busy: false, lastCsgMs: ms })
       cacheSnapshot(newOps.length, newObjects)
-    } catch (e) { set({ busy: false }); console.error('paste:', e) }
+    } catch (e) {
+      set({ busy: false })
+      // Clean up partially created objects from worker cache
+      if (pastedIds.length > 0) {
+        workerDeleteObjects(pastedIds).catch(() => { })
+      }
+      console.error('paste:', e)
+    }
   },
 
   // ── Delete ──
@@ -209,7 +223,13 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const op: TinkerCraftOperation = { type: 'delete', ids }
     const newObjects = { ...objects }
     for (const id of ids) delete newObjects[id]
-    await workerDeleteObjects(ids)
+    try {
+      await workerDeleteObjects(ids)
+    } catch (e) {
+      console.error('deleteSelected:', e)
+      notify('Ошибка удаления объектов', 'error')
+      return // do not update store if worker is out of sync
+    }
     const newOps = [...operations.slice(0, historyIndex), op]
     set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, selectedIds: [], modified: true })
     cacheSnapshot(newOps.length, newObjects)
@@ -237,7 +257,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const resultId = nextId('csg')
     set({ busy: true })
     try {
-      const t0   = performance.now()
+      const t0 = performance.now()
       // Sync worker cache before CSG — fixes stale cache after undo/redo
       // and incorrect positions from moveObject.
       await workerSyncObjects(
@@ -258,11 +278,11 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         return { x: t.x, y: t.y, z: t.z, rotX: t.rotX, rotY: t.rotY, rotZ: t.rotZ, scaleX: t.scaleX, scaleY: t.scaleY, scaleZ: t.scaleZ }
       }
       const mesh = await workerCsgBoolean(idA, idB, op, resultId, srOf(idA), srOf(idB))
-      const ms   = performance.now() - t0
+      const ms = performance.now() - t0
       // Center result geometry at origin so the Three.js pivot can be placed at
       // the true world position (bbox center of the boolean result).
       const { cx, cy, cz } = extractAndCenter(mesh.vertices)
-      const newObj: SceneObject = makeObject({ id: resultId, shapeType: 'cube', params: {}, color: objects[idA].color, transform: { x:cx,y:cy,z:cz,rotX:0,rotY:0,rotZ:0,scaleX:1,scaleY:1,scaleZ:1 }, visible: true, locked: false, vertices: mesh.vertices, indices: mesh.indices, normals: mesh.normals })
+      const newObj: SceneObject = makeObject({ id: resultId, shapeType: 'cube', params: {}, color: objects[idA].color, transform: { x: cx, y: cy, z: cz, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }, visible: true, locked: false, vertices: mesh.vertices, indices: mesh.indices, normals: mesh.normals })
       const newObjects = { ...objects }; delete newObjects[idA]; delete newObjects[idB]; newObjects[resultId] = newObj
       const histOp: TinkerCraftOperation = { type: 'group', ids: [idA, idB], isHull: false, isIntersect: op === 'intersect', subtractOp: op === 'subtract', resultId } as TinkerCraftOperation
       const newOps = [...operations.slice(0, historyIndex), histOp]
@@ -280,8 +300,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const rotDelta: Vec3 = { x: transform.rotX - obj.transform.rotX, y: transform.rotY - obj.transform.rotY, z: transform.rotZ - obj.transform.rotZ }
     const scaleDelta: Vec3 = { x: transform.scaleX - obj.transform.scaleX, y: transform.scaleY - obj.transform.scaleY, z: transform.scaleZ - obj.transform.scaleZ }
     const eps = 1e-6
-    const hasPos   = Math.abs(delta.x) > eps || Math.abs(delta.y) > eps || Math.abs(delta.z) > eps
-    const hasRot   = Math.abs(rotDelta.x) > eps || Math.abs(rotDelta.y) > eps || Math.abs(rotDelta.z) > eps
+    const hasPos = Math.abs(delta.x) > eps || Math.abs(delta.y) > eps || Math.abs(delta.z) > eps
+    const hasRot = Math.abs(rotDelta.x) > eps || Math.abs(rotDelta.y) > eps || Math.abs(rotDelta.z) > eps
     const hasScale = Math.abs(scaleDelta.x) > eps || Math.abs(scaleDelta.y) > eps || Math.abs(scaleDelta.z) > eps
     const kind = hasScale && !hasPos && !hasRot ? 'scale' : hasRot && !hasPos && !hasScale ? 'rotate' : 'translate'
     const op: TinkerCraftOperation = { type: 'move', ids: [id], delta, rotDelta, scaleDelta, kind }
@@ -337,8 +357,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const newObjects = { ...objects }
       for (const id of ids) {
         const mesh = await workerMirrorObject(id, plane)
-        const obj  = newObjects[id]
-        const t    = { ...obj.transform }
+        const obj = newObjects[id]
+        const t = { ...obj.transform }
         if (plane === 'YZ') t.x = -t.x
         if (plane === 'XZ') t.y = -t.y
         if (plane === 'XY') t.z = -t.z
@@ -360,8 +380,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const bboxes = ids.map(id => ({ id, bbox: objects[id].aabb ?? computeAABB(objects[id].vertices) }))
     let targetValue: number
     switch (anchor) {
-      case 'min':    targetValue = Math.min(...bboxes.map(b => b.bbox.min[ax])); break
-      case 'max':    targetValue = Math.max(...bboxes.map(b => b.bbox.max[ax])); break
+      case 'min': targetValue = Math.min(...bboxes.map(b => b.bbox.min[ax])); break
+      case 'max': targetValue = Math.max(...bboxes.map(b => b.bbox.max[ax])); break
       default: { const all = bboxes.flatMap(b => [b.bbox.min[ax], b.bbox.max[ax]]); targetValue = (Math.min(...all) + Math.max(...all)) / 2 }
     }
     const deltas: Record<string, number> = {}
@@ -480,9 +500,9 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const mergedParams = { ...obj.params, ...params }
     set({ busy: true })
     try {
-      const t0   = performance.now()
+      const t0 = performance.now()
       const mesh = await workerBuildShape(id, obj.shapeType, mergedParams, obj.transform)
-      const ms   = performance.now() - t0
+      const ms = performance.now() - t0
       const op: ResizeDimsOperation = { type: 'resize_dims', id, params: mergedParams }
       const newOps = [...operations.slice(0, historyIndex), op]
       const newObjects = { ...objects, [id]: makeObject({ ...obj, params: mergedParams, vertices: mesh.vertices, indices: mesh.indices, normals: mesh.normals }) }
@@ -495,7 +515,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   extrudeSelected: async (axis, depth) => {
     const { selectedIds, objects, operations, historyIndex } = get()
     if (selectedIds.length !== 1) return
-    const id  = selectedIds[0]
+    const id = selectedIds[0]
     const obj = objects[id]
     if (!obj) return
 
@@ -522,7 +542,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       slabZ = depth > 0 ? bbox.max.z + ad / 2 : bbox.min.z - ad / 2
     }
 
-    const slabId   = nextId('slab')
+    const slabId = nextId('slab')
     const resultId = nextId('ext')
     set({ busy: true })
     try {
@@ -533,7 +553,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const resultMesh = await workerCsgBoolean(id, slabId, 'union', resultId)
       const ms = performance.now() - t0
       const { cx: ex, cy: ey, cz: ez } = extractAndCenter(resultMesh.vertices)
-      const newObj: SceneObject = makeObject({ id: resultId, shapeType: 'cube', params: {}, color: obj.color, transform: { x:ex,y:ey,z:ez,rotX:0,rotY:0,rotZ:0,scaleX:1,scaleY:1,scaleZ:1 }, visible: true, locked: false, vertices: resultMesh.vertices, indices: resultMesh.indices, normals: resultMesh.normals })
+      const newObj: SceneObject = makeObject({ id: resultId, shapeType: 'cube', params: {}, color: obj.color, transform: { x: ex, y: ey, z: ez, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }, visible: true, locked: false, vertices: resultMesh.vertices, indices: resultMesh.indices, normals: resultMesh.normals })
       const addOp: AddShapeOperation = { type: 'add_shape', id: slabId, shapeType: 'cube', params: slabP, color: obj.color, transform: slabT }
       const grpOp: TinkerCraftOperation = { type: 'group', ids: [id, slabId], isHull: false, isIntersect: false, resultId } as TinkerCraftOperation
       const newObjects = { ...objects }; delete newObjects[id]; newObjects[resultId] = newObj
@@ -547,6 +567,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   renameObject: (id, name) => {
     const { objects } = get()
     if (!objects[id]) return
+    if (objects[id].name === name) return // no change — skip history entry
     const op: TinkerCraftOperation = { type: 'rename', id, name } as TinkerCraftOperation
     const { operations, historyIndex } = get()
     const newOps = [...operations.slice(0, historyIndex), op]

@@ -27,7 +27,7 @@ export default function App() {
   const [tlFilters, setTlFilters] =
     useState<Record<string, boolean>>(DEFAULT_FILTERS);
   const [filletRadius, setFilletRadius] = useState(2);
-  const [restoreMsg, setRestoreMsg] = useState(false);
+
   const [shapeSearch, setShapeSearch] = useState("");
   const [rulerActive, setRulerActive] = useState(false);
   const [rulerDist, setRulerDist] = useState<number | null>(null);
@@ -100,16 +100,12 @@ export default function App() {
       }
     }, 300);
     import("./csg/worker-client").then((m) =>
-      m.workerClearAll().catch(() => {}),
+      m.workerClearAll().catch(() => { }),
     );
     return () => clearInterval(iv);
   }, [workerOk]);
 
-  useEffect(() => {
-    restoreAutosave().then((ok) => {
-      if (ok) setRestoreMsg(false);
-    });
-  }, [restoreAutosave]);
+
 
   useEffect(() => {
     if (operations.length === 0) return;
@@ -225,7 +221,6 @@ export default function App() {
   }, []);
 
   const handleAddText = useCallback(async () => {
-    setShowTextModal(false);
     try {
       const [{ FontLoader }, { TextGeometry }] = await Promise.all([
         import("three/examples/jsm/loaders/FontLoader.js"),
@@ -252,6 +247,7 @@ export default function App() {
         indices = Array.from({ length: posAttr.count }, (_, i) => i);
       }
       await addRawMesh(`Текст: ${textInput}`, vertices, indices);
+      setShowTextModal(false);
     } catch (err) {
       console.error("Ошибка генерации текста:", err);
     }
@@ -328,25 +324,6 @@ export default function App() {
     <div className="app">
       <ToastContainer />
 
-      {/* ── Restore banner ── */}
-      {restoreMsg && (
-        <div className="restore-banner">
-          <span>Восстановить сессию из автосохранения?</span>
-          <button
-            className="btn"
-            onClick={() => {
-              restoreAutosave();
-              setRestoreMsg(false);
-            }}
-          >
-            Восстановить
-          </button>
-          <button className="btn" onClick={() => setRestoreMsg(false)}>
-            Нет
-          </button>
-        </div>
-      )}
-
       {/* ── Ruler distance display ── */}
       {rulerDist !== null && (
         <div className="ruler-display">
@@ -380,7 +357,7 @@ export default function App() {
           }}
           onSave={saveToProject}
           currentProjectId={currentProjectId ?? undefined}
-          setCurrentProjectId={() => {}}
+          setCurrentProjectId={() => { }}
         />
       )}
 
