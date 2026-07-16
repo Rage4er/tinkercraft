@@ -28,8 +28,14 @@ self.addEventListener('message', async (e: MessageEvent) => {
       case 'csgBoolean': await handleCsgBoolean(msg as unknown as import('./worker-handlers').CsgBooleanMessage); break
       case 'mirrorObject': await handleMirrorObject(msg as unknown as import('./worker-handlers').MirrorObjectMessage); break
       case 'rebuildScene': await handleRebuildScene(msg as unknown as import('./worker-handlers').RebuildSceneMessage); break
-      case 'deleteObjects': for (const id of (msg.ids as string[])) cache.delete(id); safePostMessage({ reqId: msg.reqId, type: 'ok' }); break
-      case 'clearAll': cache.clear(); safePostMessage({ reqId: msg.reqId, type: 'ok' }); break
+      case 'deleteObjects':
+        for (const id of (msg.ids as string[])) cache.delete(id)
+        safePostMessage({ reqId: msg.reqId, type: 'ok' })
+        break
+      case 'clearAll':
+        cache.clear()
+        safePostMessage({ reqId: msg.reqId, type: 'ok' })
+        break
       default: safePostMessage({ reqId: msg.reqId, type: 'error', message: `Unknown: ${msg.type}` })
     }
   } catch (err) {

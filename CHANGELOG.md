@@ -11,12 +11,12 @@
 
 ### Fixed — исправления раунда 4 (2026-07-16)
 
-- **CRITICAL FIX:** Рефакторинг worker.ts — восстановлена полная логика `handleRebuildScene`
-  - `worker-handlers.ts`: добавлена полная реализация `handleRebuildScene` с поддержкой move/fillet/mirror/align/group/resizedims/import_mesh
-  - `worker.ts`: переписан — только dispatch к handlers, `initWasm()` вынесен в handlers
-  - `wasm` теперь инициализируется через `getWasm()` с проверкой ready-state
-  - `cache.clear()` вызывается в начале rebuild (устраняет stale-объекты)
-  - Динамический `await import()` убран — все функции экспортированы напрямую
+- **CRITICAL FIX (CSG):** Исправлена ошибка "Objects not found" при CSG-операциях
+  - `worker-handlers.ts`: инлайн-реализация построения примитивов в `handleBuildShape`, `handleApplyFillet`, `handleBuildImportedMesh`
+  - Убраны функции `buildPrimitive()` / `buildPrimitiveWithFillet()` — теперь каждый handler явно использует `getWasm()` и конструкторы Manifold
+  - `worker.ts`: исправлен `deleteObjects` — `safePostMessage` вызывается один раз после цикла
+  - `handleMirrorObject` использует `getMirrorMatrix()` (встроенная логика матриц)
+  - `handleCsgBoolean` использует `applySRAroundCenter()` + `hasSR()` для корректного применения трансформов перед CSG
 - **WARN-R4-3:** Унификация `centerGeometry` / `extractAndCenter` — вынесена общая логика bbox в `computeAABB` и `computeCenter`
   - `helpers.ts`: добавлены `computeAABB` и `computeCenter` (общая функция)
   - `helpers.ts`: `extractAndCenter` использует `computeCenter` вместо дублирования кода

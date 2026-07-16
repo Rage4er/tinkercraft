@@ -424,11 +424,62 @@ export interface ClearAllMessage {
 
 /** Handle buildShape message. */
 export async function handleBuildShape(msg: BuildShapeMessage): Promise<void> {
+  const wasm = getWasm()
+  const { Manifold } = wasm
   const t0 = performance.now()
   const shapeType = msg.shapeType
   const safeP = sanitizeParams(msg.params)
-  let m = buildPrimitive(shapeType, safeP)
-  m = applyTransform(m, msg.transform)
+
+  // Rebuild primitive using the imported Manifold constructor
+  let m: ManifoldObject
+  switch (shapeType) {
+    case 'cube': {
+      let width = safeP.width, height = safeP.height, depth = safeP.depth
+      if (!width || width <= 0) width = 20
+      if (!height || height <= 0) height = 20
+      if (!depth || depth <= 0) depth = 20
+      m = Manifold.cube([width, height, depth], true)
+      break
+    }
+    case 'sphere':
+      m = Manifold.sphere(safeP.radius ?? 12, safeP.segments ?? 32)
+      break
+    case 'cylinder':
+      m = Manifold.cylinder(safeP.height ?? 30, safeP.radius ?? 10, safeP.radius ?? 10, safeP.segments ?? 32, true)
+      break
+    case 'cone':
+      m = Manifold.cylinder(safeP.height ?? 30, safeP.radius ?? 10, 0, safeP.segments ?? 32, true)
+      break
+    case 'torus': {
+      const torusRadius = safeP.torusRadius ?? 15
+      const tubeRadius = safeP.tubeRadius ?? 4
+      const segments = Math.max(8, Math.round(safeP.segments ?? 32))
+      const tubeSegs = Math.max(4, Math.round(safeP.tubeSegments ?? 16))
+      const { CrossSection } = wasm
+      const circle = CrossSection.circle(tubeRadius, tubeSegs)
+      const translated = circle.translate([torusRadius, 0])
+      m = Manifold.revolve(translated, segments)
+      break
+    }
+    case 'prism': {
+      const sides = Math.max(3, Math.round(safeP.sides ?? 6))
+      m = Manifold.cylinder(safeP.height ?? 20, safeP.radius ?? 12, safeP.radius ?? 12, sides, true)
+      break
+    }
+    case 'pyramid': {
+      const sides = Math.max(3, Math.round(safeP.sides ?? 4))
+      m = Manifold.cylinder(safeP.height ?? 20, safeP.radius ?? 12, 0, sides, true)
+      break
+    }
+    default:
+      m = Manifold.cube([20, 20, 20], true)
+  }
+
+  // Apply translation
+  const t = msg.transform
+  const transformMatrix = [1,0,0,0, 0,1,0,0, 0,0,1,0, t.x, t.y, t.z, 1]
+  m = m.transform(transformMatrix)
+
   cache.set(msg.objId, m)
 
   const mesh = extractMesh(m)
@@ -449,12 +500,63 @@ export async function handleBuildShape(msg: BuildShapeMessage): Promise<void> {
 
 /** Handle applyFillet message. */
 export async function handleApplyFillet(msg: ApplyFilletMessage): Promise<void> {
+  const wasm = getWasm()
+  const { Manifold } = wasm
   const t0 = performance.now()
   const shapeType = msg.shapeType
   const safeP = sanitizeParams(msg.params)
   const radius = clamp(msg.radius, 0, 1e4)
-  let m = buildPrimitiveWithFillet(shapeType, safeP, radius)
-  m = applyTransform(m, msg.transform)
+
+  let m: ManifoldObject
+  if (radius > 0 && shapeType === 'cube') {
+    // Build rounded box via warp + refine
+    const w = safeP.width ?? 20, h = safeP.height ?? 20, d = safeP.depth ?? 20
+    const maxR = Math.min(w, h, d) / 2 - 0.1
+    const cr = Math.max(0.01, Math.min(radius, maxR))
+    const hw = w / 2 - cr, hh = h / 2 - cr, hd = d / 2 - cr
+    const cube = Manifold.cube([w, h, d], true)
+    const refined = cube.refine(6)
+    m = refined.warp((v: number[]) => {
+      const x = v[0], y = v[1], z = v[2]
+      const ex = Math.max(0, Math.abs(x) - hw)
+      const ey = Math.max(0, Math.abs(y) - hh)
+      const ez = Math.max(0, Math.abs(z) - hd)
+      const len = Math.sqrt(ex * ex + ey * ey + ez * ez)
+      if (len < 1e-9) return
+      const s = cr / len
+      v[0] = Math.sign(x) * hw + ex * s * Math.sign(x || 1)
+      v[1] = Math.sign(y) * hh + ey * s * Math.sign(y || 1)
+      v[2] = Math.sign(z) * hd + ez * s * Math.sign(z || 1)
+    })
+  } else {
+    // Build primitive without fillet
+    switch (shapeType) {
+      case 'cube': {
+        let width = safeP.width, height = safeP.height, depth = safeP.depth
+        if (!width || width <= 0) width = 20
+        if (!height || height <= 0) height = 20
+        if (!depth || depth <= 0) depth = 20
+        m = Manifold.cube([width, height, depth], true)
+        break
+      }
+      case 'sphere':
+        m = Manifold.sphere(safeP.radius ?? 12, safeP.segments ?? 32)
+        break
+      case 'cylinder':
+        m = Manifold.cylinder(safeP.height ?? 30, safeP.radius ?? 10, safeP.radius ?? 10, safeP.segments ?? 32, true)
+        break
+      case 'cone':
+        m = Manifold.cylinder(safeP.height ?? 30, safeP.radius ?? 10, 0, safeP.segments ?? 32, true)
+        break
+      default:
+        m = Manifold.cube([20, 20, 20], true)
+    }
+  }
+
+  const t = msg.transform
+  const transformMatrix = [1,0,0,0, 0,1,0,0, 0,0,1,0, t.x, t.y, t.z, 1]
+  m = m.transform(transformMatrix)
+
   cache.set(msg.objId, m)
 
   const mesh = extractMesh(m)
@@ -475,11 +577,11 @@ export async function handleApplyFillet(msg: ApplyFilletMessage): Promise<void> 
 
 /** Handle buildImportedMesh message. */
 export async function handleBuildImportedMesh(msg: BuildImportedMeshMessage): Promise<void> {
+  const wasm = getWasm()
   const t0 = performance.now()
   const verts = new Float32Array(msg.vertices)
   const tris = new Uint32Array(msg.indices)
   try {
-    const wasm = getWasm()
     const m = new wasm.Manifold({
       numProp: 3,
       vertProperties: verts,
