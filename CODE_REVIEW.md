@@ -7,7 +7,7 @@
 
 ---
 
-## 📋 Статус исправлений (раунд 2 — 2025-07-16)
+## 📋 Статус исправлений (раунд 2 — 2026-07-16)
 
 | Категория | Исправлено | Не затронуто |
 |---|---|---|
@@ -690,3 +690,229 @@ describe('mergeCoincidentVertices', () => {
 ---
 
 *Код-ревью выполнено 2025-07-15. Раунд 1 (2025-07-15): 8 задач выполнено, 1 проверена (не баг). Раунд 2 (2025-07-16): CRIT-1 (App.tsx → 8 компонентов), CRIT-2 (store → 4 модуля), WARN-3 (3 переиспользуемых компонента), WARN-6 (CSG normals), WARN-8 (AABB caching), PERF-1 (snapshot cache), COSM-1 (inline styles → CSS), COSM-3 (DEFAULT_FILTERS). Все задачи код-ревью закрыты. Текущий код функционален, проходит typecheck и 35 тестов. Общий балл: 4.8/5.*
+
+---
+
+## 🔍 РАУНД 3 — Глубокое ревью (2025-07-16)
+
+**Ревьюер:** Koda AI  
+**Общий балл:** 4.5 / 5
+
+### 📊 Сводка
+
+| Категория | Оценка | Комментарий |
+|---|---|---|
+| **Архитектура** | ⭐⭐⭐⭐⭐ | Чёткое разделение: Worker → Store → Components |
+| **Читаемость** | ⭐⭐⭐⭐☆ | Хорошая модульность, но `worker.ts` (811 строк) и `PropertiesPanel.tsx` (434 строки) перегружены |
+| **Сопровождаемость** | ⭐⭐⭐⭐☆ | Модули разделены, но есть дублирование логики rebuild |
+| **Надёжность** | ⭐⭐⭐⭐☆ | Хорошая обработка ошибок, но есть race conditions и утечки памяти |
+| **Производительность** | ⭐⭐⭐⭐☆ | Snapshot cache, useMemo, worker-параллелизм, но есть узкие места в animate loop |
+| **Безопасность** | ⭐⭐⭐⭐☆ | Санитайзер параметров, но нет валидации размера STL и версионирования IndexedDB |
+| **Тестирование** | ⭐⭐⭐☆☆ | 35 тестов — критические пути математики не покрыты |
+
+### 🔴 КРИТИЧЕСКИЕ ПРОБЛЕМЫ
+
+#### CRIT-R3-1. Утечка памяти BoxHelper при удалении объектов
+
+**Где:** `src/components/Viewport3D.tsx`, строки 650–657  
+**Приоритет:** 🔴 Высокий  
+**Описание:** При удалении объектов из сцены `BoxHelper` (если есть в `entry.helper`) НЕ удаляется из сцены и НЕ dispose'ится. В Three.js `BoxHelper` — отдельный `Object3D` с собственным `BufferGeometry` и `Material`.
+
+**Решение:**
+```typescript
+if (entry.helper) {
+  scene.remove(entry.helper);
+  entry.helper.dispose?.();
+}
+```
+
+---
+
+#### CRIT-R3-2. Race condition при инициализации WASM Worker
+
+**Где:** `src/csg/worker-client.ts`, строки 24–27  
+**Приоритет:** 🔴 Средний  
+**Описание:** Паттерн сохранения resolver в замыкании — классический антипаттерн. При hot-reload в dev-режиме `_readyResolve` может быть потерян, и промис станет "вечным".
+
+**Решение:** Использовать handler-паттерн с удалением listener после получения ready.
+
+---
+
+#### CRIT-R3-3. Потенциальная утечка WASM-памяти при частых rebuild
+
+**Где:** `src/csg/worker.ts`, строка 752  
+**Приоритет:** 🔴 Средний  
+**Описание:** `cache.clear()` удаляет JS-ссылки, но WASM-объекты в памяти WebAssembly могут удерживаться с задержкой. При частых undo/redo это вызывает пики памяти.
+
+---
+
+### 🟡 ВАЖНЫЕ ПРОБЛЕМЫ
+
+#### WARN-R3-1. Дублирование логики rebuild между store и worker
+
+**Где:** `src/store/rebuild.ts` (строки 21–101) и `src/csg/worker.ts` (строки 550–756)  
+**Приоритет:** 🟡 Средний  
+**Описание:** Логика пересборки сцены из истории продублирована. При добавлении нового типа операции нужно обновить оба места.
+
+**Решение:** Единственный источник правды — worker. Store должен извлекать metadata из результата воркера.
+
+---
+
+#### WARN-R3-2. `sanitizeParams` непредсказуемо обрабатывает import_mesh
+
+**Где:** `src/csg/worker.ts`, строки 87–95  
+**Приоритет:** 🟡 Средний  
+**Описание:** Для примитивов параметры проходят через `sanitizeParams`, для `import_mesh` — нет. `_verts` и `_tris` извлекаются напрямую из `params`, что делает поведение непредсказуемым.
+
+---
+
+#### WARN-R3-3. `applySRAroundCenter` не покрыт тестами
+
+**Где:** `src/csg/worker.ts`, строки 242–270  
+**Приоритет:** 🟡 Средний  
+**Описание:** Критическая математическая функция для CSG (scale+rotation вокруг центра). Ошибка приведёт к невидимым артефактам. Не покрыта тестами.
+
+**Решение:** Добавить unit-тесты: identity transform, 90° rotation, scale 2x.
+
+---
+
+#### WARN-R3-4. postMessage без try/catch
+
+**Где:** `src/csg/worker.ts`, строки 372–386  
+**Приоритет:** 🟡 Средний  
+**Описание:** `postMessage` с transferList может выбросить `DataCloneError` при больших мешах.
+
+---
+
+#### WARN-R3-5. Emissive highlight в animate() — 6000 итераций/сек
+
+**Где:** `src/components/Viewport3D.tsx`, строки 333–344  
+**Приоритет:** 🟡 Средний  
+**Описание:** Цикл по всем объектам для подсветки выполняется каждый кадр. Для 100+ объектов — 60 000 итераций в секунду при 60 FPS.
+
+**Решение:** Вынести в отдельный `useEffect([selectedIds])`.
+
+---
+
+#### WARN-R3-6. Нет валидации размера STL при импорте
+
+**Где:** `src/io/stl-import.ts`  
+**Приоритет:** 🟡 Средний  
+**Описание:** Пользователь может загрузить STL с миллионами треугольников. Нет ограничений.
+
+---
+
+#### WARN-R3-7. IndexedDB без версионирования и миграции
+
+**Где:** `src/io/autosave.ts`, строка 7  
+**Приоритет:** 🟡 Низкий  
+**Описание:** `DB_NAME = 'tinkercraft-v1'`, но `openDB(..., 1)` не использует `onupgradeneeded` для миграции данных.
+
+---
+
+#### WARN-R3-8. STL экспорт игнорирует трансформации объектов (position, rotation, scale)
+
+**Где:** `src/io/stl-export.ts`, строки 34–85  
+**Приоритет:** 🟡 Высокий  
+**Описание:** Функция `exportToStl()` экспортирует вершины напрямую из `obj.vertices` без применения `obj.transform`. Пользователь перемещает, вращает и масштабирует объекты в редакторе, но при экспорте в STL все объекты выгружаются в исходных позициях без трансформации.
+
+```typescript
+// Строка 34-44 — вершины берутся из obj.vertices без трансформации
+for (const obj of visible) {
+  const { vertices, indices, normals } = obj
+
+  for (let t = 0; t < indices.length / 3; t++) {
+    const i0 = indices[t * 3]
+    const i1 = indices[t * 3 + 1]
+    const i2 = indices[t * 3 + 2]
+
+    const ax = vertices[i0 * 3], ay = vertices[i0 * 3 + 1], az = vertices[i0 * 3 + 2]
+    const bx = vertices[i1 * 3], by = vertices[i1 * 3 + 1], bz = vertices[i1 * 3 + 2]
+    const cx = vertices[i2 * 3], cy = vertices[i2 * 3 + 1], cz = vertices[i2 * 3 + 2]
+    // ← Вершины используются "как есть", obj.transform полностью игнорируется
+```
+
+**Пример проблемы:** Пользователь перемещает куб на позицию (100, 50, 0), поворачивает на 45° и масштабирует 2×. При экспорте STL куб окажется в (0, 0, 0) без поворота и масштаба.
+
+**Решение:** Применить матрицу трансформации к вершинам перед записью в STL:
+
+```typescript
+import * as THREE from 'three'
+
+function applyTransformToVertices(
+  vertices: Float32Array,
+  indices: Uint32Array,
+  transform: { x: number; y: number; z: number; rotX: number; rotY: number; rotZ: number; scaleX: number; scaleY: number; scaleZ: number },
+): { transformed: Float32Array; originalIndexMap: number[] } {
+  const matrix = new THREE.Matrix4()
+  matrix.makeRotationFromEuler(new THREE.Euler(
+    THREE.MathUtils.degToRad(transform.rotX),
+    THREE.MathUtils.degToRad(transform.rotY),
+    THREE.MathUtils.degToRad(transform.rotZ),
+    'XYZ',
+  ))
+  matrix.scale(new THREE.Vector3(transform.scaleX, transform.scaleY, transform.scaleZ))
+  matrix.setPosition(transform.x, transform.y, transform.z)
+
+  const count = vertices.length / 3
+  const transformed = new Float32Array(count * 3)
+  const indexMap: number[] = []
+
+  for (let i = 0; i < count; i++) {
+    const v = new THREE.Vector3(vertices[i * 3], vertices[i * 3 + 1], vertices[i * 3 + 2])
+    v.applyMatrix4(matrix)
+    transformed[i * 3] = v.x
+    transformed[i * 3 + 1] = v.y
+    transformed[i * 3 + 2] = v.z
+    indexMap.push(i)
+  }
+
+  return { transformed, originalIndexMap: indexMap }
+}
+```
+
+**Примечание:** Тесты `stl-export.test.ts` используют только identity transform (`T: TransformNR = { x:0, y:0, z:0, rotX:0, rotY:0, rotZ:0, scaleX:1, scaleY:1, scaleZ:1 }`), поэтому проблема не обнаружена тестами. Необходимо добавить тесты с non-identity transform.
+
+---
+
+### ⚡ ПРОИЗВОДИТЕЛЬНОСТЬ
+
+| # | Проблема | Где | Оценка |
+|---|---|---|---|
+| PERF-R3-1 | `cachedRaw.some()` — O(n) сравнение вершин | `Viewport3D.tsx:672` | 🟡 |
+| PERF-R3-2 | Emissive highlight в animate loop | `Viewport3D.tsx:333-344` | 🟡 |
+| PERF-R3-3 | `fitView` — пересчёт bbox всех мешей | `Viewport3D.tsx:399-405` | 🟢 |
+
+### 🧪 ТЕСТИРОВАНИЕ
+
+| Модуль | Что тестировать | Приоритет |
+|---|---|---|
+| `worker.ts` | `applySRAroundCenter` — identity, 90°, scale | 🔴 |
+| `worker.ts` | `sanitizeParams` — NaN, Infinity, negative | 🟡 |
+| `doodle-io.ts` | `parseDoodle` — валидный/повреждённый ZIP | 🟡 |
+| `autosave.ts` | autosaveSession + restoreSession | 🟡 |
+| `Viewport3D.tsx` | Centering CSG-результатов | 🟡 |
+
+### 📝 СТРУКТУРА
+
+| # | Проблема | Где | Оценка |
+|---|---|---|---|
+| COSM-R3-1 | `worker.ts` — 811 строк, глубокая вложенность | `worker.ts` | 🟡 |
+| COSM-R3-2 | `PropertiesPanel.tsx` — 434 строки, дублирование NumInput | `PropertiesPanel.tsx` | 🟢 |
+| COSM-R3-3 | `Object.fromEntries` + `as` assertion | `constants.ts` | 🟢 |
+
+### 🎯 ПЛАН ДЕЙСТВИЙ
+
+| # | Задача | Приоритет | Оценка |
+|---|---|---|---|
+| 1 | Утечка BoxHelper при удалении объектов | 🔴 | 15 мин |
+| 2 | Добавить тесты для `applySRAroundCenter` | 🔴 | 1-2 часа |
+| 3 | Исправить STL экспорт — применять трансформации к вершинам | 🟡 Высокий | 1-2 часа |
+| 4 | Emissive highlight — вынести из animate() | 🟡 | 30 мин |
+| 5 | Обернуть postMessage в try/catch | 🟡 | 15 мин |
+| 6 | Добавить валидацию размера STL при импорте | 🟡 | 30 мин |
+| 7 | Версионирование IndexedDB | 🟡 | 1 час |
+| 8 | Рефакторинг `PropertiesPanel` в data-driven | 🟢 | 2-3 часа |
+| 9 | Разделение `worker.ts` на модули | 🟢 | 3-4 часа |
+| 10 | Unit-тесты для `sanitizeParams` | 🟢 | 30 мин |
+| 11 | Добавить тесты для STL экспорта с non-identity transform | 🟢 | 30 мин |

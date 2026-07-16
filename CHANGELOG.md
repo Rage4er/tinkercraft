@@ -9,6 +9,29 @@
 
 ## [Unreleased]
 
+### Added — код-ревью раунд 3 (2025-07-16)
+
+- Документация глубокого код-ревью (раунд 3) в `CODE_REVIEW.md`:
+  - CRIT-R3-1: утечка BoxHelper при удалении объектов
+  - CRIT-R3-2: race condition при инициализации WASM Worker
+  - CRIT-R3-3: потенциальная утечка WASM-памяти при частых rebuild
+  - WARN-R3-1: дублирование логики rebuild между store и worker
+  - WARN-R3-2: `sanitizeParams` непредсказуемо обрабатывает import_mesh
+  - WARN-R3-3: `applySRAroundCenter` не покрыт тестами
+  - WARN-R3-4: postMessage без try/catch
+  - WARN-R3-5: emissive highlight в animate loop (6000 итераций/сек)
+  - WARN-R3-6: нет валидации размера STL при импорте
+  - WARN-R3-7: IndexedDB без версионирования
+  - WARN-R3-8: STL экспорт игнорирует трансформации (position, rotation, scale) — объекты экспортируются в (0,0,0) без поворота и масштаба
+  - PERF-R3-1: O(n) сравнение вершин через `cachedRaw.some()`
+  - PERF-R3-2: emissive highlight в animate loop
+  - PERF-R3-3: `fitView` — пересчёт bbox всех мешей
+  - COSM-R3-1: `worker.ts` — 811 строк, глубокая вложенность
+  - COSM-R3-2: `PropertiesPanel.tsx` — 434 строки, дублирование NumInput
+  - COSM-R3-3: `Object.fromEntries` + `as` assertion в constants.ts
+  - План действий: 9 задач от 15 мин до 4 часов
+- Общий балл раунда 3: 4.5 / 5
+
 ### Added — код-ревью раунд 2 (2025-07-16)
 
 - `store/helpers.ts` — утилиты store (extractAndCenter, computeAABB, makeObject, nextId, colorForIndex, PALETTE, ClipEntry)
