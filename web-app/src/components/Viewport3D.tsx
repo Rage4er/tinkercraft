@@ -9,6 +9,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { TransformControls } from "three/examples/jsm/controls/TransformControls.js";
 import type { SceneObject, TransformNR } from "../csg/types";
+import { computeAABB } from "../store/helpers";
 import WebGLFallback from "./WebGLFallback";
 import ViewCube from "./ViewCube";
 
@@ -68,23 +69,21 @@ function computeVertsHash(vertices: Float32Array): number {
   return hash;
 }
 
-// Центрирует геометрию меша и возвращает контейнер (pivot), в котором находится сам меш.
-// Worker применяет полный TRS к геометрии (translation + rotation + scale запекаются в Manifold).
-// Pivot.position устанавливается в (0,0,0) — sync-effect позже установит
-// правильную позицию из store (obj.transform).
+// Centers mesh geometry and returns a container (pivot).
+// Uses the shared computeAABB function from helpers.ts.
 function centerGeometry(mesh: THREE.Mesh, objectId: string): THREE.Object3D {
-  mesh.geometry.computeBoundingBox();
-  const box = mesh.geometry.boundingBox!;
-  const center = new THREE.Vector3();
-  box.getCenter(center);
+  // Compute bbox directly from vertices (no THREE.js overhead)
+  const geo = mesh.geometry as THREE.BufferGeometry;
+  const pos = geo.attributes.position;
+  if (pos) {
+    const vertices = pos.array as Float32Array;
+    const { min, max } = computeAABB(vertices);
+    const cx = (min.x + max.x) / 2, cy = (min.y + max.y) / 2, cz = (min.z + max.z) / 2;
+    geo.translate(-cx, -cy, -cz);
+  }
 
-  // Смещаем геометрию так, чтобы её центр оказался в (0,0,0)
-  mesh.geometry.translate(-center.x, -center.y, -center.z);
-
-  // Создаём контейнер‑объект, в котором будет находиться сам меш
   const container = new THREE.Object3D();
-  // Pivot остаётся в (0,0,0) — sync-effect установит позицию из store
-  container.userData.objectId = objectId; // важно для TransformControls
+  container.userData.objectId = objectId;
   container.add(mesh);
   return container;
 }
@@ -591,7 +590,7 @@ export default function Viewport3D({
 
       if (!start) return;
 
-      // Если это был клик (не drag) — выбираем объект через Raycaster
+      // If it was a click (not drag) — select object via Raycaster
       if (!isDraggingRef.current) {
         if (rulerMode) {
           const point = getWorldPointFromPointer(e);
@@ -626,7 +625,7 @@ export default function Viewport3D({
         return;
       }
 
-      // Если это был drag (выделение рамкой)
+      // If it was a drag (box selection)
       if (rulerMode) {
         const point = getWorldPointFromPointer(e);
         if (point && rulerPointsRef.current.length === 1) {
@@ -781,7 +780,7 @@ export default function Viewport3D({
         rawMesh.castShadow = true;
         rawMesh.receiveShadow = true;
         rawMesh.userData.objectId = obj.id;
-        // Центрируем геометрию и получаем pivot‑объект
+        // Center geometry and get pivot object
         // Worker запекает полный TRS в геометрию Manifold.
         // Pivot.position = (0,0,0) после centerGeometry — применяем transform из store.
         const pivot = centerGeometry(rawMesh, obj.id);

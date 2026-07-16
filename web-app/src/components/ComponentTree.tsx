@@ -1,6 +1,6 @@
 // ============================================================
 // ComponentTree — дерево объектов сцены с переименованием
-// Аналог SceneTreePanel.java из оригинального TinkerCraft
+// Analog of SceneTreePanel.java from the original TinkerCraft
 // ============================================================
 
 import { useState, useRef } from 'react'

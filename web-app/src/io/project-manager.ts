@@ -1,6 +1,6 @@
 // ============================================================
 // Project Manager — сохранение/загрузка нескольких проектов в IndexedDB
-// Аналог ProjectManager.java из оригинального TinkerCraft
+// Analog of ProjectManager.java from the original TinkerCraft
 // ============================================================
 
 import type { TinkerCraftOperation } from '../csg/types'

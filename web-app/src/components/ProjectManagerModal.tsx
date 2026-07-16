@@ -1,6 +1,6 @@
 // ============================================================
 // ProjectManagerModal — управление проектами (IndexedDB)
-// Аналог ProjectManager.java из оригинального TinkerCraft
+// Analog of ProjectManager.java from the original TinkerCraft
 // ============================================================
 
 import { useState, useEffect, useCallback } from 'react'

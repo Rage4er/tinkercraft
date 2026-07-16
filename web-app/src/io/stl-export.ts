@@ -1,6 +1,6 @@
 // ============================================================
 // STL Экспорт — бинарный формат
-// Совместим с TinkerCraft Java ExportManager.java
+// Compatible with TinkerCraft Java ExportManager.java
 // ============================================================
 
 import type { SceneObject } from '../csg/types'
@@ -13,7 +13,7 @@ function applyTransformToVertices(
   vertices: Float32Array,
   transform: { x: number; y: number; z: number; rotX: number; rotY: number; rotZ: number; scaleX: number; scaleY: number; scaleZ: number },
 ): Float32Array {
-  // Если трансформация identity — возвращаем как есть (оптимизация)
+  // If transform is identity — return as-is (optimization)
   if (
     transform.x === 0 && transform.y === 0 && transform.z === 0 &&
     transform.rotX === 0 && transform.rotY === 0 && transform.rotZ === 0 &&
@@ -22,7 +22,7 @@ function applyTransformToVertices(
     return vertices;
   }
 
-  // Строим матрицу трансформации: Translation × Rotation × Scale
+  // Build transformation matrix: Translation × Rotation × Scale
   // Euler XYZ (Three.js default): R = Rz × Ry × Rx
   const rx = transform.rotX * (Math.PI / 180);
   const ry = transform.rotY * (Math.PI / 180);
@@ -80,11 +80,11 @@ function applyTransformToVertices(
 export function exportToStl(objects: SceneObject[]): Blob {
   const visible = objects.filter(o => o.visible)
 
-  // Подсчитываем общее число треугольников
+  // Count total triangles
   let totalTris = 0
   for (const obj of visible) totalTris += obj.indices.length / 3
 
-  // Выделяем буфер: 80 (header) + 4 (count) + 50 * tris
+  // Allocate buffer: 80 (header) + 4 (count) + 50 * tris
   const buf    = new ArrayBuffer(84 + 50 * totalTris)
   const dv     = new DataView(buf)
   const header = new Uint8Array(buf, 0, 80)
@@ -139,19 +139,19 @@ export function exportToStl(objects: SceneObject[]): Blob {
         nx /= len; ny /= len; nz /= len
       }
 
-      // Нормаль (12 байт)
+      // Normal (12 bytes)
       dv.setFloat32(offset,      nx, true); offset += 4
       dv.setFloat32(offset,      ny, true); offset += 4
       dv.setFloat32(offset,      nz, true); offset += 4
-      // Вершина A
+      // Vertex A
       dv.setFloat32(offset,      ax, true); offset += 4
       dv.setFloat32(offset,      ay, true); offset += 4
       dv.setFloat32(offset,      az, true); offset += 4
-      // Вершина B
+      // Vertex B
       dv.setFloat32(offset,      bx, true); offset += 4
       dv.setFloat32(offset,      by, true); offset += 4
       dv.setFloat32(offset,      bz, true); offset += 4
-      // Вершина C
+      // Vertex C
       dv.setFloat32(offset,      cx, true); offset += 4
       dv.setFloat32(offset,      cy, true); offset += 4
       dv.setFloat32(offset,      cz, true); offset += 4

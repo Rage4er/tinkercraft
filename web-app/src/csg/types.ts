@@ -1,5 +1,5 @@
 // ============================================================
-// Типы формата .doodle — полное соответствие Java TinkerCraftFile
+// .doodle format types — full compatibility with Java TinkerCraftFile
 // ============================================================
 
 export interface TinkerCraftFile {

@@ -11,6 +11,11 @@
 
 ### Fixed — исправления раунда 4 (2026-07-16)
 
+- **WARN-R4-3:** Унификация `centerGeometry` / `extractAndCenter` — вынесена общая логика bbox в `computeAABB` и `computeCenter`
+  - `helpers.ts`: добавлены `computeAABB` и `computeCenter` (общая функция)
+  - `helpers.ts`: `extractAndCenter` использует `computeCenter` вместо дублирования кода
+  - `Viewport3D.tsx`: `centerGeometry` использует `computeAABB` вместо THREE.js `computeBoundingBox`
+  - Удалено дублирование ~20 строк bbox-логики
 - **WARN-R4-1:** Рефакторинг worker.ts — вынесение switch (800+ строк) в отдельные handlers (`worker-handlers.ts`)
   - Создан модуль `csg/worker-handlers.ts` с изолированными функциями: `handleBuildShape`, `handleApplyFillet`, `handleBuildImportedMesh`, `handleCsgBoolean`, `handleMirrorObject`
   - Утилиты: `buildPrimitive`, `buildPrimitiveWithFillet`, `applyTransform`, `extractMesh`, `safePostMessage`
@@ -26,6 +31,9 @@
 - **WARN-R4-5:** Runtime-валидация manifold API — проверка `setup`, `Manifold`, `CrossSection` (`worker.ts`)
 - **LOW-R4-3:** `URL.createObjectURL` в `try/finally` — гарантированное освобождение памяти (`doodle-io.ts`)
 - **Добавлено:** 18 новых тестов для `clamp()` и `sanitizeParams()` (`worker-sanitize.test.ts`)
+- **Добавлено:** 14 интеграционных тестов для operation chains (`rebuild-integration.test.ts`)
+- **Добавлено:** `computeCenter()` helper для извлечения bbox center из vertex buffer
+- **FIX:** Унификация языка комментариев — все русские комментарии переведены на английский (12 файлов)
 - **Итого:** 65 тестов (все проходят), 0 ошибок typecheck
 
 ### Added — код-ревью раунд 4 (2026-07-16)

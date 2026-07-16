@@ -1,6 +1,6 @@
 // ============================================================
 // Rebuild helper — reconstructs scene objects from operation history
-// Использует общие функции из csg/rebuildOps.ts для transform-логики.
+// Uses shared functions from csg/rebuildOps.ts for transform logic.
 // ============================================================
 
 import type {

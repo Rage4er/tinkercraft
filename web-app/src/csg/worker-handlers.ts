@@ -1,7 +1,7 @@
 // ============================================================
-// Worker handlers — отдельные обработчики для каждой операции
-// Разбиение огромного switch в worker.ts (800+ строк) на
-// изолированные функции для лучшей читаемости и тестируемости.
+// Worker handlers — individual handlers for each operation
+// Splitting the huge switch in worker.ts (800+ lines) into
+// isolated functions for better readability and testability.
 // ============================================================
 
 import { buildSRTMatrixAroundCenter } from './worker-matrix'

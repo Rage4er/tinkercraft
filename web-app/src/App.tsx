@@ -122,7 +122,7 @@ export default function App() {
     };
   }, [operations, historyIndex, triggerAutosave]);
 
-  // Клавиатурные сочетания — стабильный listener через ref (WARN-1 fix).
+  // Keyboard shortcuts — stable listener via ref (WARN-1 fix).
   // ref обновляется каждый рендер, но сам listener не переподключается.
   const kbRef = useRef({
     objects, deleteSelected, undo, redo, selectObjects,

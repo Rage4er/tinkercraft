@@ -2,11 +2,11 @@
 // Zustand store — TinkerCraftDocument с полным undo/redo
 // ============================================================
 //
-// Утилиты (computeAABB, extractAndCenter, makeObject, nextId, colorForIndex)
-// вынесены в ./helpers.ts
-// Интерфейс DocumentStore — в ./types.ts
-// rebuildFromHistory — в ./rebuild.ts
-// Реэкспорт computeAABB и extractAndCenter — для unit-тестов.
+// Utilities (computeAABB, extractAndCenter, makeObject, nextId, colorForIndex)
+// moved to ./helpers.ts
+// DocumentStore interface — in ./types.ts
+// rebuildFromHistory — in ./rebuild.ts
+// Re-export computeAABB and extractAndCenter — for unit tests.
 
 import { create } from 'zustand/react'
 import type {

@@ -1,5 +1,5 @@
 // ============================================================
-// Автосохранение в IndexedDB — восстанавливает сцену при перезагрузке
+// Auto-save to IndexedDB — restores scene on reload
 // ============================================================
 
 import type { TinkerCraftOperation } from '../csg/types'

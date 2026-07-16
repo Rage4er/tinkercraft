@@ -6,7 +6,7 @@ import type {
   SceneObject, ShapeType, ShapeParams, TransformNR, Vec3,
 } from '../csg/types'
 
-// ---- AABB (exported for unit testing) ----
+// ---- AABB ----
 export function computeAABB(vertices: Float32Array): { min: Vec3; max: Vec3 } {
   let minX = Infinity, maxX = -Infinity
   let minY = Infinity, maxY = -Infinity
@@ -19,25 +19,21 @@ export function computeAABB(vertices: Float32Array): { min: Vec3; max: Vec3 } {
   return { min: { x: minX, y: minY, z: minZ }, max: { x: maxX, y: maxY, z: maxZ } }
 }
 
+/** Returns bbox center for a vertex buffer (no mutation). */
+export function computeCenter(vertices: Float32Array): Vec3 {
+  const { min, max } = computeAABB(vertices)
+  return { x: (min.x + max.x) / 2, y: (min.y + max.y) / 2, z: (min.z + max.z) / 2 }
+}
+
 // Computes the bbox center of a vertex buffer, shifts all vertices so the
-// center is at the origin, and returns the center offset.  Used to normalise
-// CSG result geometry so the Three.js pivot can be placed at the true world
-// position of the result instead of always being at (0,0,0).
-// Exported for unit testing.
+// center is at the origin, and returns the center offset.
 export function extractAndCenter(vertices: Float32Array): { cx: number; cy: number; cz: number } {
   if (vertices.length === 0) return { cx: 0, cy: 0, cz: 0 }
-  let minX = Infinity, minY = Infinity, minZ = Infinity
-  let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity
+  const c = computeCenter(vertices)
   for (let i = 0; i < vertices.length; i += 3) {
-    if (vertices[i]   < minX) minX = vertices[i];   if (vertices[i]   > maxX) maxX = vertices[i]
-    if (vertices[i+1] < minY) minY = vertices[i+1]; if (vertices[i+1] > maxY) maxY = vertices[i+1]
-    if (vertices[i+2] < minZ) minZ = vertices[i+2]; if (vertices[i+2] > maxZ) maxZ = vertices[i+2]
+    vertices[i] -= c.x; vertices[i+1] -= c.y; vertices[i+2] -= c.z
   }
-  const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2, cz = (minZ + maxZ) / 2
-  for (let i = 0; i < vertices.length; i += 3) {
-    vertices[i] -= cx; vertices[i+1] -= cy; vertices[i+2] -= cz
-  }
-  return { cx, cy, cz }
+  return { cx: c.x, cy: c.y, cz: c.z }
 }
 
 /** Creates a SceneObject with cached AABB. Use everywhere a new object is created. */

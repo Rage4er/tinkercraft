@@ -1,7 +1,7 @@
 // ============================================================
-// Rebuild operations — общая логика обработки операций для
-// worker.ts (rebuildScene) и rebuild.ts (rebuildFromHistory).
-// Единственный источник правды для transform-манипуляций.
+// Rebuild operations — shared logic for worker.ts (rebuildScene)
+// and rebuild.ts (rebuildFromHistory).
+// Single source of truth for transform manipulation.
 // ============================================================
 
 import type {

@@ -1,6 +1,6 @@
 // ============================================================
 // .doodle формат — ZIP-архив с model.json + thumbnail.png
-// Совместимость с оригинальным Java TinkerCraftFile.
+// Compatibility with original Java TinkerCraftFile.
 // ============================================================
 
 import JSZip from 'jszip'
@@ -40,7 +40,7 @@ export async function parseDoodle(buffer: ArrayBuffer): Promise<TinkerCraftFile>
 
   const raw = JSON.parse(json)
 
-  // Поддержка обоих форматов: { version, operations } или просто массив операций
+  // Support both formats: { version, operations } or just an operations array
   let operations: TinkerCraftOperation[]
   let version = FORMAT_VERSION
 
@@ -78,7 +78,7 @@ export async function serializeDoodle(
   zip.file('model.json', JSON.stringify(doc, null, 2))
 
   if (thumbnailDataUrl) {
-    // Убираем data:image/png;base64, префикс
+    // Strip data:image/png;base64, prefix
     const base64 = thumbnailDataUrl.replace(/^data:image\/\w+;base64,/, '')
     zip.file('thumbnail.png', base64, { base64: true })
   } else {
