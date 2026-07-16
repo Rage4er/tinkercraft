@@ -1,27 +1,11 @@
 // ============================================================
 // Tests for worker sanitization functions (clamp, sanitizeParams)
-// These are tested indirectly via worker messages, but we test
-// the exported logic patterns here.
+// Imports the real production code from worker-handlers.ts.
+// FIX (CRIT-R5-1): Previously tested local copies, not real code.
 // ============================================================
 
 import { describe, it, expect } from 'vitest'
-
-/** Clamp a value to [min, max]; returns min for NaN/Infinity. */
-function clamp(v: number, min: number, max: number): number {
-  if (!Number.isFinite(v)) return min
-  return Math.max(min, Math.min(max, v))
-}
-
-/** Sanitise user-supplied params: drop non-numbers, clamp to ±1e6. */
-function sanitizeParams(params: Record<string, unknown>): Record<string, number> {
-  const result: Record<string, number> = {}
-  for (const [key, val] of Object.entries(params)) {
-    if (key.startsWith('_')) continue // skip internal fields (_verts, _tris)
-    const n = typeof val === 'number' ? val : NaN
-    result[key] = Number.isFinite(n) ? clamp(n, -1e6, 1e6) : 0
-  }
-  return result
-}
+import { clamp, sanitizeParams } from './worker-handlers'
 
 describe('clamp', () => {
   it('returns value within range', () => {

@@ -17,12 +17,24 @@ import {
   type RebuildTransform,
 } from '../csg/rebuildOps'
 
-export async function rebuildFromHistory(
-  ops: TinkerCraftOperation[],
-): Promise<Record<string, SceneObject>> {
-  const result = await workerRebuildScene(ops)
+/** Metadata accumulated over the operation chain. Exported for testing. */
+export interface RebuildMeta {
+  color: string
+  shapeType: ShapeType
+  params: ShapeParams
+  transform: TransformNR
+}
 
-  const meta: Record<string, { color: string; shapeType: ShapeType; params: ShapeParams; transform: TransformNR }> = {}
+/**
+ * Build metadata (transforms, colors, params) from operation history.
+ * Pure function — no WASM dependency. Exported for testing.
+ * Returns { meta, csgResultIds } matching what rebuildFromHistory uses.
+ */
+export function buildRebuildMeta(ops: TinkerCraftOperation[]): {
+  meta: Record<string, RebuildMeta>
+  csgResultIds: Set<string>
+} {
+  const meta: Record<string, RebuildMeta> = {}
   const transforms: Record<string, TransformNR> = {}
   const csgResultIds = new Set<string>()
 
@@ -95,6 +107,15 @@ export async function rebuildFromHistory(
       }
     }
   }
+
+  return { meta, csgResultIds }
+}
+
+export async function rebuildFromHistory(
+  ops: TinkerCraftOperation[],
+): Promise<Record<string, SceneObject>> {
+  const { meta, csgResultIds } = buildRebuildMeta(ops)
+  const result = await workerRebuildScene(ops)
 
   // For CSG results the worker returns geometry at world positions.  Center
   // each result's vertices and store the bbox offset as the pivot position,

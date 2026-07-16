@@ -17,6 +17,17 @@
   - Выявлены 2 критичные проблемы тестирования, 3 важных замечания, 3 низких
   - План действий: 8 задач, приоритет на unit-тесты worker-логики
 
+### Fixed — исправления раунда 5 (2026-07-16)
+
+- **CRIT-R5-1:** `worker-sanitize.test.ts` теперь импортирует `clamp`/`sanitizeParams` из `worker-handlers.ts` вместо тестирования локальных копий
+- **CRIT-R5-2 (частично):** Добавлены unit-тесты на `rebuildOps.ts` — `applyMoveDelta`, `applyMirrorToTransform`, `applyAlignToTransform`, `makeDefaultTransform` (20 тестов)
+- **WARN-R5-1:** `NumInput.tsx` — защита от `step <= 0` в `Math.log10` (добавлена проверка `step > 0`)
+- **WARN-R5-3:** `rebuild-integration.test.ts` переписан — тестирует `buildRebuildMeta()` (чистая функция из `rebuild.ts`) вместо проверки структуры операций (17 тестов)
+- **LOW-R5-1:** `rebuild-integration.test.ts` — убраны `as any`/`as unknown as`, используются type-safe фабрики
+- **LOW-R5-2:** `constants.ts` — убран избыточный `as Record<string, boolean>`
+- **LOW-R5-3:** `ViewCube.tsx` — `animateTo()` отменяет предыдущую анимацию через `cancelAnimationFrame` при повторных кликах
+- **Rebuild:** Извлечена чистая функция `buildRebuildMeta()` из `rebuildFromHistory()` для тестирования без WASM-зависимости
+
 ### Fixed — исправления раунда 4 (2026-07-16)
 
 - **CRITICAL FIX (CSG):** Исправлена ошибка "Objects not found" при CSG-операциях

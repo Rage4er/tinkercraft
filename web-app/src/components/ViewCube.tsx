@@ -25,6 +25,9 @@ const FACES: { label: string; normal: [number, number, number]; up: [number, num
   { label: 'Низ',    normal: [0,  0, -1], up: [0, 1, 0], color: '#3a8eef' },
 ]
 
+// Global RAF tracking for animateTo — cancel previous animation on new call
+let _activeAnimRaf = 0
+
 function animateTo(
   camera: THREE.PerspectiveCamera,
   controls: { target: THREE.Vector3; update: () => void },
@@ -32,6 +35,7 @@ function animateTo(
   toUp: THREE.Vector3,
   duration = 500,
 ) {
+  cancelAnimationFrame(_activeAnimRaf)
   const fromPos = camera.position.clone()
   const fromUp  = camera.up.clone()
   const target  = controls.target.clone()
@@ -44,10 +48,10 @@ function animateTo(
     camera.up.lerpVectors(fromUp, toUp, e).normalize()
     camera.lookAt(target)
     controls.update()
-    if (t < 1) requestAnimationFrame(tick)
+    if (t < 1) _activeAnimRaf = requestAnimationFrame(tick)
   }
 
-  requestAnimationFrame(tick)
+  _activeAnimRaf = requestAnimationFrame(tick)
 }
 
 export default function ViewCube({ mainCamera, mainControls }: Props) {

@@ -1,231 +1,294 @@
 // ============================================================
-// Integration tests: add → move → fillet → union → undo
-// Tests the rebuild pipeline by exercising the full operation chain.
+// Integration tests — rebuild meta chain (pure function, no WASM)
+// Tests buildRebuildMeta() which is the core logic of rebuildFromHistory.
+// FIX (WARN-R5-3, LOW-R5-1): Now tests real production code with
+// type-safe operation factories instead of 'as any' casts.
 // ============================================================
 
 import { describe, it, expect } from 'vitest'
-import type { TinkerCraftOperation } from '../csg/types'
+import { buildRebuildMeta, type RebuildMeta } from './rebuild'
+import type {
+  TinkerCraftOperation, AddShapeOperation, MoveOperation,
+  ColorOperation, GroupOperation, FilletOperation,
+  MirrorOperation, AlignOperation, DeleteOperation,
+  ResizeDimsOperation,
+} from '../csg/types'
 
-function makeAddShape(
-  id: string,
-  shapeType: string,
-  params: Record<string, number>,
-): TinkerCraftOperation {
-  return {
-    type: 'add_shape',
-    id,
-    shapeType: shapeType as any,
-    params,
-    color: '#89b4fa',
-    transform: { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 },
-  } as unknown as TinkerCraftOperation
+const DEFAULT_TRANSFORM = { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
+
+// --- Type-safe operation factories ---
+
+function makeAddShape(id: string, shapeType: AddShapeOperation['shapeType'], params: Record<string, number>): AddShapeOperation {
+  return { type: 'add_shape', id, shapeType, params, color: '#89b4fa', transform: { ...DEFAULT_TRANSFORM } }
 }
 
-function makeMove(ids: string[], delta: { x: number; y: number; z: number }): TinkerCraftOperation {
-  return { type: 'move', ids, delta } as unknown as TinkerCraftOperation
+function makeMove(ids: string[], delta: { x: number; y: number; z: number }): MoveOperation {
+  return { type: 'move', ids, delta }
 }
 
-function makeGroup(ids: string[], resultId: string, op: string = 'union'): TinkerCraftOperation {
-  return {
-    type: 'group',
-    ids,
-    resultId,
-    op,
-    subtractOp: op === 'subtract',
-    isIntersect: op === 'intersect',
-  } as unknown as TinkerCraftOperation
+function makeMoveWithRot(ids: string[], delta: { x: number; y: number; z: number }, rotDelta: { x: number; y: number; z: number }): MoveOperation {
+  return { type: 'move', ids, delta, rotDelta }
 }
 
-function makeColor(ids: string[], color: string): TinkerCraftOperation {
-  return { type: 'color', ids, color } as unknown as TinkerCraftOperation
+function makeMoveWithScale(ids: string[], delta: { x: number; y: number; z: number }, scaleDelta: { x: number; y: number; z: number }): MoveOperation {
+  return { type: 'move', ids, delta, scaleDelta }
 }
 
-describe('Operation chain: add → move → color', () => {
-  it('builds valid operation sequence', () => {
+function makeColor(ids: string[], color: string): ColorOperation {
+  return { type: 'color', ids, color }
+}
+
+function makeGroup(ids: string[], resultId: string, kind: 'union' | 'subtract' | 'intersect' = 'union'): GroupOperation {
+  return { type: 'group', ids, isHull: false, isIntersect: kind === 'intersect', subtractOp: kind === 'subtract', resultId }
+}
+
+function makeFillet(id: string, radius: number): FilletOperation {
+  return { type: 'fillet', id, radius }
+}
+
+function makeMirror(ids: string[], plane: MirrorOperation['plane']): MirrorOperation {
+  return { type: 'mirror', ids, plane }
+}
+
+function makeAlign(ids: string[], axis: AlignOperation['axis'], deltas: Record<string, number>): AlignOperation {
+  return { type: 'align', ids, axis, anchor: 'center', deltas }
+}
+
+function makeDelete(ids: string[]): DeleteOperation {
+  return { type: 'delete', ids }
+}
+
+function makeResizeDims(id: string, params: Record<string, number>): ResizeDimsOperation {
+  return { type: 'resize_dims', id, params }
+}
+
+// --- Tests for buildRebuildMeta (the core meta-building logic) ---
+
+describe('buildRebuildMeta: add_shape → move', () => {
+  it('tracks position after move', () => {
     const ops: TinkerCraftOperation[] = [
-      makeAddShape('cube1', 'cube', { width: 20, height: 20, depth: 20 }),
-      makeMove(['cube1'], { x: 5, y: 10, z: 0 }),
-      makeColor(['cube1'], '#ff0000'),
+      makeAddShape('a', 'cube', { width: 20, height: 20, depth: 20 }),
+      makeMove(['a'], { x: 10, y: 20, z: 30 }),
     ]
-
-    expect(ops.length).toBe(3)
-    expect(ops[0].type).toBe('add_shape')
-    expect((ops[0] as any).id).toBe('cube1')
-    expect(ops[1].type).toBe('move')
-    expect((ops[1] as any).delta).toEqual({ x: 5, y: 10, z: 0 })
-    expect(ops[2].type).toBe('color')
-    expect((ops[2] as any).color).toBe('#ff0000')
+    const { meta } = buildRebuildMeta(ops)
+    expect(meta['a'].transform.x).toBe(10)
+    expect(meta['a'].transform.y).toBe(20)
+    expect(meta['a'].transform.z).toBe(30)
   })
 
-  it('supports multiple object selection', () => {
+  it('preserves identity fields untouched by move', () => {
     const ops: TinkerCraftOperation[] = [
-      makeAddShape('a', 'cube', { width: 10, height: 10, depth: 10 }),
-      makeAddShape('b', 'sphere', { radius: 5 }),
-      makeMove(['a', 'b'], { x: 1, y: 2, z: 3 }),
+      makeAddShape('a', 'cube', { width: 20, height: 20, depth: 20 }),
+      makeMove(['a'], { x: 10, y: 0, z: 0 }),
     ]
-    expect((ops[2] as any).ids).toEqual(['a', 'b'])
+    const { meta } = buildRebuildMeta(ops)
+    expect(meta['a'].transform.rotX).toBe(0)
+    expect(meta['a'].transform.scaleX).toBe(1)
   })
 })
 
-describe('Operation chain: add → group (union/subtract/intersect)', () => {
-  it('builds union operation', () => {
+describe('buildRebuildMeta: add_shape → move (rotation)', () => {
+  it('tracks rotation delta', () => {
+    const ops: TinkerCraftOperation[] = [
+      makeAddShape('a', 'cube', { width: 20, height: 20, depth: 20 }),
+      makeMoveWithRot(['a'], { x: 0, y: 0, z: 0 }, { x: 45, y: 90, z: 0 }),
+    ]
+    const { meta } = buildRebuildMeta(ops)
+    expect(meta['a'].transform.rotX).toBe(45)
+    expect(meta['a'].transform.rotY).toBe(90)
+    expect(meta['a'].transform.rotZ).toBe(0)
+  })
+})
+
+describe('buildRebuildMeta: add_shape → move (scale)', () => {
+  it('tracks scale delta', () => {
+    const ops: TinkerCraftOperation[] = [
+      makeAddShape('a', 'cube', { width: 20, height: 20, depth: 20 }),
+      makeMoveWithScale(['a'], { x: 0, y: 0, z: 0 }, { x: 0.5, y: 0, z: 0 }),
+    ]
+    const { meta } = buildRebuildMeta(ops)
+    expect(meta['a'].transform.scaleX).toBe(1.5)
+    expect(meta['a'].transform.scaleY).toBe(1)
+  })
+})
+
+describe('buildRebuildMeta: mirror (negate position)', () => {
+  it('mirrors across YZ plane negates X', () => {
+    const ops: TinkerCraftOperation[] = [
+      makeAddShape('a', 'cube', { width: 20, height: 20, depth: 20 }),
+      makeMove(['a'], { x: 10, y: 20, z: 30 }),
+      makeMirror(['a'], 'YZ'),
+    ]
+    const { meta } = buildRebuildMeta(ops)
+    expect(meta['a'].transform.x).toBe(-10)
+    expect(meta['a'].transform.y).toBe(20)
+    expect(meta['a'].transform.z).toBe(30)
+  })
+
+  it('mirrors across XZ plane negates Y', () => {
+    const ops: TinkerCraftOperation[] = [
+      makeAddShape('a', 'cube', { width: 20, height: 20, depth: 20 }),
+      makeMove(['a'], { x: 10, y: 20, z: 30 }),
+      makeMirror(['a'], 'XZ'),
+    ]
+    const { meta } = buildRebuildMeta(ops)
+    expect(meta['a'].transform.x).toBe(10)
+    expect(meta['a'].transform.y).toBe(-20)
+    expect(meta['a'].transform.z).toBe(30)
+  })
+
+  it('mirrors across XY plane negates Z', () => {
+    const ops: TinkerCraftOperation[] = [
+      makeAddShape('a', 'cube', { width: 20, height: 20, depth: 20 }),
+      makeMove(['a'], { x: 10, y: 20, z: 30 }),
+      makeMirror(['a'], 'XY'),
+    ]
+    const { meta } = buildRebuildMeta(ops)
+    expect(meta['a'].transform.x).toBe(10)
+    expect(meta['a'].transform.y).toBe(20)
+    expect(meta['a'].transform.z).toBe(-30)
+  })
+})
+
+describe('buildRebuildMeta: color update', () => {
+  it('updates color without affecting transform', () => {
+    const ops: TinkerCraftOperation[] = [
+      makeAddShape('a', 'cube', { width: 20, height: 20, depth: 20 }),
+      makeColor(['a'], '#ff0000'),
+    ]
+    const { meta } = buildRebuildMeta(ops)
+    expect(meta['a'].color).toBe('#ff0000')
+    expect(meta['a'].shapeType).toBe('cube')
+    expect(meta['a'].transform.rotX).toBe(0)
+  })
+})
+
+describe('buildRebuildMeta: fillet updates params', () => {
+  it('adds filletRadius to params', () => {
+    const ops: TinkerCraftOperation[] = [
+      makeAddShape('a', 'cube', { width: 20, height: 20, depth: 20 }),
+      makeFillet('a', 2.5),
+    ]
+    const { meta } = buildRebuildMeta(ops)
+    expect(meta['a'].params.filletRadius).toBe(2.5)
+    expect(meta['a'].params.width).toBe(20)
+  })
+})
+
+describe('buildRebuildMeta: group creates result and removes sources', () => {
+  it('removes source objects and creates result', () => {
     const ops: TinkerCraftOperation[] = [
       makeAddShape('a', 'cube', { width: 20, height: 20, depth: 20 }),
       makeAddShape('b', 'sphere', { radius: 10 }),
-      makeGroup(['a', 'b'], 'union1', 'union'),
+      makeGroup(['a', 'b'], 'result1', 'union'),
     ]
-    expect(ops[2].type).toBe('group')
-    expect((ops[2] as any).resultId).toBe('union1')
-    expect((ops[2] as any).op).toBe('union')
+    const { meta, csgResultIds } = buildRebuildMeta(ops)
+    expect(meta['a']).toBeUndefined()
+    expect(meta['b']).toBeUndefined()
+    expect(meta['result1']).toBeDefined()
+    expect(csgResultIds.has('result1')).toBe(true)
   })
 
-  it('builds subtract operation', () => {
+  it('result inherits color from first source', () => {
+    const ops: TinkerCraftOperation[] = [
+      makeAddShape('a', 'cube', { width: 20, height: 20, depth: 20 }),
+      makeColor(['a'], '#00ff00'),
+      makeAddShape('b', 'sphere', { radius: 10 }),
+      makeGroup(['a', 'b'], 'result1', 'union'),
+    ]
+    const { meta } = buildRebuildMeta(ops)
+    expect(meta['result1'].color).toBe('#00ff00')
+  })
+})
+
+describe('buildRebuildMeta: delete removes objects', () => {
+  it('removes deleted object from meta', () => {
     const ops: TinkerCraftOperation[] = [
       makeAddShape('a', 'cube', { width: 20, height: 20, depth: 20 }),
       makeAddShape('b', 'sphere', { radius: 10 }),
-      makeGroup(['a', 'b'], 'sub1', 'subtract'),
+      makeDelete(['a']),
     ]
-    expect((ops[2] as any).op).toBe('subtract')
-    expect((ops[2] as any).subtractOp).toBe(true)
-  })
-
-  it('builds intersect operation', () => {
-    const ops: TinkerCraftOperation[] = [
-      makeAddShape('a', 'cube', { width: 20, height: 20, depth: 20 }),
-      makeAddShape('b', 'sphere', { radius: 10 }),
-      makeGroup(['a', 'b'], 'int1', 'intersect'),
-    ]
-    expect((ops[2] as any).op).toBe('intersect')
-    expect((ops[2] as any).isIntersect).toBe(true)
+    const { meta } = buildRebuildMeta(ops)
+    expect(meta['a']).toBeUndefined()
+    expect(meta['b']).toBeDefined()
   })
 })
 
-describe('Operation chain: add → move → group → move', () => {
-  it('supports chaining operations after group', () => {
+describe('buildRebuildMeta: align', () => {
+  it('applies align delta to transform', () => {
     const ops: TinkerCraftOperation[] = [
       makeAddShape('a', 'cube', { width: 20, height: 20, depth: 20 }),
-      makeAddShape('b', 'sphere', { radius: 10 }),
-      makeGroup(['a', 'b'], 'result1'),
-      makeMove(['result1'], { x: 100, y: 0, z: 0 }),
+      makeMove(['a'], { x: 10, y: 0, z: 0 }),
+      makeAlign(['a'], 'X', { a: 5 }),
     ]
-    expect(ops.length).toBe(4)
-    expect(ops[3].type).toBe('move')
+    const { meta } = buildRebuildMeta(ops)
+    expect(meta['a'].transform.x).toBe(15)
   })
 })
 
-describe('Operation chain: add → fillet → move', () => {
-  it('supports fillet on cube', () => {
+describe('buildRebuildMeta: resize_dims', () => {
+  it('resize_dims does not affect transform (only params handled by worker)', () => {
     const ops: TinkerCraftOperation[] = [
-      makeAddShape('cube1', 'cube', { width: 20, height: 20, depth: 20 }),
-      { type: 'fillet', id: 'cube1', radius: 1.5 } as unknown as TinkerCraftOperation,
-      makeMove(['cube1'], { x: 5, y: 5, z: 0 }),
+      makeAddShape('a', 'cube', { width: 20, height: 20, depth: 20 }),
+      makeResizeDims('a', { width: 30 }),
     ]
-    expect(ops.length).toBe(3)
-    expect(ops[1].type).toBe('fillet')
-    expect((ops[1] as any).radius).toBe(1.5)
-    expect(ops[2].type).toBe('move')
+    const { meta } = buildRebuildMeta(ops)
+    // resize_dims rebuild logic is handled by the worker, not by meta
+    expect(meta['a'].transform.x).toBe(0)
   })
 })
 
-describe('Operation chain: mirror', () => {
-  it('supports XY mirror', () => {
-    const ops: TinkerCraftOperation[] = [
-      makeAddShape('a', 'cube', { width: 20, height: 20, depth: 20 }),
-      { type: 'mirror', ids: ['a'], plane: 'XY' } as unknown as TinkerCraftOperation,
-    ]
-    expect((ops[1] as any).plane).toBe('XY')
-  })
-
-  it('supports XZ mirror', () => {
-    const ops: TinkerCraftOperation[] = [
-      makeAddShape('a', 'cube', { width: 20, height: 20, depth: 20 }),
-      { type: 'mirror', ids: ['a'], plane: 'XZ' } as unknown as TinkerCraftOperation,
-    ]
-    expect((ops[1] as any).plane).toBe('XZ')
-  })
-
-  it('supports YZ mirror', () => {
-    const ops: TinkerCraftOperation[] = [
-      makeAddShape('a', 'cube', { width: 20, height: 20, depth: 20 }),
-      { type: 'mirror', ids: ['a'], plane: 'YZ' } as unknown as TinkerCraftOperation,
-    ]
-    expect((ops[1] as any).plane).toBe('YZ')
-  })
-})
-
-describe('Operation chain: align', () => {
-  it('supports align operation', () => {
-    const ops: TinkerCraftOperation[] = [
-      makeAddShape('a', 'cube', { width: 20, height: 20, depth: 20 }),
-      { type: 'align', ids: ['a'], axis: 'X', deltas: { a: 5 } } as unknown as TinkerCraftOperation,
-    ]
-    expect(ops[1].type).toBe('align')
-    expect((ops[1] as any).axis).toBe('X')
-  })
-})
-
-describe('Operation chain: resize_dims', () => {
-  it('supports resize operation', () => {
-    const ops: TinkerCraftOperation[] = [
-      makeAddShape('a', 'cube', { width: 20, height: 20, depth: 20 }),
-      { type: 'resize_dims', id: 'a', params: { width: 30, height: 25 } } as unknown as TinkerCraftOperation,
-    ]
-    expect(ops[1].type).toBe('resize_dims')
-    expect((ops[1] as any).params).toEqual({ width: 30, height: 25 })
-  })
-})
-
-describe('Full pipeline: add → move → fillet → group → move', () => {
-  it('builds a complete pipeline', () => {
+describe('buildRebuildMeta: full pipeline add → move → fillet → group → move', () => {
+  it('tracks through full operation chain', () => {
     const ops: TinkerCraftOperation[] = [
       makeAddShape('cube1', 'cube', { width: 20, height: 20, depth: 20 }),
       makeMove(['cube1'], { x: 5, y: 0, z: 0 }),
-      { type: 'fillet', id: 'cube1', radius: 1.5 } as unknown as TinkerCraftOperation,
+      makeFillet('cube1', 1.5),
       makeAddShape('sphere1', 'sphere', { radius: 12 }),
       makeMove(['sphere1'], { x: -10, y: 0, z: 0 }),
       makeGroup(['cube1', 'sphere1'], 'union1', 'union'),
       makeMove(['union1'], { x: 0, y: 50, z: 0 }),
       makeColor(['union1'], '#00ff00'),
     ]
-
-    expect(ops.length).toBe(8)
-    expect(ops[0].type).toBe('add_shape')
-    expect(ops[1].type).toBe('move')
-    expect(ops[2].type).toBe('fillet')
-    expect(ops[3].type).toBe('add_shape')
-    expect(ops[4].type).toBe('move')
-    expect(ops[5].type).toBe('group')
-    expect(ops[6].type).toBe('move')
-    expect(ops[7].type).toBe('color')
-
-    expect((ops[1] as any).delta).toEqual({ x: 5, y: 0, z: 0 })
-    expect((ops[6] as any).delta).toEqual({ x: 0, y: 50, z: 0 })
-    expect((ops[2] as any).radius).toBe(1.5)
-    expect((ops[5] as any).resultId).toBe('union1')
+    const { meta, csgResultIds } = buildRebuildMeta(ops)
+    expect(meta['cube1']).toBeUndefined() // removed by group
+    expect(meta['sphere1']).toBeUndefined()
+    expect(csgResultIds.has('union1')).toBe(true)
+    expect(meta['union1']).toBeDefined()
+    expect(meta['union1'].color).toBe('#00ff00')
+    expect(meta['union1'].transform.y).toBe(50)
   })
 })
 
-describe('Operation type safety', () => {
-  it('all operations have valid types', () => {
-    const validTypes = new Set([
-      'add_shape', 'move', 'fillet', 'group', 'color',
-      'delete', 'mirror', 'align', 'resize_dims',
-    ])
-
+describe('buildRebuildMeta: multiple objects selected for move', () => {
+  it('moves all selected objects', () => {
     const ops: TinkerCraftOperation[] = [
       makeAddShape('a', 'cube', { width: 10, height: 10, depth: 10 }),
-      makeMove(['a'], { x: 1, y: 2, z: 3 }),
-      { type: 'fillet', id: 'a', radius: 1 } as unknown as TinkerCraftOperation,
-      makeGroup(['a'], 'r1'),
-      makeColor(['a'], '#ff0000'),
-      { type: 'delete', ids: ['a'] } as unknown as TinkerCraftOperation,
-      { type: 'mirror', ids: ['a'], plane: 'XY' } as unknown as TinkerCraftOperation,
-      { type: 'align', ids: ['a'], axis: 'X', deltas: { a: 5 } } as unknown as TinkerCraftOperation,
-      { type: 'resize_dims', id: 'a', params: { width: 15 } } as unknown as TinkerCraftOperation,
+      makeAddShape('b', 'sphere', { radius: 5 }),
+      makeMove(['a', 'b'], { x: 1, y: 2, z: 3 }),
     ]
-
-    for (const op of ops) {
-      expect(validTypes.has(op.type)).toBe(true)
-    }
+    const { meta } = buildRebuildMeta(ops)
+    expect(meta['a'].transform.x).toBe(1)
+    expect(meta['b'].transform.x).toBe(1)
+    expect(meta['a'].transform.y).toBe(2)
+    expect(meta['b'].transform.y).toBe(2)
+    expect(meta['a'].transform.z).toBe(3)
+    expect(meta['b'].transform.z).toBe(3)
   })
 })
+
+describe('buildRebuildMeta: chain add → move → color → move', () => {
+  it('color after move does not override transform', () => {
+    const ops: TinkerCraftOperation[] = [
+      makeAddShape('a', 'cube', { width: 10, height: 10, depth: 10 }),
+      makeMove(['a'], { x: 5, y: 10, z: 0 }),
+      makeColor(['a'], '#ff0000'),
+      makeMove(['a'], { x: 0, y: -5, z: 0 }),
+    ]
+    const { meta } = buildRebuildMeta(ops)
+    expect(meta['a'].color).toBe('#ff0000')
+    expect(meta['a'].transform.x).toBe(5)
+    expect(meta['a'].transform.y).toBe(5) // 10 + (-5)
+  })
+})
+

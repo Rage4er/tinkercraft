@@ -18,7 +18,7 @@ export default function NumInput({
   step?: number;
   onChange: (v: number) => void;
 }) {
-  const decimals = step !== undefined && step < 1 ? Math.ceil(-Math.log10(step)) : 1;
+  const decimals = step !== undefined && step > 0 && step < 1 ? Math.ceil(-Math.log10(step)) : 1;
   const [draft, setDraft] = useState(value.toFixed(decimals));
   useEffect(() => {
     setDraft(value.toFixed(decimals));

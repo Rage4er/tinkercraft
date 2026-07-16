@@ -46,4 +46,4 @@ export const OP_FILTER_LABELS: Record<string, string> = {
 // ---- Default filters (all enabled) ----
 export const DEFAULT_FILTERS = Object.fromEntries(
   Object.keys(OP_FILTER_LABELS).map((k) => [k, true]),
-) as Record<string, boolean>;
+);
