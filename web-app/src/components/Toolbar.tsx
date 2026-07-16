@@ -1,4 +1,7 @@
 import type { GizmoMode } from "./Viewport3D";
+import MirrorButtons from "./MirrorButtons";
+import AlignButtons from "./AlignButtons";
+import CsgButtons from "./CsgButtons";
 
 export default function Toolbar({
   titleSuffix,
@@ -174,41 +177,11 @@ export default function Toolbar({
         </button>
       </div>
 
-      <div className="toolbar-group">
-        <button className="btn" disabled={!canMirror} onClick={() => onMirror("YZ")} title="Зеркало YZ">
-          ⟺YZ
-        </button>
-        <button className="btn" disabled={!canMirror} onClick={() => onMirror("XZ")} title="Зеркало XZ">
-          ⟺XZ
-        </button>
-        <button className="btn" disabled={!canMirror} onClick={() => onMirror("XY")} title="Зеркало XY">
-          ⟺XY
-        </button>
-      </div>
+      <MirrorButtons disabled={!canMirror} onMirror={onMirror} />
 
-      <div className="toolbar-group">
-        <button className="btn" disabled={!canAlign} onClick={() => onAlign("X", "min")} title="◧X">
-          ◧X
-        </button>
-        <button className="btn" disabled={!canAlign} onClick={() => onAlign("X", "center")} title="⊡X">
-          ⊡X
-        </button>
-        <button className="btn" disabled={!canAlign} onClick={() => onAlign("X", "max")} title="◨X">
-          ◨X
-        </button>
-        <button className="btn" disabled={!canAlign} onClick={() => onAlign("Y", "center")} title="⊡Y">
-          ⊡Y
-        </button>
-        <button className="btn" disabled={!canAlign} onClick={() => onAlign("Z", "center")} title="⊡Z">
-          ⊡Z
-        </button>
-      </div>
+      <AlignButtons disabled={!canAlign} onAlign={onAlign} />
 
-      <div className="toolbar-group">
-        <button className="btn primary" disabled={!canCsg} onClick={() => onCsg("union")}>∪</button>
-        <button className="btn primary" disabled={!canCsg} onClick={() => onCsg("subtract")}>−</button>
-        <button className="btn primary" disabled={!canCsg} onClick={() => onCsg("intersect")}>∩</button>
-      </div>
+      <CsgButtons disabled={!canCsg} onCsg={onCsg} />
 
       <div className="toolbar-group">
         <button className="btn" onClick={onToggleTheme} title="Сменить тему">

@@ -1,4 +1,7 @@
 import NumInput from "./NumInput";
+import MirrorButtons from "./MirrorButtons";
+import AlignButtons from "./AlignButtons";
+import CsgButtons from "./CsgButtons";
 import type { ShapeParams, SceneObject } from "../csg/types";
 
 export default function PropertiesPanel({
@@ -435,116 +438,15 @@ export default function PropertiesPanel({
 
       {/* Зеркало */}
       {selectedIds.length === 1 && (
-        <div className="csg-group">
-          <div className="csg-group-title">Зеркало</div>
-          <div style={{ display: "flex", gap: 4 }}>
-            <button
-              className="btn"
-              style={{ flex: 1 }}
-              disabled={!canMirror}
-              onClick={() => onMirror("YZ")}
-            >
-              YZ
-            </button>
-            <button
-              className="btn"
-              style={{ flex: 1 }}
-              disabled={!canMirror}
-              onClick={() => onMirror("XZ")}
-            >
-              XZ
-            </button>
-            <button
-              className="btn"
-              style={{ flex: 1 }}
-              disabled={!canMirror}
-              onClick={() => onMirror("XY")}
-            >
-              XY
-            </button>
-          </div>
-        </div>
+        <MirrorButtons disabled={!canMirror} onMirror={onMirror} variant="full" />
       )}
 
-      {/* CSG */}
+      {/* CSG + Align */}
       {selectedIds.length === 2 && (
-        <div className="csg-group">
-          <div className="csg-group-title">CSG операции</div>
-          <button
-            className="btn primary"
-            disabled={!canCsg}
-            onClick={() => onCsg("union")}
-          >
-            ∪ Объединение
-          </button>
-          <button
-            className="btn primary"
-            disabled={!canCsg}
-            onClick={() => onCsg("subtract")}
-          >
-            − Вычитание
-          </button>
-          <button
-            className="btn primary"
-            disabled={!canCsg}
-            onClick={() => onCsg("intersect")}
-          >
-            ∩ Пересечение
-          </button>
-          <div className="csg-group-title" style={{ marginTop: 8 }}>
-            Выравнивание
-          </div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-            <button
-              className="btn"
-              style={{ flex: 1, minWidth: 36 }}
-              disabled={!canAlign}
-              onClick={() => onAlign("X", "min")}
-            >
-              X◧
-            </button>
-            <button
-              className="btn"
-              style={{ flex: 1, minWidth: 36 }}
-              disabled={!canAlign}
-              onClick={() => onAlign("X", "center")}
-            >
-              X⊡
-            </button>
-            <button
-              className="btn"
-              style={{ flex: 1, minWidth: 36 }}
-              disabled={!canAlign}
-              onClick={() => onAlign("X", "max")}
-            >
-              X◨
-            </button>
-            <button
-              className="btn"
-              style={{ flex: 1, minWidth: 36 }}
-              disabled={!canAlign}
-              onClick={() => onAlign("Y", "min")}
-            >
-              Y◧
-            </button>
-            <button
-              className="btn"
-              style={{ flex: 1, minWidth: 36 }}
-              disabled={!canAlign}
-              onClick={() => onAlign("Y", "center")}
-            >
-              Y⊡
-            </button>
-            <button
-              className="btn"
-              style={{ flex: 1, minWidth: 36 }}
-              disabled={!canAlign}
-              onClick={() => onAlign("Y", "max")}
-            >
-              Y◨
-            </button>
-          </div>
-        </div>
+        <>
+          <CsgButtons disabled={!canCsg} onCsg={onCsg} variant="full" />
+          <AlignButtons disabled={!canAlign} onAlign={onAlign} variant="full" />
+        </>
       )}
     </>
   );

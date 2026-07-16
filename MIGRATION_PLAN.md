@@ -229,8 +229,8 @@
 |---|---|---|---|
 | ~~CRIT-1~~ | ~~Разделение `App.tsx` (1809 строк) на ~12 компонентов~~ | ~~1-2 дня рефакторинга~~ | ✅ Выполнено (553 строки, 8 компонентов) |
 | ~~CRIT-2~~ | ~~Разделение `document-store.ts` (750 строк) на модули~~ | ~~1-2 дня рефакторинга~~ | ✅ Выполнено (500 строк, 3 новых модуля: helpers, types, rebuild) |
-| PERF-1 | Кэширование snapshots для undo/redo | Архитектурное изменение | 🔲 |
-| WARN-3 | Дублирование инструментов в тулбаре и панели свойств | Зависит от CRIT-1 | 🔄 Частично (компоненты разделены, дублирование осталось) |
+| ~~PERF-1~~ | ~~Кэширование snapshots для undo/redo~~ | ~~Архитектурное изменение~~ | ✅ Выполнено (snapshots.ts, мгновенный undo/redo) |
+| ~~WARN-3~~ | ~~Дублирование инструментов в тулбаре и панели свойств~~ | ~~Зависит от CRIT-1~~ | ✅ Выполнено (3 переиспользуемых компонента: MirrorButtons, CsgButtons, AlignButtons) |
 | ~~WARN-6~~ | ~~Нормали для CSG-геометрии в STL-экспорте~~ | ~~Требует изменения `SceneObject` + worker~~ | ✅ Выполнено |
 | ~~WARN-8~~ | ~~Кэширование AABB в `SceneObject`~~ | ~~Требует изменения типов + worker~~ | ✅ Выполнено |
 | COSM-1 | Инлайн-стили в CSS-модули | 2-3 часа, низкий приоритет | 🔲 |
@@ -297,6 +297,7 @@ tinkercraft/
 │   │   │   ├── helpers.ts         # утилиты (extractAndCenter, computeAABB, makeObject)
 │   │   │   ├── types.ts           # DocumentStore interface
 │   │   │   ├── rebuild.ts         # rebuildFromHistory — восстановление из истории
+│   │   │   ├── snapshots.ts       # кэш snapshot'ов для undo/redo (PERF-1)
 │   │   │   ├── document-store.test.ts  # unit-тесты computeAABB + extractAndCenter
 │   │   │   └── notifications.ts   # toast-уведомления (замена alert)
 │   │   │
@@ -312,6 +313,9 @@ tinkercraft/
 │   │   │   ├── NumInput.tsx       # numeric input с draft-редактированием
 │   │   │   ├── Section.tsx        # collapsible section
 │   │   │   ├── Timeline.tsx       # история операций + opIcon/opLabel
+│   │   │   ├── MirrorButtons.tsx  # переиспользуемые кнопки зеркала (WARN-3)
+│   │   │   ├── CsgButtons.tsx     # переиспользуемые кнопки CSG (WARN-3)
+│   │   │   ├── AlignButtons.tsx   # переиспользуемые кнопки выравнивания (WARN-3)
 │   │   │   ├── ProjectManagerModal.tsx
 │   │   │   ├── ToastContainer.tsx # toast рендер
 │   │   │   ├── ErrorBoundary.tsx
@@ -358,7 +362,7 @@ tinkercraft/
 | Нет импорта SVG | 🔲 | Фаза 7 |
 | Нет импорта 3MF | 🔲 | Фаза 7 |
 | Нет Robot Lab | 🔲 | Фаза 7 (опционально) |
-| Медленная регенерация при >50 операциях | ⚠️ | Оптимизировать в Фазе 7 (PERF-1: кэш snapshots) |
+| Медленная регенерация при >50 операциях | ✅ Исправлено | PERF-1: snapshot cache — мгновенный undo/redo после первой операции |
 | `App.tsx` — God Component (1809 строк) | ✅ Исправлено | CRIT-1: разделён на 8 компонентов (553 строки) |
 | `document-store.ts` — 757 строк в одном файле | ✅ Исправлено | CRIT-2: разделён на 4 модуля (helpers, types, rebuild, store — 500 строк) |
 | `any`-типы в воркере | ✅ Исправлено | WARN-4: типобезопасные интерфейсы |

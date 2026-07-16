@@ -14,6 +14,10 @@
 - `store/helpers.ts` — утилиты store (extractAndCenter, computeAABB, makeObject, nextId, colorForIndex, PALETTE, ClipEntry)
 - `store/types.ts` — DocumentStore interface
 - `store/rebuild.ts` — rebuildFromHistory (восстановление объектов из истории операций)
+- `store/snapshots.ts` — кэш snapshot'ов для мгновенного undo/redo (PERF-1)
+- `components/MirrorButtons.tsx` — переиспользуемые кнопки зеркала (compact/full variants)
+- `components/CsgButtons.tsx` — переиспользуемые кнопки CSG (compact/full variants)
+- `components/AlignButtons.tsx` — переиспользуемые кнопки выравнивания (compact/full variants)
 - `components/NumInput.tsx` — numeric input с draft-редактированием
 - `components/Section.tsx` — collapsible section
 - `components/Timeline.tsx` — история операций + opIcon/opLabel
@@ -37,6 +41,8 @@
 
 - `App.tsx` разделён с 1809 до 553 строк (−69%) — CRIT-1
 - `document-store.ts` разделён с 757 до 500 строк (−34%) — CRIT-2: утилиты, типы и rebuild вынесены в отдельные модули
+- Undo/redo использует snapshot cache вместо полного WASM rebuild — PERF-1: мгновенный undo/redo после первой операции
+- Дублирование Mirror/CSG/Align кнопок устранено — WARN-3: 3 переиспользуемых компонента с variant prop
 - `extractMesh()` в `worker.ts` парсит per-vertex normals из manifold-меша (WARN-6)
 - `stl-export.ts` использует manifold normals с fallback на cross-product (WARN-6)
 - `makeObject()` helper в `document-store.ts` — авто-вычисление и кэширование AABB (WARN-8)

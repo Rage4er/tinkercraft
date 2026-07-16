@@ -46,6 +46,7 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 | `src/store/helpers.ts` | Утилиты store (extractAndCenter, computeAABB, makeObject, nextId, colorForIndex) |
 | `src/store/types.ts` | DocumentStore interface |
 | `src/store/rebuild.ts` | rebuildFromHistory — восстановление объектов из истории операций |
+| `src/store/snapshots.ts` | Snapshot cache для мгновенного undo/redo (PERF-1) |
 | `src/store/notifications.ts` | Toast-уведомления (замена alert) |
 | `src/csg/worker.ts` | WASM worker — manifold-3d операции, типобезопасные интерфейсы |
 | `src/csg/worker-client.ts` | Promise-обёртка над воркером |
@@ -80,7 +81,7 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 - Один store: `document-store.ts`
 - Actions возвращают Promise при вызове воркера
 - История операций — массив `history[]` с фильтрацией
-- Undo/redo = полный rebuild через `rebuildFromHistory()`
+- Undo/redo через `rebuildFromHistory()` с snapshot cache (`snapshots.ts`) — мгновенный undo/redo при наличии кэша, fallback на WASM rebuild
 
 ### CSG Worker
 - Воркер кэширует manifold-объекты по `id` (Map)
@@ -148,7 +149,6 @@ Worker НЕ центрирует геометрию. Центрирование 
 ## Известные ограничения (не баги)
 
 - Fillet работает только для cube (требует специфичной математики для других форм)
-- Undo/redo = полный rebuild (нет кэша snapshots — PERF-1)
 
 ## Документация
 

@@ -32,6 +32,7 @@ import { computeAABB, extractAndCenter, makeObject, nextId, colorForIndex } from
 import type { ClipEntry } from './helpers'
 import type { DocumentStore } from './types'
 import { rebuildFromHistory } from './rebuild'
+import { cacheSnapshot, getCachedSnapshot, clearSnapshots } from './snapshots'
 
 // ---- Store ----
 
@@ -70,7 +71,9 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const ms   = performance.now() - t0
       const obj: SceneObject = makeObject({ id, shapeType, params: finalParams, color, transform, visible: true, locked: false, vertices: mesh.vertices, indices: mesh.indices, normals: mesh.normals })
       const newOps = [...operations.slice(0, historyIndex), op]
-      set({ operations: newOps, historyIndex: newOps.length, objects: { ...objects, [id]: obj }, modified: true, busy: false, lastCsgMs: ms })
+      const newObjects = { ...objects, [id]: obj }
+      set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true, busy: false, lastCsgMs: ms })
+      cacheSnapshot(newOps.length, newObjects)
     } catch (e) { set({ busy: false }); console.error('addShape:', e) }
   },
 
@@ -88,7 +91,9 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const obj: SceneObject = makeObject({ id, shapeType: 'import_mesh', params: {}, color, transform, visible: true, locked: false, vertices: result.vertices, indices: result.indices, normals: result.normals })
       const op: ImportMeshOperation = { type: 'import_mesh', id, name, color, transform, vertices, indices }
       const newOps = [...operations.slice(0, historyIndex), op]
-      set({ operations: newOps, historyIndex: newOps.length, objects: { ...objects, [id]: obj }, selectedIds: [id], modified: true, busy: false, lastCsgMs: ms })
+      const newObjects = { ...objects, [id]: obj }
+      set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, selectedIds: [id], modified: true, busy: false, lastCsgMs: ms })
+      cacheSnapshot(newOps.length, newObjects)
     } catch (e) { set({ busy: false }); console.error('addRawMesh:', e) }
   },
 
@@ -111,7 +116,9 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const obj: SceneObject = makeObject({ id, shapeType: 'import_mesh', params: {}, color, transform: mesh.transform, visible: true, locked: false, vertices: result.vertices, indices: result.indices })
       const op: ImportMeshOperation = { type: 'import_mesh', id, name: mesh.name, color, transform: mesh.transform, vertices: mesh.vertices, indices: mesh.indices }
       const newOps = [...operations.slice(0, historyIndex), op]
-      set({ operations: newOps, historyIndex: newOps.length, objects: { ...objects, [id]: obj }, selectedIds: [id], modified: true, busy: false, lastCsgMs: ms })
+      const newObjects = { ...objects, [id]: obj }
+      set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, selectedIds: [id], modified: true, busy: false, lastCsgMs: ms })
+      cacheSnapshot(newOps.length, newObjects)
     } catch (e) { set({ busy: false }); notify(`Ошибка импорта STL: ${e}`, 'error') }
   },
 
@@ -127,14 +134,16 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const ms   = performance.now() - t0
       const op: FilletOperation = { type: 'fillet', id, radius }
       const newOps = [...operations.slice(0, historyIndex), op]
+      const newObjects = { ...objects, [id]: { ...obj, params: { ...obj.params, filletRadius: radius }, vertices: mesh.vertices, indices: mesh.indices } }
       set({
         operations: newOps,
         historyIndex: newOps.length,
-        objects: { ...objects, [id]: { ...obj, params: { ...obj.params, filletRadius: radius }, vertices: mesh.vertices, indices: mesh.indices } },
+        objects: newObjects,
         modified: true,
         busy: false,
         lastCsgMs: ms,
       })
+      cacheSnapshot(newOps.length, newObjects)
     } catch (e) { set({ busy: false }); console.error('applyFillet:', e) }
   },
 
@@ -187,6 +196,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
 
       const ms = performance.now() - t0
       set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, selectedIds: pastedIds, modified: true, busy: false, lastCsgMs: ms })
+      cacheSnapshot(newOps.length, newObjects)
     } catch (e) { set({ busy: false }); console.error('paste:', e) }
   },
 
@@ -201,6 +211,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     await workerDeleteObjects(ids)
     const newOps = [...operations.slice(0, historyIndex), op]
     set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, selectedIds: [], modified: true })
+    cacheSnapshot(newOps.length, newObjects)
   },
 
   selectObjects: (ids, add) => {
@@ -242,6 +253,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const histOp: TinkerCraftOperation = { type: 'group', ids: [idA, idB], isHull: false, isIntersect: op === 'intersect', subtractOp: op === 'subtract', resultId } as TinkerCraftOperation
       const newOps = [...operations.slice(0, historyIndex), histOp]
       set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, selectedIds: [resultId], modified: true, busy: false, lastCsgMs: ms })
+      cacheSnapshot(newOps.length, newObjects)
     } catch (e) { set({ busy: false }); console.error('csgBoolean:', e) }
   },
 
@@ -260,7 +272,9 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const kind = hasScale && !hasPos && !hasRot ? 'scale' : hasRot && !hasPos && !hasScale ? 'rotate' : 'translate'
     const op: TinkerCraftOperation = { type: 'move', ids: [id], delta, rotDelta, scaleDelta, kind }
     const newOps = [...operations.slice(0, historyIndex), op]
-    set({ operations: newOps, historyIndex: newOps.length, objects: { ...objects, [id]: { ...obj, transform } }, modified: true })
+    const newObjects = { ...objects, [id]: { ...obj, transform } }
+    set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true })
+    cacheSnapshot(newOps.length, newObjects)
   },
 
   // ── Color ──
@@ -269,7 +283,9 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     if (!objects[id]) return
     const op: TinkerCraftOperation = { type: 'color', ids: [id], color }
     const newOps = [...operations.slice(0, historyIndex), op]
-    set({ operations: newOps, historyIndex: newOps.length, objects: { ...objects, [id]: { ...objects[id], color } }, modified: true })
+    const newObjects = { ...objects, [id]: { ...objects[id], color } }
+    set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true })
+    cacheSnapshot(newOps.length, newObjects)
   },
 
   // ── Visibility ──
@@ -279,7 +295,9 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const newVis = !objects[id].visible
     const op: TinkerCraftOperation = { type: 'visibility', ids: [id], visible: newVis }
     const newOps = [...operations.slice(0, historyIndex), op]
-    set({ operations: newOps, historyIndex: newOps.length, objects: { ...objects, [id]: { ...objects[id], visible: newVis } }, modified: true })
+    const newObjects = { ...objects, [id]: { ...objects[id], visible: newVis } }
+    set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true })
+    cacheSnapshot(newOps.length, newObjects)
   },
 
   // ── Mirror ──
@@ -303,6 +321,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const op: MirrorOperation = { type: 'mirror', ids, plane }
       const newOps = [...operations.slice(0, historyIndex), op]
       set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true, busy: false, lastCsgMs: performance.now() - t0 })
+      cacheSnapshot(newOps.length, newObjects)
     } catch (e) { set({ busy: false }); console.error('mirrorSelected:', e) }
   },
 
@@ -340,6 +359,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const op: AlignOperation & { deltas: Record<string, number> } = { type: 'align', ids, axis, anchor, deltas }
       const newOps = [...operations.slice(0, historyIndex), op as unknown as TinkerCraftOperation]
       set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true, busy: false, lastCsgMs: performance.now() - t0 })
+      cacheSnapshot(newOps.length, newObjects)
     } catch (e) { set({ busy: false }); console.error('alignSelected:', e) }
   },
 
@@ -351,7 +371,9 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     set({ busy: true })
     try {
       const t0 = performance.now()
-      const newObjects = await rebuildFromHistory(operations.slice(0, newIdx))
+      const cached = getCachedSnapshot(newIdx)
+      const newObjects = cached ?? await rebuildFromHistory(operations.slice(0, newIdx))
+      if (!cached) cacheSnapshot(newIdx, newObjects)
       set({ historyIndex: newIdx, objects: newObjects, selectedIds: [], busy: false, lastCsgMs: performance.now() - t0 })
     } catch (e) { set({ busy: false }); console.error('undo:', e) }
   },
@@ -364,7 +386,9 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     set({ busy: true })
     try {
       const t0 = performance.now()
-      const newObjects = await rebuildFromHistory(operations.slice(0, newIdx))
+      const cached = getCachedSnapshot(newIdx)
+      const newObjects = cached ?? await rebuildFromHistory(operations.slice(0, newIdx))
+      if (!cached) cacheSnapshot(newIdx, newObjects)
       set({ historyIndex: newIdx, objects: newObjects, selectedIds: [], busy: false, lastCsgMs: performance.now() - t0 })
     } catch (e) { set({ busy: false }); console.error('redo:', e) }
   },
@@ -377,7 +401,9 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     set({ busy: true })
     try {
       const t0 = performance.now()
-      const newObjects = await rebuildFromHistory(operations.slice(0, newIdx))
+      const cached = getCachedSnapshot(newIdx)
+      const newObjects = cached ?? await rebuildFromHistory(operations.slice(0, newIdx))
+      if (!cached) cacheSnapshot(newIdx, newObjects)
       set({ historyIndex: newIdx, objects: newObjects, selectedIds: [], busy: false, lastCsgMs: performance.now() - t0 })
     } catch (e) { set({ busy: false }); console.error('jumpToHistory:', e) }
   },
@@ -385,6 +411,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   // ── Clear ──
   clearScene: async () => {
     await workerClearAll()
+    clearSnapshots()
     set({ operations: [], historyIndex: 0, objects: {}, selectedIds: [], modified: false, fileName: null, lastCsgMs: null })
   },
 
@@ -396,9 +423,11 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     try {
       const doc = await parseDoodle(picked.buffer)
       await workerClearAll()
+      clearSnapshots()
       const t0 = performance.now()
       const newObjects = await rebuildFromHistory(doc.operations)
       set({ operations: doc.operations, historyIndex: doc.operations.length, objects: newObjects, selectedIds: [], fileName: picked.file.name, modified: false, busy: false, lastCsgMs: performance.now() - t0 })
+      cacheSnapshot(doc.operations.length, newObjects)
     } catch (e) { set({ busy: false }); notify(`Ошибка открытия: ${e}`, 'error') }
   },
 
@@ -430,7 +459,9 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const ms   = performance.now() - t0
       const op: ResizeDimsOperation = { type: 'resize_dims', id, params: mergedParams }
       const newOps = [...operations.slice(0, historyIndex), op]
-      set({ operations: newOps, historyIndex: newOps.length, objects: { ...objects, [id]: makeObject({ ...obj, params: mergedParams, vertices: mesh.vertices, indices: mesh.indices, normals: mesh.normals }) }, modified: true, busy: false, lastCsgMs: ms })
+      const newObjects = { ...objects, [id]: makeObject({ ...obj, params: mergedParams, vertices: mesh.vertices, indices: mesh.indices, normals: mesh.normals }) }
+      set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true, busy: false, lastCsgMs: ms })
+      cacheSnapshot(newOps.length, newObjects)
     } catch (e) { set({ busy: false }); console.error('resizeObject:', e) }
   },
 
@@ -482,6 +513,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const newObjects = { ...objects }; delete newObjects[id]; newObjects[resultId] = newObj
       const newOps = [...operations.slice(0, historyIndex), addOp, grpOp]
       set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, selectedIds: [resultId], modified: true, busy: false, lastCsgMs: ms })
+      cacheSnapshot(newOps.length, newObjects)
     } catch (e) { set({ busy: false }); console.error('extrudeSelected:', e) }
   },
 
@@ -492,7 +524,9 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const op: TinkerCraftOperation = { type: 'rename', id, name } as TinkerCraftOperation
     const { operations, historyIndex } = get()
     const newOps = [...operations.slice(0, historyIndex), op]
-    set({ operations: newOps, historyIndex: newOps.length, objects: { ...objects, [id]: { ...objects[id], name } }, modified: true })
+    const newObjects = { ...objects, [id]: { ...objects[id], name } }
+    set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true })
+    cacheSnapshot(newOps.length, newObjects)
   },
 
   // ── Autosave ──
@@ -505,11 +539,13 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const entry = await restoreSession()
     if (!entry || entry.operations.length === 0) return false
     await workerClearAll()
+    clearSnapshots()
     set({ busy: true })
     try {
       const t0 = performance.now()
       const newObjects = await rebuildFromHistory(entry.operations)
       set({ operations: entry.operations, historyIndex: entry.historyIndex, objects: newObjects, selectedIds: [], fileName: entry.fileName, modified: false, busy: false, lastCsgMs: performance.now() - t0 })
+      cacheSnapshot(entry.historyIndex, newObjects)
       return true
     } catch (e) { set({ busy: false }); return false }
   },
@@ -531,11 +567,13 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const record = await pmLoad(id)
     if (!record) return
     await workerClearAll()
+    clearSnapshots()
     set({ busy: true })
     try {
       const t0 = performance.now()
       const newObjects = await rebuildFromHistory(record.operations)
       set({ operations: record.operations, historyIndex: record.operations.length, objects: newObjects, selectedIds: [], fileName: null, modified: false, busy: false, lastCsgMs: performance.now() - t0, currentProjectId: id })
+      cacheSnapshot(record.operations.length, newObjects)
     } catch (e) { set({ busy: false }); console.error('loadFromProject:', e) }
   },
 }))

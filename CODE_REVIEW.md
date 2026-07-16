@@ -11,8 +11,8 @@
 
 | Категория | Исправлено | Не затронуто |
 |---|---|---|
-| 🔴 Критические | CRIT-1, CRIT-2, CRIT-3 (не баг), WARN-5 | PERF-1 |
-| 🟡 Важные | WARN-1, WARN-2, WARN-4, WARN-6, WARN-7, WARN-8 | WARN-3 |
+| 🔴 Критические | CRIT-1, CRIT-2, CRIT-3 (не баг), WARN-5, PERF-1 | — |
+| 🟡 Важные | WARN-1, WARN-2, WARN-3, WARN-4, WARN-6, WARN-7, WARN-8 | — |
 | 🔒 Безопасность | SEC-1, SEC-2 | — |
 | ⚡ Производительность | PERF-2, PERF-3 | PERF-1 |
 | 🧪 Тестирование | TEST-1 (15 новых тестов) | — |
@@ -30,10 +30,10 @@
 | **Читаемость** | ⭐⭐⭐⭐⭐ | App.tsx разделён на 8 компонентов (553 строки) ✅ |
 | **Сопровождаемость** | ⭐⭐⭐⭐⭐ | App.tsx (553 строки) и store (500 строк) разделены ✅ |
 | **Надёжность** | ⭐⭐⭐⭐☆ | CRIT-3 — не баг; остальные потенциальные баги устранены ✅ |
-| **Производительность** | ⭐⭐⭐⭐☆ | AABB кэширование (WARN-8), useMemo; undo/redo rebuild (PERF-1) |
+| **Производительность** | ⭐⭐⭐⭐⭐ | Snapshot cache (PERF-1), AABB кэширование, useMemo ✅ |
 | **Безопасность** | ⭐⭐⭐⭐☆ | `any` заменён на типы, валидация добавлена, `alert()` → toast ✅ |
 | **Тестирование** | ⭐⭐⭐☆☆ | 35 тестов (20 type-level + 15 unit-тестов логики) ✅ |
-| **Общий балл** | **4.5 / 5** | Значительное улучшение после раунда 2 |
+| **Общий балл** | **4.7 / 5** | Значительное улучшение после раунда 2 |
 
 ---
 
@@ -47,6 +47,7 @@
 | `src/store/helpers.ts` | 63 | Утилиты store (extractAndCenter, computeAABB, makeObject) ✅ новый |
 | `src/store/types.ts` | 50 | DocumentStore interface ✅ новый |
 | `src/store/rebuild.ts` | 118 | rebuildFromHistory — восстановление из истории ✅ новый |
+| `src/store/snapshots.ts` | 42 | Snapshot cache для undo/redo (PERF-1) ✅ новый |
 | `src/store/notifications.ts` | 42 | Toast-уведомления (замена alert) ✅ новый |
 | `src/components/Viewport3D.tsx` | 803 | Three.js вьюпорт, гизмо, raycaster |
 | `src/components/Toolbar.tsx` | 165 | Тулбар (файл, undo, view, gizmo, CSG) ✅ новый |
@@ -57,6 +58,9 @@
 | `src/components/NumInput.tsx` | 58 | Numeric input с draft-редактированием ✅ новый |
 | `src/components/Section.tsx` | 38 | Collapsible section ✅ новый |
 | `src/components/Timeline.tsx` | 120 | История операций + opIcon/opLabel ✅ новый |
+| `src/components/MirrorButtons.tsx` | 45 | Переиспользуемые кнопки зеркала ✅ новый |
+| `src/components/CsgButtons.tsx` | 47 | Переиспользуемые кнопки CSG ✅ новый |
+| `src/components/AlignButtons.tsx` | 62 | Переиспользуемые кнопки выравнивания ✅ новый |
 | `src/components/ToastContainer.tsx` | 36 | Рендер toast-уведомлений ✅ новый |
 | `src/csg/worker.ts` | 779 | WASM worker — manifold-3d операции (типизирован) |
 | `src/csg/worker-client.ts` | 133 | Promise-обёртка над воркером |
@@ -269,23 +273,23 @@ useEffect(() => {
 
 ---
 
-### WARN-3. Дублирование инструментов в тулбаре и панели свойств
+### WARN-3. Дублирование инструментов в тулбаре и панели свойств ✅ ИСПРАВЛЕНО
 
-**Где:** `src/App.tsx`, тулбар (строки 943-1038) vs панель свойств (строки 1578-1689)  
-**Приоритет:** 🟡 Средний
+**Где:** `src/components/Toolbar.tsx`, `src/components/PropertiesPanel.tsx`  
+**Приоритет:** 🟡 Средний  
+**Статус:** ✅ Исправлено (раунд 2)
 
-**Описание:** Кнопки зеркало, выравнивание и CSG продублированы в двух местах с одинаковой логикой.
+**Что было:** Кнопки зеркало, выравнивание и CSG продублированы в тулбаре и панели свойств с одинаковой логикой, но разным оформлением.
 
-**Решение:** Вынести в переиспользуемые компоненты:
+**Что сделано:** Создано 3 переиспользуемых компонента с `variant` prop (`"compact"` для тулбара, `"full"` для панели свойств):
 
-```typescript
-// src/components/MirrorPanel.tsx
-interface MirrorPanelProps {
-  disabled: boolean;
-  onMirror: (plane: 'XY' | 'XZ' | 'YZ') => void;
-  compact?: boolean;
-}
-```
+| Компонент | Строк | Ответственность |
+|---|---|---|
+| `MirrorButtons.tsx` | 45 | Кнопки зеркалирования по плоскостям XY/XZ/YZ |
+| `CsgButtons.tsx` | 47 | Кнопки CSG операций (∪ − ∩) |
+| `AlignButtons.tsx` | 62 | Кнопки выравнивания по осям и якорям |
+
+Toolbar и PropertiesPanel теперь используют эти компоненты вместо дублированного кода.
 
 ---
 
@@ -466,38 +470,26 @@ export function showNotification(message: string, type: 'error' | 'warning' | 'i
 
 ## ⚡ ПРОИЗВОДИТЕЛЬНОСТЬ
 
-### PERF-1. Undo/Redo = полный rebuild сцены через WASM
+### PERF-1. Undo/Redo = полный rebuild сцены через WASM ✅ ИСПРАВЛЕНО
 
-**Где:** `src/store/document-store.ts`, строки 555-591  
-**Приоритет:** 🔴 Высокий
+**Где:** `src/store/document-store.ts`, `src/store/snapshots.ts`  
+**Приоритет:** 🔴 Высокий  
+**Статус:** ✅ Исправлено (раунд 2)
 
-**Описание:** Каждое undo/redo пересчитывает **всю историю** через WASM-воркер. При 100 операциях с сложными CSG-булевыми это может занять несколько секунд.
+**Что было:** Каждое undo/redo пересчитывало всю историю через WASM-воркер. При 100+ операциях это занимало несколько секунд.
 
-```typescript
-undo: async () => {
-  const newObjects = await rebuildFromHistory(operations.slice(0, newIdx))
-  // rebuildFromHistory вызывает workerRebuildScene, который проходит
-  // все операции и пересоздаёт все меша
-}
-```
+**Что сделано:** Реализован кэш snapshot'ов (`store/snapshots.ts`):
 
-**Рекомендации:**
+- Module-level `Map<number, Record<string, SceneObject>>` — НЕ часть Zustand state, не вызывает re-render'ов
+- Каждое действие кэширует `objects` при новом `historyIndex` через `cacheSnapshot()`
+- Undo/redo/jumpToHistory проверяют кэш через `getCachedSnapshot()` перед вызовом `rebuildFromHistory()`
+- При обрезании истории (новая операция после undo) старые snapshot'ы автоматически инвалидируются
+- `clearSnapshots()` вызывается при clearScene, openDoodle, restoreAutosave, loadFromProject
 
-**Вариант A: Кэшировать объекты**
-```typescript
-// historyIndex → Snapshot
-interface HistorySnapshot {
-  objects: Record<string, SceneObject>;
-  operations: TinkerCraftOperation[];
-}
-```
-
-**Вариант B: Применение обратных операций**
-```typescript
-// Вместо пересбора с нуля — применить inverse(move) вместо undo
-// move: pos += delta → undo: pos -= delta
-// csgBoolean: objA + objB → result → undo: restore objA, objB
-```
+**Результат:**
+- Undo/redo после первой операции — мгновенны (O(1) lookup вместо O(n) WASM rebuild)
+- Память: только ссылки на immutable-объекты (не копии Float32Array)
+- `tsc --noEmit` — 0 ошибок, `vitest run` — 35/35 тестов, `vite build` — успешно
 
 ---
 
@@ -657,7 +649,7 @@ describe('mergeCoincidentVertices', () => {
 | 4 | Исправить дублирование центрирования в `Viewport3D.tsx` | 🟡 Средний | 1 час + тесты | ✅ Не баг (проверено) |
 | 5 | Добавить unit-тесты для `stl-import`, `stl-export`, `document-store` | 🟡 Средний | 3-4 часа | ✅ Выполнено (15 тестов) |
 | 6 | Заменить `alert()` на toast-уведомления | 🟡 Средний | 1 час | ✅ Выполнено |
-| 7 | Оптимизировать `undo/redo` — кэшировать snapshots | 🟠 Высокий | 1-2 дня | 🔲 Не начато |
+| 7 | Оптимизировать `undo/redo` — кэшировать snapshots | 🟠 Высокий | 1-2 дня | ✅ Выполнено (snapshots.ts, мгновенный undo/redo) |
 | 8 | Кэшировать AABB в `SceneObject` | 🟢 Низкий | 2 часа | ✅ Выполнено |
 | 9 | Вынести инлайн-стили в CSS-модули | 🟢 Низкий | 2-3 часа | 🔲 Не начато |
 | 10 | Добавить валидацию входных данных в воркер | 🟢 Низкий | 1 час | ✅ Выполнено |
@@ -666,6 +658,7 @@ describe('mergeCoincidentVertices', () => {
 | 13 | `useMemo` для `selSet` и `totalTris` (PERF-2/3) | 🟢 Низкий | 15 мин | ✅ Выполнено |
 | 14 | Нормали CSG для STL экспорта (WARN-6) | 🟡 Средний | 2 часа | ✅ Выполнено |
 | 15 | Типизация `DEFAULT_FILTERS` (COSM-3) | 🟢 Низкий | 5 мин | ✅ Выполнено |
+| 16 | Переиспользуемые компоненты Mirror/CSG/Align (WARN-3) | 🟡 Средний | 2 часа | ✅ Выполнено (3 компонента) |
 
 ---
 
@@ -694,4 +687,4 @@ describe('mergeCoincidentVertices', () => {
 
 ---
 
-*Код-ревью выполнено 2025-07-15. Раунд 1 (2025-07-15): 8 задач выполнено, 1 проверена (не баг). Раунд 2 (2025-07-16): CRIT-1 (App.tsx → 8 компонентов), CRIT-2 (store → 4 модуля, 757→500 строк), WARN-6 (CSG normals), WARN-8 (AABB caching), COSM-3 (DEFAULT_FILTERS). Текущий код функционален, проходит typecheck и 35 тестов. Общий балл: 4.5/5.*
+*Код-ревью выполнено 2025-07-15. Раунд 1 (2025-07-15): 8 задач выполнено, 1 проверена (не баг). Раунд 2 (2025-07-16): CRIT-1 (App.tsx → 8 компонентов), CRIT-2 (store → 4 модуля), WARN-3 (3 переиспользуемых компонента), WARN-6 (CSG normals), WARN-8 (AABB caching), PERF-1 (snapshot cache), COSM-3 (DEFAULT_FILTERS). Текущий код функционален, проходит typecheck и 35 тестов. Общий балл: 4.7/5. Осталась одна косметическая задача: COSM-1 (инлайн-стили → CSS).*
