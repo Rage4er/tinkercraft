@@ -27,8 +27,14 @@ export default function TextModal({
 
   return (
     <div className="text-modal-backdrop" onClick={onClose}>
-      <div className="text-modal-box" onClick={(e) => e.stopPropagation()}>
-        <div className="text-modal-title">
+      <div 
+        className="text-modal-box" 
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="text-modal-title"
+      >
+        <div className="text-modal-title" id="text-modal-title">
           ✚ 3D Текст
         </div>
         <input

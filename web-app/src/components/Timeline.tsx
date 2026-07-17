@@ -1,4 +1,4 @@
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useMemo } from "react";
 import type { TinkerCraftOperation } from "../csg/types";
 
 // ---- Operation icon ----
@@ -101,9 +101,13 @@ export default function Timeline({
       ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }, [historyIndex]);
 
-  const visible = operations
-    .map((op, i) => ({ op, i }))
-    .filter(({ op }) => filters[op.type] !== false);
+  // PERF-R8-4: Мемоизация вычисления видимых операций
+  const visible = useMemo(
+    () => operations
+      .map((op, i) => ({ op, i }))
+      .filter(({ op }) => filters[op.type] !== false),
+    [operations, filters]
+  );
   if (visible.length === 0) return <div className="tl-empty">Пусто</div>;
 
   return (

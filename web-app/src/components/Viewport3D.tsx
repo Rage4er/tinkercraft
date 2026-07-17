@@ -25,7 +25,6 @@ interface DragRect {
   endX: number;
   endY: number;
 }
-
 interface Props {
   busy: boolean;
   workerOk: boolean;
@@ -111,7 +110,6 @@ export default function Viewport3D({
     null,
   );
   const [cubeCtrl, setCubeCtrl] = useState<OrbitControls | null>(null);
-  const [dragRect, setDragRect] = useState<DragRect | null>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const initRanRef = useRef(false); // <-- added to track initialization
@@ -134,7 +132,6 @@ export default function Viewport3D({
   const rulerPointsRef = useRef<THREE.Vector3[]>([]);
   const rafRef = useRef<number | null>(null);
   const fpsRef = useRef({ last: performance.now(), frames: 0 });
-  const currentMeshRef = useRef<THREE.Object3D | null>(null);
 
   const fitTargetRef = useRef<FitTarget | null>(null);
   // Keep cameraModeRef in sync with prop
@@ -156,6 +153,12 @@ export default function Viewport3D({
   useEffect(() => {
     selectedIdsRef.current = selectedIds;
   }, [selectedIds]);
+
+  // WARN-R8-2: stabilize onFpsUpdate via ref to avoid stale closure in animation loop
+  const fpsUpdateRef = useRef(onFpsUpdate);
+  useEffect(() => {
+    fpsUpdateRef.current = onFpsUpdate;
+  }, [onFpsUpdate]);
 
   const pointerDownPos = useRef<{ x: number; y: number } | null>(null);
   const isDraggingRef = useRef(false);

@@ -25,9 +25,10 @@ export default function NumInput({
   }, [value, decimals]);
   return (
     <div className="props-row">
-      <span className="props-label">{label}</span>
+      <label className="props-label" htmlFor={`num-input-${label}`}>{label}</label>
       <div className="flex-row" style={{ gap: 3 }}>
         <input
+          id={`num-input-${label}`}
           className="props-input"
           type="number"
           step={step ?? 1}

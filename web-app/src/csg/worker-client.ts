@@ -82,10 +82,27 @@ function getWorker(): Worker {
   return _worker
 }
 
-function send<T>(type: string, data: Record<string, unknown>): Promise<T> {
+function send<T>(type: string, data: Record<string, unknown>, timeoutMs = 30000): Promise<T> {
   return new Promise((resolve, reject) => {
     const reqId = nextReqId()
-    _pending.set(reqId, [resolve as PendingResolve, reject])
+    
+    // PERF-R8-2: Таймаут для предотвращения бесконечного ожидания
+    const timer = setTimeout(() => {
+      _pending.delete(reqId)
+      reject(new Error(`Worker timeout: ${type} (>${timeoutMs}ms)`))
+    }, timeoutMs)
+    
+    _pending.set(reqId, [
+      (v: unknown) => {
+        clearTimeout(timer)
+        resolve(v as T)
+      },
+      (r: unknown) => {
+        clearTimeout(timer)
+        reject(r)
+      }
+    ])
+    
     getWorker().postMessage({ reqId, type, ...data })
   })
 }
@@ -113,7 +130,7 @@ export async function workerApplyFillet(
 }
 
 export async function workerBuildImportedMesh(
-  objId: string, vertices: number[], indices: number[],
+  objId: string, vertices: Float32Array | number[], indices: Uint32Array | number[],
 ): Promise<MeshResult> {
   await waitReady()
   return send<MeshResult>('buildImportedMesh', { objId, vertices, indices })
@@ -187,3 +204,17 @@ export async function workerClearAll(): Promise<void> {
 }
 
 export function isWorkerReady(): boolean { return _ready }
+
+/**
+ * PERF-R8-3: Terminate worker and cleanup state.
+ * Used for HMR cleanup to prevent "ghost" workers accumulating.
+ */
+export function disposeWorker(): void {
+  if (_worker) {
+    _worker.terminate()
+    _worker = null
+    _ready = false
+    _readyPromise = null
+    _pending.clear()
+  }
+}

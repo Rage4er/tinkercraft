@@ -77,7 +77,11 @@ export default function Toolbar({
   onClearScene: () => void;
 }) {
   return (
-    <div className="toolbar">
+    <div 
+      className="toolbar"
+      role="toolbar"
+      aria-label="Панель инструментов"
+    >
       <span className="toolbar-logo">⬛ TinkerCraft{titleSuffix}</span>
 
       <div className="toolbar-group">

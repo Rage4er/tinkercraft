@@ -22,7 +22,11 @@ export default function StatusBar({
   fps: number;
 }) {
   return (
-    <div className="statusbar">
+    <div 
+      className="statusbar"
+      role="status"
+      aria-live="polite"
+    >
       <span className="status-item">
         CSG:&nbsp;
         {workerOk ? (

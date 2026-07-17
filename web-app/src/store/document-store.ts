@@ -120,7 +120,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const result = await workerBuildImportedMesh(id, mesh.vertices, mesh.indices)
       const ms = performance.now() - t0
 
-      const obj: SceneObject = makeObject({ id, shapeType: 'import_mesh', params: {}, color, transform: mesh.transform, visible: true, locked: false, vertices: result.vertices, indices: result.indices })
+      // BUG-R8-1: Передаём normals в makeObject для корректного рендеринга
+      const obj: SceneObject = makeObject({ id, shapeType: 'import_mesh', params: {}, color, transform: mesh.transform, visible: true, locked: false, vertices: result.vertices, indices: result.indices, normals: result.normals })
       const op: ImportMeshOperation = { type: 'import_mesh', id, name: mesh.name, color, transform: mesh.transform, vertices: mesh.vertices, indices: mesh.indices }
       const newOps = [...operations.slice(0, historyIndex), op]
       const newObjects = { ...objects, [id]: obj }
@@ -170,8 +171,9 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       if (!obj) return []
       const entry: ClipEntry = { shapeType: obj.shapeType, params: obj.params, color: obj.color, transform: obj.transform }
       if (obj.shapeType === 'import_mesh') {
-        entry.importVertices = Array.from(obj.vertices)
-        entry.importIndices = Array.from(obj.indices)
+        // PERF-R8-1: Храним TypedArray вместо number[] для экономии памяти (8×)
+        entry.importVertices = new Float32Array(obj.vertices)
+        entry.importIndices = new Uint32Array(obj.indices)
       }
       return [entry]
     })
@@ -303,6 +305,10 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const hasPos = Math.abs(delta.x) > MOVE_DELTA_EPSILON || Math.abs(delta.y) > MOVE_DELTA_EPSILON || Math.abs(delta.z) > MOVE_DELTA_EPSILON
     const hasRot = Math.abs(rotDelta.x) > MOVE_DELTA_EPSILON || Math.abs(rotDelta.y) > MOVE_DELTA_EPSILON || Math.abs(rotDelta.z) > MOVE_DELTA_EPSILON
     const hasScale = Math.abs(scaleDelta.x) > MOVE_DELTA_EPSILON || Math.abs(scaleDelta.y) > MOVE_DELTA_EPSILON || Math.abs(scaleDelta.z) > MOVE_DELTA_EPSILON
+    
+    // BUG-R8-3: Early return если все delta ниже epsilon — не засоряем историю
+    if (!hasPos && !hasRot && !hasScale) return
+    
     const kind = hasScale && !hasPos && !hasRot ? 'scale' : hasRot && !hasPos && !hasScale ? 'rotate' : 'translate'
     const op: MoveOperation = { type: 'move', ids: [id], delta, rotDelta, scaleDelta, kind }
     const newOps = [...operations.slice(0, historyIndex), op]
@@ -628,6 +634,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const meta = await pmSave(name, ops, count)
       set({ currentProjectId: meta.id })
     }
+    // BUG-R8-2: Сбрасываем modified flag после успешного сохранения
+    set({ modified: false })
   },
 
   loadFromProject: async (id) => {

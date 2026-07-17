@@ -24,6 +24,28 @@
   - Подстроковая проверка `json.includes('constructor')` заменена на рекурсивную валидацию ключей `validateObjectKeys()` после `JSON.parse`
   - Легитимные имена объектов (например, `my_constructor_block`) больше не блокируются
   - Функция проверяет ключи объектов рекурсивно, включая массивы
+- **WARN-R8-2:** Stale closure в animation loop — добавлен `fpsUpdateRef` (`Viewport3D.tsx`)
+  - `onFpsUpdate` стабилизируется через ref-паттерн, аналогично другим callback props
+- **WARN-R8-4:** Удалён мёртвый код (`Viewport3D.tsx`)
+  - Удалены неиспользуемые: интерфейс `DragRect`, state `dragRect`, ref `currentMeshRef`
+
+### Fixed — Раунд 8: Безопасность, производительность, баги, доступность (2026-07-16)
+
+- **SEC-R8-1:** Добавлен лимит размера .doodle файла 50 МБ для защиты от ZIP bomb (`doodle-io.ts`)
+- **SEC-R8-2:** Задержка 1 секунда перед `URL.revokeObjectURL` для гарантии завершения скачивания (`stl-export.ts`)
+- **PERF-R8-1:** Clipboard хранит `Float32Array`/`Uint32Array` вместо `number[]` — экономия памяти в 8× (`helpers.ts`, `document-store.ts`)
+- **PERF-R8-2:** Добавлен таймаут 30 секунд для worker-запросов для предотвращения бесконечного ожидания (`worker-client.ts`)
+- **PERF-R8-3:** Добавлена функция `disposeWorker()` для корректной очистки при HMR (`worker-client.ts`)
+- **PERF-R8-4:** Вычисление `visible` в Timeline обёрнуто в `useMemo` для оптимизации рендеров (`Timeline.tsx`)
+- **WARN-R8-7:** Добавлена валидация схемы операций при загрузке .doodle — проверка типа каждой операции (`doodle-io.ts`)
+- **BUG-R8-1:** `importStl` теперь передаёт `normals` в `makeObject` для корректного рендеринга (`document-store.ts`)
+- **BUG-R8-2:** `saveToProject` теперь сбрасывает `modified` flag после успешного сохранения (`document-store.ts`)
+- **BUG-R8-3:** `moveObject` теперь делает early return если все delta ниже epsilon — не засоряет историю (`document-store.ts`)
+- **A11Y-1:** `Section.tsx` — добавлены `role="button"`, `tabIndex={0}`, `aria-expanded`, keyboard support (Enter/Space)
+- **A11Y-2:** `TextModal.tsx` — добавлены `role="dialog"`, `aria-modal="true"`, `aria-labelledby`
+- **A11Y-3:** `Toolbar.tsx` — добавлены `role="toolbar"`, `aria-label="Панель инструментов"`
+- **A11Y-4:** `StatusBar.tsx` — добавлены `role="status"`, `aria-live="polite"`
+- **A11Y-5:** `NumInput.tsx` — `<span>` заменён на `<label htmlFor>` для правильной связи label-input
 
 ### Changed — Раунд 8: DRY рефакторинг (2026-07-16)
 

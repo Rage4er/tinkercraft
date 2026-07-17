@@ -39,8 +39,8 @@ export interface ImportMeshOperation {
   name: string
   color: string
   transform: TransformNR
-  vertices: number[]
-  indices: number[]
+  vertices: Float32Array | number[]
+  indices: Uint32Array | number[]
 }
 
 export interface MoveOperation {

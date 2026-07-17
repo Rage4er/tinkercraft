@@ -170,5 +170,6 @@ export function downloadStl(objects: SceneObject[], fileName = 'tinkercraft-expo
   a.href = url
   a.download = fileName
   a.click()
-  URL.revokeObjectURL(url)
+  // SEC-R8-2: Задержка перед освобождением URL для гарантии завершения скачивания
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
