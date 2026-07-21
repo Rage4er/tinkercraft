@@ -125,11 +125,26 @@ describe('applyMirrorToTransform', () => {
     expect(result.z).toBe(-30)
   })
 
-  it('does not affect rotation or scale', () => {
-    const t: RebuildTransform = { ...ID, rotX: 45, scaleX: 2, x: 5 }
+  it('mirrors rotation on the axis perpendicular to the plane', () => {
+    const t: RebuildTransform = { ...ID, rotX: 45, rotY: 30, rotZ: 15, scaleX: 2, x: 5 }
     const result = applyMirrorToTransform(t, 'YZ')
+    expect(result.rotX).toBe(-45) // YZ plane → negate rotX
+    expect(result.rotY).toBe(30)  // unchanged
+    expect(result.rotZ).toBe(15)  // unchanged
+    expect(result.scaleX).toBe(2) // scale unaffected
+  })
+
+  it('mirrors rotation for XZ and XY planes', () => {
+    const t: RebuildTransform = { ...ID, rotX: 45, rotY: 30, rotZ: 15 }
+    let result = applyMirrorToTransform(t, 'XZ')
     expect(result.rotX).toBe(45)
-    expect(result.scaleX).toBe(2)
+    expect(result.rotY).toBe(-30) // XZ plane → negate rotY
+    expect(result.rotZ).toBe(15)
+
+    result = applyMirrorToTransform(t, 'XY')
+    expect(result.rotX).toBe(45)
+    expect(result.rotY).toBe(30)
+    expect(result.rotZ).toBe(-15) // XY plane → negate rotZ
   })
 
   it('does not mutate input', () => {

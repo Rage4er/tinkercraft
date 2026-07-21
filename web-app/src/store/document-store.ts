@@ -399,13 +399,16 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const t0 = performance.now()
       // Sync worker cache before mirror — fixes stale cache after undo/redo
       // FIX (CRIT-CSG-3): For CSG results and imported meshes, use workerSyncMesh.
-      // workerSyncObjects rebuilds from shapeType/params which loses CSG geometry.
+      // FIX (MIRROR-ROT): Sync mesh WITHOUT rotation — only position.
+      // This ensures geometry is mirrored relative to origin, then the pivot
+      // in Three.js applies the mirrored rotation to the mirrored geometry.
       const syncOps = ids.map(async id => {
         const obj = objects[id]
         if (obj.shapeType === 'cube' && !obj.params.width || obj.shapeType === 'import_mesh') {
-          await workerSyncMesh(id, obj.vertices, obj.indices, { x: obj.transform.x, y: obj.transform.y, z: obj.transform.z, rotX: obj.transform.rotX, rotY: obj.transform.rotY, rotZ: obj.transform.rotZ, scaleX: obj.transform.scaleX, scaleY: obj.transform.scaleY, scaleZ: obj.transform.scaleZ }).catch(() => {})
+          // Sync without rotation — mirror will be applied after
+          await workerSyncMesh(id, obj.vertices, obj.indices, { x: obj.transform.x, y: obj.transform.y, z: obj.transform.z, rotX: 0, rotY: 0, rotZ: 0, scaleX: obj.transform.scaleX, scaleY: obj.transform.scaleY, scaleZ: obj.transform.scaleZ }).catch(() => {})
         } else {
-          return { objId: id, shapeType: obj.shapeType, params: obj.params, transform: { x: obj.transform.x, y: obj.transform.y, z: obj.transform.z, rotX: obj.transform.rotX, rotY: obj.transform.rotY, rotZ: obj.transform.rotZ, scaleX: obj.transform.scaleX, scaleY: obj.transform.scaleY, scaleZ: obj.transform.scaleZ } as const }
+          return { objId: id, shapeType: obj.shapeType, params: obj.params, transform: { x: obj.transform.x, y: obj.transform.y, z: obj.transform.z, rotX: 0, rotY: 0, rotZ: 0, scaleX: obj.transform.scaleX, scaleY: obj.transform.scaleY, scaleZ: obj.transform.scaleZ } as const }
         }
       })
       await Promise.all(syncOps)
@@ -429,9 +432,15 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         const mesh = await workerMirrorObject(id, plane)
         const obj = newObjects[id]
         const t = { ...obj.transform }
+        // Mirror position
         if (plane === 'YZ') t.x = -t.x
         if (plane === 'XZ') t.y = -t.y
         if (plane === 'XY') t.z = -t.z
+        // Mirror rotation around the axis perpendicular to the mirror plane
+        // (mirroring reverses handedness, so rotation direction flips)
+        if (plane === 'YZ') t.rotX = -t.rotX
+        if (plane === 'XZ') t.rotY = -t.rotY
+        if (plane === 'XY') t.rotZ = -t.rotZ
         newObjects[id] = makeObject({ ...obj, transform: t, vertices: mesh.vertices, indices: mesh.indices, normals: mesh.normals })
       }
       const op: MirrorOperation = { type: 'mirror', ids, plane }
@@ -582,18 +591,61 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const { objects, operations, historyIndex } = get()
     const obj = objects[id]
     if (!obj || obj.shapeType === 'import_mesh') return
-    const mergedParams = { ...obj.params, ...params }
-    set({ busy: true })
-    try {
-      const t0 = performance.now()
-      const mesh = await workerBuildShape(id, obj.shapeType, mergedParams, obj.transform)
-      const ms = performance.now() - t0
-      const op: ResizeDimsOperation = { type: 'resize_dims', id, params: mergedParams }
-      const newOps = [...operations.slice(0, historyIndex), op]
-      const newObjects = { ...objects, [id]: makeObject({ ...obj, params: mergedParams, vertices: mesh.vertices, indices: mesh.indices, normals: mesh.normals }) }
-      set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true, busy: false, lastCsgMs: ms })
-      cacheSnapshot(newOps.length, newObjects)
-    } catch (e) { set({ busy: false }); console.error('resizeObject:', e) }
+    // FIX (RESIZE-CSG): For CSG results (shapeType='cube' with no params),
+    // use scale transformation instead of rebuilding from shapeType/params.
+    // Rebuilding would lose CSG geometry (shapeType='cube', params={} → default cube).
+    const isCsgResult = obj.shapeType === 'cube' && !obj.params.width
+    if (!isCsgResult) {
+      const mergedParams = { ...obj.params, ...params }
+      set({ busy: true })
+      try {
+        const t0 = performance.now()
+        const mesh = await workerBuildShape(id, obj.shapeType, mergedParams, obj.transform)
+        const ms = performance.now() - t0
+        const op: ResizeDimsOperation = { type: 'resize_dims', id, params: mergedParams }
+        const newOps = [...operations.slice(0, historyIndex), op]
+        const newObjects = { ...objects, [id]: makeObject({ ...obj, params: mergedParams, vertices: mesh.vertices, indices: mesh.indices, normals: mesh.normals }) }
+        set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true, busy: false, lastCsgMs: ms })
+        cacheSnapshot(newOps.length, newObjects)
+      } catch (e) { set({ busy: false }); console.error('resizeObject:', e) }
+      return
+    }
+
+    // CSG result: apply scale transformation to fit the new dimensions
+    const bbox = obj.aabb ?? computeAABB(obj.vertices)
+    const currentSize = {
+      x: bbox.max.x - bbox.min.x,
+      y: bbox.max.y - bbox.min.y,
+      z: bbox.max.z - bbox.min.z,
+    }
+    const targetWidth = params.width ?? currentSize.x
+    const targetHeight = params.height ?? currentSize.y
+    const targetDepth = params.depth ?? currentSize.z
+
+    const scaleX = currentSize.x > 0 ? targetWidth / currentSize.x : 1
+    const scaleY = currentSize.y > 0 ? targetHeight / currentSize.y : 1
+    const scaleZ = currentSize.z > 0 ? targetDepth / currentSize.z : 1
+
+    // Update transform with new scale
+    const newTransform = {
+      ...obj.transform,
+      scaleX: (obj.transform.scaleX ?? 1) * scaleX,
+      scaleY: (obj.transform.scaleY ?? 1) * scaleY,
+      scaleZ: (obj.transform.scaleZ ?? 1) * scaleZ,
+    }
+
+    const op: ResizeDimsOperation = { type: 'resize_dims', id, params }
+    const newOps = [...operations.slice(0, historyIndex), op]
+    const newObjects = { ...objects, [id]: { ...obj, transform: newTransform } }
+    set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true })
+    cacheSnapshot(newOps.length, newObjects)
+
+    // Sync worker cache with new scale
+    workerSyncMesh(id, obj.vertices, obj.indices, {
+      x: newTransform.x, y: newTransform.y, z: newTransform.z,
+      rotX: newTransform.rotX, rotY: newTransform.rotY, rotZ: newTransform.rotZ,
+      scaleX: newTransform.scaleX, scaleY: newTransform.scaleY, scaleZ: newTransform.scaleZ,
+    }).catch(e => console.error('resizeObject syncMesh:', e))
   },
 
   // ── Extrude ──

@@ -9,6 +9,49 @@
 
 ## [Unreleased]
 
+### Fixed — UX: сворачиваемые фильтры, скрытие extrude/mirror (2026-07-21)
+
+- **UX-2:** Фильтры истории занимали много места на панели — свёрнуты в dropdown
+  - Чекбоксы фильтров заменены на кнопку "▼ Фильтр" с выпадающей панелью
+  - Добавлен CSS для `.tl-filter-dropdown`, `.tl-filter-toggle`, `.tl-filter-panel` (`App.css`)
+  - Добавлен state `filtersOpen` в LeftPanel (`LeftPanel.tsx`)
+- **UX-3:** Extrude (выдавливание) в панели свойств — неясный UX, перенесено на панель инструментов
+  - Убраны props: `canExtrude`, `extrudeAxis`, `extrudeDepth`, `onSetExtrudeAxis`, `onSetExtrudeDepth`, `onExtrude`
+  - Секция Extrude удалена из PropertiesPanel (`PropertiesPanel.tsx`)
+- **UX-4:** Mirror (зеркало) в панели свойств — дублирует панель инструментов
+  - Убраны props: `canMirror`, `onMirror`
+  - Секция Mirror удалена из PropertiesPanel (`PropertiesPanel.tsx`)
+  - Удалён unused import `MirrorButtons` (`PropertiesPanel.tsx`)
+- **UX-5:** Линейка — drag detection (4px) мешал второму клику для измерения
+  - `handlePointerMove` теперь игнорирует движение мыши в ruler mode
+  - `handlePointerUp` в ruler mode обрабатывает все клики независимо от drag flag
+  - Рuler работает click-click (две точки), а не drag-измерение (`Viewport3D.tsx`)
+- **UX-6:** Гизмо вращался с фигурой — теперь всегда ориентирован по осям вида
+  - `tc.setSpace("local")` заменён на `tc.setSpace("world")` (`Viewport3D.tsx`)
+
+### Fixed — Зеркалирование сбрасывает вращение (2026-07-21)
+
+- **CRIT-MIRROR-1:** При зеркальном отражении фигуры угол поворота сбрасывался визуально
+  - `mirrorSelected` и `applyMirrorToTransform` инвертировали только позицию, но не вращение
+  - При отражении по плоскости вращение вокруг перпендикулярной оси должно инвертироваться (зеркало меняет handedness)
+  - `applyMirrorToTransform` теперь инвертирует `rotX` при YZ, `rotY` при XZ, `rotZ` при XY (`rebuildOps.ts`)
+  - `mirrorSelected` в document-store также инвертирует вращение (`document-store.ts`)
+  - Тест обновлён: `does not affect rotation or scale` → `mirrors rotation on the axis perpendicular to the plane` (`rebuildOps.test.ts`)
+- **CRIT-MIRROR-2:** Pivot в Three.js применял вращение к geometry, которая была зеркалена с учётом старого вращения
+  - `handleMirrorObject` зеркалит geometry, которая уже имеет transform (включая вращение) из кэша
+  - Pivot в Three.js применяет инвертированное вращение к geometry, которая была зеркалена с учётом старого вращения — рассинхрон
+  - `mirrorSelected` теперь sync'ит mesh БЕЗ вращения (только позицию) перед зеркалением
+  - Pivot применяет инвертированное вращение к geometry, которая была зеркалена без вращения — корректно (`document-store.ts`)
+
+### Fixed — Resize CSG результата заменяется кубиком (2026-07-21)
+
+- **CRIT-RESIZE-1:** В свойствах объединённой фигуры есть размеры, при их изменении фигура заменяется кубиком этих размеров
+  - `resizeObject` rebuildит primitive из `shapeType/params`, но CSG результаты имеют `shapeType='cube' && !params.width`
+  - Rebuild создаёт default cube вместо масштабирования CSG-геометрии
+  - Для CSG результатов теперь используется scale-трансформация вместо rebuild'а (`document-store.ts`)
+  - Вычисляется bbox CSG-результата, scale = targetSize / currentSize
+  - Transform обновляется с новым scale, worker sync'ится через `workerSyncMesh` с новым scale
+
 ### Fixed — История цвета: только финальный выбор (2026-07-21)
 
 - **UX-1:** При выборе цвета фигуры в историю записывались все промежуточные движения мыши по палитре

@@ -50,17 +50,19 @@ export function applyMoveDelta(
 }
 
 /**
- * Применить зеркало к трансформации (позиция).
+ * Применить зеркало к трансформации (позиция + вращение).
  * Геометрия зеркалится отдельно через manifold matrix.
+ * При отражении по плоскости вращение вокруг перпендикулярной оси инвертируется
+ * (зеркало меняет handedness координатной системы).
  */
 export function applyMirrorToTransform(
   t: RebuildTransform,
   plane: 'XY' | 'XZ' | 'YZ',
 ): RebuildTransform {
   const nt = { ...t }
-  if (plane === 'YZ') nt.x = -nt.x
-  if (plane === 'XZ') nt.y = -nt.y
-  if (plane === 'XY') nt.z = -nt.z
+  if (plane === 'YZ') { nt.x = -nt.x; nt.rotX = -nt.rotX }
+  if (plane === 'XZ') { nt.y = -nt.y; nt.rotY = -nt.rotY }
+  if (plane === 'XY') { nt.z = -nt.z; nt.rotZ = -nt.rotZ }
   return nt
 }
 

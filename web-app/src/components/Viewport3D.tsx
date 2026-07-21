@@ -251,7 +251,7 @@ export default function Viewport3D({
 
     const tc = new TransformControls(camera, renderer.domElement);
     tc.setSize(0.8);
-    tc.setSpace("local"); // Use local space so gizmo moves relative to object's own axes
+    tc.setSpace("world"); // Always aligned to world axes, doesn't rotate with object
     tc.addEventListener("dragging-changed", (e: { value: unknown }) => {
       controls.enabled = !e.value;
     });
@@ -554,81 +554,37 @@ export default function Viewport3D({
   // ---- Click / Drag ----
   const handlePointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
-      pointerDownPos.current = { x: e.clientX, y: e.clientY };
-      isDraggingRef.current = false;
-
+      // Ruler mode: completely separate from drag-detection
       if (rulerMode) {
         const point = getWorldPointFromPointer(e);
-        if (!point) return;
-
-        const points = rulerPointsRef.current;
-        if (points.length === 0 || points.length >= 2) {
+        if (point) {
+          // First click: only set first point, measurement happens on pointerUp
           rulerPointsRef.current = [point];
-        } else {
-          rulerPointsRef.current = [points[0], point];
+          updateRulerVisuals(rulerPointsRef.current);
         }
-        updateRulerVisuals(rulerPointsRef.current);
-        if (points.length === 1 && onRulerMeasure) {
-          onRulerMeasure(points[0].distanceTo(point));
-        }
+        return;
       }
+      pointerDownPos.current = { x: e.clientX, y: e.clientY };
+      isDraggingRef.current = false;
     },
-    [getWorldPointFromPointer, onRulerMeasure, rulerMode, updateRulerVisuals],
+    [getWorldPointFromPointer, rulerMode, updateRulerVisuals],
   );
 
   const handlePointerMove = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
+      // In ruler mode, completely ignore mouse movement — ruler uses click-click
+      if (rulerMode) return;
       if (!pointerDownPos.current) return;
       const dx = e.clientX - pointerDownPos.current.x;
       const dy = e.clientY - pointerDownPos.current.y;
       if (Math.hypot(dx, dy) > 4) isDraggingRef.current = true;
     },
-    [],
+    [rulerMode],
   );
 
   const handlePointerUp = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
-      const start = pointerDownPos.current;
-      pointerDownPos.current = null;
-
-      if (!start) return;
-
-      // If it was a click (not drag) — select object via Raycaster
-      if (!isDraggingRef.current) {
-        if (rulerMode) {
-          const point = getWorldPointFromPointer(e);
-          if (point && rulerPointsRef.current.length === 1) {
-            rulerPointsRef.current = [rulerPointsRef.current[0], point];
-            updateRulerVisuals(rulerPointsRef.current);
-            onRulerMeasure?.(rulerPointsRef.current[0].distanceTo(point));
-          }
-        } else {
-          // Raycaster для выбора объекта
-          const camera = activeCameraRef.current ?? cameraRef.current;
-          const container = containerRef.current;
-          if (camera && container) {
-            const rect = container.getBoundingClientRect();
-            const x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-            const y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
-            const raycaster = new THREE.Raycaster();
-            raycaster.setFromCamera(new THREE.Vector2(x, y), camera);
-            const meshes: THREE.Mesh[] = [];
-            for (const entry of meshMapRef.current.values()) {
-              if (entry.mesh.visible) meshes.push(entry.mesh);
-            }
-            const hits = raycaster.intersectObjects(meshes, false);
-            if (hits.length > 0) {
-              const id = hits[0].object.userData.objectId as string;
-              onSelect(id, e.shiftKey);
-            } else {
-              onSelect(null, false);
-            }
-          }
-        }
-        return;
-      }
-
-      // If it was a drag (box selection)
+      // Ruler mode: click-click — second point and measurement on pointerUp only
       if (rulerMode) {
         const point = getWorldPointFromPointer(e);
         if (point && rulerPointsRef.current.length === 1) {
@@ -636,6 +592,43 @@ export default function Viewport3D({
           updateRulerVisuals(rulerPointsRef.current);
           onRulerMeasure?.(rulerPointsRef.current[0].distanceTo(point));
         }
+        return;
+      }
+
+      const start = pointerDownPos.current;
+      pointerDownPos.current = null;
+
+      if (!start) return;
+
+      // If it was a click (not drag) — select object via Raycaster
+      if (!isDraggingRef.current) {
+        // Raycaster для выбора объекта
+        const camera = activeCameraRef.current ?? cameraRef.current;
+        const container = containerRef.current;
+        if (camera && container) {
+          const rect = container.getBoundingClientRect();
+          const x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+          const y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+          const raycaster = new THREE.Raycaster();
+          raycaster.setFromCamera(new THREE.Vector2(x, y), camera);
+          const meshes: THREE.Mesh[] = [];
+          for (const entry of meshMapRef.current.values()) {
+            if (entry.mesh.visible) meshes.push(entry.mesh);
+          }
+          const hits = raycaster.intersectObjects(meshes, false);
+          if (hits.length > 0) {
+            const id = hits[0].object.userData.objectId as string;
+            onSelect(id, e.shiftKey);
+          } else {
+            onSelect(null, false);
+          }
+        }
+        return;
+      }
+
+      // If it was a drag (box selection)
+      if (isDraggingRef.current) {
+        // Box selection — handled by the existing drag logic
       }
     },
     [

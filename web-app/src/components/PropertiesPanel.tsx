@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import NumInput from "./NumInput";
-import MirrorButtons from "./MirrorButtons";
 import AlignButtons from "./AlignButtons";
 import CsgButtons from "./CsgButtons";
 import type { ShapeParams, SceneObject } from "../csg/types";
@@ -11,26 +10,18 @@ export default function PropertiesPanel({
   selectedIds,
   canResize,
   canFillet,
-  canExtrude,
-  canMirror,
-  canAlign,
   canCsg,
+  canAlign,
   filletRadius,
-  extrudeAxis,
-  extrudeDepth,
   objectList,
   operationsLength,
   onSetFilletRadius,
-  onSetExtrudeAxis,
-  onSetExtrudeDepth,
   onMoveAxis,
   onRotAxis,
   onScaleAxis,
   onResizeDim,
   onResizeObject,
   onApplyFillet,
-  onExtrude,
-  onMirror,
   onCsg,
   onAlign,
   onSetColor,
@@ -43,26 +34,18 @@ export default function PropertiesPanel({
   selectedIds: string[];
   canResize: boolean;
   canFillet: boolean;
-  canExtrude: boolean;
-  canMirror: boolean;
-  canAlign: boolean;
   canCsg: boolean;
+  canAlign: boolean;
   filletRadius: number;
-  extrudeAxis: "X" | "Y" | "Z";
-  extrudeDepth: number;
   objectList: SceneObject[];
   operationsLength: number;
   onSetFilletRadius: (v: number) => void;
-  onSetExtrudeAxis: (a: "X" | "Y" | "Z") => void;
-  onSetExtrudeDepth: (v: number) => void;
   onMoveAxis: (axis: "x" | "y" | "z", val: number) => void;
   onRotAxis: (axis: "rotX" | "rotY" | "rotZ", val: number) => void;
   onScaleAxis: (axis: "scaleX" | "scaleY" | "scaleZ", val: number) => void;
   onResizeDim: (dim: "width" | "height" | "depth", val: number) => void;
   onResizeObject: (id: string, params: ShapeParams) => void;
   onApplyFillet: (id: string, radius: number) => void;
-  onExtrude: (axis: "X" | "Y" | "Z", depth: number) => void;
-  onMirror: (plane: "XY" | "XZ" | "YZ") => void;
   onCsg: (op: "union" | "subtract" | "intersect") => void;
   onAlign: (axis: "X" | "Y" | "Z", anchor: "min" | "center" | "max") => void;
   onSetColor: (id: string, color: string, skipHistory?: boolean) => void;
@@ -400,54 +383,8 @@ export default function PropertiesPanel({
         </div>
       )}
 
-      {/* Extrude */}
-      {canExtrude && (
-        <div className="csg-group">
-          <div className="csg-group-title">Выдавливание (Extrude)</div>
-          <div className="props-row">
-            <span className="props-label">Ось</span>
-            <div className="flex-row">
-              {(["X", "Y", "Z"] as const).map((a) => (
-                <button
-                  key={a}
-                  className={`btn${extrudeAxis === a ? " active" : ""} min-w-30`}
-                  onClick={() => onSetExtrudeAxis(a)}
-                >
-                  {a}
-                </button>
-              ))}
-            </div>
-          </div>
-          <NumInput
-            label="Глубина"
-            unit="мм"
-            min={0.1}
-            value={extrudeDepth}
-            onChange={onSetExtrudeDepth}
-          />
-          <div className="flex-row">
-            <button
-              className="btn primary flex-1"
-              disabled={!canExtrude}
-              onClick={() => onExtrude(extrudeAxis, extrudeDepth)}
-            >
-              ▲ +{extrudeAxis}
-            </button>
-            <button
-              className="btn flex-1"
-              disabled={!canExtrude}
-              onClick={() => onExtrude(extrudeAxis, -extrudeDepth)}
-            >
-              ▼ −{extrudeAxis}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Зеркало */}
-      {selectedIds.length === 1 && (
-        <MirrorButtons disabled={!canMirror} onMirror={onMirror} variant="full" />
-      )}
+      {/* Extrude — скрыто в свойствах, доступно на панели инструментов */}
+      {/* Mirror — скрыто в свойствах, доступно на панели инструментов */}
 
       {/* CSG + Align */}
       {selectedIds.length === 2 && (
