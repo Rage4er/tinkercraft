@@ -87,6 +87,14 @@ export interface GroupOperation {
   isIntersect: boolean
   subtractOp?: boolean
   resultId?: string
+  /** Vertices of the CSG result — used for rebuild from history (replaces shapeType-based reconstruction) */
+  resultVertices?: Float32Array | number[]
+  /** Indices of the CSG result — used for rebuild from history */
+  resultIndices?: Uint32Array | number[]
+  /** Normals of the CSG result */
+  resultNormals?: Float32Array | number[]
+  /** Center position of the CSG result — used to restore transform on rebuild (FIX CRIT-CSG-2) */
+  resultCenter?: { x: number; y: number; z: number }
 }
 
 export interface ResizeDimsOperation { type: 'resize_dims'; id: string; params: ShapeParams }

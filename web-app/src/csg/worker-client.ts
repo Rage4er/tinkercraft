@@ -154,6 +154,16 @@ export async function workerSyncObjects(
   await send<unknown>('syncObjects', { entries })
 }
 
+export async function workerSyncMesh(
+  objId: string,
+  vertices: Float32Array | number[],
+  indices: Uint32Array | number[],
+  transform?: TransformNR,
+): Promise<void> {
+  await waitReady()
+  await send<unknown>('syncMesh', { objId, vertices, indices, transform: transform ?? { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 } })
+}
+
 export async function workerCsgBoolean(
   idA: string, idB: string, op: CsgBooleanOp, resultId: string,
   transformA?: { x: number; y: number; z: number; rotX: number; rotY: number; rotZ: number; scaleX: number; scaleY: number; scaleZ: number },

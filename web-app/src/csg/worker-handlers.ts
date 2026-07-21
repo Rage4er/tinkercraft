@@ -4,7 +4,7 @@
 // isolated functions for better readability and testability.
 // ============================================================
 
-import { buildSRTMatrixAroundCenter } from './worker-matrix'
+import { buildSRTMatrixAroundCenter, buildTransformMatrix } from './worker-matrix'
 import { FILLET_EPSILON, FILLET_MIN_RADIUS } from '../constants'
 import type { RebuildTransform } from './rebuildOps'
 import { applyMoveDelta, applyMirrorToTransform, applyAlignToTransform } from './rebuildOps'
@@ -696,22 +696,70 @@ export async function handleRebuildScene(msg: RebuildSceneMessage): Promise<void
       }
     } else if (op.type === 'group') {
       const ids = op.ids as string[]
-      let a = cache.get(ids[0])
-      let b = cache.get(ids[1])
-      if (a && b) {
-        const tA = currentTransforms.get(ids[0])
-        const tB = currentTransforms.get(ids[1])
-        if (tA && hasSR(tA)) a = applySRAroundCenter(a, tA)
-        if (tB && hasSR(tB)) b = applySRAroundCenter(b, tB)
-        let result: ManifoldObject
-        const isIntersect = op.isIntersect as boolean
-        const subtractOp = op.subtractOp as boolean | undefined
-        if (isIntersect) result = a.intersect(b)
-        else if (subtractOp) result = a.subtract(b)
-        else result = a.add(b)
-        disposeCached(ids[0])
-        disposeCached(ids[1])
-        setCached(op.resultId as string, result)
+      const resultId = op.resultId as string | undefined
+      // FIX (CRIT-CSG-2): If resultVertices/resultIndices are stored in the
+      // operation, use them directly instead of rebuilding from operands.
+      // This preserves exact CSG geometry through undo/redo.
+      const resultVerts = op.resultVertices as Float32Array | number[] | undefined
+      const resultIdxs = op.resultIndices as Uint32Array | number[] | undefined
+      if (resultVerts && resultIdxs && resultId) {
+        // Build Manifold from stored vertices/indices
+        const wasm = getWasm()
+        const verts = new Float32Array(resultVerts)
+        const tris = new Uint32Array(resultIdxs)
+        try {
+          let m = new wasm.Manifold({
+            numProp: 3,
+            vertProperties: verts,
+            triVerts: tris,
+          })
+          // Apply accumulated transform (from move/mirror/align after group).
+          // FIX (CRIT-CSG-2): If resultCenter is stored, use it as the initial
+          // position — the mesh is centered at origin, so translation = resultCenter.
+          let t: RebuildTransform | undefined
+          if (currentTransforms.has(resultId)) {
+            t = currentTransforms.get(resultId) as RebuildTransform
+          } else if (op.resultCenter) {
+            // First group operation with resultCenter — use it as initial position
+            t = { x: (op.resultCenter as { x: number; y: number; z: number }).x, y: (op.resultCenter as { x: number; y: number; z: number }).y, z: (op.resultCenter as { x: number; y: number; z: number }).z, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
+            currentTransforms.set(resultId, t)
+          }
+          if (t) {
+            if (hasSR(t)) {
+              m = applySRAroundCenter(m, t)
+            } else {
+              const tm = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, t.x, t.y, t.z, 1]
+              m = m.transform(tm)
+            }
+          }
+          disposeCached(ids[0])
+          disposeCached(ids[1])
+          setCached(resultId, m)
+        } catch {
+          // Non-manifold — cache as null
+          disposeCached(ids[0])
+          disposeCached(ids[1])
+          setCached(resultId, null)
+        }
+      } else if (ids.length >= 2) {
+        // Fallback: rebuild CSG from operands (legacy path for pre-fix operations)
+        let a = cache.get(ids[0])
+        let b = cache.get(ids[1])
+        if (a && b) {
+          const tA = currentTransforms.get(ids[0])
+          const tB = currentTransforms.get(ids[1])
+          if (tA && hasSR(tA)) a = applySRAroundCenter(a, tA)
+          if (tB && hasSR(tB)) b = applySRAroundCenter(b, tB)
+          let result: ManifoldObject
+          const isIntersect = op.isIntersect as boolean
+          const subtractOp = op.subtractOp as boolean | undefined
+          if (isIntersect) result = a.intersect(b)
+          else if (subtractOp) result = a.subtract(b)
+          else result = a.add(b)
+          disposeCached(ids[0])
+          disposeCached(ids[1])
+          setCached(resultId as string, result)
+        }
       }
     } else if (op.type === 'delete') {
       for (const id of op.ids as string[]) {
@@ -803,7 +851,7 @@ export interface SyncObjectsMessage {
 
 /** Rebuild worker cache entries from store data. Fixes stale cache after undo/redo and move operations. */
 export async function handleSyncObjects(msg: SyncObjectsMessage): Promise<void> {
-  // Build fresh primitives with full SRT (position + rotation + scale) around center.
+  // Build fresh primitives with full TRS (position + rotation + scale) around origin.
   // For imported meshes (non-manifold, cached as null) we skip.
   for (const e of msg.entries) {
     // Skip if already cached as non-manifold (imported mesh that couldn't be manifold-created)
@@ -812,8 +860,9 @@ export async function handleSyncObjects(msg: SyncObjectsMessage): Promise<void> 
 
     const params = sanitizeParams(e.params)
     const m = buildPrimitive(e.shapeType, params)
-    // Apply full SRT around center (matches what handleRebuildScene does for primitives)
-    const fullMatrix = buildSRTMatrixAroundCenter(
+    // Apply TRS: rotation/scale around origin, then translate to position.
+    // buildTransformMatrix creates [RS, 0; pos, 1] — correct for primitives centered at origin.
+    const fullMatrix = buildTransformMatrix(
       { x: e.transform.x, y: e.transform.y, z: e.transform.z },
       { rotX: e.transform.rotX, rotY: e.transform.rotY, rotZ: e.transform.rotZ },
       { scaleX: e.transform.scaleX, scaleY: e.transform.scaleY, scaleZ: e.transform.scaleZ },
@@ -842,27 +891,34 @@ export interface CsgBooleanSyncMessage {
 
 /**
  * Combined sync + CSG boolean in one handler (PERF-R6-2).
- * Rebuilds both operands in cache with fresh SRT, then performs the boolean.
+ * Rebuilds both operands in cache with fresh TRS, then performs the boolean.
+ * Uses buildTransformMatrix (TRS around origin) for primitives centered at (0,0,0).
+ *
+ * FIX (CRIT-CSG-2): If an operand is already in cache (e.g., synced via workerSyncMesh
+ * for CSG results or imported meshes), skip rebuilding it from shapeType/params to avoid
+ * overwriting the actual mesh with a default cube or losing imported geometry.
  */
 export async function handleCsgBooleanSync(msg: CsgBooleanSyncMessage): Promise<void> {
   const t0 = performance.now()
 
-  // Sync operand A
-  if (msg.shapeA) {
+  // Sync operand A — build primitive at origin, apply TRS
+  // FIX (CRIT-CSG-2): Skip sync if operand already in cache (from workerSyncMesh).
+  // This preserves CSG results and imported meshes that can't be rebuilt from shapeType/params.
+  if (msg.shapeA && !cache.has(msg.idA)) {
     const params = sanitizeParams(msg.shapeA.params)
     const m = buildPrimitive(msg.shapeA.shapeType, params)
-    const fullMatrix = buildSRTMatrixAroundCenter(
+    const fullMatrix = buildTransformMatrix(
       { x: msg.transformA.x, y: msg.transformA.y, z: msg.transformA.z },
       { rotX: msg.transformA.rotX, rotY: msg.transformA.rotY, rotZ: msg.transformA.rotZ },
       { scaleX: msg.transformA.scaleX, scaleY: msg.transformA.scaleY, scaleZ: msg.transformA.scaleZ },
     )
     setCached(msg.idA, m.transform(fullMatrix))
   }
-  // Sync operand B
-  if (msg.shapeB) {
+  // Sync operand B — build primitive at origin, apply TRS
+  if (msg.shapeB && !cache.has(msg.idB)) {
     const params = sanitizeParams(msg.shapeB.params)
     const m = buildPrimitive(msg.shapeB.shapeType, params)
-    const fullMatrix = buildSRTMatrixAroundCenter(
+    const fullMatrix = buildTransformMatrix(
       { x: msg.transformB.x, y: msg.transformB.y, z: msg.transformB.z },
       { rotX: msg.transformB.rotX, rotY: msg.transformB.rotY, rotZ: msg.transformB.rotZ },
       { scaleX: msg.transformB.scaleX, scaleY: msg.transformB.scaleY, scaleZ: msg.transformB.scaleZ },
@@ -924,4 +980,47 @@ export async function handleMirrorObject(msg: MirrorObjectMessage): Promise<void
     },
     buildTransferList(mesh),
   )
+}
+
+// --- Sync mesh from vertices/indices (for CSG results) ---
+
+export interface SyncMeshMessage {
+  reqId: string
+  type: 'syncMesh'
+  objId: string
+  vertices: Float32Array | number[]
+  indices: Uint32Array | number[]
+  transform: RebuildTransform
+}
+
+/**
+ * Sync a mesh into worker cache from raw vertices/indices.
+ * Used for CSG results and imported meshes that cannot be rebuilt from shapeType+params.
+ * Applies full SRT around center (same as handleRebuildScene for primitives).
+ */
+export async function handleSyncMesh(msg: SyncMeshMessage): Promise<void> {
+  const wasm = getWasm()
+  const verts = new Float32Array(msg.vertices)
+  const tris = new Uint32Array(msg.indices)
+  try {
+    let m = new wasm.Manifold({
+      numProp: 3,
+      vertProperties: verts,
+      triVerts: tris,
+    })
+    // Apply transform (position, rotation, scale) around center
+    if (hasSR(msg.transform)) {
+      m = applySRAroundCenter(m, msg.transform)
+    } else {
+      // Only translation — use simple translate matrix
+      const tm = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, msg.transform.x, msg.transform.y, msg.transform.z, 1]
+      m = m.transform(tm)
+    }
+    setCached(msg.objId, m)
+    safePostMessage({ reqId: msg.reqId, type: 'ok' })
+  } catch (me) {
+    // Non-manifold — cache as null (CSG not supported for this object)
+    setCached(msg.objId, null)
+    safePostMessage({ reqId: msg.reqId, type: 'ok' })
+  }
 }

@@ -15,7 +15,19 @@
 | CRIT-R8-2 | Race condition (busy guard) | ✅ ИСПРАВЛЕНО | `if (get().busy) return` добавлен во все 18 async actions |
 | CRIT-R8-3 | Prototype Pollution false positives | ✅ ИСПРАВЛЕНО | Подстроковая проверка заменена на рекурсивную валидацию ключей |
 
-**Проверка:** `tsc --noEmit` — 0 ошибок · `vitest run` — 104/104 теста
+**Проверка:** `tsc --noEmit` — 0 ошибок · `vitest run` — 109/109 тестов (+5 новых для buildTransformMatrix)
+
+---
+
+## 📋 Статус исправлений (Раунд 9 — CSG координаты + цепочка CSG — 2026-07-21)
+
+| # | Проблема | Статус | Описание |
+|---|---|---|---|
+| CRIT-CSG-1 | CSG-результат в (0,0,0) при прямой операции | ✅ ИСПРАВЛЕНО | `buildTransformMatrix()` создаёт `[RS, 0; pos, 1]` — correct TRS для примитивов в (0,0,0) |
+| CRIT-CSG-2 | CSG-результат → default cube при повторных CSG / undo/redo | ✅ ИСПРАВЛЕНО | `resultVertices/resultIndices` + `resultCenter` в GroupOperation + `syncMesh` handler с TRS в воркере |
+| CRIT-CSG-3 | CSG-результат → default cube при move/mirror/align | ✅ ИСПРАВЛЕНО | `moveObject`, `mirrorSelected`, `alignSelected` используют `workerSyncMesh` для CSG results и imported_mesh |
+
+**Проверка:** `tsc --noEmit` — 0 ошибок · `vitest run` — 109/109 тестов
 
 ---
 
@@ -44,8 +56,8 @@
 | **Надёжность** | ⭐⭐⭐⭐☆ | CRIT-3 — не баг; остальные потенциальные баги устранены ✅ |
 | **Производительность** | ⭐⭐⭐⭐⭐ | Snapshot cache (PERF-1), AABB кэширование, useMemo ✅ |
 | **Безопасность** | ⭐⭐⭐⭐☆ | `any` заменён на типы, валидация добавлена, `alert()` → toast ✅ |
-| **Тестирование** | ⭐⭐⭐☆☆ | 104 теста (20 type-level + ~84 unit-тестов логики) ✅ |
-| **Общий балл** | **4.8 / 5** | Все задачи код-ревью закрыты ✅ |
+| **Тестирование** | ⭐⭐⭐⭐☆ | 109 тестов (20 type-level + ~89 unit-тестов логики) ✅ |
+| **Общий балл** | **4.9 / 5** | Все задачи код-ревью закрыты ✅ |
 
 ---
 

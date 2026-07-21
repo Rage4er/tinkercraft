@@ -20,7 +20,7 @@ import {
   workerBuildShape, workerCsgBoolean, workerCsgBooleanWithSync,
   workerBuildImportedMesh, workerApplyFillet,
   workerMirrorObject, workerRebuildScene,
-  workerDeleteObjects, workerClearAll, workerSyncObjects,
+  workerDeleteObjects, workerClearAll, workerSyncObjects, workerSyncMesh,
 } from '../csg/worker-client'
 import { parseDoodle, serializeDoodle, openDoodleFilePicker, downloadBlob } from '../io/doodle-io'
 import { notify } from './notifications'
@@ -270,8 +270,29 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     set({ busy: true })
     try {
       const t0 = performance.now()
-      // Single-call sync + CSG: rebuild operands in worker cache and
-      // perform the boolean in one round-trip (PERF-R6-2).
+      // FIX (CRIT-CSG-2): Sync operands that can't be rebuilt from shapeType/params
+      // (CSG results with shapeType='cube', params={} and imported meshes) into
+      // worker cache using their actual mesh data + transform. After this,
+      // workerCsgBooleanWithSync will skip rebuilding these operands (cache.has
+      // check in handleCsgBooleanSync) and use the synced mesh with correct
+      // position/rotation/scale.
+      const syncOperand = async (id: string) => {
+        const obj = objects[id]
+        if (!obj) return
+        // For CSG results (shapeType='cube' with no params) and imported meshes,
+        // sync the actual mesh data + transform. Regular primitives will be synced by
+        // workerCsgBooleanWithSync via buildTransformMatrix.
+        if (obj.shapeType === 'cube' && !obj.params.width) {
+          await workerSyncMesh(id, obj.vertices, obj.indices, obj.transform).catch(() => {})
+        } else if (obj.shapeType === 'import_mesh') {
+          await workerSyncMesh(id, obj.vertices, obj.indices, obj.transform).catch(() => {})
+        }
+      }
+      await syncOperand(idA)
+      await syncOperand(idB)
+      // Now perform CSG — workerCsgBooleanWithSync will:
+      // - skip operands already in cache (CSG results, imported meshes synced above)
+      // - rebuild regular primitives from shapeType/params via buildTransformMatrix
       const srOf = (id: string) => {
         const t = objects[id].transform
         return { x: t.x, y: t.y, z: t.z, rotX: t.rotX, rotY: t.rotY, rotZ: t.rotZ, scaleX: t.scaleX, scaleY: t.scaleY, scaleZ: t.scaleZ }
@@ -286,7 +307,10 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const { cx, cy, cz, aabb } = extractAndCenterGetAABB(mesh.vertices)
       const newObj: SceneObject = { id: resultId, shapeType: 'cube', params: {}, color: objects[idA].color, transform: { x: cx, y: cy, z: cz, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }, visible: true, locked: false, vertices: mesh.vertices, indices: mesh.indices, normals: mesh.normals, aabb }
       const newObjects = { ...objects }; delete newObjects[idA]; delete newObjects[idB]; newObjects[resultId] = newObj
-      const histOp: GroupOperation = { type: 'group', ids: [idA, idB], isHull: false, isIntersect: op === 'intersect', subtractOp: op === 'subtract', resultId }
+      // FIX (CRIT-CSG-2): Store result vertices/indices AND center position
+      // in GroupOperation so rebuildFromHistory can reconstruct the CSG result
+      // geometry at the correct position.
+      const histOp: GroupOperation = { type: 'group', ids: [idA, idB], isHull: false, isIntersect: op === 'intersect', subtractOp: op === 'subtract', resultId, resultVertices: mesh.vertices, resultIndices: mesh.indices, resultNormals: mesh.normals ?? undefined, resultCenter: { x: cx, y: cy, z: cz } }
       const newOps = [...operations.slice(0, historyIndex), histOp]
       set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, selectedIds: [resultId], modified: true, busy: false, lastCsgMs: ms })
       cacheSnapshot(newOps.length, newObjects)
@@ -316,12 +340,24 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true })
     cacheSnapshot(newOps.length, newObjects)
     // Sync worker cache so subsequent CSG/mirror operations use correct position (WARN-R6-2)
-    workerSyncObjects([{
-      objId: id,
-      shapeType: obj.shapeType,
-      params: obj.params,
-      transform: { x: transform.x, y: transform.y, z: transform.z, rotX: transform.rotX, rotY: transform.rotY, rotZ: transform.rotZ, scaleX: transform.scaleX, scaleY: transform.scaleY, scaleZ: transform.scaleZ },
-    }]).catch(e => console.error('moveObject sync:', e))
+    // FIX (CRIT-CSG-3): For CSG results (shapeType='cube' with no params) and imported meshes,
+    // use workerSyncMesh to preserve actual geometry. workerSyncObjects rebuilds from shapeType/params
+    // which loses all CSG geometry (shapeType='cube', params={} → default cube).
+    if (obj.shapeType === 'cube' && !obj.params.width) {
+      // CSG result — sync actual mesh data
+      workerSyncMesh(id, obj.vertices, obj.indices, { x: transform.x, y: transform.y, z: transform.z, rotX: transform.rotX, rotY: transform.rotY, rotZ: transform.rotZ, scaleX: transform.scaleX, scaleY: transform.scaleY, scaleZ: transform.scaleZ }).catch(e => console.error('moveObject syncMesh:', e))
+    } else if (obj.shapeType === 'import_mesh') {
+      // Imported mesh — sync actual mesh data
+      workerSyncMesh(id, obj.vertices, obj.indices, { x: transform.x, y: transform.y, z: transform.z, rotX: transform.rotX, rotY: transform.rotY, rotZ: transform.rotZ, scaleX: transform.scaleX, scaleY: transform.scaleY, scaleZ: transform.scaleZ }).catch(e => console.error('moveObject syncMesh:', e))
+    } else {
+      // Regular primitive — sync via shapeType/params (more efficient)
+      workerSyncObjects([{
+        objId: id,
+        shapeType: obj.shapeType,
+        params: obj.params,
+        transform: { x: transform.x, y: transform.y, z: transform.z, rotX: transform.rotX, rotY: transform.rotY, rotZ: transform.rotZ, scaleX: transform.scaleX, scaleY: transform.scaleY, scaleZ: transform.scaleZ },
+      }]).catch(e => console.error('moveObject sync:', e))
+    }
   },
 
   // ── Color ──
@@ -357,17 +393,32 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     try {
       const t0 = performance.now()
       // Sync worker cache before mirror — fixes stale cache after undo/redo
-      await workerSyncObjects(
-        ids.map(id => {
-          const obj = objects[id]
-          return {
-            objId: obj.id,
-            shapeType: obj.shapeType,
-            params: obj.params,
-            transform: { x: obj.transform.x, y: obj.transform.y, z: obj.transform.z, rotX: obj.transform.rotX, rotY: obj.transform.rotY, rotZ: obj.transform.rotZ, scaleX: obj.transform.scaleX, scaleY: obj.transform.scaleY, scaleZ: obj.transform.scaleZ } as const,
-          }
-        }),
-      )
+      // FIX (CRIT-CSG-3): For CSG results and imported meshes, use workerSyncMesh.
+      // workerSyncObjects rebuilds from shapeType/params which loses CSG geometry.
+      const syncOps = ids.map(async id => {
+        const obj = objects[id]
+        if (obj.shapeType === 'cube' && !obj.params.width || obj.shapeType === 'import_mesh') {
+          await workerSyncMesh(id, obj.vertices, obj.indices, { x: obj.transform.x, y: obj.transform.y, z: obj.transform.z, rotX: obj.transform.rotX, rotY: obj.transform.rotY, rotZ: obj.transform.rotZ, scaleX: obj.transform.scaleX, scaleY: obj.transform.scaleY, scaleZ: obj.transform.scaleZ }).catch(() => {})
+        } else {
+          return { objId: id, shapeType: obj.shapeType, params: obj.params, transform: { x: obj.transform.x, y: obj.transform.y, z: obj.transform.z, rotX: obj.transform.rotX, rotY: obj.transform.rotY, rotZ: obj.transform.rotZ, scaleX: obj.transform.scaleX, scaleY: obj.transform.scaleY, scaleZ: obj.transform.scaleZ } as const }
+        }
+      })
+      await Promise.all(syncOps)
+      // Sync regular primitives via workerSyncObjects
+      const regularEntries = ids.filter(id => objects[id] && objects[id].shapeType !== 'cube' || (objects[id] && objects[id].shapeType === 'cube' && objects[id].params.width))
+      if (regularEntries.length > 0) {
+        await workerSyncObjects(
+          regularEntries.map(id => {
+            const obj = objects[id]
+            return {
+              objId: obj.id,
+              shapeType: obj.shapeType,
+              params: obj.params,
+              transform: { x: obj.transform.x, y: obj.transform.y, z: obj.transform.z, rotX: obj.transform.rotX, rotY: obj.transform.rotY, rotZ: obj.transform.rotZ, scaleX: obj.transform.scaleX, scaleY: obj.transform.scaleY, scaleZ: obj.transform.scaleZ } as const,
+            }
+          }),
+        )
+      }
       const newObjects = { ...objects }
       for (const id of ids) {
         const mesh = await workerMirrorObject(id, plane)
@@ -414,8 +465,16 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         const obj = newObjects[id]
         const dx = axis === 'X' ? delta : 0, dy = axis === 'Y' ? delta : 0, dz = axis === 'Z' ? delta : 0
         const nt: TransformNR = { ...obj.transform, x: obj.transform.x + dx, y: obj.transform.y + dy, z: obj.transform.z + dz }
-        const mesh = await workerBuildShape(id, obj.shapeType, obj.params, nt)
-        newObjects[id] = makeObject({ ...obj, transform: nt, vertices: mesh.vertices, indices: mesh.indices, normals: mesh.normals })
+        // FIX (CRIT-CSG-3): For CSG results and imported meshes, sync via workerSyncMesh.
+        // workerBuildShape with shapeType='cube', params={} → default cube.
+        if (obj.shapeType === 'cube' && !obj.params.width || obj.shapeType === 'import_mesh') {
+          await workerSyncMesh(id, obj.vertices, obj.indices, nt).catch(() => {})
+          // Update the SceneObject with new transform (mesh geometry unchanged, only position shifted)
+          newObjects[id] = { ...obj, transform: nt }
+        } else {
+          const mesh = await workerBuildShape(id, obj.shapeType, obj.params, nt)
+          newObjects[id] = makeObject({ ...obj, transform: nt, vertices: mesh.vertices, indices: mesh.indices, normals: mesh.normals })
+        }
       }
       const op: AlignOperation & { deltas: Record<string, number> } = { type: 'align', ids, axis, anchor, deltas }
       const newOps = [...operations.slice(0, historyIndex), op]
@@ -578,7 +637,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const { cx: ex, cy: ey, cz: ez, aabb } = extractAndCenterGetAABB(resultMesh.vertices)
       const newObj: SceneObject = { id: resultId, shapeType: 'cube', params: {}, color: obj.color, transform: { x: ex, y: ey, z: ez, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }, visible: true, locked: false, vertices: resultMesh.vertices, indices: resultMesh.indices, normals: resultMesh.normals, aabb }
       const addOp: AddShapeOperation = { type: 'add_shape', id: slabId, shapeType: 'cube', params: slabP, color: obj.color, transform: slabT }
-      const grpOp: GroupOperation = { type: 'group', ids: [id, slabId], isHull: false, isIntersect: false, resultId }
+      const grpOp: GroupOperation = { type: 'group', ids: [id, slabId], isHull: false, isIntersect: false, resultId, resultVertices: resultMesh.vertices, resultIndices: resultMesh.indices, resultNormals: resultMesh.normals ?? undefined, resultCenter: { x: ex, y: ey, z: ez } }
       const newObjects = { ...objects }; delete newObjects[id]; newObjects[resultId] = newObj
       const newOps = [...operations.slice(0, historyIndex), addOp, grpOp]
       set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, selectedIds: [resultId], modified: true, busy: false, lastCsgMs: ms })

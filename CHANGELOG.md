@@ -9,6 +9,38 @@
 
 ## [Unreleased]
 
+### Fixed — CSG координаты и цепочка операций (2026-07-21)
+
+- **CRIT-CSG-1:** CSG-результат появлялся в (0,0,0) при прямой операции (без вращения/масштаба operand'ов)
+  - `buildSRTMatrixAroundCenter` создавал identity-матрицу когда RS = identity (формула `tx = pos - RS·pos = 0`)
+  - `handleCsgBooleanSync` и `handleSyncObjects` использовали эту матрицу для примитивов, центрированных в (0,0,0)
+  - Результат: operand'ы не смещались в позицию, boolean выполнялся в (0,0,0), результат в (0,0,0)
+  - Rebuild из истории работал корректно (`applyTransform` применял translate отдельно) — рассинхронизация
+  - Добавлена `buildTransformMatrix()` — создаёт матрицу `[RS, 0; pos, 1]` (RS вокруг origin, затем translate)
+  - `handleCsgBooleanSync` и `handleSyncObjects` теперь используют `buildTransformMatrix` (`worker-handlers.ts`)
+  - `buildSRTMatrixAroundCenter` оставлен для `applySRAroundCenter` в `handleRebuildScene` (там геометрия уже смещена)
+  - Добавлены unit-тесты для `buildTransformMatrix` (`worker-matrix.test.ts`, +5 тестов)
+- **CRIT-CSG-2:** CSG-результат превращался в default cube при повторных CSG-операциях и при undo/redo
+  - Результат CSG хранился как `shapeType: 'cube', params: {}` — при rebuild воркер создавал default cube
+  - При цепочке CSG (A+B=C, затем C+D=E) operand C rebuildился как default cube вместо сложной CSG-геометрии
+  - Добавлены `resultVertices`, `resultIndices`, `resultNormals` в `GroupOperation` (`types.ts`)
+  - Добавлен `syncMesh` handler в воркер — кэширует произвольный mesh из vertices/indices (`worker-handlers.ts`)
+  - `document-store.csgBoolean` теперь sync'ит operandы через `workerSyncMesh` + **transform** перед CSG (`document-store.ts`)
+  - `handleSyncMesh` применяет полный TRS (buildSRAroundCenter) к sync'нутому mesh (`worker-handlers.ts`)
+  - `handleCsgBooleanSync` пропускает sync для operandов уже в кэше (CSG results, imported meshes) (`worker-handlers.ts`)
+  - `handleRebuildScene` применяет transform к resultVertices mesh'ам (`worker-handlers.ts`)
+  - `rebuildFromHistory` применяет accumulated TRS к stored mesh для CSG-результатов (`rebuild.ts`)
+  - **resultCenter:** `buildRebuildMeta` сбрасывал transform CSG results на {0,0,0}, теряя позицию центра. Добавлено поле `resultCenter` в GroupOperation, buildRebuildMeta использует его как начальную позицию (`types.ts`, `rebuild.ts`)
+  - `handleRebuildScene` использует resultCenter как начальную позицию currentTransforms (`worker-handlers.ts`)
+  - `extrudeSelected` также сохраняет resultVertices/resultIndices/resultCenter (`document-store.ts`)
+- **CRIT-CSG-3:** CSG-результат терял геометрию при move/mirror/align после CSG-операции
+  - `moveObject`, `mirrorSelected`, `alignSelected` sync'или worker кэш через `workerSyncObjects`/`workerBuildShape`, которые rebuildят primitive из `shapeType/params`
+  - Для CSG-результата (`shapeType='cube'`, `params={}`) это создавало default cube вместо реального mesh
+  - При цепочке CSG → move → CSG результат был неправильный
+  - `moveObject` теперь использует `workerSyncMesh` для CSG results и imported_mesh (`document-store.ts`)
+  - `mirrorSelected` теперь использует `workerSyncMesh` для CSG results и imported_mesh (`document-store.ts`)
+  - `alignSelected` теперь использует `workerSyncMesh` для CSG results и imported_mesh (`document-store.ts`)
+
 ### Fixed — Раунд 8: Критические исправления (Фаза A) (2026-07-16)
 
 - **CRIT-R8-1:** Утечка WASM-памяти — ManifoldObject теперь освобождается через `delete()` при удалении из кэша воркера
