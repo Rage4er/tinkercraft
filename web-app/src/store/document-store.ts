@@ -361,14 +361,19 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   },
 
   // ── Color ──
-  setColor: (id, color) => {
+  setColor: (id, color, skipHistory = false) => {
     const { objects, operations, historyIndex } = get()
     if (!objects[id]) return
-    const op: ColorOperation = { type: 'color', ids: [id], color }
-    const newOps = [...operations.slice(0, historyIndex), op]
     const newObjects = { ...objects, [id]: { ...objects[id], color } }
-    set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true })
-    cacheSnapshot(newOps.length, newObjects)
+    if (skipHistory) {
+      // Visual preview only — no history entry (used for draft color picker)
+      set({ objects: newObjects })
+    } else {
+      const op: ColorOperation = { type: 'color', ids: [id], color }
+      const newOps = [...operations.slice(0, historyIndex), op]
+      set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true })
+      cacheSnapshot(newOps.length, newObjects)
+    }
   },
 
   // ── Visibility ──

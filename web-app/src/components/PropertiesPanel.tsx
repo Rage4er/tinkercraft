@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import NumInput from "./NumInput";
 import MirrorButtons from "./MirrorButtons";
 import AlignButtons from "./AlignButtons";
@@ -64,11 +65,36 @@ export default function PropertiesPanel({
   onMirror: (plane: "XY" | "XZ" | "YZ") => void;
   onCsg: (op: "union" | "subtract" | "intersect") => void;
   onAlign: (axis: "X" | "Y" | "Z", anchor: "min" | "center" | "max") => void;
-  onSetColor: (id: string, color: string) => void;
+  onSetColor: (id: string, color: string, skipHistory?: boolean) => void;
   onToggleVisible: (id: string) => void;
   onShowProjects: () => void;
   onSaveToProject: (name: string) => void;
 }) {
+  // FIX: Draft color state — only commit to history on blur or object switch
+  const [draftColor, setDraftColor] = useState<string | null>(null);
+
+  // Apply draft color when object changes or when blur fires
+  const applyDraftColor = () => {
+    if (firstSelected && draftColor && draftColor !== firstSelected.color) {
+      onSetColor(firstSelected.id, draftColor);
+    }
+    setDraftColor(null);
+  };
+
+  // Preview color change in real-time (no history entry)
+  const handleColorChange = (color: string) => {
+    if (firstSelected) {
+      setDraftColor(color);
+      // Update store for visual feedback — skip history
+      onSetColor(firstSelected.id, color, true);
+    }
+  };
+
+  // Reset draft color when selected object changes
+  useEffect(() => {
+    setDraftColor(null);
+  }, [firstSelected?.id]);
+
   if (!firstSelected) {
     return (
       <>
@@ -123,13 +149,14 @@ export default function PropertiesPanel({
         <div className="flex-row-6">
           <div
             className="color-swatch"
-            style={{ background: firstSelected.color }}
+            style={{ background: draftColor || firstSelected.color }}
           />
           <input
             type="color"
-            value={firstSelected.color}
+            value={draftColor || firstSelected.color}
             className="color-input"
-            onChange={(e) => onSetColor(firstSelected.id, e.target.value)}
+            onChange={(e) => handleColorChange(e.target.value)}
+            onBlur={applyDraftColor}
           />
         </div>
       </div>
