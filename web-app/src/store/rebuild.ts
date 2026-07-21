@@ -127,9 +127,12 @@ export function buildRebuildMeta(ops: TinkerCraftOperation[]): {
         csgResultIds.add(op.resultId)
         // Store result mesh data for rebuild (FIX CRIT-CSG-2)
         // This replaces shapeType-based reconstruction which loses all CSG geometry.
-        ;(meta[op.resultId] as RebuildMeta & { resultVertices?: Float32Array | number[]; resultIndices?: Uint32Array | number[]; resultNormals?: Float32Array | number[] }).resultVertices = op.resultVertices
-        ;(meta[op.resultId] as RebuildMeta & { resultVertices?: Float32Array | number[]; resultIndices?: Uint32Array | number[]; resultNormals?: Float32Array | number[] }).resultIndices = op.resultIndices
-        ;(meta[op.resultId] as RebuildMeta & { resultVertices?: Float32Array | number[]; resultIndices?: Uint32Array | number[]; resultNormals?: Float32Array | number[] }).resultNormals = op.resultNormals
+        ;(meta[op.resultId] as RebuildMeta & { resultVertices?: Float32Array | number[]; resultIndices?: Uint32Array | number[]; resultNormals?: Float32Array | number[]; originalBboxSize?: { x: number; y: number; z: number } }).resultVertices = op.resultVertices
+        ;(meta[op.resultId] as RebuildMeta & { resultVertices?: Float32Array | number[]; resultIndices?: Uint32Array | number[]; resultNormals?: Float32Array | number[]; originalBboxSize?: { x: number; y: number; z: number } }).resultIndices = op.resultIndices
+        ;(meta[op.resultId] as RebuildMeta & { resultVertices?: Float32Array | number[]; resultIndices?: Uint32Array | number[]; resultNormals?: Float32Array | number[]; originalBboxSize?: { x: number; y: number; z: number } }).resultNormals = op.resultNormals
+        if (op.originalBboxSize) {
+          ;(meta[op.resultId] as RebuildMeta & { originalBboxSize?: { x: number; y: number; z: number } }).originalBboxSize = op.originalBboxSize
+        }
       }
     }
   }
@@ -203,6 +206,9 @@ export async function rebuildFromHistory(
   const objects: Record<string, SceneObject> = {}
   for (const m of result.results) {
     const info = meta[m.objId]
+    // For CSG results, use originalBboxSize if available
+    const metaWithMesh = meta[m.objId] as RebuildMeta & { resultVertices?: Float32Array | number[]; resultIndices?: Uint32Array | number[]; resultNormals?: Float32Array | number[]; originalBboxSize?: { x: number; y: number; z: number } }
+    const originalBboxSize = metaWithMesh.originalBboxSize
     objects[m.objId] = makeObject({
       id: m.objId,
       name: info?.name,
@@ -215,6 +221,7 @@ export async function rebuildFromHistory(
       vertices: m.vertices,
       indices: m.indices,
       normals: m.normals,
+      originalBboxSize,
     })
   }
   return objects

@@ -562,6 +562,8 @@ export default function Viewport3D({
           rulerPointsRef.current = [point];
           updateRulerVisuals(rulerPointsRef.current);
         }
+        // Prevent OrbitControls from handling the event
+        e.stopPropagation();
         return;
       }
       pointerDownPos.current = { x: e.clientX, y: e.clientY };
@@ -592,6 +594,8 @@ export default function Viewport3D({
           updateRulerVisuals(rulerPointsRef.current);
           onRulerMeasure?.(rulerPointsRef.current[0].distanceTo(point));
         }
+        // Prevent OrbitControls from handling the event
+        e.stopPropagation();
         return;
       }
 

@@ -95,6 +95,8 @@ export interface GroupOperation {
   resultNormals?: Float32Array | number[]
   /** Center position of the CSG result — used to restore transform on rebuild (FIX CRIT-CSG-2) */
   resultCenter?: { x: number; y: number; z: number }
+  /** Original bbox size of the CSG result — used to compute scale relative to original dimensions */
+  originalBboxSize?: { x: number; y: number; z: number }
 }
 
 export interface ResizeDimsOperation { type: 'resize_dims'; id: string; params: ShapeParams }
@@ -148,6 +150,8 @@ export interface SceneObject {
   normals?: Float32Array | null
   /** Cached axis-aligned bounding box in local space (computed from vertices) */
   aabb?: { min: Vec3; max: Vec3 }
+  /** Original bbox size for CSG results — used to compute scale relative to original dimensions */
+  originalBboxSize?: { x: number; y: number; z: number }
 }
 
 export type CsgBooleanOp = 'union' | 'subtract' | 'intersect'

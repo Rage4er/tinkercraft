@@ -26,8 +26,10 @@
   - `handlePointerMove` теперь игнорирует движение мыши в ruler mode
   - `handlePointerUp` в ruler mode обрабатывает все клики независимо от drag flag
   - Рuler работает click-click (две точки), а не drag-измерение (`Viewport3D.tsx`)
+  - `e.stopPropagation()` предотвращает обработку событий OrbitControls в ruler mode
 - **UX-6:** Гизмо вращался с фигурой — теперь всегда ориентирован по осям вида
-  - `tc.setSpace("local")` заменён на `tc.setSpace("world")` (`Viewport3D.tsx`)
+  - `tc.setSpace("world")` — гизмо всегда ориентирован по осям вида, не вращается с фигурой
+  - Убран `change` event handler, который сбрасывал rotation pivot'а и ломал вращение
 
 ### Fixed — Зеркалирование сбрасывает вращение (2026-07-21)
 
@@ -37,6 +39,23 @@
   - `applyMirrorToTransform` теперь инвертирует `rotX` при YZ, `rotY` при XZ, `rotZ` при XY (`rebuildOps.ts`)
   - `mirrorSelected` в document-store также инвертирует вращение (`document-store.ts`)
   - Тест обновлён: `does not affect rotation or scale` → `mirrors rotation on the axis perpendicular to the plane` (`rebuildOps.test.ts`)
+- **CRIT-MIRROR-2:** Pivot в Three.js применял вращение к geometry, которая была зеркалена с учётом старого вращения
+  - `handleMirrorObject` зеркалит geometry, которая уже имеет transform (включая вращение) из кэша
+  - Pivot в Three.js применяет инвертированное вращение к geometry, которая была зеркалена с учётом старого вращения — рассинхрон
+  - `mirrorSelected` теперь sync'ит mesh С вращением (не БЕЗ вращения) перед зеркалением
+  - Worker зеркалит geometry относительно origin с учётом вращения, pivot применяет вращение к geometry, которая была mirror — корректно (`document-store.ts`)
+
+### Fixed — Resize CSG результата заменяется кубиком (2026-07-21)
+
+- **CRIT-RESIZE-1:** В свойствах объединённой фигуры есть размеры, при их изменении фигура заменяется кубиком этих размеров
+  - `resizeObject` rebuildит primitive из `shapeType/params`, но CSG результаты имеют `shapeType='cube' && !params.width`
+  - Rebuild создаёт default cube вместо масштабирования CSG-геометрии
+  - Для CSG результатов теперь используется сброс scale до 1 и задание размеров бондибокса в мм (`document-store.ts`)
+  - В свойствах объединённой фигуры отображается реальный размер бондибокса в мм (`PropertiesPanel.tsx`)
+  - `originalBboxSize` сохраняется в SceneObject и GroupOperation, используется для отображения размеров (`types.ts`)
+  - `csgBoolean` сохраняет `originalBboxSize` при создании CSG результата (`document-store.ts`)
+  - `rebuildFromHistory` восстанавливает `originalBboxSize` из GroupOperation (`rebuild.ts`)
+  - `buildRebuildMeta` извлекает `originalBboxSize` из GroupOperation (`rebuild.ts`)
 - **CRIT-MIRROR-2:** Pivot в Three.js применял вращение к geometry, которая была зеркалена с учётом старого вращения
   - `handleMirrorObject` зеркалит geometry, которая уже имеет transform (включая вращение) из кэша
   - Pivot в Three.js применяет инвертированное вращение к geometry, которая была зеркалена с учётом старого вращения — рассинхрон

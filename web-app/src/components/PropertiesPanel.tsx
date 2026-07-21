@@ -233,11 +233,37 @@ export default function PropertiesPanel({
         onChange={(v) => onScaleAxis("scaleZ", v)}
       />
 
-      {/* Resize dims — только для примитивов */}
+      {/* Resize dims — только для примитивов и CSG результатов */}
       {canResize && firstSelected.shapeType !== "import_mesh" && (
         <div className="csg-group">
           <div className="csg-group-title">Размеры (мм)</div>
-          {firstSelected.shapeType === "cube" && (
+          {firstSelected.shapeType === "cube" && !firstSelected.params.width && firstSelected.originalBboxSize ? (
+            // CSG result: show real bbox dimensions in mm
+            <>
+              <NumInput
+                label="Ширина"
+                min={0.1}
+                value={Math.round(firstSelected.originalBboxSize.x * 100) / 100}
+                disabled={busy}
+                onChange={(v) => onResizeObject(firstSelected.id, { width: v })}
+              />
+              <NumInput
+                label="Высота"
+                min={0.1}
+                value={Math.round(firstSelected.originalBboxSize.y * 100) / 100}
+                disabled={busy}
+                onChange={(v) => onResizeObject(firstSelected.id, { height: v })}
+              />
+              <NumInput
+                label="Глубина"
+                min={0.1}
+                value={Math.round(firstSelected.originalBboxSize.z * 100) / 100}
+                disabled={busy}
+                onChange={(v) => onResizeObject(firstSelected.id, { depth: v })}
+              />
+            </>
+          ) : firstSelected.shapeType === "cube" && firstSelected.params.width ? (
+            // Regular cube: show params
             <>
               <NumInput
                 label="Ширина"
@@ -261,7 +287,7 @@ export default function PropertiesPanel({
                 onChange={(v) => onResizeDim("depth", v)}
               />
             </>
-          )}
+          ) : null}
           {firstSelected.shapeType === "sphere" && (
             <>
               <NumInput

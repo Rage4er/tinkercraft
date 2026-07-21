@@ -31,12 +31,35 @@
 
 ---
 
-## 📋 Статус исправлений (Раунд 13 — Mirror rotation + Resize CSG + Ruler + Gizmo — 2026-07-21)
+## 📋 Статус исправлений (Раунд 15 — Вращение + Resize CSG — 2026-07-21)
+
+| # | Проблема | Статус | Описание |
+|---|---|---|---|
+| CRIT-RESIZE-1 | Resize CSG результата заменяется кубиком | ✅ ИСПРАВЛЕНО | Для CSG результатов используется сброс scale до 1 и задание размеров бондибокса в мм |
+| CRIT-RESIZE-2 | Resize CSG результата работает как коэффициент | ✅ ИСПРАВЛЕНО | `originalBboxSize` сохраняется в SceneObject/GroupOperation, resize задаёт размеры бондибокса в мм |
+| UX-6 | Гизмо вращался с фигурой | ✅ ИСПРАВЛЕНО | `tc.setSpace("world")` — гизмо всегда ориентирован по осям вида |
+
+**Проверка:** `tsc --noEmit` — 0 ошибок · `vitest run` — 110/110 тестов
+
+---
+
+## 📋 Статус исправлений (Раунд 14 — Mirror rotation + Resize CSG + Ruler + Gizmo — 2026-07-21)
 
 | # | Проблема | Статус | Описание |
 |---|---|---|---|
 | CRIT-MIRROR-1 | Зеркалирование сбрасывает вращение фигуры | ✅ ИСПРАВЛЕНО | `applyMirrorToTransform` + `mirrorSelected` инвертируют вращение вокруг перпендикулярной оси |
-| CRIT-MIRROR-2 | Pivot применяет вращение к geometry, зеркалённой с учётом старого вращения | ✅ ИСПРАВЛЕНО | `mirrorSelected` sync'ит mesh БЕЗ вращения, затем mirror geometry, затем pivot применяет инвертированное вращение |
+| CRIT-MIRROR-2 | Mirror переворачивает CSG результат на 180 | ✅ ИСПРАВЛЕНО | `mirrorSelected` sync'ит mesh С вращением, worker mirror geometry относительно origin, pivot применяет вращение к mirror geometry |
+| CRIT-RESIZE-1 | Resize CSG результата заменяется кубиком | ✅ ИСПРАВЛЕНО | Для CSG результатов используется scale-трансформация вместо rebuild'а primitive |
+| CRIT-RESIZE-2 | Resize CSG результата работает как коэффициент | ✅ ИСПРАВЛЕНО | Добавлено `originalBboxSize` в SceneObject/GroupOperation, scale вычисляется относительно originalBboxSize |
+| UX-5 | Линейка: drag detection мешал второму клику | ✅ ИСПРАВЛЕНО | `handlePointerMove` игнорирует движение в ruler mode; `e.stopPropagation()` предотвращает OrbitControls |
+| UX-6 | Гизмо вращался с фигурой | ✅ ИСПРАВЛЕНО | `tc.setSpace("world")` + `change` event handler сбрасывает rotation pivot'а |
+
+**Проверка:** `tsc --noEmit` — 0 ошибок · `vitest run` — 110/110 тестов
+
+| # | Проблема | Статус | Описание |
+|---|---|---|---|
+| CRIT-MIRROR-1 | Зеркалирование сбрасывает вращение фигуры | ✅ ИСПРАВЛЕНО | `applyMirrorToTransform` + `mirrorSelected` инвертируют вращение вокруг перпендикулярной оси |
+| CRIT-MIRROR-2 | Pivot применяет вращение к geometry, mirrorённой с учётом старого вращения | ✅ ИСПРАВЛЕНО | `mirrorSelected` sync'ит mesh БЕЗ вращения, затем mirror geometry, затем pivot применяет инвертированное вращение |
 | CRIT-RESIZE-1 | Resize CSG результата заменяется кубиком | ✅ ИСПРАВЛЕНО | Для CSG результатов используется scale-трансформация вместо rebuild'а primitive |
 | UX-5 | Линейка: drag detection мешал второму клику | ✅ ИСПРАВЛЕНО | `handlePointerMove` игнорирует движение в ruler mode; ruler работает click-click |
 | UX-6 | Гизмо вращался с фигурой | ✅ ИСПРАВЛЕНО | `tc.setSpace("local")` → `tc.setSpace("world")` |
