@@ -1,7 +1,7 @@
 {
   "name": "tinkercraft",
   "version": "1.0.0",
-  "description": "Веб-версия десктопного 3D CAD-приложения CaDoodle — параметрический 3D-редактор для образования и хобби, работающий прямо в браузере.",
+  "description": "TinkerCraft — браузерный 3D CAD-редактор. Параметрический 3D-редактор для образования и хобби, вдохновлённый CaDoodle.",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"

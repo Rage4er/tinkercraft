@@ -139,8 +139,8 @@ export default function Viewport3D({
   const rulerPointsRef = useRef<THREE.Vector3[]>([]);
   // Snap-индикатор (маленькая сфера, показывающая привязку при наведении)
   const snapIndicatorRef = useRef<THREE.Mesh | null>(null);
-  const snapPreviewPointRef = useRef<THREE.Vector3 | null>(null);
-  const snapPreviewTypeRef = useRef<SnapType>(null);
+  const [snapPreviewPoint, setSnapPreviewPoint] = useState<THREE.Vector3 | null>(null);
+  const [snapPreviewType, setSnapPreviewType] = useState<SnapType>(null);
   const rafRef = useRef<number | null>(null);
   const fpsRef = useRef({ last: performance.now(), frames: 0 });
 
@@ -509,13 +509,16 @@ export default function Viewport3D({
       clearRulerVisuals();
       removeSnapIndicators(sceneRef.current);
       snapIndicatorRef.current = null;
-      snapPreviewPointRef.current = null;
-      snapPreviewTypeRef.current = null;
+      setSnapPreviewPoint(null);
+      setSnapPreviewType(null);
     }
   }, [rulerMode, clearRulerVisuals]);
 
   // ---- Snap indicator update (preview при наведении в rulerMode) ----
   useEffect(() => {
+    const pt = snapPreviewPoint;
+    const type = snapPreviewType;
+
     const scene = sceneRef.current;
     if (!scene) return;
 
@@ -528,14 +531,12 @@ export default function Viewport3D({
     }
 
     // Создать новый, если есть превью
-    const pt = snapPreviewPointRef.current;
-    const type = snapPreviewTypeRef.current;
     if (pt && rulerMode) {
       const indicator = createSnapIndicator(pt, type);
       scene.add(indicator);
       snapIndicatorRef.current = indicator;
     }
-  }, [snapPreviewPointRef.current, snapPreviewTypeRef.current, rulerMode]);
+  }, [snapPreviewPoint, snapPreviewType, rulerMode]);
 
   // ---- Drag-select helpers ----
   const performDragSelect = useCallback(
@@ -683,11 +684,13 @@ export default function Viewport3D({
 
         const result = findNearestSnap(raycaster, meshMapRef, camera, screenPos);
         if (result) {
-          snapPreviewPointRef.current = result.point;
-          snapPreviewTypeRef.current = result.type;
+          setSnapPreviewPoint(result.point);
+          setSnapPreviewType(result.type);
         } else {
-          snapPreviewPointRef.current = null;
-          snapPreviewTypeRef.current = null;
+          // DEBUG: Логируем отсутствие привязки
+          console.log('DEBUG: No snap result');
+          setSnapPreviewPoint(null);
+          setSnapPreviewType(null);
         }
         return;
       }
