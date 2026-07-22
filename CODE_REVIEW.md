@@ -1692,7 +1692,7 @@ function animateTo(camera, controls, toPos, toUp, duration = 500) {
 4. **Transfer list + safePostMessage** — профессиональная работа с Web Workers.
 5. **Hash-based сравнение вершин** — умная оптимизация, заменяющая O(n) сравнение на O(1).
 6. **0 typecheck ошибок, 79/79 тестов** — стабильная кодовая база, готовая к CI/CD.
-7. **Документирование** — `AGENTS.md`, `ARCHITECTURE.md`, `CODE_REVIEW.md`, `MIGRATION_PLAN.md` дают полную картину проекта новому разработчику.
+7. **Документирование** — `AGENTS.md`, `ARCHITECTURE.md`, `CODE_REVIEW.md`, `DEVELOPMENT_PLAN.md` дают полную картину проекта новому разработчику.
 8. **CSS-переменные для тёмной/светлой темы** — без лишних библиотек, чистое решение.
 9. **Draft-редактирование в NumInput** — UX, о котором часто забывают в CAD-приложениях.
 
@@ -2085,7 +2085,7 @@ const op: RenameOperation = { type: 'rename', id, name }
 7. **`extractMesh`** — обработка `numProp >= 6` для per-vertex normals.
 8. **ResizeObserver** вместо `window.resize` — современный подход.
 9. **CSS-переменные** для светлой/тёмной темы — чистое решение без библиотек.
-10. **Документация** — `AGENTS.md`, `ARCHITECTURE.md`, `CHANGELOG.md`, `MIGRATION_PLAN.md`.
+10. **Документация** — `AGENTS.md`, `ARCHITECTURE.md`, `CHANGELOG.md`, `DEVELOPMENT_PLAN.md`.
 
 ---
 

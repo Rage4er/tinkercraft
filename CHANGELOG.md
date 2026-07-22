@@ -9,6 +9,24 @@
 
 ## [Unreleased]
 
+### Changed — Переименование документации (2026-07-22)
+
+- **MIGRATION_PLAN.md → DEVELOPMENT_PLAN.md** — файл переименован: проект не является миграцией CaDoodle, а вдохновлён им как референс
+- **README.md** — описание обновлено: TinkerCraft — независимый 3D CAD-редактор, вдохновлённый CaDoodle (не "веб-версия CaDoodle")
+- **AGENTS.md** — описание проекта обновлено, ссылки на MIGRATION_PLAN.md заменены на DEVELOPMENT_PLAN.md
+- **ARCHITECTURE.md** — упоминание "совместим с Java-оригиналом" заменено на "вдохновлён CaDoodle"
+- **CHANGELOG.md** — упоминание "совместимость с Java-оригиналом" заменено на "вдохновлён CaDoodle"
+- **CODE_REVIEW.md** — ссылки на MIGRATION_PLAN.md заменены на DEVELOPMENT_PLAN.md
+- **package.json** — описание обновлено
+
+### Fixed — Ruler: snap preview visualization (2026-07-22)
+
+- **Snap preview visualization:** Точки привязки теперь отображаются при движении мыши в режиме линейки, а не только после клика
+  - Заменены `snapPreviewPointRef` и `snapPreviewTypeRef` на `useState` для обеспечения перерисовки компонента
+  - `handlePointerMove` теперь обновляет состояние привязки, вызывая визуализацию индикатора
+  - Добавлен визуальный индикатор с правильной цветовой схемой: vertex=красный, edge=зелёный, circle=синий, face=жёлтый
+  - Сохранена существующая логика поиска привязки `findNearestSnap` и создания индикаторов `createSnapIndicator`
+
 ### Fixed — Ruler: click-click measurement (2026-07-22)
 
 - **Ruler click-click:** Линейка теперь работает по двум кликам (click-click), а не требует удержания кнопки
@@ -437,7 +455,7 @@
 - **Фаза 4:** История операций с undo/redo, таймлайн с фильтрацией
 - **Фаза 4:** Зеркало по осям, выравнивание (align) по 3 осям
 - **Фаза 5:** Импорт/экспорт STL (бинарный + ASCII)
-- **Фаза 5:** Формат `.doodle` (ZIP + JSON) с совместимостью с Java-оригиналом
+- **Фаза 5:** Формат `.doodle` (ZIP + JSON) — вдохновлён CaDoodle
 - **Фаза 5:** Автосохранение в IndexedDB, восстановление сессии
 - **Фаза 5:** Менеджер проектов (несколько проектов в IndexedDB)
 - **Фаза 5:** 3D-текст через TextGeometry (opentype.js)

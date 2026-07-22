@@ -1,8 +1,9 @@
 # TinkerCraft Web
 
-Веб-версия десктопного 3D CAD-приложения CaDoodle — параметрический 3D-редактор для образования и хобби, работающий прямо в браузере.
+TinkerCraft — браузерный 3D CAD-редактор. Параметрический 3D-редактор для образования и хобби, работающий прямо в браузере.
 
-> Миграция с Java/JavaFX на современный веб-стек: **React + TypeScript + Three.js + manifold-3d (WASM)**.
+> Вдохновлён [CaDoodle](https://cadoodlecad.com) — оригинальное Java-приложение использовано как референс архитектуры и UX.
+> Стек: **React + TypeScript + Three.js + manifold-3d (WASM)**.
 
 ---
 
@@ -68,7 +69,7 @@ pnpm typecheck    # проверка типов TypeScript
 | 6 | Полировка UI и финальные штрихи | ✅ Завершена |
 | 7 | Исправления и улучшения | 🔄 В процессе |
 
-Подробности: [MIGRATION_PLAN.md](./MIGRATION_PLAN.md) · Результаты код-ревью: [CODE_REVIEW.md](./CODE_REVIEW.md)
+Подробности: [DEVELOPMENT_PLAN.md](./DEVELOPMENT_PLAN.md) · Результаты код-ревью: [CODE_REVIEW.md](./CODE_REVIEW.md)
 
 ---
 
@@ -83,9 +84,9 @@ tinkercraft/
 │       ├── store/         # Zustand store + notifications
 │       ├── components/    # Viewport3D, ViewCube, ComponentTree и др.
 │       └── io/            # STL/Doodle импорт-экспорт, autosave, проекты
-├── reference/             # Оригинальный Java-проект (для справки)
+├── reference/             # Оригинальный Java-проект CaDoodle (вдохновение)
 ├── CODE_REVIEW.md         # Код-ревью и статус исправлений
-├── MIGRATION_PLAN.md      # План миграции (Фазы 0–7)
+├── DEVELOPMENT_PLAN.md    # План разработки (Фазы 0–7)
 ├── CHANGELOG.md           # История изменений
 ├── CONTRIBUTING.md        # Правила контрибуции
 ├── ARCHITECTURE.md        # Описание архитектуры
@@ -94,11 +95,10 @@ tinkercraft/
 
 ---
 
-## Оригинальный проект
+## Вдохновение
 
-Оригинальное Java-приложение CaDoodle используется как референс. Его исходники лежат в папке `reference/`.
-
-- Сайт оригинала: cadoodlecad.com
+Проект CaDoodle (cadoodlecad.com) был использован как референс архитектуры и UX.
+Его исходники лежат в папке `reference/`.
 
 ## Лицензия
 

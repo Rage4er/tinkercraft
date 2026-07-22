@@ -1,5 +1,6 @@
-# TinkerCraft Web — План миграции
-> Java/JavaFX CaDoodle → Браузер (Three.js + React + TypeScript + manifold-3d WASM)
+# TinkerCraft Web — План разработки
+
+> Референс архитектуры и UX: CaDoodle (Java/JavaFX). Реализация с нуля на браузере: **React + TypeScript + Three.js + manifold-3d WASM**.
 
 ---
 
@@ -7,8 +8,8 @@
 
 | Метрика | Значение |
 |---|---|
-| Исходный код (CaDoodle) | ~17 600 строк Java |
-| Зависимость BowlerStudio | ~100 000+ строк Java |
+| Референс (CaDoodle) | ~17 600 строк Java (оригинал для вдохновения) |
+| Зависимость BowlerStudio | ~100 000+ строк Java (оригинал) |
 | Текущий объём TS/TSX кода | ~6 700 строк (18 файлов) |
 | Прогресс | **Фазы 0–6 завершены, Фаза 7 — код-ревью раунд 1** ✅ |
 | Статус | MVP готов, Фаза 7 — исправления и улучшения |
@@ -336,7 +337,7 @@ tinkercraft/
 │   └── pnpm-workspace.yaml
 │
 ├── CODE_REVIEW.md                 # Код-ревью и статус исправлений
-├── MIGRATION_PLAN.md              # Этот файл
+├── DEVELOPMENT_PLAN.md            # Этот файл
 └── README.md
 ```
 
