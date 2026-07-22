@@ -434,32 +434,59 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       
       for (const id of ids) {
         originalIds.push(id)
-        const mesh = await workerMirrorObject(id, plane)
-        const obj = objects[id] // Используем оригинальный объект, а не newObjects
-        const t = { ...obj.transform }
+        const obj = objects[id]
         
-        // Worker применил матрицу отзеркаливания к геометрии,
-        // поэтому инвертируем только позицию, чтобы скопия была по другую сторону оси
-        if (plane === 'YZ') t.x = -t.x
-        if (plane === 'XZ') t.y = -t.y
-        if (plane === 'XY') t.z = -t.z
+        // Определяем, является ли объект примитивом
+        const isPrimitive = obj.shapeType !== 'cube' || (obj.shapeType === 'cube' && obj.params.width)
         
-        // Поворот и масштаб сохраняем как есть, т.к. worker уже
-        // применил матрицу к геометрии
+        // Для примитивов передаем shapeType, params и transform
+        const mesh = isPrimitive
+          ? await workerMirrorObject(id, plane, obj.shapeType, obj.params as Record<string, number>, obj.transform)
+          : await workerMirrorObject(id, plane, undefined, undefined, obj.transform)
         
-        // СОЗДАЕМ НОВЫЙ ОБЪЕКТ с уникальным ID
-        const newId = nextId()
-        const newObj = makeObject({
-          ...obj,
-          id: newId,
-          transform: t,
-          vertices: mesh.vertices,
-          indices: mesh.indices,
-          normals: mesh.normals
-        })
-        
-        newObjects[newId] = newObj
-        newIds.push(newId)
+        // Для примитивов используем applyMirrorToTransform (инвертируем позицию и соответствующие углы)
+        if (isPrimitive) {
+          // Временная реализация applyMirrorToTransform
+          const t = { ...obj.transform }
+          if (plane === 'YZ') { t.x = -t.x; t.rotX = -t.rotX }
+          if (plane === 'XZ') { t.y = -t.y; t.rotY = -t.rotY }
+          if (plane === 'XY') { t.z = -t.z; t.rotZ = -t.rotZ }
+          
+          // СОЗДАЕМ НОВЫЙ ОБЪЕКТ с уникальным ID
+          const newId = nextId()
+          const newObj = makeObject({
+            ...obj,
+            id: newId,
+            transform: t,
+            vertices: mesh.vertices,
+            indices: mesh.indices,
+            normals: mesh.normals
+          })
+          newObjects[newId] = newObj
+          newIds.push(newId)
+        }
+        // Для CSG / импорта сбрасываем scale и rotation, оставляем только зеркальную позицию
+        else {
+          const t = { ...obj.transform }
+          t.scaleX = t.scaleY = t.scaleZ = 1
+          t.rotX = t.rotY = t.rotZ = 0
+          if (plane === 'YZ') t.x = -t.x
+          if (plane === 'XZ') t.y = -t.y
+          if (plane === 'XY') t.z = -t.z
+          
+          // СОЗДАЕМ НОВЫЙ ОБЪЕКТ с уникальным ID
+          const newId = nextId()
+          const newObj = makeObject({
+            ...obj,
+            id: newId,
+            transform: t,
+            vertices: mesh.vertices,
+            indices: mesh.indices,
+            normals: mesh.normals
+          })
+          newObjects[newId] = newObj
+          newIds.push(newId)
+        }
       }
       
       const op: MirrorOperation = { type: 'mirror', originalIds, ids: newIds, plane }

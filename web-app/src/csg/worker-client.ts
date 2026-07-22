@@ -190,10 +190,10 @@ export async function workerCsgBooleanWithSync(
 }
 
 export async function workerMirrorObject(
-  objId: string, plane: 'XY' | 'XZ' | 'YZ',
+  objId: string, plane: 'XY' | 'XZ' | 'YZ', shapeType?: string, params?: Record<string, number>, transform?: any,
 ): Promise<MeshResult> {
   await waitReady()
-  return send<MeshResult>('mirrorObject', { objId, plane })
+  return send<MeshResult>('mirrorObject', { objId, plane, shapeType, params, transform })
 }
 
 export async function workerRebuildScene(

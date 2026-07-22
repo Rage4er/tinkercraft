@@ -443,6 +443,19 @@ export interface MirrorObjectMessage {
   type: 'mirrorObject'
   objId: string
   plane: 'XY' | 'XZ' | 'YZ'
+  shapeType?: string
+  params?: Record<string, number>
+  transform?: {
+    x: number
+    y: number
+    z: number
+    rotX: number
+    rotY: number
+    rotZ: number
+    scaleX: number
+    scaleY: number
+    scaleZ: number
+  }
 }
 
 export interface RebuildSceneMessage {
@@ -975,10 +988,37 @@ export async function handleMirrorObject(msg: MirrorObjectMessage): Promise<void
   const t0 = performance.now()
   const src = cache.get(msg.objId)
   if (!src) throw new Error(`Object not found: ${msg.objId}`)
-  const m = src.transform(getMirrorMatrix(msg.plane))
-  setCached(msg.objId, m)
+  
+  let mesh: MeshResult
+  
+  // Для примитивов (shapeType и params присутствуют) - строим свежий примитив
+  if (msg.shapeType && msg.params) {
+    const fresh = buildPrimitive(msg.shapeType, msg.params)
+    const mirror = getMirrorMatrix(msg.plane)
+    const mirrored = fresh.transform(mirror)
+    setCached(msg.objId, mirrored)
+    mesh = extractMesh(mirrored)
+  }
+  // Для CSG / импорта (shapeType/params отсутствуют) - сдвигаем к origin, зеркалим
+  else {
+    if (!msg.transform) throw new Error(`Transform is required for CSG/import objects`)
+    const { x, y, z } = msg.transform
+    // 1. Обратное перемещение к origin + зеркало за один шаг
+    const wasm = getWasm()
+    const mirror = getMirrorMatrix(msg.plane)
+    // Матрица:Mirror * Translate(-x,-y,-z)
+    const combinedMatrix = [
+      mirror[0], mirror[1], mirror[2], mirror[3],
+      mirror[4], mirror[5], mirror[6], mirror[7],
+      mirror[8], mirror[9], mirror[10], mirror[11],
+      mirror[12] - x, mirror[13] - y, mirror[14] - z, mirror[15]
+    ]
+    const mirrored = src.transform(combinedMatrix)
+    
+    setCached(msg.objId, mirrored)
+    mesh = extractMesh(mirrored)
+  }
 
-  const mesh = extractMesh(m)
   safePostMessage(
     {
       reqId: msg.reqId,
