@@ -12,6 +12,13 @@ import type { SceneObject, TransformNR } from "../csg/types";
 import { computeAABB } from "../store/helpers";
 import WebGLFallback from "./WebGLFallback";
 import ViewCube from "./ViewCube";
+import {
+  findNearestSnap,
+  createSnapIndicator,
+  removeSnapIndicators,
+  type SnapType,
+  type SnapResult,
+} from "./snap-utils";
 
 export type GizmoMode = "translate" | "rotate" | "scale" | null;
 
@@ -130,6 +137,10 @@ export default function Viewport3D({
   const rulerLineRef = useRef<THREE.Line | null>(null);
   const rulerMarkersRef = useRef<THREE.Mesh[]>([]);
   const rulerPointsRef = useRef<THREE.Vector3[]>([]);
+  // Snap-индикатор (маленькая сфера, показывающая привязку при наведении)
+  const snapIndicatorRef = useRef<THREE.Mesh | null>(null);
+  const snapPreviewPointRef = useRef<THREE.Vector3 | null>(null);
+  const snapPreviewTypeRef = useRef<SnapType>(null);
   const rafRef = useRef<number | null>(null);
   const fpsRef = useRef({ last: performance.now(), frames: 0 });
 
@@ -148,6 +159,11 @@ export default function Viewport3D({
   useEffect(() => {
     snapValueRef.current = snapValue;
   }, [snapValue]);
+
+  const rulerModeRef = useRef(rulerMode);
+  useEffect(() => {
+    rulerModeRef.current = rulerMode;
+  }, [rulerMode]);
 
   const selectedIdsRef = useRef(selectedIds);
   useEffect(() => {
@@ -491,8 +507,35 @@ export default function Viewport3D({
     if (!rulerMode) {
       rulerPointsRef.current = [];
       clearRulerVisuals();
+      removeSnapIndicators(sceneRef.current);
+      snapIndicatorRef.current = null;
+      snapPreviewPointRef.current = null;
+      snapPreviewTypeRef.current = null;
     }
   }, [rulerMode, clearRulerVisuals]);
+
+  // ---- Snap indicator update (preview при наведении в rulerMode) ----
+  useEffect(() => {
+    const scene = sceneRef.current;
+    if (!scene) return;
+
+    // Удалить старый индикатор
+    if (snapIndicatorRef.current) {
+      scene.remove(snapIndicatorRef.current);
+      snapIndicatorRef.current.geometry.dispose();
+      (snapIndicatorRef.current.material as THREE.Material).dispose();
+      snapIndicatorRef.current = null;
+    }
+
+    // Создать новый, если есть превью
+    const pt = snapPreviewPointRef.current;
+    const type = snapPreviewTypeRef.current;
+    if (pt && rulerMode) {
+      const indicator = createSnapIndicator(pt, type);
+      scene.add(indicator);
+      snapIndicatorRef.current = indicator;
+    }
+  }, [snapPreviewPointRef.current, snapPreviewTypeRef.current, rulerMode]);
 
   // ---- Drag-select helpers ----
   const performDragSelect = useCallback(
@@ -554,47 +597,115 @@ export default function Viewport3D({
   // ---- Click / Drag ----
   const handlePointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
-      // Ruler mode: completely separate from drag-detection
-      if (rulerMode) {
-        const point = getWorldPointFromPointer(e);
-        if (point) {
-          // First click: only set first point, measurement happens on pointerUp
+      // Ruler mode: click-click measurement с snap к геометрии
+      if (rulerModeRef.current) {
+        const scene = sceneRef.current;
+        const camera = cameraRef.current;
+        const container = containerRef.current;
+        if (!scene || !camera || !container) {
+          e.stopPropagation();
+          return;
+        }
+
+        const rect = container.getBoundingClientRect();
+        const x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+        const y = -(((e.clientY - rect.top) / rect.height) * 2 - 1);
+        const screenPos = new THREE.Vector2(x, y);
+        const raycaster = new THREE.Raycaster();
+        raycaster.setFromCamera(screenPos, camera);
+
+        // Сначала пробуем snap к геометрии
+        const snapResult = findNearestSnap(raycaster, meshMapRef, camera, screenPos);
+        let point: THREE.Vector3;
+        if (snapResult) {
+          point = snapResult.point;
+        } else {
+          // Fallback: проецируем на рабочую плоскость (Z=0)
+          const ndc = new THREE.Vector3(x, y, 0);
+          ndc.unproject(camera);
+          const dir = ndc.sub(camera.position).normalize();
+          const groundZ = 0;
+          const distance = (groundZ - camera.position.z) / dir.z;
+          if (!Number.isFinite(distance) || distance < 0) {
+            e.stopPropagation();
+            return;
+          }
+          point = camera.position.clone().add(dir.clone().multiplyScalar(distance));
+        }
+
+        if (rulerPointsRef.current.length === 0) {
+          // Первый клик: сохраняем начальную точку
           rulerPointsRef.current = [point];
           updateRulerVisuals(rulerPointsRef.current);
+        } else {
+          // Второй клик: завершаем измерение
+          rulerPointsRef.current.push(point);
+          updateRulerVisuals(rulerPointsRef.current);
+          onRulerMeasure?.(rulerPointsRef.current[0].distanceTo(point));
+          // Сброс для следующего измерения
+          rulerPointsRef.current = [];
         }
-        // Prevent OrbitControls from handling the event
+
+        // Предотвращаем обработку OrbitControls
         e.stopPropagation();
         return;
       }
       pointerDownPos.current = { x: e.clientX, y: e.clientY };
       isDraggingRef.current = false;
     },
-    [getWorldPointFromPointer, rulerMode, updateRulerVisuals],
+    [meshMapRef, updateRulerVisuals, onRulerMeasure],
   );
 
   const handlePointerMove = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
-      // In ruler mode, completely ignore mouse movement — ruler uses click-click
-      if (rulerMode) return;
+      // Ruler mode: обновляем snap-превью при наведении
+      if (rulerModeRef.current) {
+        const scene = sceneRef.current;
+        const camera = cameraRef.current;
+        const container = containerRef.current;
+        if (!scene || !camera || !container) return;
+
+        const rect = container.getBoundingClientRect();
+        const x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+        const y = -(((e.clientY - rect.top) / rect.height) * 2 - 1);
+        const ndc = new THREE.Vector3(x, y, 0);
+        ndc.unproject(camera);
+
+        const dir = ndc.sub(camera.position).normalize();
+        const groundZ = 0;
+        const distance = (groundZ - camera.position.z) / dir.z;
+        if (!Number.isFinite(distance) || distance < 0) return;
+
+        const worldPoint = camera.position.clone().add(dir.clone().multiplyScalar(distance));
+        const screenPos = new THREE.Vector2(x, y);
+        const raycaster = new THREE.Raycaster();
+        raycaster.setFromCamera(screenPos, camera);
+
+        const result = findNearestSnap(raycaster, meshMapRef, camera, screenPos);
+        if (result) {
+          snapPreviewPointRef.current = result.point;
+          snapPreviewTypeRef.current = result.type;
+        } else {
+          snapPreviewPointRef.current = null;
+          snapPreviewTypeRef.current = null;
+        }
+        return;
+      }
+
+      // Нерuler mode: существующая логика drag-select
       if (!pointerDownPos.current) return;
       const dx = e.clientX - pointerDownPos.current.x;
       const dy = e.clientY - pointerDownPos.current.y;
       if (Math.hypot(dx, dy) > 4) isDraggingRef.current = true;
     },
-    [rulerMode],
+    [],
   );
 
   const handlePointerUp = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
-      // Ruler mode: click-click — second point and measurement on pointerUp only
-      if (rulerMode) {
-        const point = getWorldPointFromPointer(e);
-        if (point && rulerPointsRef.current.length === 1) {
-          rulerPointsRef.current = [rulerPointsRef.current[0], point];
-          updateRulerVisuals(rulerPointsRef.current);
-          onRulerMeasure?.(rulerPointsRef.current[0].distanceTo(point));
-        }
-        // Prevent OrbitControls from handling the event
+      // Ruler mode: measurement already handled in pointerDown
+      // Only prevent OrbitControls — no measurement logic here
+      if (rulerModeRef.current) {
         e.stopPropagation();
         return;
       }
@@ -636,11 +747,7 @@ export default function Viewport3D({
       }
     },
     [
-      getWorldPointFromPointer,
-      onRulerMeasure,
       onSelect,
-      rulerMode,
-      updateRulerVisuals,
     ],
   );
 

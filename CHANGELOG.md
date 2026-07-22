@@ -9,6 +9,36 @@
 
 ## [Unreleased]
 
+### Fixed — Ruler: click-click measurement (2026-07-22)
+
+- **Ruler click-click:** Линейка теперь работает по двум кликам (click-click), а не требует удержания кнопки
+  - Вся логика измерения перенесена в `handlePointerDown` (`Viewport3D.tsx`)
+  - Первый `pointerDown` — сохраняет начальную точку, рисует маркер
+  - Второй `pointerDown` — сохраняет конечную точку, рисует линию, вызывает `onRulerMeasure`, сбрасывает состояние
+  - `handlePointerUp` в ruler mode больше не обрабатывает точки — только `stopPropagation` для OrbitControls
+  - `handlePointerMove` по-прежнему полностью игнорируется в ruler mode
+
+### Added — Ruler: snap to geometry (2026-07-22)
+
+- **Ruler snap:** Точки линейки привязываются к геометрии фигур при клике
+  - Добавлен модуль `src/components/snap-utils.ts` с утилитами snap
+  - Поддерживаемые типы привязок:
+    - **Точка (vertex)** — вершина/угол фигуры (красный маркер)
+    - **Ребро (edge)** — ближайшая точка на ребре (зелёный маркер)
+    - **Грань (face)** — центр bounding box фигуры (жёлтый маркер)
+    - **Центр (circle)** — центр окружности для сфер, цилиндров, торов (синий маркер)
+  - Приоритет привязок: vertex > edge > circle > face
+  - `Viewport3D.tsx`: `handlePointerDown` в ruler mode сначала ищет snap, fallback — проекция на Z=0
+  - `Viewport3D.tsx`: `handlePointerMove` в ruler mode обновляет превью snap-индикатора при наведении
+  - `Viewport3D.tsx`: `snapIndicatorRef` — визуальная сфера-индикатор привязки
+  - `Viewport3D.tsx`: `useEffect` для создания/удаления snap-индикатора в сцене
+  - `findNearestSnap()` — raycast → поиск вершин/рёбер/граней/центров → выбор лучшего кандидата
+  - `collectWorldVertices()` / `collectWorldEdges()` — сбор геометрии в мировом пространстве
+  - `closestPointOnSegment()` — ближайшая точка на отрезке (для edge snap)
+  - Визуальные маркеры: цветные сферы с `userData.isSnapIndicator`, авто-удаление при cleanup
+  - Константы радиусов привязки: `SNAP_VERTEX_RADIUS=2.0`, `SNAP_EDGE_RADIUS=2.0`, `SNAP_FACE_RADIUS=2.0`, `SNAP_CIRCLE_RADIUS=3.0`
+  - `snapLabel()` — текстовая метка типа привязки на русском языке
+
 ### Fixed — UX: сворачиваемые фильтры, скрытие extrude/mirror (2026-07-21)
 
 - **UX-2:** Фильтры истории занимали много места на панели — свёрнуты в dropdown

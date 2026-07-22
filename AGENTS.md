@@ -52,7 +52,8 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 | `src/csg/worker.ts` | WASM worker — manifold-3d операции, типобезопасные интерфейсы |
 | `src/csg/worker-client.ts` | Promise-обёртка над воркером |
 | `src/csg/types.ts` | Типы операций, сцены, параметров |
-| `src/components/Viewport3D.tsx` | Three.js вьюпорт, гизмо, raycaster |
+| `src/components/Viewport3D.tsx` | Three.js вьюпорт, гизмо, raycaster, ruler, snap-to-geometry |
+| `src/components/snap-utils.ts` | Привязка (snap) к геометрии: vertex, edge, face, circle |
 | `src/components/Toolbar.tsx` | Тулбар (файл, undo, view, gizmo, CSG, тема) |
 | `src/components/LeftPanel.tsx` | Палитра фигур + список объектов + история |
 | `src/components/PropertiesPanel.tsx` | Панель свойств (трансформ, resize, fillet, extrude, CSG) |
@@ -146,6 +147,15 @@ Worker НЕ центрирует геометрию. Центрирование 
 
 ### Валидация ввода
 Используйте `clamp(v, min, max)` и `sanitizeParams(params)` из `worker.ts` для валидации пользовательских параметров перед отправкой в воркер.
+
+### Привязка линейки к геометрии (snap-to-geometry)
+При включённой `rulerMode` точки клика линейки привязываются к геометрии фигур через `findNearestSnap()` (`snap-utils.ts`):
+- Raycast → поиск вершин/рёбер/граней/центров → выбор лучшего кандидата
+- Приоритет: vertex > edge > circle > face
+- Fallback (если raycast не попал) — проекция на рабочую плоскость Z=0
+- Визуальный индикатор — цветная сфера (`createSnapIndicator`)
+- Цвета: vertex=красный, edge=зелёный, circle=синий, face=жёлтый
+- Константы радиусов: `SNAP_VERTEX_RADIUS=2.0`, `SNAP_EDGE_RADIUS=2.0`, `SNAP_FACE_RADIUS=2.0`, `SNAP_CIRCLE_RADIUS=3.0`
 
 ## Известные ограничения (не баги)
 
