@@ -8,6 +8,7 @@ import { buildSRTMatrixAroundCenter, buildTransformMatrix } from './worker-matri
 import { FILLET_EPSILON, FILLET_MIN_RADIUS } from '../constants'
 import type { RebuildTransform } from './rebuildOps'
 import { applyMoveDelta, applyMirrorToTransform, applyAlignToTransform } from './rebuildOps'
+import type { MirrorOperation } from './types'
 
 // --- Type definitions (moved from worker.ts to avoid circular deps) ---
 
@@ -644,13 +645,24 @@ export async function handleRebuildScene(msg: RebuildSceneMessage): Promise<void
       }
     } else if (op.type === 'mirror') {
       const flip = getMirrorMatrix(op.plane as string)
-      for (const id of op.ids as string[]) {
-        const cm = cache.get(id)
-        if (cm) setCached(id, cm.transform(flip))
-        const t = currentTransforms.get(id)
-        if (t) {
-          const nt = applyMirrorToTransform(t, op.plane as 'XY' | 'XZ' | 'YZ')
-          currentTransforms.set(id, nt)
+      // Mirror creates NEW objects. Look up transforms from originalIds.
+      const mirrorOp = op as unknown as MirrorOperation
+      const origIds = mirrorOp.originalIds ?? []
+      for (let i = 0; i < origIds.length && i < mirrorOp.ids.length; i++) {
+        const origId = origIds[i]
+        const newId = mirrorOp.ids[i]
+        const cm = cache.get(newId)
+        if (cm) {
+          setCached(newId, cm.transform(flip))
+        } else {
+          const origT = currentTransforms.get(origId)
+          const origShape = shapeInfos.get(origId)
+          if (origT && origShape) {
+            const nt = applyMirrorToTransform(origT, op.plane as 'XY' | 'XZ' | 'YZ')
+            const m = applyTransform(buildPrimitiveWithFillet(origShape.shapeType, origShape.params, origShape.filletRadius), nt)
+            setCached(newId, m)
+            currentTransforms.set(newId, nt)
+          }
         }
       }
     } else if (op.type === 'align') {

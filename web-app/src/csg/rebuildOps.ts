@@ -60,9 +60,25 @@ export function applyMirrorToTransform(
   plane: 'XY' | 'XZ' | 'YZ',
 ): RebuildTransform {
   const nt = { ...t }
-  if (plane === 'YZ') { nt.x = -nt.x; nt.rotX = -nt.rotX }
-  if (plane === 'XZ') { nt.y = -nt.y; nt.rotY = -nt.rotY }
-  if (plane === 'XY') { nt.z = -nt.z; nt.rotZ = -nt.rotZ }
+  if (plane === 'YZ') {
+    nt.x = -nt.x
+    // Отражение по X инвертирует вращение вокруг X-оси
+    nt.rotX = -nt.rotX
+  }
+  if (plane === 'XZ') {
+    nt.y = -nt.y
+    // Отражение по Y инвертирует вращение вокруг Y-оси
+    nt.rotY = -nt.rotY
+  }
+  if (plane === 'XY') {
+    nt.z = -nt.z
+    // Отражение по Z инвертирует вращение вокруг Z-оси
+    nt.rotZ = -nt.rotZ
+  }
+  // ВАЖНО: Сохраняем масштаб без изменений при отзеркаливании
+  nt.scaleX = t.scaleX
+  nt.scaleY = t.scaleY
+  nt.scaleZ = t.scaleZ
   return nt
 }
 

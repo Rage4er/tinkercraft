@@ -68,7 +68,8 @@ export interface FilletOperation {
 
 export interface MirrorOperation {
   type: 'mirror'
-  ids: string[]
+  originalIds: string[]   // ID объектов ДО зеркалирования
+  ids: string[]           // ID нового объекта(ов) после зеркалирования
   plane: 'XY' | 'XZ' | 'YZ'
 }
 

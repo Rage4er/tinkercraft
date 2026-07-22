@@ -67,12 +67,17 @@ export function buildRebuildMeta(ops: TinkerCraftOperation[]): {
       }
 
     } else if (op.type === 'mirror') {
-      for (const id of op.ids) {
-        const t = transforms[id]
-        if (t && meta[id]) {
+      // Mirror creates NEW objects. The originalIds hold the source objects'
+      // transforms. We mirror each and store under the corresponding new id.
+      const origIds = (op as { originalIds?: string[] }).originalIds ?? []
+      for (let i = 0; i < origIds.length && i < op.ids.length; i++) {
+        const origId = origIds[i]
+        const newId = op.ids[i]
+        const t = transforms[origId]
+        if (t && meta[origId]) {
           const nt = applyMirrorToTransform(t as unknown as RebuildTransform, op.plane) as TransformNR
-          transforms[id] = nt
-          meta[id] = { ...meta[id], transform: nt }
+          transforms[newId] = nt
+          meta[newId] = { ...meta[origId], transform: nt }
         }
       }
 
