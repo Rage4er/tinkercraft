@@ -98,6 +98,9 @@ export interface GroupOperation {
   resultCenter?: { x: number; y: number; z: number }
   /** Original bbox size of the CSG result — used to compute scale relative to original dimensions */
   originalBboxSize?: { x: number; y: number; z: number }
+  // ── BuildTree: tree structure for this CSG operation ──
+  /** Operation type for tree (union/subtract/intersect) */
+  treeOperation?: 'union' | 'subtract' | 'intersect'
 }
 
 export interface ResizeDimsOperation { type: 'resize_dims'; id: string; params: ShapeParams }
@@ -156,6 +159,77 @@ export interface SceneObject {
 }
 
 export type CsgBooleanOp = 'union' | 'subtract' | 'intersect'
+
+// ---- BuildTree types (parameterized build tree) ----
+
+/** Type of a build tree node */
+export type TreeNodeType = 'primitive' | 'boolean' | 'baked'
+
+/** 3D point */
+export interface Point3D {
+  x: number
+  y: number
+  z: number
+}
+
+/** Axis-aligned bounding box */
+export interface BoundingBox {
+  min: Point3D
+  max: Point3D
+}
+
+/** Extracted mesh data from manifold */
+export interface ExtractedMesh {
+  vertices: Float32Array
+  indices: Uint32Array
+  normals?: Float32Array | null
+  tris?: number
+}
+
+/**
+ * Node in the parameterized build tree.
+ * - `primitive` (leaves): cube, sphere, cylinder, etc. with params + localTransform
+ * - `boolean` (internal): union, subtract, intersect with children (exactly 2)
+ * - `baked` (leaves): imported STL / non-manifold with raw vertices/indices
+ */
+export interface TreeNode {
+  /** Unique node ID */
+  id: string
+  /** Node type */
+  type: TreeNodeType
+
+  // ── Primitives (tree leaves) ──
+  /** Primitive shape type (cube, sphere, cylinder, ...) */
+  shapeType?: ShapeType
+  /** Primitive parameters (width, height, depth, radius, ...) */
+  params?: ShapeParams
+  /** Local transform — used by both primitive and baked nodes */
+  localTransform?: TransformNR
+
+  // ── Baked nodes (imported STL, non-manifold) ──
+  /** Vertex data for baked geometry */
+  vertices?: Float32Array
+  /** Index data for baked geometry */
+  indices?: Uint32Array
+  /** Normal data for baked geometry (null = no normals) */
+  normals?: Float32Array | null
+
+  // ── Boolean operations (internal nodes) ──
+  /** Boolean operation type */
+  operation?: 'union' | 'subtract' | 'intersect'
+  /** IDs of child nodes (exactly 2 for boolean) */
+  children?: string[]
+  /** Parent node ID — used for O(depth) cascade cache invalidation */
+  parentId?: string
+
+  // ── Cache ──
+  /** Cached rebuild result */
+  cachedMesh?: ExtractedMesh
+  /** Cached bounding box (invalidated together with cachedMesh) */
+  cachedBBox?: BoundingBox
+  /** Hash to verify cache validity */
+  cacheHash?: string
+}
 
 export interface PerfMetrics {
   csgTimeMs: number

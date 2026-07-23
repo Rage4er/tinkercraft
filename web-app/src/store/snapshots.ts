@@ -9,15 +9,64 @@
 //
 // The cache is a plain module-level Map — NOT part of Zustand state — so
 // updating it never triggers React re-renders.
+//
+// BuildTree integration: we also cache the tree nodes alongside objects
+// so that undo/redo restores both the scene objects AND the build tree.
 
 import type { SceneObject } from '../csg/types'
+import type { TreeNode } from '../csg/types'
 
 const cache = new Map<number, Record<string, SceneObject>>()
+
+/** Tree node data stored alongside snapshot for tree restoration */
+interface SnapshotTree {
+  nodes: Array<{
+    id: string
+    type: TreeNode['type']
+    shapeType?: string
+    params?: Record<string, number>
+    localTransform?: { x: number; y: number; z: number; rotX: number; rotY: number; rotZ: number; scaleX: number; scaleY: number; scaleZ: number }
+    vertices?: number[]
+    indices?: number[]
+    normals?: number[]
+    operation?: 'union' | 'subtract' | 'intersect'
+    children?: string[]
+    parentId?: string
+  }>
+}
+
+/** Tree data stored per snapshot index */
+const treeCache = new Map<number, SnapshotTree>()
+
+/**
+ * Serialize tree nodes to plain objects for snapshot storage.
+ * Excludes cached fields (cachedMesh, cachedBBox, cacheHash).
+ */
+function serializeTree(nodes: Map<string, TreeNode>): SnapshotTree {
+  const nodeArray: SnapshotTree['nodes'] = []
+  for (const [id, node] of nodes) {
+    nodeArray.push({
+      id,
+      type: node.type,
+      shapeType: node.shapeType,
+      params: node.params as Record<string, number> | undefined,
+      localTransform: node.localTransform,
+      vertices: node.vertices ? Array.from(node.vertices) : undefined,
+      indices: node.indices ? Array.from(node.indices) : undefined,
+      normals: node.normals ? Array.from(node.normals) : undefined,
+      operation: node.operation,
+      children: node.children,
+      parentId: node.parentId,
+    })
+  }
+  return { nodes: nodeArray }
+}
 
 /**
  * Cache the objects dictionary at the given history index.
  * Automatically invalidates any snapshots for indices > `index`
  * (history was truncated by a new operation after undo).
+ * Also caches the current build tree state.
  */
 export function cacheSnapshot(
   index: number,
@@ -26,6 +75,19 @@ export function cacheSnapshot(
   cache.set(index, objects)
   for (const key of cache.keys()) {
     if (key > index) cache.delete(key)
+  }
+}
+
+/**
+ * Cache the build tree state at the given history index.
+ */
+export function cacheTreeSnapshot(
+  index: number,
+  nodes: Map<string, TreeNode>,
+): void {
+  treeCache.set(index, serializeTree(nodes))
+  for (const key of treeCache.keys()) {
+    if (key > index) treeCache.delete(key)
   }
 }
 
@@ -39,7 +101,17 @@ export function getCachedSnapshot(
   return cache.get(index)
 }
 
+/**
+ * Returns the cached tree snapshot for the given index, or `undefined`.
+ */
+export function getCachedTreeSnapshot(
+  index: number,
+): SnapshotTree | undefined {
+  return treeCache.get(index)
+}
+
 /** Clear all cached snapshots (used on clearScene, openDoodle, loadFromProject). */
 export function clearSnapshots(): void {
   cache.clear()
+  treeCache.clear()
 }

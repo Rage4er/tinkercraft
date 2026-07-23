@@ -15,6 +15,7 @@ import type {
   MoveOperation, ColorOperation, GroupOperation, RenameOperation, HideShowOperation,
   DeleteOperation,
   SceneObject, ShapeParams, TransformNR, Vec3,
+  TreeNode,
 } from '../csg/types'
 import {
   workerBuildShape, workerCsgBoolean, workerCsgBooleanWithSync,
@@ -35,8 +36,59 @@ import { computeAABB, extractAndCenter, extractAndCenterGetAABB, makeObject, nex
 import type { ClipEntry } from './helpers'
 import type { DocumentStore } from './types'
 import { rebuildFromHistory } from './rebuild'
-import { cacheSnapshot, getCachedSnapshot, clearSnapshots } from './snapshots'
+import { cacheSnapshot, getCachedSnapshot, clearSnapshots, cacheTreeSnapshot, getCachedTreeSnapshot } from './snapshots'
 import { OBJECT_SPACING, PASTE_OFFSET, MOVE_DELTA_EPSILON } from '../constants'
+import {
+  createPrimitiveNode,
+  createBooleanNode,
+  createBakedNode,
+  mirrorTreeNode,
+  cloneSubtree,
+  rebuildNode,
+  computeNodeBBox,
+  bboxCenter,
+  getNode,
+  deleteNode,
+  clearTree,
+  moveTreeNode,
+} from '../csg/history-tree'
+import { getAllNodes } from '../csg/history-tree'
+
+// ── Tree snapshot helpers ──
+
+/** Restore build tree from cached snapshot */
+function restoreTreeFromSnapshot(index: number): void {
+  const treeSnap = getCachedTreeSnapshot(index)
+  if (!treeSnap) return
+
+  clearTree()
+  for (const nd of treeSnap.nodes) {
+    if (nd.type === 'primitive' && nd.shapeType && nd.params) {
+      createPrimitiveNode(nd.id, nd.shapeType as any, nd.params, nd.localTransform!)
+    } else if (nd.type === 'baked') {
+      const verts = nd.vertices ? new Float32Array(nd.vertices) : undefined
+      const idxs = nd.indices ? new Uint32Array(nd.indices) : undefined
+      const nrm = nd.normals ? new Float32Array(nd.normals) : null
+      createBakedNode(nd.id, verts!, idxs!, nrm, nd.localTransform!)
+    } else if (nd.type === 'boolean' && nd.operation && nd.children) {
+      createBooleanNode(nd.id, nd.operation, nd.children[0], nd.children[1])
+    }
+  }
+}
+
+/**
+ * Wrapper around cacheSnapshot that also caches the build tree.
+ * Replace all cacheSnapshot calls with this.
+ */
+function cacheSnapshotWithTree(index: number, objects: Record<string, SceneObject>): void {
+  cacheSnapshotWithTree(index, objects)
+  // Cache tree nodes (only the structure, not cached mesh/BBox/hash)
+  const treeNodesMap = new Map<string, TreeNode>()
+  for (const n of getAllNodes()) {
+    treeNodesMap.set(n.id, n)
+  }
+  cacheTreeSnapshot(index, treeNodesMap)
+}
 
 // ---- Store ----
 
@@ -78,7 +130,9 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const newOps = [...operations.slice(0, historyIndex), op]
       const newObjects = { ...objects, [id]: obj }
       set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true, busy: false, lastCsgMs: ms })
-      cacheSnapshot(newOps.length, newObjects)
+      cacheSnapshotWithTree(newOps.length, newObjects)
+      // Register in build tree
+      createPrimitiveNode(id, shapeType, finalParams, transform)
     } catch (e) { set({ busy: false }); console.error('addShape:', e) }
   },
 
@@ -99,7 +153,9 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const newOps = [...operations.slice(0, historyIndex), op]
       const newObjects = { ...objects, [id]: obj }
       set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, selectedIds: [id], modified: true, busy: false, lastCsgMs: ms })
-      cacheSnapshot(newOps.length, newObjects)
+      cacheSnapshotWithTree(newOps.length, newObjects)
+      // Register baked node in build tree
+      createBakedNode(id, result.vertices, result.indices, result.normals, transform)
     } catch (e) { set({ busy: false }); console.error('addRawMesh:', e) }
   },
 
@@ -126,7 +182,9 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const newOps = [...operations.slice(0, historyIndex), op]
       const newObjects = { ...objects, [id]: obj }
       set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, selectedIds: [id], modified: true, busy: false, lastCsgMs: ms })
-      cacheSnapshot(newOps.length, newObjects)
+      cacheSnapshotWithTree(newOps.length, newObjects)
+      // Register baked node in build tree
+      createBakedNode(id, result.vertices, result.indices, result.normals, mesh.transform)
     } catch (e) { set({ busy: false }); notify(`Ошибка импорта STL: ${e}`, 'error') }
   },
 
@@ -159,7 +217,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         busy: false,
         lastCsgMs: ms,
       })
-      cacheSnapshot(newOps.length, newObjects)
+      cacheSnapshotWithTree(newOps.length, newObjects)
     } catch (e) { set({ busy: false }); console.error('applyFillet:', e) }
   },
 
@@ -214,7 +272,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
 
       const ms = performance.now() - t0
       set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, selectedIds: pastedIds, modified: true, busy: false, lastCsgMs: ms })
-      cacheSnapshot(newOps.length, newObjects)
+      cacheSnapshotWithTree(newOps.length, newObjects)
     } catch (e) {
       set({ busy: false })
       // Clean up partially created objects from worker cache
@@ -233,7 +291,11 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     if (ids.length === 0) return
     const op: DeleteOperation = { type: 'delete', ids }
     const newObjects = { ...objects }
-    for (const id of ids) delete newObjects[id]
+    for (const id of ids) {
+      delete newObjects[id]
+      // Remove from build tree
+      deleteNode(id)
+    }
     try {
       await workerDeleteObjects(ids)
     } catch (e) {
@@ -243,7 +305,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     }
     const newOps = [...operations.slice(0, historyIndex), op]
     set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, selectedIds: [], modified: true })
-    cacheSnapshot(newOps.length, newObjects)
+    cacheSnapshotWithTree(newOps.length, newObjects)
   },
 
   selectObjects: (ids, add) => {
@@ -312,10 +374,14 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       // FIX (CRIT-CSG-2): Store result vertices/indices AND center position
       // in GroupOperation so rebuildFromHistory can reconstruct the CSG result
       // geometry at the correct position.
-      const histOp: GroupOperation = { type: 'group', ids: [idA, idB], isHull: false, isIntersect: op === 'intersect', subtractOp: op === 'subtract', resultId, resultVertices: mesh.vertices, resultIndices: mesh.indices, resultNormals: mesh.normals ?? undefined, resultCenter: { x: cx, y: cy, z: cz }, originalBboxSize: originalBboxSize }
+      const histOp: GroupOperation = { type: 'group', ids: [idA, idB], isHull: false, isIntersect: op === 'intersect', subtractOp: op === 'subtract', resultId, resultVertices: mesh.vertices, resultIndices: mesh.indices, resultNormals: mesh.normals ?? undefined, resultCenter: { x: cx, y: cy, z: cz }, originalBboxSize: originalBboxSize, treeOperation: op as 'union' | 'subtract' | 'intersect' }
       const newOps = [...operations.slice(0, historyIndex), histOp]
       set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, selectedIds: [resultId], modified: true, busy: false, lastCsgMs: ms })
-      cacheSnapshot(newOps.length, newObjects)
+      cacheSnapshotWithTree(newOps.length, newObjects)
+      // Register boolean node in build tree
+      createBooleanNode(resultId, op as 'union' | 'subtract' | 'intersect', idA, idB)
+      // Rebuild tree node to cache the mesh in history-tree
+      rebuildNode(resultId).catch(e => console.error('[csgBoolean] rebuildNode failed:', e))
     } catch (e) { set({ busy: false }); console.error('csgBoolean:', e) }
   },
 
@@ -328,19 +394,17 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const delta: Vec3 = { x: transform.x - obj.transform.x, y: transform.y - obj.transform.y, z: transform.z - obj.transform.z }
     const rotDelta: Vec3 = { x: transform.rotX - obj.transform.rotX, y: transform.rotY - obj.transform.rotY, z: transform.rotZ - obj.transform.rotZ }
     const scaleDelta: Vec3 = { x: transform.scaleX - obj.transform.scaleX, y: transform.scaleY - obj.transform.scaleY, z: transform.scaleZ - obj.transform.scaleZ }
-    const hasPos = Math.abs(delta.x) > MOVE_DELTA_EPSILON || Math.abs(delta.y) > MOVE_DELTA_EPSILON || Math.abs(delta.z) > MOVE_DELTA_EPSILON
-    const hasRot = Math.abs(rotDelta.x) > MOVE_DELTA_EPSILON || Math.abs(rotDelta.y) > MOVE_DELTA_EPSILON || Math.abs(rotDelta.z) > MOVE_DELTA_EPSILON
-    const hasScale = Math.abs(scaleDelta.x) > MOVE_DELTA_EPSILON || Math.abs(scaleDelta.y) > MOVE_DELTA_EPSILON || Math.abs(scaleDelta.z) > MOVE_DELTA_EPSILON
-    
-    // BUG-R8-3: Early return если все delta ниже epsilon — не засоряем историю
-    if (!hasPos && !hasRot && !hasScale) return
-    
+    const hasPos = delta.x !== 0 || delta.y !== 0 || delta.z !== 0
+    const hasRot = rotDelta.x !== 0 || rotDelta.y !== 0 || rotDelta.z !== 0
+    const hasScale = scaleDelta.x !== 0 || scaleDelta.y !== 0 || scaleDelta.z !== 0
     const kind = hasScale && !hasPos && !hasRot ? 'scale' : hasRot && !hasPos && !hasScale ? 'rotate' : 'translate'
     const op: MoveOperation = { type: 'move', ids: [id], delta, rotDelta, scaleDelta, kind }
     const newOps = [...operations.slice(0, historyIndex), op]
     const newObjects = { ...objects, [id]: { ...obj, transform } }
     set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true })
-    cacheSnapshot(newOps.length, newObjects)
+    cacheSnapshotWithTree(newOps.length, newObjects)
+    // BuildTree: move the node in the tree (updates localTransform on all primitives in subtree)
+    moveTreeNode(id, { x: delta.x, y: delta.y, z: delta.z })
     // Sync worker cache so subsequent CSG/mirror operations use correct position (WARN-R6-2)
     // FIX (CRIT-CSG-3): For CSG results (shapeType='cube' with no params) and imported meshes,
     // use workerSyncMesh to preserve actual geometry. workerSyncObjects rebuilds from shapeType/params
@@ -374,7 +438,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const op: ColorOperation = { type: 'color', ids: [id], color }
       const newOps = [...operations.slice(0, historyIndex), op]
       set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true })
-      cacheSnapshot(newOps.length, newObjects)
+      cacheSnapshotWithTree(newOps.length, newObjects)
     }
   },
 
@@ -387,7 +451,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const newOps = [...operations.slice(0, historyIndex), op]
     const newObjects = { ...objects, [id]: { ...objects[id], visible: newVis } }
     set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true })
-    cacheSnapshot(newOps.length, newObjects)
+    cacheSnapshotWithTree(newOps.length, newObjects)
   },
 
   // ── Mirror ──
@@ -436,6 +500,40 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         originalIds.push(id)
         const obj = objects[id]
         
+        // BuildTree: clone subtree + mirror the clone
+        // Check if node exists in tree (may not if created before BuildTree or via rebuildFromHistory)
+        const treeExists = getNode(id) !== undefined
+        let mirroredTransform = { ...obj.transform }
+        
+        if (treeExists) {
+          try {
+            const treeId = `mirror_${nextId()}`
+            const treeClone = cloneSubtree(id, treeId)
+            
+            // Mirror the cloned subtree
+            mirrorTreeNode(treeId, plane)
+            
+            // Extract mirrored transform from the tree clone's root primitive/baked node
+            const clonedNode = getNode(treeId)
+            if (clonedNode) {
+              if (clonedNode.type === 'primitive' && clonedNode.localTransform) {
+                mirroredTransform = { ...clonedNode.localTransform }
+              } else if (clonedNode.type === 'baked' && clonedNode.localTransform) {
+                mirroredTransform = { ...clonedNode.localTransform }
+              } else if (clonedNode.type === 'boolean' && clonedNode.children) {
+                // For boolean nodes, extract from the first child's local transform
+                const firstChild = getNode(clonedNode.children[0])
+                if (firstChild && firstChild.localTransform) {
+                  mirroredTransform = { ...firstChild.localTransform }
+                }
+              }
+            }
+          } catch {
+            // Tree clone failed — fall through to worker mirror
+            mirroredTransform = { ...obj.transform }
+          }
+        }
+        
         // Определяем, является ли объект примитивом
         const isPrimitive = obj.shapeType !== 'cube' || (obj.shapeType === 'cube' && obj.params.width)
         
@@ -464,6 +562,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
           })
           newObjects[newId] = newObj
           newIds.push(newId)
+          // ✅ РЕГИСТРИРУЕМ в дереве — чтобы следующее зеркало нашло ноду
+          createPrimitiveNode(newId, obj.shapeType!, obj.params!, t)
         }
         // Для CSG / импорта сбрасываем scale и rotation, оставляем только зеркальную позицию
         else {
@@ -486,13 +586,15 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
           })
           newObjects[newId] = newObj
           newIds.push(newId)
+          // ✅ РЕГИСТРИРУЕМ в дереве — fallback-копия должна быть доступна для следующего зеркала
+          createBakedNode(newId, mesh.vertices, mesh.indices, mesh.normals, t)
         }
       }
       
       const op: MirrorOperation = { type: 'mirror', originalIds, ids: newIds, plane }
       const newOps = [...operations.slice(0, historyIndex), op]
       set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true, busy: false, lastCsgMs: performance.now() - t0 })
-      cacheSnapshot(newOps.length, newObjects)
+      cacheSnapshotWithTree(newOps.length, newObjects)
     } catch (e) { set({ busy: false }); console.error('mirrorSelected:', e) }
   },
 
@@ -539,7 +641,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const op: AlignOperation & { deltas: Record<string, number> } = { type: 'align', ids, axis, anchor, deltas }
       const newOps = [...operations.slice(0, historyIndex), op]
       set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true, busy: false, lastCsgMs: performance.now() - t0 })
-      cacheSnapshot(newOps.length, newObjects)
+      cacheSnapshotWithTree(newOps.length, newObjects)
     } catch (e) { set({ busy: false }); console.error('alignSelected:', e) }
   },
 
@@ -554,7 +656,9 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const t0 = performance.now()
       const cached = getCachedSnapshot(newIdx)
       const newObjects = cached ?? await rebuildFromHistory(operations.slice(0, newIdx))
-      if (!cached) cacheSnapshot(newIdx, newObjects)
+      if (!cached) cacheSnapshotWithTree(newIdx, newObjects)
+      // Restore build tree from snapshot
+      restoreTreeFromSnapshot(newIdx)
       set({ historyIndex: newIdx, objects: newObjects, selectedIds: [], busy: false, lastCsgMs: performance.now() - t0 })
     } catch (e) { set({ busy: false }); console.error('undo:', e) }
   },
@@ -570,7 +674,9 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const t0 = performance.now()
       const cached = getCachedSnapshot(newIdx)
       const newObjects = cached ?? await rebuildFromHistory(operations.slice(0, newIdx))
-      if (!cached) cacheSnapshot(newIdx, newObjects)
+      if (!cached) cacheSnapshotWithTree(newIdx, newObjects)
+      // Restore build tree from snapshot
+      restoreTreeFromSnapshot(newIdx)
       set({ historyIndex: newIdx, objects: newObjects, selectedIds: [], busy: false, lastCsgMs: performance.now() - t0 })
     } catch (e) { set({ busy: false }); console.error('redo:', e) }
   },
@@ -586,7 +692,9 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const t0 = performance.now()
       const cached = getCachedSnapshot(newIdx)
       const newObjects = cached ?? await rebuildFromHistory(operations.slice(0, newIdx))
-      if (!cached) cacheSnapshot(newIdx, newObjects)
+      if (!cached) cacheSnapshotWithTree(newIdx, newObjects)
+      // Restore build tree from snapshot
+      restoreTreeFromSnapshot(newIdx)
       set({ historyIndex: newIdx, objects: newObjects, selectedIds: [], busy: false, lastCsgMs: performance.now() - t0 })
     } catch (e) { set({ busy: false }); console.error('jumpToHistory:', e) }
   },
@@ -596,6 +704,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     if (get().busy) return
     await workerClearAll()
     clearSnapshots()
+    clearTree()
     set({ operations: [], historyIndex: 0, objects: {}, selectedIds: [], modified: false, fileName: null, lastCsgMs: null })
   },
 
@@ -612,7 +721,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const t0 = performance.now()
       const newObjects = await rebuildFromHistory(doc.operations)
       set({ operations: doc.operations, historyIndex: doc.operations.length, objects: newObjects, selectedIds: [], fileName: picked.file.name, modified: false, busy: false, lastCsgMs: performance.now() - t0 })
-      cacheSnapshot(doc.operations.length, newObjects)
+      cacheSnapshotWithTree(doc.operations.length, newObjects)
     } catch (e) { set({ busy: false }); notify(`Ошибка открытия: ${e}`, 'error') }
   },
 
@@ -652,7 +761,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         const newOps = [...operations.slice(0, historyIndex), op]
         const newObjects = { ...objects, [id]: makeObject({ ...obj, params: mergedParams, vertices: mesh.vertices, indices: mesh.indices, normals: mesh.normals }) }
         set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true, busy: false, lastCsgMs: ms })
-        cacheSnapshot(newOps.length, newObjects)
+        cacheSnapshotWithTree(newOps.length, newObjects)
       } catch (e) { set({ busy: false }); console.error('resizeObject:', e) }
       return
     }
@@ -683,7 +792,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const newOps = [...operations.slice(0, historyIndex), op]
     const newObjects = { ...objects, [id]: { ...obj, transform: newTransform, originalBboxSize: { x: targetWidth, y: targetHeight, z: targetDepth } } }
     set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true })
-    cacheSnapshot(newOps.length, newObjects)
+    cacheSnapshotWithTree(newOps.length, newObjects)
 
     // Sync worker cache with reset scale
     workerSyncMesh(id, obj.vertices, obj.indices, {
@@ -743,7 +852,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const newObjects = { ...objects }; delete newObjects[id]; newObjects[resultId] = newObj
       const newOps = [...operations.slice(0, historyIndex), addOp, grpOp]
       set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, selectedIds: [resultId], modified: true, busy: false, lastCsgMs: ms })
-      cacheSnapshot(newOps.length, newObjects)
+      cacheSnapshotWithTree(newOps.length, newObjects)
     } catch (e) { set({ busy: false }); console.error('extrudeSelected:', e) }
   },
 
@@ -757,7 +866,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const newOps = [...operations.slice(0, historyIndex), op]
     const newObjects = { ...objects, [id]: { ...objects[id], name } }
     set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true })
-    cacheSnapshot(newOps.length, newObjects)
+    cacheSnapshotWithTree(newOps.length, newObjects)
   },
 
   // ── Autosave ──
@@ -779,7 +888,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const t0 = performance.now()
       const newObjects = await rebuildFromHistory(entry.operations)
       set({ operations: entry.operations, historyIndex: entry.historyIndex, objects: newObjects, selectedIds: [], fileName: entry.fileName, modified: false, busy: false, lastCsgMs: performance.now() - t0 })
-      cacheSnapshot(entry.historyIndex, newObjects)
+      cacheSnapshotWithTree(entry.historyIndex, newObjects)
       return true
     } catch (e) { set({ busy: false }); return false }
   },
@@ -810,7 +919,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const t0 = performance.now()
       const newObjects = await rebuildFromHistory(record.operations)
       set({ operations: record.operations, historyIndex: record.operations.length, objects: newObjects, selectedIds: [], fileName: null, modified: false, busy: false, lastCsgMs: performance.now() - t0, currentProjectId: id })
-      cacheSnapshot(record.operations.length, newObjects)
+      cacheSnapshotWithTree(record.operations.length, newObjects)
     } catch (e) { set({ busy: false }); console.error('loadFromProject:', e) }
   },
 }))

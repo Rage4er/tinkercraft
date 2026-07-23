@@ -9,6 +9,45 @@
 
 ## [Unreleased]
 
+### Added — BuildTree: Параметрическое дерево построения (2026-07-23)
+
+- **BUILD_TREE_SPEC.md:** Полная переработка подхода к зеркалу и всем операциям над сложными объектами (`web-app/src/csg/BUILD_TREE_SPEC.md`)
+  - **Новая архитектура:** Параметрическое дерево построения (TreeNode) вместо плоского списка объектов
+  - **Три типа нод:** `primitive` (листья: cube, sphere, cylinder, ...) и `boolean` (узлы: union, subtract, intersect) и `baked` (STL, non-manifold)
+  - **Baked-ноды:** STL-файлы теперь могут участвовать в дереве — `boolean(куб, STL)` валидная нода
+  - **Lazy rebuild:** Меш пересобирается по запросу с кэшированием по хешу
+  - **Worker rebuild:** `handleRebuildTreeNode` в worker.ts — rebuild из дерева в WASM, `workerRebuildNode` в client
+  - **Каскадная инвалидация O(depth):** `parentId` обратные ссылки, `invalidateCache` рекурсия по parentId, 1000 нод → 10 операций вместо 10000
+  - **isAncestor защита:** `createBooleanNode` проверяет циклы при создании — `isAncestor(childA, id)` + self-ref guard
+  - **visited Set в cloneSubtree:** защита от циклов при рекурсивном клонировании, shared children не дублируются
+  - **deleteNode сбрасывает parentId:** дети удаляемой ноды теряют связь с родителем
+  - **Мемоизация BBox:** `cachedBBox` в TreeNode, инвалидируется вместе с `cachedMesh`, избегает O(n) прохода по вершинам
+  - **Единый API:** `mirrorTreeNode`, `moveTreeNode`, `rotateTreeNode`, `cloneSubtree` — все операции через дерево
+  - **Синхронизация:** Store хранит меш для рендеринга, дерево — источник параметричности
+  - **Глубокое копирование TypedArray:** `cloneSubtree` делает `new Float32Array()` для избежания shared buffers
+  - **Transform-ноды:** Отложены на future (групповые операции, иерархическая анимация)
+- **history-tree.ts:** Ядро дерева (хранение, rebuild, mirror, move, rotate, clone, BBox, hash, cascade invalidation)
+- **types.ts:** `TreeNode`, `Point3D`, `BoundingBox`, `ExtractedMesh` с полной типизацией
+- **document-store.ts:** Интеграция дерева — `addShape` регистрирует primitive, `csgBoolean` создаёт boolean-ноду + `rebuildNode`, `mirrorSelected` клонирует + зеркалит поддерево с fallback-регистрацией, `moveObject` двигает всё поддерево, `deleteSelected` удаляет из дерева, `clearScene` очищает дерево
+- **worker-handlers.ts:** `handleRebuildTreeNode` — rebuild subtree из дерева в WASM
+- **worker-client.ts:** `workerRebuildNode` — вызов rebuild из дерева
+- **worker.ts:** Кейс `rebuildTreeNode` в обработчике сообщений
+- **rebuild.ts:** `rebuildBuildTree` и `registerBakedNodes` — sync дерева при undo/redo
+- **history-tree.test.ts:** 29 unit-тестов — createPrimitiveNode, createBooleanNode (включая self-ref и cycle guards), createBakedNode, deleteNode, computeNodeBBox (с memoization), isAncestor, mirrorTreeNode, moveTreeNode, cloneSubtree (с deep copy TypedArrays), cascade invalidation, rebuildNode
+- **types.ts:** `treeOperation` в GroupOperation — тип булевой операции для tree reconstruction при undo/redo
+- **snapshots.ts:** `cacheTreeSnapshot`, `getCachedTreeSnapshot` — кэширование дерева alongside objects; `serializeTree` — сериализация в plain objects (без cachedMesh/BBox/hash)
+- **document-store.ts:** `cacheSnapshotWithTree` — wrapper, заменяющий все cacheSnapshot; `restoreTreeFromSnapshot` — восстановление дерева при undo/redo/jumpToHistory
+- **rebuild.ts:** `rebuildBuildTree` использует `treeOperation` из GroupOperation
+- **Планируемые файлы:**
+  - `history-tree.ts` — ядро дерева (хранение, rebuild, mirror, move, rotate, clone)
+  - `types.ts` — `TreeNode`, `Point3D`, `BoundingBox`, `ExtractedMesh`
+  - `worker-handlers.ts` — `handleApplyCsg` для CSG между двумя мешами
+  - `worker-client.ts` — `workerRebuildNode` для пересборки из дерева
+  - `document-store.ts` — интеграция: `createPrimitiveNode`, `createBooleanNode`, `mirrorTreeNode`, `moveTreeNode`
+- **5 фаз внедрения:** A (базовая структура) → B (rebuild+CSG) → C (интеграция store) → D (mirror+transform) → E (undo/redo+polish)
+- **7 тест-кейсов:** union, зеркало CSG, двойное зеркало, move CSG, каскадная инвалидация, параметрическое редактирование, undo/redo
+- **Заменяет:** MIRROR_FIX_SPEC.md (гибридный подход зеркала) — архитектура дерева решает проблему зеркала как частный случай
+
 ### Fixed — Mirror operation (2026-07-22)
 
 - **Комплексное исправление отзеркаливания с разделением логики для примитивов и CSG/импорта:**

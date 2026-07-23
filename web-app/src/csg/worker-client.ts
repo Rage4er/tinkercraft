@@ -213,6 +213,25 @@ export async function workerClearAll(): Promise<void> {
   await send<unknown>('clearAll', {})
 }
 
+export async function workerRebuildNode(
+  nodeId: string,
+  nodes: Array<{
+    id: string
+    type: 'primitive' | 'boolean' | 'baked'
+    shapeType?: string
+    params?: Record<string, number>
+    localTransform?: { x: number; y: number; z: number; rotX: number; rotY: number; rotZ: number; scaleX: number; scaleY: number; scaleZ: number }
+    vertices?: number[]
+    indices?: number[]
+    normals?: number[]
+    operation?: 'union' | 'subtract' | 'intersect'
+    children?: string[]
+  }>,
+): Promise<MeshResult> {
+  await waitReady()
+  return send<MeshResult>('rebuildTreeNode', { nodeId, nodes })
+}
+
 export function isWorkerReady(): boolean { return _ready }
 
 /**

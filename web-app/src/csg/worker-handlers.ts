@@ -584,12 +584,140 @@ export async function handleBuildImportedMesh(msg: BuildImportedMeshMessage): Pr
         objId: msg.objId,
         vertices: mesh.vertices,
         indices: mesh.indices,
+        normals: mesh.normals,
         tris: mesh.tris,
         ms: performance.now() - t0,
-        nonManifold: true,
       },
-      [mesh.vertices.buffer, mesh.indices.buffer],
+      buildTransferList(mesh),
     )
+  }
+}
+
+// --- BuildTree: rebuild a node from its tree definition ---
+
+export interface RebuildTreeNodeMessage {
+  reqId: string
+  type: 'rebuildTreeNode'
+  nodeId: string
+  nodes: Array<{
+    id: string
+    type: 'primitive' | 'boolean' | 'baked'
+    shapeType?: string
+    params?: Record<string, number>
+    localTransform?: { x: number; y: number; z: number; rotX: number; rotY: number; rotZ: number; scaleX: number; scaleY: number; scaleZ: number }
+    vertices?: number[]
+    indices?: number[]
+    normals?: number[]
+    operation?: 'union' | 'subtract' | 'intersect'
+    children?: string[]
+  }>
+  nodeIdPath: string[]
+}
+
+/** RebuildTreeNodeMessage node data type */
+export type RebuildTreeNodeData = RebuildTreeNodeMessage['nodes'][number]
+
+/**
+ * Rebuild a tree node using worker. Sends node definition, rebuilds the subtree,
+ * returns the extracted mesh. Used by history-tree rebuildNode when cache misses.
+ */
+export async function handleRebuildTreeNode(msg: RebuildTreeNodeMessage): Promise<void> {
+  const t0 = performance.now()
+  const wasm = getWasm()
+
+  // Build a map of id → node data
+  const nodeMap = new Map<string, RebuildTreeNodeMessage['nodes'][number]>()
+  for (const n of msg.nodes) {
+    nodeMap.set(n.id, n)
+  }
+
+  // Recursive function to rebuild a node and return ManifoldObject
+  function rebuildNode(id: string): ManifoldObject | null {
+    const nd = nodeMap.get(id)
+    if (!nd) return null
+
+    let m: ManifoldObject | null = null
+
+    if (nd.type === 'primitive') {
+      // Build primitive
+      const shapeType = nd.shapeType || 'cube'
+      const params = nd.params || {}
+      m = buildPrimitive(shapeType, params as Record<string, number>)
+      // Apply transform
+      const t = nd.localTransform || { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
+      const matrix = buildTransformMatrix(
+        { x: t.x, y: t.y, z: t.z },
+        { rotX: t.rotX, rotY: t.rotY, rotZ: t.rotZ },
+        { scaleX: t.scaleX, scaleY: t.scaleY, scaleZ: t.scaleZ },
+      )
+      const transformed = m.transform(matrix)
+      m.delete()
+      m = transformed
+
+    } else if (nd.type === 'baked') {
+      if (nd.vertices && nd.indices) {
+        m = new wasm.Manifold({
+          numProp: 3,
+          vertProperties: new Float32Array(nd.vertices),
+          triVerts: new Uint32Array(nd.indices),
+        })
+        // Apply position transform (scale=1, rot=0 for baked)
+        const t = nd.localTransform || { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
+        const matrix = buildTransformMatrix(
+          { x: t.x, y: t.y, z: t.z },
+          { rotX: 0, rotY: 0, rotZ: 0 },
+          { scaleX: 1, scaleY: 1, scaleZ: 1 },
+        )
+        const transformed = m.transform(matrix)
+        m.delete()
+        m = transformed
+      }
+
+    } else if (nd.type === 'boolean' && nd.children && nd.operation) {
+      const childA = rebuildNode(nd.children[0])
+      const childB = rebuildNode(nd.children[1])
+      if (childA && childB) {
+        if (nd.operation === 'subtract') {
+          m = childA.subtract(childB)
+        } else if (nd.operation === 'intersect') {
+          m = childA.intersect(childB)
+        } else {
+          m = childA.add(childB)
+        }
+        childA.delete()
+        childB.delete()
+      }
+    }
+
+    return m
+  }
+
+  try {
+    // Rebuild the target node
+    const result = rebuildNode(msg.nodeId)
+    if (!result) {
+      safePostMessage({ reqId: msg.reqId, type: 'error', message: `Node ${msg.nodeId} not found` })
+      return
+    }
+
+    const mesh = extractMesh(result)
+    result.delete()
+
+    safePostMessage(
+      {
+        reqId: msg.reqId,
+        type: 'mesh',
+        objId: msg.nodeId,
+        vertices: mesh.vertices,
+        indices: mesh.indices,
+        normals: mesh.normals,
+        tris: mesh.tris,
+        ms: performance.now() - t0,
+      },
+      buildTransferList(mesh),
+    )
+  } catch (e: unknown) {
+    safePostMessage({ reqId: msg.reqId, type: 'error', message: (e as Error).message })
   }
 }
 

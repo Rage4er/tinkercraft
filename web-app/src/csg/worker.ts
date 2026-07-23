@@ -13,6 +13,7 @@ import {
   handleRebuildScene,
   handleSyncObjects,
   handleSyncMesh,
+  handleRebuildTreeNode,
   safePostMessage,
   disposeCached,
   disposeAllCached,
@@ -35,6 +36,7 @@ self.addEventListener('message', async (e: MessageEvent) => {
       case 'rebuildScene': await handleRebuildScene(msg as unknown as import('./worker-handlers').RebuildSceneMessage); break
       case 'syncObjects': await handleSyncObjects(msg as unknown as import('./worker-handlers').SyncObjectsMessage); break
       case 'syncMesh': await handleSyncMesh(msg as unknown as import('./worker-handlers').SyncMeshMessage); break
+      case 'rebuildTreeNode': await handleRebuildTreeNode(msg as unknown as import('./worker-handlers').RebuildTreeNodeMessage); break
       case 'deleteObjects':
         for (const id of (msg.ids as string[])) disposeCached(id)
         safePostMessage({ reqId: msg.reqId, type: 'ok' })

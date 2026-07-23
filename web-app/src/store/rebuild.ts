@@ -16,6 +16,12 @@ import {
   makeDefaultTransform,
   type RebuildTransform,
 } from '../csg/rebuildOps'
+import {
+  createPrimitiveNode,
+  createBooleanNode,
+  createBakedNode,
+  getNode,
+} from '../csg/history-tree'
 
 /** Metadata accumulated over the operation chain. Exported for testing. */
 export interface RebuildMeta {
@@ -230,4 +236,105 @@ export async function rebuildFromHistory(
     })
   }
   return objects
+}
+
+// ---------------------------------------------------------------------------
+// BuildTree reconstruction (called after rebuildFromHistory)
+// ---------------------------------------------------------------------------
+
+/**
+ * Rebuild the build tree from operations.
+ * Called after rebuildFromHistory to keep the tree in sync with the scene.
+ * This is essential for undo/redo to work correctly with tree operations.
+ */
+export function rebuildBuildTree(ops: TinkerCraftOperation[]): void {
+  const transforms: Record<string, TransformNR> = {}
+
+  for (const op of ops) {
+    if (op.type === 'add_shape') {
+      createPrimitiveNode(op.id, op.shapeType, op.params, { ...op.transform })
+      transforms[op.id] = { ...op.transform }
+
+    } else if (op.type === 'import_mesh') {
+      transforms[op.id] = { ...op.transform }
+      // Baked nodes registered after mesh data is available
+
+    } else if (op.type === 'move') {
+      const d: Vec3 = op.delta
+      const rd = (op as { rotDelta?: Vec3 }).rotDelta
+      const sd = (op as { scaleDelta?: Vec3 }).scaleDelta
+      for (const id of op.ids) {
+        const t = transforms[id]
+        if (t) {
+          const nt = applyMoveDelta(t as unknown as RebuildTransform, d, rd, sd) as TransformNR
+          transforms[id] = nt
+          // Update tree node transform if it exists
+          const node = getNode(id)
+          if (node && node.localTransform) {
+            node.localTransform = { ...nt }
+          }
+        }
+      }
+
+    } else if (op.type === 'mirror') {
+      const origIds = (op as { originalIds?: string[] }).originalIds ?? []
+      for (let i = 0; i < origIds.length && i < op.ids.length; i++) {
+        const origId = origIds[i]
+        const newId = op.ids[i]
+        const t = transforms[origId]
+        if (t) {
+          const nt = applyMirrorToTransform(t as unknown as RebuildTransform, op.plane) as TransformNR
+          transforms[newId] = nt
+          // Register mirrored primitive in tree
+          const origNode = getNode(origId)
+          if (origNode && origNode.type === 'primitive') {
+            createPrimitiveNode(newId, origNode.shapeType!, { ...origNode.params! }, nt)
+          } else if (origNode && origNode.type === 'baked') {
+            createBakedNode(newId, origNode.vertices!, origNode.indices!, origNode.normals ?? null, nt)
+          } else {
+            // Fallback: create a placeholder primitive node
+            createPrimitiveNode(newId, 'cube', {}, nt)
+          }
+        }
+      }
+
+    } else if (op.type === 'group') {
+      for (const id of op.ids) { delete transforms[id] }
+      if (op.resultId) {
+        const startT: TransformNR = op.resultCenter
+          ? { x: op.resultCenter.x, y: op.resultCenter.y, z: op.resultCenter.z, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
+          : makeDefaultTransform() as TransformNR
+        transforms[op.resultId] = startT
+        // Register boolean node in tree
+        const isSubtract = (op as { subtractOp?: boolean }).subtractOp
+        const isIntersect = (op as { isIntersect?: boolean }).isIntersect
+        // Use treeOperation from GroupOperation if available, fallback to subtractOp/isIntersect
+        const treeOp = (op as { treeOperation?: 'union' | 'subtract' | 'intersect' }).treeOperation
+          ?? (isSubtract ? 'subtract' : isIntersect ? 'intersect' : 'union')
+        try {
+          createBooleanNode(op.resultId, treeOp, op.ids[0], op.ids[1])
+        } catch {
+          // Tree creation failed (e.g., orphaned CSG) — skip
+          console.warn('[rebuildBuildTree] Failed to create boolean node:', op.resultId)
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Register baked nodes after rebuildFromHistory has the mesh data.
+ */
+export function registerBakedNodes(
+  objects: Record<string, SceneObject>,
+  ops: TinkerCraftOperation[],
+): void {
+  for (const op of ops) {
+    if (op.type === 'import_mesh' && objects[op.id]) {
+      const obj = objects[op.id]
+      if (obj.vertices && obj.indices) {
+        createBakedNode(op.id, obj.vertices, obj.indices, obj.normals ?? null, obj.transform)
+      }
+    }
+  }
 }
