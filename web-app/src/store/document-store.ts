@@ -81,13 +81,10 @@ function restoreTreeFromSnapshot(index: number): void {
  * Replace all cacheSnapshot calls with this.
  */
 function cacheSnapshotWithTree(index: number, objects: Record<string, SceneObject>): void {
-  cacheSnapshotWithTree(index, objects)
+  cacheSnapshot(index, objects)
   // Cache tree nodes (only the structure, not cached mesh/BBox/hash)
-  const treeNodesMap = new Map<string, TreeNode>()
-  for (const n of getAllNodes()) {
-    treeNodesMap.set(n.id, n)
-  }
-  cacheTreeSnapshot(index, treeNodesMap)
+  const nodes = getAllNodes()
+  cacheTreeSnapshot(index, nodes)
 }
 
 // ---- Store ----
@@ -125,14 +122,14 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     try {
       const t0 = performance.now()
       const mesh = await workerBuildShape(id, shapeType, finalParams, transform)
-      const ms = performance.now() - t0
-      const obj: SceneObject = makeObject({ id, shapeType, params: finalParams, color, transform, visible: true, locked: false, vertices: mesh.vertices, indices: mesh.indices, normals: mesh.normals })
-      const newOps = [...operations.slice(0, historyIndex), op]
-      const newObjects = { ...objects, [id]: obj }
-      set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true, busy: false, lastCsgMs: ms })
-      cacheSnapshotWithTree(newOps.length, newObjects)
-      // Register in build tree
-      createPrimitiveNode(id, shapeType, finalParams, transform)
+       const ms = performance.now() - t0
+       const obj: SceneObject = makeObject({ id, shapeType, params: finalParams, color, transform, visible: true, locked: false, vertices: mesh.vertices, indices: mesh.indices, normals: mesh.normals })
+       const newOps = [...operations.slice(0, historyIndex), op]
+       const newObjects = { ...objects, [id]: obj }
+       // Register in build tree BEFORE caching snapshot
+       createPrimitiveNode(id, shapeType, finalParams, transform)
+       set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true, busy: false, lastCsgMs: ms })
+       cacheSnapshotWithTree(newOps.length, newObjects)
     } catch (e) { set({ busy: false }); console.error('addShape:', e) }
   },
 
@@ -148,14 +145,14 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const t0 = performance.now()
       const result = await workerBuildImportedMesh(id, vertices, indices)
       const ms = performance.now() - t0
-      const obj: SceneObject = makeObject({ id, shapeType: 'import_mesh', params: {}, color, transform, visible: true, locked: false, vertices: result.vertices, indices: result.indices, normals: result.normals })
-      const op: ImportMeshOperation = { type: 'import_mesh', id, name, color, transform, vertices, indices }
-      const newOps = [...operations.slice(0, historyIndex), op]
-      const newObjects = { ...objects, [id]: obj }
-      set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, selectedIds: [id], modified: true, busy: false, lastCsgMs: ms })
-      cacheSnapshotWithTree(newOps.length, newObjects)
-      // Register baked node in build tree
-      createBakedNode(id, result.vertices, result.indices, result.normals, transform)
+       const obj: SceneObject = makeObject({ id, shapeType: 'import_mesh', params: {}, color, transform, visible: true, locked: false, vertices: result.vertices, indices: result.indices, normals: result.normals })
+       const op: ImportMeshOperation = { type: 'import_mesh', id, name, color, transform, vertices, indices }
+       const newOps = [...operations.slice(0, historyIndex), op]
+       const newObjects = { ...objects, [id]: obj }
+       // Register baked node in build tree BEFORE caching snapshot
+       createBakedNode(id, result.vertices, result.indices, result.normals, transform)
+       set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, selectedIds: [id], modified: true, busy: false, lastCsgMs: ms })
+       cacheSnapshotWithTree(newOps.length, newObjects)
     } catch (e) { set({ busy: false }); console.error('addRawMesh:', e) }
   },
 
@@ -177,14 +174,14 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const ms = performance.now() - t0
 
       // BUG-R8-1: Передаём normals в makeObject для корректного рендеринга
-      const obj: SceneObject = makeObject({ id, shapeType: 'import_mesh', params: {}, color, transform: mesh.transform, visible: true, locked: false, vertices: result.vertices, indices: result.indices, normals: result.normals })
-      const op: ImportMeshOperation = { type: 'import_mesh', id, name: mesh.name, color, transform: mesh.transform, vertices: mesh.vertices, indices: mesh.indices }
-      const newOps = [...operations.slice(0, historyIndex), op]
-      const newObjects = { ...objects, [id]: obj }
-      set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, selectedIds: [id], modified: true, busy: false, lastCsgMs: ms })
-      cacheSnapshotWithTree(newOps.length, newObjects)
-      // Register baked node in build tree
-      createBakedNode(id, result.vertices, result.indices, result.normals, mesh.transform)
+       const obj: SceneObject = makeObject({ id, shapeType: 'import_mesh', params: {}, color, transform: mesh.transform, visible: true, locked: false, vertices: result.vertices, indices: result.indices, normals: result.normals })
+       const op: ImportMeshOperation = { type: 'import_mesh', id, name: mesh.name, color, transform: mesh.transform, vertices: mesh.vertices, indices: mesh.indices }
+       const newOps = [...operations.slice(0, historyIndex), op]
+       const newObjects = { ...objects, [id]: obj }
+       // Register baked node in build tree BEFORE caching snapshot
+       createBakedNode(id, result.vertices, result.indices, result.normals, mesh.transform)
+       set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, selectedIds: [id], modified: true, busy: false, lastCsgMs: ms })
+       cacheSnapshotWithTree(newOps.length, newObjects)
     } catch (e) { set({ busy: false }); notify(`Ошибка импорта STL: ${e}`, 'error') }
   },
 
@@ -375,13 +372,28 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       // in GroupOperation so rebuildFromHistory can reconstruct the CSG result
       // geometry at the correct position.
       const histOp: GroupOperation = { type: 'group', ids: [idA, idB], isHull: false, isIntersect: op === 'intersect', subtractOp: op === 'subtract', resultId, resultVertices: mesh.vertices, resultIndices: mesh.indices, resultNormals: mesh.normals ?? undefined, resultCenter: { x: cx, y: cy, z: cz }, originalBboxSize: originalBboxSize, treeOperation: op as 'union' | 'subtract' | 'intersect' }
-      const newOps = [...operations.slice(0, historyIndex), histOp]
-      set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, selectedIds: [resultId], modified: true, busy: false, lastCsgMs: ms })
-      cacheSnapshotWithTree(newOps.length, newObjects)
-      // Register boolean node in build tree
-      createBooleanNode(resultId, op as 'union' | 'subtract' | 'intersect', idA, idB)
-      // Rebuild tree node to cache the mesh in history-tree
-      rebuildNode(resultId).catch(e => console.error('[csgBoolean] rebuildNode failed:', e))
+       const newOps = [...operations.slice(0, historyIndex), histOp]
+       // Ensure children are registered in build tree BEFORE creating boolean node
+       const ensureInTree = (id: string) => {
+         if (!getNode(id)) {
+           const obj = objects[id]
+           if (obj) {
+             if (obj.shapeType === 'import_mesh') {
+               createBakedNode(id, obj.vertices, obj.indices, obj.normals ?? null, obj.transform)
+             } else {
+               createPrimitiveNode(id, obj.shapeType, obj.params, obj.transform)
+             }
+           }
+         }
+       }
+       ensureInTree(idA)
+       ensureInTree(idB)
+       // Register boolean node in build tree BEFORE caching snapshot
+       createBooleanNode(resultId, op as 'union' | 'subtract' | 'intersect', idA, idB)
+       set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, selectedIds: [resultId], modified: true, busy: false, lastCsgMs: ms })
+       cacheSnapshotWithTree(newOps.length, newObjects)
+       // Rebuild tree node to cache the mesh in history-tree
+       rebuildNode(resultId).catch(e => console.error('[csgBoolean] rebuildNode failed:', e))
     } catch (e) { set({ busy: false }); console.error('csgBoolean:', e) }
   },
 

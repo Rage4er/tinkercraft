@@ -38,6 +38,10 @@
 - **snapshots.ts:** `cacheTreeSnapshot`, `getCachedTreeSnapshot` — кэширование дерева alongside objects; `serializeTree` — сериализация в plain objects (без cachedMesh/BBox/hash)
 - **document-store.ts:** `cacheSnapshotWithTree` — wrapper, заменяющий все cacheSnapshot; `restoreTreeFromSnapshot` — восстановление дерева при undo/redo/jumpToHistory
 - **rebuild.ts:** `rebuildBuildTree` использует `treeOperation` из GroupOperation
+- **FIXED:** `cacheSnapshotWithTree` — исправлена рекурсия (само-вызов на line 84 заменён на `cacheSnapshot`)
+- **FIXED:** Order of tree registration — `createPrimitiveNode`/`createBooleanNode`/`createBakedNode` теперь вызываются ДО `cacheSnapshotWithTree` в `addShape`, `addRawMesh`, `importStl`, `csgBoolean`. Раньше boolean/primtive/baked узлы не попадали в снапшот, из-за чего undo/redo терял их, и следующая CSG операция падала с `Node csg_N not found`
+- **FIXED:** `csgBoolean` — добавлена функция `ensureInTree`, которая гарантирует, что `idA` и `idB` зарегистрированы в `treeNodes` ДО вызова `createBooleanNode`. Это предотвращает ошибку "Node not found" в воркере, когда children boolean ноды отсутствуют в дереве
+- **FIXED:** `applyCSGMeshes` — `collectSubtree(node.id)` вместо `collectSubtree(node.children[0])` + `collectSubtree(node.children[1])`, чтобы целевая boolean нода включалась в поддерево, отправляемое в воркер
 - **Планируемые файлы:**
   - `history-tree.ts` — ядро дерева (хранение, rebuild, mirror, move, rotate, clone)
   - `types.ts` — `TreeNode`, `Point3D`, `BoundingBox`, `ExtractedMesh`

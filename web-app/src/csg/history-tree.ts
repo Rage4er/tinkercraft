@@ -346,7 +346,7 @@ async function applyCSGMeshes(node: TreeNode): Promise<ExtractedMesh> {
     throw new Error(`Boolean node needs exactly 2 children`)
   }
 
-  // Collect all nodes in the subtree
+  // Collect all nodes in the subtree INCLUDING the target node
   const nodes: typeof treeNodes = new Map()
   function collectSubtree(id: string): void {
     const n = treeNodes.get(id)
@@ -358,8 +358,7 @@ async function applyCSGMeshes(node: TreeNode): Promise<ExtractedMesh> {
       }
     }
   }
-  collectSubtree(node.children[0])
-  collectSubtree(node.children[1])
+  collectSubtree(node.id) // ← include target node itself
 
   // Serialize to plain objects for worker
   const nodeData = Array.from(nodes.values()).map(n => ({

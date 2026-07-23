@@ -42,11 +42,11 @@ const treeCache = new Map<number, SnapshotTree>()
  * Serialize tree nodes to plain objects for snapshot storage.
  * Excludes cached fields (cachedMesh, cachedBBox, cacheHash).
  */
-function serializeTree(nodes: Map<string, TreeNode>): SnapshotTree {
+function serializeTree(nodes: TreeNode[]): SnapshotTree {
   const nodeArray: SnapshotTree['nodes'] = []
-  for (const [id, node] of nodes) {
+  for (const node of nodes) {
     nodeArray.push({
-      id,
+      id: node.id,
       type: node.type,
       shapeType: node.shapeType,
       params: node.params as Record<string, number> | undefined,
@@ -83,7 +83,7 @@ export function cacheSnapshot(
  */
 export function cacheTreeSnapshot(
   index: number,
-  nodes: Map<string, TreeNode>,
+  nodes: TreeNode[],
 ): void {
   treeCache.set(index, serializeTree(nodes))
   for (const key of treeCache.keys()) {
