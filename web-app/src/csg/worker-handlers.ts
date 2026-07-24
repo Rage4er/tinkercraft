@@ -620,6 +620,9 @@ export type RebuildTreeNodeData = RebuildTreeNodeMessage['nodes'][number]
 /**
  * Rebuild a tree node using worker. Sends node definition, rebuilds the subtree,
  * returns the extracted mesh. Used by history-tree rebuildNode when cache misses.
+ *
+ * NOTE: Returns mesh in WORLD coordinates (children transforms applied).
+ * Centering and localTransform application is done by caller (applyCSGMeshes in history-tree.ts).
  */
 export async function handleRebuildTreeNode(msg: RebuildTreeNodeMessage): Promise<void> {
   const t0 = performance.now()
@@ -686,6 +689,32 @@ export async function handleRebuildTreeNode(msg: RebuildTreeNodeMessage): Promis
         }
         childA.delete()
         childB.delete()
+        
+        // FIX (BUG-CSG-POS-4): Center geometry at origin only.
+        // Children have their transforms applied (world coordinates), so the boolean result
+        // is also in world coordinates. We center it (extractAndCenter behavior).
+        // DO NOT apply boolean node's localTransform here — it's applied in history-tree.ts
+        // in the applyCSGMeshes function.
+        const mesh = m.getMesh()
+        const verts = mesh.vertProperties
+        const numVerts = verts.length / mesh.numProp
+        let cx = 0, cy = 0, cz = 0
+        for (let i = 0; i < numVerts; i++) {
+          cx += verts[i * mesh.numProp]
+          cy += verts[i * mesh.numProp + 1]
+          cz += verts[i * mesh.numProp + 2]
+        }
+        cx /= numVerts; cy /= numVerts; cz /= numVerts
+        
+        // Translate to center only
+        const centerMatrix = buildTransformMatrix(
+          { x: -cx, y: -cy, z: -cz },
+          { rotX: 0, rotY: 0, rotZ: 0 },
+          { scaleX: 1, scaleY: 1, scaleZ: 1 },
+        )
+        const centered = m.transform(centerMatrix)
+        m.delete()
+        m = centered
       }
     }
 
@@ -752,7 +781,10 @@ export async function handleRebuildScene(msg: RebuildSceneMessage): Promise<void
       shapeInfos.set(op.id as string, { shapeType: st, params: par, filletRadius: 0 })
       currentTransforms.set(op.id as string, { ...t })
     } else if (op.type === 'import_mesh') {
-      const t: RebuildTransform = { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
+      const raw = op.transform as { x: number; y: number; z: number; rotX: number; rotY: number; rotZ: number; scaleX?: number; scaleY?: number; scaleZ?: number } | undefined
+      const t: RebuildTransform = raw
+        ? { x: raw.x, y: raw.y, z: raw.z, rotX: raw.rotX, rotY: raw.rotY, rotZ: raw.rotZ, scaleX: raw.scaleX ?? 1, scaleY: raw.scaleY ?? 1, scaleZ: raw.scaleZ ?? 1 }
+        : { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
       currentTransforms.set(op.id as string, t)
       shapeInfos.set(op.id as string, { shapeType: 'import_mesh', params: {}, filletRadius: 0 })
     } else if (op.type === 'fillet') {
@@ -776,8 +808,15 @@ export async function handleRebuildScene(msg: RebuildSceneMessage): Promise<void
           const nt = applyMoveDelta(t, d, rd, sd)
           currentTransforms.set(id, nt)
           if (info) {
-            const m = applyTransform(buildPrimitiveWithFillet(info.shapeType, info.params, info.filletRadius), nt)
-            setCached(id, m)
+            const fresh = buildPrimitiveWithFillet(info.shapeType, info.params, info.filletRadius)
+            const fullMatrix = buildTransformMatrix(
+              { x: nt.x, y: nt.y, z: nt.z },
+              { rotX: nt.rotX, rotY: nt.rotY, rotZ: nt.rotZ },
+              { scaleX: nt.scaleX, scaleY: nt.scaleY, scaleZ: nt.scaleZ },
+            )
+            const tm = fresh.transform(fullMatrix)
+            fresh.delete()
+            setCached(id, tm)
           }
         } else {
           const cm = cache.get(id)
@@ -1124,27 +1163,40 @@ export async function handleMirrorObject(msg: MirrorObjectMessage): Promise<void
     const fresh = buildPrimitive(msg.shapeType, msg.params)
     const mirror = getMirrorMatrix(msg.plane)
     const mirrored = fresh.transform(mirror)
-    setCached(msg.objId, mirrored)
-    mesh = extractMesh(mirrored)
+    
+    // Применяем полную трансформацию (position, rotation, scale) к зеркальному мешу
+    if (msg.transform) {
+      const transformMatrix = buildTransformMatrix(
+        { x: msg.transform.x, y: msg.transform.y, z: msg.transform.z },
+        { rotX: msg.transform.rotX, rotY: msg.transform.rotY, rotZ: msg.transform.rotZ },
+        { scaleX: msg.transform.scaleX, scaleY: msg.transform.scaleY, scaleZ: msg.transform.scaleZ }
+      )
+      const fullyTransformed = mirrored.transform(transformMatrix)
+      setCached(msg.objId, fullyTransformed)
+      mesh = extractMesh(fullyTransformed)
+    } else {
+      setCached(msg.objId, mirrored)
+      mesh = extractMesh(mirrored)
+    }
   }
   // Для CSG / импорта (shapeType/params отсутствуют) - сдвигаем к origin, зеркалим
   else {
     if (!msg.transform) throw new Error(`Transform is required for CSG/import objects`)
-    const { x, y, z } = msg.transform
-    // 1. Обратное перемещение к origin + зеркало за один шаг
-    const wasm = getWasm()
-    const mirror = getMirrorMatrix(msg.plane)
-    // Матрица:Mirror * Translate(-x,-y,-z)
-    const combinedMatrix = [
-      mirror[0], mirror[1], mirror[2], mirror[3],
-      mirror[4], mirror[5], mirror[6], mirror[7],
-      mirror[8], mirror[9], mirror[10], mirror[11],
-      mirror[12] - x, mirror[13] - y, mirror[14] - z, mirror[15]
-    ]
-    const mirrored = src.transform(combinedMatrix)
     
-    setCached(msg.objId, mirrored)
-    mesh = extractMesh(mirrored)
+    // 1. Зеркалим геометрию (только mirror matrix, без position/scale/rotation)
+    const mirror = getMirrorMatrix(msg.plane)
+    const mirrored = src.transform(mirror)
+    
+    // 2. Применяем полную трансформацию (position, rotation, scale) к зеркальному мешу
+    const transformMatrix = buildTransformMatrix(
+      { x: msg.transform.x, y: msg.transform.y, z: msg.transform.z },
+      { rotX: msg.transform.rotX, rotY: msg.transform.rotY, rotZ: msg.transform.rotZ },
+      { scaleX: msg.transform.scaleX, scaleY: msg.transform.scaleY, scaleZ: msg.transform.scaleZ }
+    )
+    const fullyTransformed = mirrored.transform(transformMatrix)
+    
+    setCached(msg.objId, fullyTransformed)
+    mesh = extractMesh(fullyTransformed)
   }
 
   safePostMessage(

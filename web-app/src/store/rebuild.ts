@@ -312,7 +312,8 @@ export function rebuildBuildTree(ops: TinkerCraftOperation[]): void {
         const treeOp = (op as { treeOperation?: 'union' | 'subtract' | 'intersect' }).treeOperation
           ?? (isSubtract ? 'subtract' : isIntersect ? 'intersect' : 'union')
         try {
-          createBooleanNode(op.resultId, treeOp, op.ids[0], op.ids[1])
+          // Pass the transform to the boolean node creation
+          createBooleanNode(op.resultId, treeOp, op.ids[0], op.ids[1], startT)
         } catch {
           // Tree creation failed (e.g., orphaned CSG) — skip
           console.warn('[rebuildBuildTree] Failed to create boolean node:', op.resultId)

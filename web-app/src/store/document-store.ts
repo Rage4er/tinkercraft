@@ -43,6 +43,7 @@ import {
   createBooleanNode,
   createBakedNode,
   mirrorTreeNode,
+  syncNodeTransform,
   cloneSubtree,
   rebuildNode,
   computeNodeBBox,
@@ -352,6 +353,10 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       // Now perform CSG — workerCsgBooleanWithSync will:
       // - skip operands already in cache (CSG results, imported meshes synced above)
       // - rebuild regular primitives from shapeType/params via buildTransformMatrix
+      // СИНХРОНИЗИРУЕМ ТРАНСФОРМАЦИИ ИЗ STORE ПЕРЕД ОПЕРАЦИЕЙ
+      syncNodeTransform(idA, objects[idA].transform)
+      syncNodeTransform(idB, objects[idB].transform)
+      
       const srOf = (id: string) => {
         const t = objects[id].transform
         return { x: t.x, y: t.y, z: t.z, rotX: t.rotX, rotY: t.rotY, rotZ: t.rotZ, scaleX: t.scaleX, scaleY: t.scaleY, scaleZ: t.scaleZ }
@@ -366,7 +371,21 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const { cx, cy, cz, aabb } = extractAndCenterGetAABB(mesh.vertices)
       // Store original bbox size for CSG results — used to compute scale relative to original dimensions
       const originalBboxSize = { x: aabb.max.x - aabb.min.x, y: aabb.max.y - aabb.min.y, z: aabb.max.z - aabb.min.z }
-      const newObj: SceneObject = { id: resultId, shapeType: 'cube', params: {}, color: objects[idA].color, transform: { x: cx, y: cy, z: cz, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }, visible: true, locked: false, vertices: mesh.vertices, indices: mesh.indices, normals: mesh.normals, aabb, originalBboxSize }
+      
+      // ИСПОЛЬЗУЕМ СРЕДНЮЮ ТРАНСФОРМАЦИЮ ИЗ ОСНОВНЫХ ОБЪЕКТОВ ВМЕСТО СБОРА
+      const avgTransform = {
+        x: (objects[idA].transform.x + objects[idB].transform.x) / 2,
+        y: (objects[idA].transform.y + objects[idB].transform.y) / 2,
+        z: (objects[idA].transform.z + objects[idB].transform.z) / 2,
+        rotX: (objects[idA].transform.rotX + objects[idB].transform.rotX) / 2,
+        rotY: (objects[idA].transform.rotY + objects[idB].transform.rotY) / 2,
+        rotZ: (objects[idA].transform.rotZ + objects[idB].transform.rotZ) / 2,
+        scaleX: (objects[idA].transform.scaleX + objects[idB].transform.scaleX) / 2,
+        scaleY: (objects[idA].transform.scaleY + objects[idB].transform.scaleY) / 2,
+        scaleZ: (objects[idA].transform.scaleZ + objects[idB].transform.scaleZ) / 2,
+      }
+      
+      const newObj: SceneObject = { id: resultId, shapeType: 'cube', params: {}, color: objects[idA].color, transform: avgTransform, visible: true, locked: false, vertices: mesh.vertices, indices: mesh.indices, normals: mesh.normals, aabb, originalBboxSize }
       const newObjects = { ...objects }; delete newObjects[idA]; delete newObjects[idB]; newObjects[resultId] = newObj
       // FIX (CRIT-CSG-2): Store result vertices/indices AND center position
       // in GroupOperation so rebuildFromHistory can reconstruct the CSG result
@@ -389,7 +408,18 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
        ensureInTree(idA)
        ensureInTree(idB)
        // Register boolean node in build tree BEFORE caching snapshot
-       createBooleanNode(resultId, op as 'union' | 'subtract' | 'intersect', idA, idB)
+       // Используем среднюю трансформацию из исходных объектов для результата CSG
+       createBooleanNode(resultId, op as 'union' | 'subtract' | 'intersect', idA, idB, {
+         x: (objects[idA].transform.x + objects[idB].transform.x) / 2,
+         y: (objects[idA].transform.y + objects[idB].transform.y) / 2,
+         z: (objects[idA].transform.z + objects[idB].transform.z) / 2,
+         rotX: (objects[idA].transform.rotX + objects[idB].transform.rotX) / 2,
+         rotY: (objects[idA].transform.rotY + objects[idB].transform.rotY) / 2,
+         rotZ: (objects[idA].transform.rotZ + objects[idB].transform.rotZ) / 2,
+         scaleX: (objects[idA].transform.scaleX + objects[idB].transform.scaleX) / 2,
+         scaleY: (objects[idA].transform.scaleY + objects[idB].transform.scaleY) / 2,
+         scaleZ: (objects[idA].transform.scaleZ + objects[idB].transform.scaleZ) / 2,
+       })
        set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, selectedIds: [resultId], modified: true, busy: false, lastCsgMs: ms })
        cacheSnapshotWithTree(newOps.length, newObjects)
        // Rebuild tree node to cache the mesh in history-tree
@@ -398,44 +428,74 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   },
 
   // ── Move ──
-  moveObject: async (id, transform) => {
+  moveObject: async (id, newTransform) => {
     if (get().busy) return
     const { objects, operations, historyIndex } = get()
     const obj = objects[id]
     if (!obj) return
-    const delta: Vec3 = { x: transform.x - obj.transform.x, y: transform.y - obj.transform.y, z: transform.z - obj.transform.z }
-    const rotDelta: Vec3 = { x: transform.rotX - obj.transform.rotX, y: transform.rotY - obj.transform.rotY, z: transform.rotZ - obj.transform.rotZ }
-    const scaleDelta: Vec3 = { x: transform.scaleX - obj.transform.scaleX, y: transform.scaleY - obj.transform.scaleY, z: transform.scaleZ - obj.transform.scaleZ }
-    const hasPos = delta.x !== 0 || delta.y !== 0 || delta.z !== 0
-    const hasRot = rotDelta.x !== 0 || rotDelta.y !== 0 || rotDelta.z !== 0
-    const hasScale = scaleDelta.x !== 0 || scaleDelta.y !== 0 || scaleDelta.z !== 0
-    const kind = hasScale && !hasPos && !hasRot ? 'scale' : hasRot && !hasPos && !hasScale ? 'rotate' : 'translate'
-    const op: MoveOperation = { type: 'move', ids: [id], delta, rotDelta, scaleDelta, kind }
+    
+    // ВСЕ объекты должны быть зарегистрированы в дереве
+    const treeExists = getNode(id) !== undefined
+    
+    if (!treeExists) {
+      // Для простых объектов создаём primitive ноду
+      if (obj.shapeType && obj.params) {
+        createPrimitiveNode(id, obj.shapeType, obj.params, obj.transform)
+      } else {
+        // Для CSG/baked создаём baked ноду
+        createBakedNode(id, obj.vertices || new Float32Array(), obj.indices || new Uint32Array(), obj.normals || null, obj.transform)
+      }
+    }
+    
+    // Используем дерево как единственный источник правды
+    const delta: Vec3 = {
+      x: newTransform.x - obj.transform.x,
+      y: newTransform.y - obj.transform.y,
+      z: newTransform.z - obj.transform.z
+    }
+    
+    // Move в дереве и пересобираем меш
+    moveTreeNode(id, delta)
+    const mesh = await rebuildNode(id)
+    
+    // Обновляем объект в store с правильными геометрией и трансформацией
+    const newObj = makeObject({
+      ...obj,
+      transform: newTransform,
+      vertices: mesh.vertices,
+      indices: mesh.indices,
+      normals: mesh.normals
+    })
+    
+    const newObjects = { ...objects, [id]: newObj }
+    const rotDelta = {
+      x: newTransform.rotX - obj.transform.rotX,
+      y: newTransform.rotY - obj.transform.rotY,
+      z: newTransform.rotZ - obj.transform.rotZ,
+    }
+    const scaleDelta = {
+      x: newTransform.scaleX - obj.transform.scaleX,
+      y: newTransform.scaleY - obj.transform.scaleY,
+      z: newTransform.scaleZ - obj.transform.scaleZ,
+    }
+    const kind: 'translate' | 'rotate' | 'scale' =
+      Math.abs(scaleDelta.x) > 1e-6 || Math.abs(scaleDelta.y) > 1e-6 || Math.abs(scaleDelta.z) > 1e-6
+        ? 'scale'
+        : Math.abs(rotDelta.x) > 1e-6 || Math.abs(rotDelta.y) > 1e-6 || Math.abs(rotDelta.z) > 1e-6
+          ? 'rotate'
+          : 'translate'
+    const op: MoveOperation = {
+      type: 'move',
+      ids: [id],
+      delta,
+      rotDelta,
+      scaleDelta,
+      kind,
+    }
     const newOps = [...operations.slice(0, historyIndex), op]
-    const newObjects = { ...objects, [id]: { ...obj, transform } }
+    
     set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true })
     cacheSnapshotWithTree(newOps.length, newObjects)
-    // BuildTree: move the node in the tree (updates localTransform on all primitives in subtree)
-    moveTreeNode(id, { x: delta.x, y: delta.y, z: delta.z })
-    // Sync worker cache so subsequent CSG/mirror operations use correct position (WARN-R6-2)
-    // FIX (CRIT-CSG-3): For CSG results (shapeType='cube' with no params) and imported meshes,
-    // use workerSyncMesh to preserve actual geometry. workerSyncObjects rebuilds from shapeType/params
-    // which loses all CSG geometry (shapeType='cube', params={} → default cube).
-    if (obj.shapeType === 'cube' && !obj.params.width) {
-      // CSG result — sync actual mesh data
-      workerSyncMesh(id, obj.vertices, obj.indices, { x: transform.x, y: transform.y, z: transform.z, rotX: transform.rotX, rotY: transform.rotY, rotZ: transform.rotZ, scaleX: transform.scaleX, scaleY: transform.scaleY, scaleZ: transform.scaleZ }).catch(e => console.error('moveObject syncMesh:', e))
-    } else if (obj.shapeType === 'import_mesh') {
-      // Imported mesh — sync actual mesh data
-      workerSyncMesh(id, obj.vertices, obj.indices, { x: transform.x, y: transform.y, z: transform.z, rotX: transform.rotX, rotY: transform.rotY, rotZ: transform.rotZ, scaleX: transform.scaleX, scaleY: transform.scaleY, scaleZ: transform.scaleZ }).catch(e => console.error('moveObject syncMesh:', e))
-    } else {
-      // Regular primitive — sync via shapeType/params (more efficient)
-      workerSyncObjects([{
-        objId: id,
-        shapeType: obj.shapeType,
-        params: obj.params,
-        transform: { x: transform.x, y: transform.y, z: transform.z, rotX: transform.rotX, rotY: transform.rotY, rotZ: transform.rotZ, scaleX: transform.scaleX, scaleY: transform.scaleY, scaleZ: transform.scaleZ },
-      }]).catch(e => console.error('moveObject sync:', e))
-    }
   },
 
   // ── Color ──
@@ -512,95 +572,71 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         originalIds.push(id)
         const obj = objects[id]
         
-        // BuildTree: clone subtree + mirror the clone
-        // Check if node exists in tree (may not if created before BuildTree or via rebuildFromHistory)
+        // ВСЕ объекты должны быть зарегистрированы в дереве при создании
+        // Если объект не в дереве (из-за rebuildFromHistory или старых данных) — создаём fallback ноду
         const treeExists = getNode(id) !== undefined
-        let mirroredTransform = { ...obj.transform }
         
-        if (treeExists) {
-          try {
-            const treeId = `mirror_${nextId()}`
-            const treeClone = cloneSubtree(id, treeId)
-            
-            // Mirror the cloned subtree
-            mirrorTreeNode(treeId, plane)
-            
-            // Extract mirrored transform from the tree clone's root primitive/baked node
-            const clonedNode = getNode(treeId)
-            if (clonedNode) {
-              if (clonedNode.type === 'primitive' && clonedNode.localTransform) {
-                mirroredTransform = { ...clonedNode.localTransform }
-              } else if (clonedNode.type === 'baked' && clonedNode.localTransform) {
-                mirroredTransform = { ...clonedNode.localTransform }
-              } else if (clonedNode.type === 'boolean' && clonedNode.children) {
-                // For boolean nodes, extract from the first child's local transform
-                const firstChild = getNode(clonedNode.children[0])
-                if (firstChild && firstChild.localTransform) {
-                  mirroredTransform = { ...firstChild.localTransform }
-                }
-              }
-            }
-          } catch {
-            // Tree clone failed — fall through to worker mirror
-            mirroredTransform = { ...obj.transform }
+        if (!treeExists) {
+          // Для простых объектов создаём primitive ноду
+          if (obj.shapeType && obj.params) {
+            createPrimitiveNode(id, obj.shapeType, obj.params, obj.transform)
+          } else {
+            // Для CSG/baked создаём baked ноду
+            createBakedNode(id, obj.vertices || new Float32Array(), obj.indices || new Uint32Array(), obj.normals || null, obj.transform)
           }
         }
         
-        // Определяем, является ли объект примитивом
-        const isPrimitive = obj.shapeType !== 'cube' || (obj.shapeType === 'cube' && obj.params.width)
+        // СИНХРОНИЗИРУЕМ ТРАНСФОРМАЦИИ ИЗ STORE ПЕРЕД ОПЕРАЦИЕЙ
+        syncNodeTransform(id, obj.transform)
         
-        // Для примитивов передаем shapeType, params и transform
-        const mesh = isPrimitive
-          ? await workerMirrorObject(id, plane, obj.shapeType, obj.params as Record<string, number>, obj.transform)
-          : await workerMirrorObject(id, plane, undefined, undefined, obj.transform)
+        // Клонируем поддерево и зеркалим
+        const treeId = `mirror_${nextId()}`
+        cloneSubtree(id, treeId)
+        mirrorTreeNode(treeId, plane)
         
-        // Для примитивов используем applyMirrorToTransform (инвертируем позицию и соответствующие углы)
-        if (isPrimitive) {
-          // Временная реализация applyMirrorToTransform
-          const t = { ...obj.transform }
-          if (plane === 'YZ') { t.x = -t.x; t.rotX = -t.rotX }
-          if (plane === 'XZ') { t.y = -t.y; t.rotY = -t.rotY }
-          if (plane === 'XY') { t.z = -t.z; t.rotZ = -t.rotZ }
-          
-          // СОЗДАЕМ НОВЫЙ ОБЪЕКТ с уникальным ID
-          const newId = nextId()
-          const newObj = makeObject({
-            ...obj,
-            id: newId,
-            transform: t,
-            vertices: mesh.vertices,
-            indices: mesh.indices,
-            normals: mesh.normals
-          })
-          newObjects[newId] = newObj
-          newIds.push(newId)
-          // ✅ РЕГИСТРИРУЕМ в дереве — чтобы следующее зеркало нашло ноду
-          createPrimitiveNode(newId, obj.shapeType!, obj.params!, t)
+        // Извлекаем зеркальный меш из дерева
+        const mesh = await rebuildNode(treeId)
+        
+        // Извлекаем трансформацию из зеркальной ноды
+        const clonedNode = getNode(treeId)
+        let finalTransform = { ...obj.transform }
+        
+        if (clonedNode) {
+          if (clonedNode.type === 'primitive' && clonedNode.localTransform) {
+            finalTransform = { ...clonedNode.localTransform }
+          } else if (clonedNode.type === 'baked' && clonedNode.localTransform) {
+            finalTransform = { ...clonedNode.localTransform }
+          } else if (clonedNode.type === 'boolean' && clonedNode.children) {
+            // Для boolean нод извлекаем трансформацию из первого дочернего элемента
+            const firstChild = getNode(clonedNode.children[0])
+            if (firstChild && firstChild.localTransform) {
+              finalTransform = { ...firstChild.localTransform }
+            }
+          }
         }
-        // Для CSG / импорта сбрасываем scale и rotation, оставляем только зеркальную позицию
-        else {
-          const t = { ...obj.transform }
-          t.scaleX = t.scaleY = t.scaleZ = 1
-          t.rotX = t.rotY = t.rotZ = 0
-          if (plane === 'YZ') t.x = -t.x
-          if (plane === 'XZ') t.y = -t.y
-          if (plane === 'XY') t.z = -t.z
-          
-          // СОЗДАЕМ НОВЫЙ ОБЪЕКТ с уникальным ID
-          const newId = nextId()
-          const newObj = makeObject({
-            ...obj,
-            id: newId,
-            transform: t,
-            vertices: mesh.vertices,
-            indices: mesh.indices,
-            normals: mesh.normals
-          })
-          newObjects[newId] = newObj
-          newIds.push(newId)
-          // ✅ РЕГИСТРИРУЕМ в дереве — fallback-копия должна быть доступна для следующего зеркала
-          createBakedNode(newId, mesh.vertices, mesh.indices, mesh.normals, t)
+        
+        // СОЗДАЕМ НОВЫЙ ОБЪЕКТ с уникальным ID
+        const newId = nextId()
+        const newObj = makeObject({
+          ...obj,
+          id: newId,
+          transform: finalTransform,
+          vertices: mesh.vertices,
+          indices: mesh.indices,
+          normals: mesh.normals
+        })
+        newObjects[newId] = newObj
+        newIds.push(newId)
+        
+        // ✅ РЕГИСТРИРУЕМ в дереве — зеркальная копия как полноценная нода
+        if (clonedNode?.type === 'primitive' && obj.shapeType && obj.params) {
+          createPrimitiveNode(newId, obj.shapeType, obj.params, finalTransform)
+        } else {
+          createBakedNode(newId, mesh.vertices || new Float32Array(), mesh.indices || new Uint32Array(), mesh.normals || null, finalTransform)
         }
+        
+        // Удаляем временную зеркальную ноду из дерева
+        deleteNode(treeId)
       }
       
       const op: MirrorOperation = { type: 'mirror', originalIds, ids: newIds, plane }
@@ -758,60 +794,101 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const { objects, operations, historyIndex } = get()
     const obj = objects[id]
     if (!obj || obj.shapeType === 'import_mesh') return
-    // FIX (RESIZE-CSG): For CSG results (shapeType='cube' with no params),
-    // use scale transformation instead of rebuilding from shapeType/params.
-    // Rebuilding would lose CSG geometry (shapeType='cube', params={} → default cube).
-    const isCsgResult = obj.shapeType === 'cube' && !obj.params.width
-    if (!isCsgResult) {
+    
+    // ВСЕ объекты должны быть зарегистрированы в дереве
+    const treeExists = getNode(id) !== undefined
+    
+    // СИНХРОНИЗИРУЕМ ТРАНСФОРМАЦИЮ ИЗ STORE ПЕРЕД ОПЕРАЦИЕЙ
+    syncNodeTransform(id, obj.transform)
+    
+    if (!treeExists) {
+      // Для простых объектов создаём primitive ноду
+      if (obj.shapeType && obj.params) {
+        createPrimitiveNode(id, obj.shapeType, obj.params, obj.transform)
+      } else {
+        // Для CSG/baked создаём baked ноду
+        createBakedNode(id, obj.vertices || new Float32Array(), obj.indices || new Uint32Array(), obj.normals || null, obj.transform)
+      }
+    }
+    
+    // Для примитивов: обновляем params в дереве и пересобираем
+    if (obj.shapeType && obj.params) {
       const mergedParams = { ...obj.params, ...params }
+      
+      // Обновляем params в ноде дерева
+      const node = getNode(id)
+      if (node && node.type === 'primitive') {
+        node.params = mergedParams
+      }
+      
       set({ busy: true })
       try {
         const t0 = performance.now()
-        const mesh = await workerBuildShape(id, obj.shapeType, mergedParams, obj.transform)
+        // Пересобираем меш с новыми параметрами
+        const mesh = await rebuildNode(id)
         const ms = performance.now() - t0
+        
+        const newObj = makeObject({
+          ...obj,
+          params: mergedParams,
+          vertices: mesh.vertices,
+          indices: mesh.indices,
+          normals: mesh.normals
+        })
+        
         const op: ResizeDimsOperation = { type: 'resize_dims', id, params: mergedParams }
         const newOps = [...operations.slice(0, historyIndex), op]
-        const newObjects = { ...objects, [id]: makeObject({ ...obj, params: mergedParams, vertices: mesh.vertices, indices: mesh.indices, normals: mesh.normals }) }
+        const newObjects = { ...objects, [id]: newObj }
+        
         set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true, busy: false, lastCsgMs: ms })
         cacheSnapshotWithTree(newOps.length, newObjects)
       } catch (e) { set({ busy: false }); console.error('resizeObject:', e) }
-      return
     }
-
-    // CSG result: set bbox dimensions directly without scale
-    // FIX (RESIZE-CSG): Don't compute scale relative to originalBboxSize.
-    // Instead, set the bbox dimensions directly in mm, resetting scale to 1.
-    // The bbox dimensions shown in properties should be the real size in mm.
-    const bbox = obj.aabb ?? computeAABB(obj.vertices)
-    const currentSize = {
-      x: bbox.max.x - bbox.min.x,
-      y: bbox.max.y - bbox.min.y,
-      z: bbox.max.z - bbox.min.z,
+    // Для CSG результатов: используем scale трансформацию
+    else {
+      const bbox = obj.aabb ?? computeAABB(obj.vertices)
+      const currentSize = {
+        x: bbox.max.x - bbox.min.x,
+        y: bbox.max.y - bbox.min.y,
+        z: bbox.max.z - bbox.min.z,
+      }
+      
+      const targetWidth = params.width ?? currentSize.x
+      const targetHeight = params.height ?? currentSize.y
+      const targetDepth = params.depth ?? currentSize.z
+      
+      // Вычисляем новый scale
+      const newTransform = {
+        ...obj.transform,
+        scaleX: targetWidth / currentSize.x,
+        scaleY: targetHeight / currentSize.y,
+        scaleZ: targetDepth / currentSize.z,
+      }
+      
+      // Для CSG объектов в дереве: создаём baked ноду с scale
+      const node = getNode(id)
+      if (node) {
+        node.localTransform = newTransform
+      }
+      
+      // Синхронизируем с worker
+      const mesh = await rebuildNode(id)
+      
+      const newObj = makeObject({
+        ...obj,
+        transform: newTransform,
+        vertices: mesh.vertices,
+        indices: mesh.indices,
+        normals: mesh.normals
+      })
+      
+      const op: ResizeDimsOperation = { type: 'resize_dims', id, params }
+      const newOps = [...operations.slice(0, historyIndex), op]
+      const newObjects = { ...objects, [id]: newObj }
+      
+      set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true })
+      cacheSnapshotWithTree(newOps.length, newObjects)
     }
-    const targetWidth = params.width ?? currentSize.x
-    const targetHeight = params.height ?? currentSize.y
-    const targetDepth = params.depth ?? currentSize.z
-
-    // Reset scale to 1 and set new bbox dimensions
-    const newTransform = {
-      ...obj.transform,
-      scaleX: 1,
-      scaleY: 1,
-      scaleZ: 1,
-    }
-
-    const op: ResizeDimsOperation = { type: 'resize_dims', id, params }
-    const newOps = [...operations.slice(0, historyIndex), op]
-    const newObjects = { ...objects, [id]: { ...obj, transform: newTransform, originalBboxSize: { x: targetWidth, y: targetHeight, z: targetDepth } } }
-    set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true })
-    cacheSnapshotWithTree(newOps.length, newObjects)
-
-    // Sync worker cache with reset scale
-    workerSyncMesh(id, obj.vertices, obj.indices, {
-      x: newTransform.x, y: newTransform.y, z: newTransform.z,
-      rotX: newTransform.rotX, rotY: newTransform.rotY, rotZ: newTransform.rotZ,
-      scaleX: 1, scaleY: 1, scaleZ: 1,
-    }).catch(e => console.error('resizeObject syncMesh:', e))
   },
 
   // ── Extrude ──

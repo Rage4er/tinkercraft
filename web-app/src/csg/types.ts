@@ -184,6 +184,7 @@ export interface ExtractedMesh {
   indices: Uint32Array
   normals?: Float32Array | null
   tris?: number
+  ms?: number
 }
 
 /**

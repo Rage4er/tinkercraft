@@ -356,7 +356,7 @@ export default function Viewport3D({
       const now = performance.now();
       fpsRef.current.frames++;
       if (now - fpsRef.current.last >= 500) {
-        onFpsUpdate(
+        fpsUpdateRef.current(
           Math.round(
             (fpsRef.current.frames * 1000) / (now - fpsRef.current.last),
           ),
@@ -687,8 +687,6 @@ export default function Viewport3D({
           setSnapPreviewPoint(result.point);
           setSnapPreviewType(result.type);
         } else {
-          // DEBUG: Логируем отсутствие привязки
-          console.log('DEBUG: No snap result');
           setSnapPreviewPoint(null);
           setSnapPreviewType(null);
         }

@@ -20,6 +20,7 @@ import {
   sanitizeParams,
   extractMesh,
   ManifoldObject,
+  isWasmReady,
 } from './worker-handlers'
 import { buildTransformMatrix } from './worker-matrix'
 import { workerRebuildNode } from './worker-client'
@@ -89,11 +90,16 @@ export function createPrimitiveNode(
  * Create a boolean operation node.
  * Sets parentId on children and checks for cycles.
  */
+/**
+ * Create a boolean node with optional transform.
+ * Boolean nodes can have their own transform to position/rotate/scale the result.
+ */
 export function createBooleanNode(
   id: string,
   operation: 'union' | 'subtract' | 'intersect',
   childA: string,
   childB: string,
+  transform?: TransformNR,
 ): TreeNode {
   // Guard: self-reference
   if (childA === id || childB === id) {
@@ -109,6 +115,7 @@ export function createBooleanNode(
     type: 'boolean',
     operation,
     children: [childA, childB],
+    localTransform: transform ? { ...transform } : undefined,
   }
   treeNodes.set(id, node)
 
@@ -321,14 +328,29 @@ export async function rebuildNode(nodeId: string): Promise<ExtractedMesh> {
 
   let result: ExtractedMesh
 
-  if (node.type === 'primitive') {
-    result = rebuildPrimitive(node)
-  } else if (node.type === 'baked') {
-    result = transformBakedMesh(node)
-  } else if (node.type === 'boolean' && node.children) {
-    result = await applyCSGMeshes(node)
+  // Check if WASM is ready, if not — use worker
+  if (isWasmReady()) {
+    // Local rebuild with WASM
+    if (node.type === 'primitive') {
+      result = rebuildPrimitive(node)
+    } else if (node.type === 'baked') {
+      result = transformBakedMesh(node)
+    } else if (node.type === 'boolean' && node.children) {
+      result = await applyCSGMeshes(node)
+    } else {
+      throw new Error(`Unknown node type: ${node.type}`)
+    }
   } else {
-    throw new Error(`Unknown node type: ${node.type}`)
+    // Worker rebuild — collect subtree data and send to worker
+    const subtreeData = collectSubtreeForWorker(nodeId)
+    const resultMesh = await workerRebuildNode(nodeId, subtreeData)
+    result = {
+      vertices: resultMesh.vertices,
+      indices: resultMesh.indices,
+      normals: resultMesh.normals,
+      tris: resultMesh.tris,
+      ms: resultMesh.ms
+    }
   }
 
   // Cache the result
@@ -338,8 +360,68 @@ export async function rebuildNode(nodeId: string): Promise<ExtractedMesh> {
 }
 
 /**
+ * Collect subtree data for worker rebuild.
+ * Returns all nodes in the subtree with their current state.
+ */
+function collectSubtreeForWorker(rootId: string): Array<{
+  id: string
+  type: 'primitive' | 'boolean' | 'baked'
+  shapeType?: string
+  params?: Record<string, number>
+  localTransform?: { x: number; y: number; z: number; rotX: number; rotY: number; rotZ: number; scaleX: number; scaleY: number; scaleZ: number }
+  vertices?: number[]
+  indices?: number[]
+  normals?: number[]
+  operation?: 'union' | 'subtract' | 'intersect'
+  children?: string[]
+}> {
+  const nodes: Array<any> = []
+  const visited = new Set<string>()
+
+  function collect(id: string): void {
+    if (visited.has(id)) return
+    
+    const node = treeNodes.get(id)
+    if (!node) return
+    
+    visited.add(id)
+    
+    // Convert TreeNode to worker-compatible format
+    const workerNode: any = {
+      id: node.id,
+      type: node.type,
+    }
+    
+    if (node.shapeType !== undefined) workerNode.shapeType = node.shapeType
+    if (node.params !== undefined) workerNode.params = node.params as Record<string, number>
+    if (node.localTransform !== undefined) workerNode.localTransform = node.localTransform
+    if (node.vertices !== undefined) workerNode.vertices = Array.from(node.vertices)
+    if (node.indices !== undefined) workerNode.indices = Array.from(node.indices)
+    if (node.normals !== undefined) workerNode.normals = Array.from(node.normals || [])
+    if (node.operation !== undefined) workerNode.operation = node.operation
+    if (node.children !== undefined) workerNode.children = node.children
+    
+    nodes.push(workerNode)
+    
+    // Recursively collect children
+    if (node.children) {
+      for (const childId of node.children) {
+        collect(childId)
+      }
+    }
+  }
+
+  collect(rootId)
+  return nodes
+}
+
+/**
  * Apply a CSG boolean operation between two child nodes.
  * Uses workerRebuildNode for efficient tree-based CSG.
+ *
+ * FIX (BUG-CSG-POS-3): Center the result mesh (like extractAndCenter does on first creation)
+ * and apply boolean node's localTransform. Children have their transforms applied (world coords),
+ * so boolean result is also in world coordinates. We must center it and apply localTransform.
  */
 async function applyCSGMeshes(node: TreeNode): Promise<ExtractedMesh> {
   if (!node.children || node.children.length !== 2) {
@@ -375,7 +457,49 @@ async function applyCSGMeshes(node: TreeNode): Promise<ExtractedMesh> {
   }))
 
   const result = await workerRebuildNode(node.id, nodeData)
-  return result
+  
+  // Worker centers the mesh but does NOT apply the boolean node's localTransform.
+  // We need to apply the localTransform here to position the result correctly.
+  // First, convert to Float32Array
+  let vertices = new Float32Array(result.vertices);
+  const indices = new Uint32Array(result.indices);
+  const normals = result.normals ? new Float32Array(result.normals) : null;
+  
+  // Apply localTransform if it exists
+  if (node.localTransform) {
+    const t = node.localTransform;
+    const matrix = buildTransformMatrix(
+      { x: t.x, y: t.y, z: t.z },
+      { rotX: t.rotX, rotY: t.rotY, rotZ: t.rotZ },
+      { scaleX: t.scaleX, scaleY: t.scaleY, scaleZ: t.scaleZ },
+    );
+    
+    // Apply transformation to vertices
+    for (let i = 0; i < vertices.length; i += 3) {
+      const x = vertices[i], y = vertices[i + 1], z = vertices[i + 2];
+      vertices[i] = matrix[0] * x + matrix[4] * y + matrix[8] * z + matrix[12];
+      vertices[i + 1] = matrix[1] * x + matrix[5] * y + matrix[9] * z + matrix[13];
+      vertices[i + 2] = matrix[2] * x + matrix[6] * y + matrix[10] * z + matrix[14];
+    }
+    
+    // Apply transformation to normals if they exist
+    if (normals) {
+      for (let i = 0; i < normals.length; i += 3) {
+        const nx = normals[i], ny = normals[i + 1], nz = normals[i + 2];
+        normals[i] = matrix[0] * nx + matrix[4] * ny + matrix[8] * nz;
+        normals[i + 1] = matrix[1] * nx + matrix[5] * ny + matrix[9] * nz;
+        normals[i + 2] = matrix[2] * nx + matrix[6] * ny + matrix[10] * nz;
+      }
+    }
+  }
+  
+  return {
+    vertices,
+    indices,
+    normals,
+    tris: result.tris,
+    ms: result.ms,
+  }
 }
 
 /** Rebuild a primitive node */
@@ -598,6 +722,17 @@ export function rotateTreeNode(
   })
 
   invalidateCache(nodeId)
+}
+
+/**
+ * Sync transform from store to tree node.
+ * Ensures tree has the latest transform before operations.
+ */
+export function syncNodeTransform(id: string, transform: TransformNR): void {
+  const node = treeNodes.get(id)
+  if (node && node.localTransform) {
+    node.localTransform = { ...transform }
+  }
 }
 
 // ---------------------------------------------------------------------------

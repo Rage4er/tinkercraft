@@ -1,5 +1,19 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed — CSG позиционирование (BUG-CSG-POS-5) (2026-07-24)
+- Исправлена проблема с разлетающимися фигурами после булевых операций (union/subtract/intersect)
+- Правильное применение transform к результатам CSG операций в дереве
+- Исправлено центрирование и позиционирование CSG результатов
+- Исправлена проблема разлёта координат после булевых операций
+- При rebuild boolean node mesh центрируется (как `extractAndCenter`)
+- Применяется `localTransform` boolean node для правильного позиционирования
+- Файлы:
+  - `web-app/src/csg/worker-handlers.ts` — [`handleRebuildTreeNode()`](web-app/src/csg/worker-handlers.ts:676)
+  - `web-app/src/csg/history-tree.ts` — [`applyCSGMeshes()`](web-app/src/csg/history-tree.ts:418)
+
+
 Все заметные изменения в этом проекте документируются в этом файле.
 
 Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/),
@@ -8,6 +22,14 @@
 ---
 
 ## [Unreleased]
+
+### Fixed — WASM initialization error (2026-07-23)
+
+- **FIXED:** rebuildNode теперь безопасна для вызова из главного потока — проверяет инициализацию WASM через `isWasmReady()`
+- **FIXED:** При неинициализированном WASM rebuildNode автоматически вызывает воркер через `workerRebuildNode`
+- **FIXED:** Добавлен `ms` свойство в `ExtractedMesh` интерфейс
+- **FIXED:** Исправлен `collectSubtreeForWorker` — корректное преобразование TreeNode в формат воркера
+- **FIXED:** Исправлен `Array.from(node.normals || [])` для избежания ошибки с null/undefined
 
 ### Added — BuildTree: Параметрическое дерево построения (2026-07-23)
 

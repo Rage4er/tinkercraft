@@ -369,9 +369,8 @@ export default function App() {
       {showPM && (
         <ProjectManagerModal
           onClose={() => setShowPM(false)}
-          onLoad={async (ops) => {
-            await loadFromProject("_direct");
-            void ops;
+          onLoad={async (id) => {
+            await loadFromProject(id);
           }}
           onSave={saveToProject}
           currentProjectId={currentProjectId ?? undefined}
