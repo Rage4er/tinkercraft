@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import Section from "./Section";
 import Timeline from "./Timeline";
 import ComponentTree from "./ComponentTree";
@@ -55,6 +55,9 @@ export default function LeftPanel({
         : ALL_SHAPES,
     [shapeSearch],
   );
+
+  // Filter dropdown state
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   return (
     <div className="panel-left">
@@ -156,17 +159,28 @@ export default function LeftPanel({
         title={`История ${historyIndex}/${operations.length}`}
         defaultOpen={true}
       >
-        <div className="tl-filters">
-          {Object.entries(OP_FILTER_LABELS).map(([key, label]) => (
-            <label key={key} className="tl-filter-row">
-              <input
-                type="checkbox"
-                checked={tlFilters[key] !== false}
-                onChange={(e) => onFilterChange(key, e.target.checked)}
-              />
-              {label}
-            </label>
-          ))}
+        {/* Filter dropdown */}
+        <div className="tl-filter-dropdown">
+          <button
+            className="btn btn-compact tl-filter-toggle"
+            onClick={() => setFiltersOpen(!filtersOpen)}
+          >
+            {filtersOpen ? "▲" : "▼"} Фильтр
+          </button>
+          {filtersOpen && (
+            <div className="tl-filter-panel">
+              {Object.entries(OP_FILTER_LABELS).map(([key, label]) => (
+                <label key={key} className="tl-filter-row">
+                  <input
+                    type="checkbox"
+                    checked={tlFilters[key] !== false}
+                    onChange={(e) => onFilterChange(key, e.target.checked)}
+                  />
+                  {label}
+                </label>
+              ))}
+            </div>
+          )}
         </div>
         <Timeline
           operations={operations}

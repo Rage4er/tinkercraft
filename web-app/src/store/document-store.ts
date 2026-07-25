@@ -15,12 +15,13 @@ import type {
   MoveOperation, ColorOperation, GroupOperation, RenameOperation, HideShowOperation,
   DeleteOperation,
   SceneObject, ShapeParams, TransformNR, Vec3,
+  TreeNode,
 } from '../csg/types'
 import {
   workerBuildShape, workerCsgBoolean, workerCsgBooleanWithSync,
   workerBuildImportedMesh, workerApplyFillet,
   workerMirrorObject, workerRebuildScene,
-  workerDeleteObjects, workerClearAll, workerSyncObjects,
+  workerDeleteObjects, workerClearAll, workerSyncObjects, workerSyncMesh,
 } from '../csg/worker-client'
 import { parseDoodle, serializeDoodle, openDoodleFilePicker, downloadBlob } from '../io/doodle-io'
 import { notify } from './notifications'
@@ -35,8 +36,57 @@ import { computeAABB, extractAndCenter, extractAndCenterGetAABB, makeObject, nex
 import type { ClipEntry } from './helpers'
 import type { DocumentStore } from './types'
 import { rebuildFromHistory } from './rebuild'
-import { cacheSnapshot, getCachedSnapshot, clearSnapshots } from './snapshots'
+import { cacheSnapshot, getCachedSnapshot, clearSnapshots, cacheTreeSnapshot, getCachedTreeSnapshot } from './snapshots'
 import { OBJECT_SPACING, PASTE_OFFSET, MOVE_DELTA_EPSILON } from '../constants'
+import {
+  createPrimitiveNode,
+  createBooleanNode,
+  createBakedNode,
+  mirrorTreeNode,
+  syncNodeTransform,
+  cloneSubtree,
+  rebuildNode,
+  computeNodeBBox,
+  bboxCenter,
+  getNode,
+  deleteNode,
+  clearTree,
+  moveTreeNode,
+} from '../csg/history-tree'
+import { getAllNodes } from '../csg/history-tree'
+
+// ── Tree snapshot helpers ──
+
+/** Restore build tree from cached snapshot */
+function restoreTreeFromSnapshot(index: number): void {
+  const treeSnap = getCachedTreeSnapshot(index)
+  if (!treeSnap) return
+
+  clearTree()
+  for (const nd of treeSnap.nodes) {
+    if (nd.type === 'primitive' && nd.shapeType && nd.params) {
+      createPrimitiveNode(nd.id, nd.shapeType as any, nd.params, nd.localTransform!)
+    } else if (nd.type === 'baked') {
+      const verts = nd.vertices ? new Float32Array(nd.vertices) : undefined
+      const idxs = nd.indices ? new Uint32Array(nd.indices) : undefined
+      const nrm = nd.normals ? new Float32Array(nd.normals) : null
+      createBakedNode(nd.id, verts!, idxs!, nrm, nd.localTransform!)
+    } else if (nd.type === 'boolean' && nd.operation && nd.children) {
+      createBooleanNode(nd.id, nd.operation, nd.children[0], nd.children[1])
+    }
+  }
+}
+
+/**
+ * Wrapper around cacheSnapshot that also caches the build tree.
+ * Replace all cacheSnapshot calls with this.
+ */
+function cacheSnapshotWithTree(index: number, objects: Record<string, SceneObject>): void {
+  cacheSnapshot(index, objects)
+  // Cache tree nodes (only the structure, not cached mesh/BBox/hash)
+  const nodes = getAllNodes()
+  cacheTreeSnapshot(index, nodes)
+}
 
 // ---- Store ----
 
@@ -73,12 +123,14 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     try {
       const t0 = performance.now()
       const mesh = await workerBuildShape(id, shapeType, finalParams, transform)
-      const ms = performance.now() - t0
-      const obj: SceneObject = makeObject({ id, shapeType, params: finalParams, color, transform, visible: true, locked: false, vertices: mesh.vertices, indices: mesh.indices, normals: mesh.normals })
-      const newOps = [...operations.slice(0, historyIndex), op]
-      const newObjects = { ...objects, [id]: obj }
-      set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true, busy: false, lastCsgMs: ms })
-      cacheSnapshot(newOps.length, newObjects)
+       const ms = performance.now() - t0
+       const obj: SceneObject = makeObject({ id, shapeType, params: finalParams, color, transform, visible: true, locked: false, vertices: mesh.vertices, indices: mesh.indices, normals: mesh.normals })
+       const newOps = [...operations.slice(0, historyIndex), op]
+       const newObjects = { ...objects, [id]: obj }
+       // Register in build tree BEFORE caching snapshot
+       createPrimitiveNode(id, shapeType, finalParams, transform)
+       set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true, busy: false, lastCsgMs: ms })
+       cacheSnapshotWithTree(newOps.length, newObjects)
     } catch (e) { set({ busy: false }); console.error('addShape:', e) }
   },
 
@@ -94,12 +146,14 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const t0 = performance.now()
       const result = await workerBuildImportedMesh(id, vertices, indices)
       const ms = performance.now() - t0
-      const obj: SceneObject = makeObject({ id, shapeType: 'import_mesh', params: {}, color, transform, visible: true, locked: false, vertices: result.vertices, indices: result.indices, normals: result.normals })
-      const op: ImportMeshOperation = { type: 'import_mesh', id, name, color, transform, vertices, indices }
-      const newOps = [...operations.slice(0, historyIndex), op]
-      const newObjects = { ...objects, [id]: obj }
-      set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, selectedIds: [id], modified: true, busy: false, lastCsgMs: ms })
-      cacheSnapshot(newOps.length, newObjects)
+       const obj: SceneObject = makeObject({ id, shapeType: 'import_mesh', params: {}, color, transform, visible: true, locked: false, vertices: result.vertices, indices: result.indices, normals: result.normals })
+       const op: ImportMeshOperation = { type: 'import_mesh', id, name, color, transform, vertices, indices }
+       const newOps = [...operations.slice(0, historyIndex), op]
+       const newObjects = { ...objects, [id]: obj }
+       // Register baked node in build tree BEFORE caching snapshot
+       createBakedNode(id, result.vertices, result.indices, result.normals, transform)
+       set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, selectedIds: [id], modified: true, busy: false, lastCsgMs: ms })
+       cacheSnapshotWithTree(newOps.length, newObjects)
     } catch (e) { set({ busy: false }); console.error('addRawMesh:', e) }
   },
 
@@ -120,12 +174,15 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const result = await workerBuildImportedMesh(id, mesh.vertices, mesh.indices)
       const ms = performance.now() - t0
 
-      const obj: SceneObject = makeObject({ id, shapeType: 'import_mesh', params: {}, color, transform: mesh.transform, visible: true, locked: false, vertices: result.vertices, indices: result.indices })
-      const op: ImportMeshOperation = { type: 'import_mesh', id, name: mesh.name, color, transform: mesh.transform, vertices: mesh.vertices, indices: mesh.indices }
-      const newOps = [...operations.slice(0, historyIndex), op]
-      const newObjects = { ...objects, [id]: obj }
-      set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, selectedIds: [id], modified: true, busy: false, lastCsgMs: ms })
-      cacheSnapshot(newOps.length, newObjects)
+      // BUG-R8-1: Передаём normals в makeObject для корректного рендеринга
+       const obj: SceneObject = makeObject({ id, shapeType: 'import_mesh', params: {}, color, transform: mesh.transform, visible: true, locked: false, vertices: result.vertices, indices: result.indices, normals: result.normals })
+       const op: ImportMeshOperation = { type: 'import_mesh', id, name: mesh.name, color, transform: mesh.transform, vertices: mesh.vertices, indices: mesh.indices }
+       const newOps = [...operations.slice(0, historyIndex), op]
+       const newObjects = { ...objects, [id]: obj }
+       // Register baked node in build tree BEFORE caching snapshot
+       createBakedNode(id, result.vertices, result.indices, result.normals, mesh.transform)
+       set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, selectedIds: [id], modified: true, busy: false, lastCsgMs: ms })
+       cacheSnapshotWithTree(newOps.length, newObjects)
     } catch (e) { set({ busy: false }); notify(`Ошибка импорта STL: ${e}`, 'error') }
   },
 
@@ -158,7 +215,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         busy: false,
         lastCsgMs: ms,
       })
-      cacheSnapshot(newOps.length, newObjects)
+      cacheSnapshotWithTree(newOps.length, newObjects)
     } catch (e) { set({ busy: false }); console.error('applyFillet:', e) }
   },
 
@@ -170,8 +227,9 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       if (!obj) return []
       const entry: ClipEntry = { shapeType: obj.shapeType, params: obj.params, color: obj.color, transform: obj.transform }
       if (obj.shapeType === 'import_mesh') {
-        entry.importVertices = Array.from(obj.vertices)
-        entry.importIndices = Array.from(obj.indices)
+        // PERF-R8-1: Храним TypedArray вместо number[] для экономии памяти (8×)
+        entry.importVertices = new Float32Array(obj.vertices)
+        entry.importIndices = new Uint32Array(obj.indices)
       }
       return [entry]
     })
@@ -212,7 +270,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
 
       const ms = performance.now() - t0
       set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, selectedIds: pastedIds, modified: true, busy: false, lastCsgMs: ms })
-      cacheSnapshot(newOps.length, newObjects)
+      cacheSnapshotWithTree(newOps.length, newObjects)
     } catch (e) {
       set({ busy: false })
       // Clean up partially created objects from worker cache
@@ -231,7 +289,11 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     if (ids.length === 0) return
     const op: DeleteOperation = { type: 'delete', ids }
     const newObjects = { ...objects }
-    for (const id of ids) delete newObjects[id]
+    for (const id of ids) {
+      delete newObjects[id]
+      // Remove from build tree
+      deleteNode(id)
+    }
     try {
       await workerDeleteObjects(ids)
     } catch (e) {
@@ -241,7 +303,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     }
     const newOps = [...operations.slice(0, historyIndex), op]
     set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, selectedIds: [], modified: true })
-    cacheSnapshot(newOps.length, newObjects)
+    cacheSnapshotWithTree(newOps.length, newObjects)
   },
 
   selectObjects: (ids, add) => {
@@ -268,8 +330,33 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     set({ busy: true })
     try {
       const t0 = performance.now()
-      // Single-call sync + CSG: rebuild operands in worker cache and
-      // perform the boolean in one round-trip (PERF-R6-2).
+      // FIX (CRIT-CSG-2): Sync operands that can't be rebuilt from shapeType/params
+      // (CSG results with shapeType='cube', params={} and imported meshes) into
+      // worker cache using their actual mesh data + transform. After this,
+      // workerCsgBooleanWithSync will skip rebuilding these operands (cache.has
+      // check in handleCsgBooleanSync) and use the synced mesh with correct
+      // position/rotation/scale.
+      const syncOperand = async (id: string) => {
+        const obj = objects[id]
+        if (!obj) return
+        // For CSG results (shapeType='cube' with no params) and imported meshes,
+        // sync the actual mesh data + transform. Regular primitives will be synced by
+        // workerCsgBooleanWithSync via buildTransformMatrix.
+        if (obj.shapeType === 'cube' && !obj.params.width) {
+          await workerSyncMesh(id, obj.vertices, obj.indices, obj.transform).catch(() => {})
+        } else if (obj.shapeType === 'import_mesh') {
+          await workerSyncMesh(id, obj.vertices, obj.indices, obj.transform).catch(() => {})
+        }
+      }
+      await syncOperand(idA)
+      await syncOperand(idB)
+      // Now perform CSG — workerCsgBooleanWithSync will:
+      // - skip operands already in cache (CSG results, imported meshes synced above)
+      // - rebuild regular primitives from shapeType/params via buildTransformMatrix
+      // СИНХРОНИЗИРУЕМ ТРАНСФОРМАЦИИ ИЗ STORE ПЕРЕД ОПЕРАЦИЕЙ
+      syncNodeTransform(idA, objects[idA].transform)
+      syncNodeTransform(idB, objects[idB].transform)
+      
       const srOf = (id: string) => {
         const t = objects[id].transform
         return { x: t.x, y: t.y, z: t.z, rotX: t.rotX, rotY: t.rotY, rotZ: t.rotZ, scaleX: t.scaleX, scaleY: t.scaleY, scaleZ: t.scaleZ }
@@ -282,51 +369,149 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const ms = performance.now() - t0
       // Single-pass: center geometry at origin + compute AABB (PERF-R6-1)
       const { cx, cy, cz, aabb } = extractAndCenterGetAABB(mesh.vertices)
-      const newObj: SceneObject = { id: resultId, shapeType: 'cube', params: {}, color: objects[idA].color, transform: { x: cx, y: cy, z: cz, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }, visible: true, locked: false, vertices: mesh.vertices, indices: mesh.indices, normals: mesh.normals, aabb }
+      // Store original bbox size for CSG results — used to compute scale relative to original dimensions
+      const originalBboxSize = { x: aabb.max.x - aabb.min.x, y: aabb.max.y - aabb.min.y, z: aabb.max.z - aabb.min.z }
+      
+      // ИСПОЛЬЗУЕМ СРЕДНЮЮ ТРАНСФОРМАЦИЮ ИЗ ОСНОВНЫХ ОБЪЕКТОВ ВМЕСТО СБОРА
+      const avgTransform = {
+        x: (objects[idA].transform.x + objects[idB].transform.x) / 2,
+        y: (objects[idA].transform.y + objects[idB].transform.y) / 2,
+        z: (objects[idA].transform.z + objects[idB].transform.z) / 2,
+        rotX: (objects[idA].transform.rotX + objects[idB].transform.rotX) / 2,
+        rotY: (objects[idA].transform.rotY + objects[idB].transform.rotY) / 2,
+        rotZ: (objects[idA].transform.rotZ + objects[idB].transform.rotZ) / 2,
+        scaleX: (objects[idA].transform.scaleX + objects[idB].transform.scaleX) / 2,
+        scaleY: (objects[idA].transform.scaleY + objects[idB].transform.scaleY) / 2,
+        scaleZ: (objects[idA].transform.scaleZ + objects[idB].transform.scaleZ) / 2,
+      }
+      
+      const newObj: SceneObject = { id: resultId, shapeType: 'cube', params: {}, color: objects[idA].color, transform: avgTransform, visible: true, locked: false, vertices: mesh.vertices, indices: mesh.indices, normals: mesh.normals, aabb, originalBboxSize }
       const newObjects = { ...objects }; delete newObjects[idA]; delete newObjects[idB]; newObjects[resultId] = newObj
-      const histOp: GroupOperation = { type: 'group', ids: [idA, idB], isHull: false, isIntersect: op === 'intersect', subtractOp: op === 'subtract', resultId }
-      const newOps = [...operations.slice(0, historyIndex), histOp]
-      set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, selectedIds: [resultId], modified: true, busy: false, lastCsgMs: ms })
-      cacheSnapshot(newOps.length, newObjects)
+      // FIX (CRIT-CSG-2): Store result vertices/indices AND center position
+      // in GroupOperation so rebuildFromHistory can reconstruct the CSG result
+      // geometry at the correct position.
+      const histOp: GroupOperation = { type: 'group', ids: [idA, idB], isHull: false, isIntersect: op === 'intersect', subtractOp: op === 'subtract', resultId, resultVertices: mesh.vertices, resultIndices: mesh.indices, resultNormals: mesh.normals ?? undefined, resultCenter: { x: cx, y: cy, z: cz }, originalBboxSize: originalBboxSize, treeOperation: op as 'union' | 'subtract' | 'intersect' }
+       const newOps = [...operations.slice(0, historyIndex), histOp]
+       // Ensure children are registered in build tree BEFORE creating boolean node
+       const ensureInTree = (id: string) => {
+         if (!getNode(id)) {
+           const obj = objects[id]
+           if (obj) {
+             if (obj.shapeType === 'import_mesh') {
+               createBakedNode(id, obj.vertices, obj.indices, obj.normals ?? null, obj.transform)
+             } else {
+               createPrimitiveNode(id, obj.shapeType, obj.params, obj.transform)
+             }
+           }
+         }
+       }
+       ensureInTree(idA)
+       ensureInTree(idB)
+       // Register boolean node in build tree BEFORE caching snapshot
+       // Используем среднюю трансформацию из исходных объектов для результата CSG
+       createBooleanNode(resultId, op as 'union' | 'subtract' | 'intersect', idA, idB, {
+         x: (objects[idA].transform.x + objects[idB].transform.x) / 2,
+         y: (objects[idA].transform.y + objects[idB].transform.y) / 2,
+         z: (objects[idA].transform.z + objects[idB].transform.z) / 2,
+         rotX: (objects[idA].transform.rotX + objects[idB].transform.rotX) / 2,
+         rotY: (objects[idA].transform.rotY + objects[idB].transform.rotY) / 2,
+         rotZ: (objects[idA].transform.rotZ + objects[idB].transform.rotZ) / 2,
+         scaleX: (objects[idA].transform.scaleX + objects[idB].transform.scaleX) / 2,
+         scaleY: (objects[idA].transform.scaleY + objects[idB].transform.scaleY) / 2,
+         scaleZ: (objects[idA].transform.scaleZ + objects[idB].transform.scaleZ) / 2,
+       })
+       set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, selectedIds: [resultId], modified: true, busy: false, lastCsgMs: ms })
+       cacheSnapshotWithTree(newOps.length, newObjects)
+       // Rebuild tree node to cache the mesh in history-tree
+       rebuildNode(resultId).catch(e => console.error('[csgBoolean] rebuildNode failed:', e))
     } catch (e) { set({ busy: false }); console.error('csgBoolean:', e) }
   },
 
   // ── Move ──
-  moveObject: async (id, transform) => {
+  moveObject: async (id, newTransform) => {
     if (get().busy) return
     const { objects, operations, historyIndex } = get()
     const obj = objects[id]
     if (!obj) return
-    const delta: Vec3 = { x: transform.x - obj.transform.x, y: transform.y - obj.transform.y, z: transform.z - obj.transform.z }
-    const rotDelta: Vec3 = { x: transform.rotX - obj.transform.rotX, y: transform.rotY - obj.transform.rotY, z: transform.rotZ - obj.transform.rotZ }
-    const scaleDelta: Vec3 = { x: transform.scaleX - obj.transform.scaleX, y: transform.scaleY - obj.transform.scaleY, z: transform.scaleZ - obj.transform.scaleZ }
-    const hasPos = Math.abs(delta.x) > MOVE_DELTA_EPSILON || Math.abs(delta.y) > MOVE_DELTA_EPSILON || Math.abs(delta.z) > MOVE_DELTA_EPSILON
-    const hasRot = Math.abs(rotDelta.x) > MOVE_DELTA_EPSILON || Math.abs(rotDelta.y) > MOVE_DELTA_EPSILON || Math.abs(rotDelta.z) > MOVE_DELTA_EPSILON
-    const hasScale = Math.abs(scaleDelta.x) > MOVE_DELTA_EPSILON || Math.abs(scaleDelta.y) > MOVE_DELTA_EPSILON || Math.abs(scaleDelta.z) > MOVE_DELTA_EPSILON
-    const kind = hasScale && !hasPos && !hasRot ? 'scale' : hasRot && !hasPos && !hasScale ? 'rotate' : 'translate'
-    const op: MoveOperation = { type: 'move', ids: [id], delta, rotDelta, scaleDelta, kind }
+    
+    // ВСЕ объекты должны быть зарегистрированы в дереве
+    const treeExists = getNode(id) !== undefined
+    
+    if (!treeExists) {
+      // Для простых объектов создаём primitive ноду
+      if (obj.shapeType && obj.params) {
+        createPrimitiveNode(id, obj.shapeType, obj.params, obj.transform)
+      } else {
+        // Для CSG/baked создаём baked ноду
+        createBakedNode(id, obj.vertices || new Float32Array(), obj.indices || new Uint32Array(), obj.normals || null, obj.transform)
+      }
+    }
+    
+    // Используем дерево как единственный источник правды
+    const delta: Vec3 = {
+      x: newTransform.x - obj.transform.x,
+      y: newTransform.y - obj.transform.y,
+      z: newTransform.z - obj.transform.z
+    }
+    
+    // Move в дереве и пересобираем меш
+    moveTreeNode(id, delta)
+    const mesh = await rebuildNode(id)
+    
+    // Обновляем объект в store с правильными геометрией и трансформацией
+    const newObj = makeObject({
+      ...obj,
+      transform: newTransform,
+      vertices: mesh.vertices,
+      indices: mesh.indices,
+      normals: mesh.normals
+    })
+    
+    const newObjects = { ...objects, [id]: newObj }
+    const rotDelta = {
+      x: newTransform.rotX - obj.transform.rotX,
+      y: newTransform.rotY - obj.transform.rotY,
+      z: newTransform.rotZ - obj.transform.rotZ,
+    }
+    const scaleDelta = {
+      x: newTransform.scaleX - obj.transform.scaleX,
+      y: newTransform.scaleY - obj.transform.scaleY,
+      z: newTransform.scaleZ - obj.transform.scaleZ,
+    }
+    const kind: 'translate' | 'rotate' | 'scale' =
+      Math.abs(scaleDelta.x) > 1e-6 || Math.abs(scaleDelta.y) > 1e-6 || Math.abs(scaleDelta.z) > 1e-6
+        ? 'scale'
+        : Math.abs(rotDelta.x) > 1e-6 || Math.abs(rotDelta.y) > 1e-6 || Math.abs(rotDelta.z) > 1e-6
+          ? 'rotate'
+          : 'translate'
+    const op: MoveOperation = {
+      type: 'move',
+      ids: [id],
+      delta,
+      rotDelta,
+      scaleDelta,
+      kind,
+    }
     const newOps = [...operations.slice(0, historyIndex), op]
-    const newObjects = { ...objects, [id]: { ...obj, transform } }
+    
     set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true })
-    cacheSnapshot(newOps.length, newObjects)
-    // Sync worker cache so subsequent CSG/mirror operations use correct position (WARN-R6-2)
-    workerSyncObjects([{
-      objId: id,
-      shapeType: obj.shapeType,
-      params: obj.params,
-      transform: { x: transform.x, y: transform.y, z: transform.z, rotX: transform.rotX, rotY: transform.rotY, rotZ: transform.rotZ, scaleX: transform.scaleX, scaleY: transform.scaleY, scaleZ: transform.scaleZ },
-    }]).catch(e => console.error('moveObject sync:', e))
+    cacheSnapshotWithTree(newOps.length, newObjects)
   },
 
   // ── Color ──
-  setColor: (id, color) => {
+  setColor: (id, color, skipHistory = false) => {
     const { objects, operations, historyIndex } = get()
     if (!objects[id]) return
-    const op: ColorOperation = { type: 'color', ids: [id], color }
-    const newOps = [...operations.slice(0, historyIndex), op]
     const newObjects = { ...objects, [id]: { ...objects[id], color } }
-    set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true })
-    cacheSnapshot(newOps.length, newObjects)
+    if (skipHistory) {
+      // Visual preview only — no history entry (used for draft color picker)
+      set({ objects: newObjects })
+    } else {
+      const op: ColorOperation = { type: 'color', ids: [id], color }
+      const newOps = [...operations.slice(0, historyIndex), op]
+      set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true })
+      cacheSnapshotWithTree(newOps.length, newObjects)
+    }
   },
 
   // ── Visibility ──
@@ -338,7 +523,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const newOps = [...operations.slice(0, historyIndex), op]
     const newObjects = { ...objects, [id]: { ...objects[id], visible: newVis } }
     set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true })
-    cacheSnapshot(newOps.length, newObjects)
+    cacheSnapshotWithTree(newOps.length, newObjects)
   },
 
   // ── Mirror ──
@@ -351,31 +536,113 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     try {
       const t0 = performance.now()
       // Sync worker cache before mirror — fixes stale cache after undo/redo
-      await workerSyncObjects(
-        ids.map(id => {
-          const obj = objects[id]
-          return {
-            objId: obj.id,
-            shapeType: obj.shapeType,
-            params: obj.params,
-            transform: { x: obj.transform.x, y: obj.transform.y, z: obj.transform.z, rotX: obj.transform.rotX, rotY: obj.transform.rotY, rotZ: obj.transform.rotZ, scaleX: obj.transform.scaleX, scaleY: obj.transform.scaleY, scaleZ: obj.transform.scaleZ } as const,
-          }
-        }),
-      )
-      const newObjects = { ...objects }
-      for (const id of ids) {
-        const mesh = await workerMirrorObject(id, plane)
-        const obj = newObjects[id]
-        const t = { ...obj.transform }
-        if (plane === 'YZ') t.x = -t.x
-        if (plane === 'XZ') t.y = -t.y
-        if (plane === 'XY') t.z = -t.z
-        newObjects[id] = makeObject({ ...obj, transform: t, vertices: mesh.vertices, indices: mesh.indices, normals: mesh.normals })
+      // FIX (CRIT-CSG-3): For CSG results and imported meshes, use workerSyncMesh.
+      // Keep full transform (including rotation) — mirror will flip geometry relative to origin,
+      // then pivot applies the mirrored rotation to the mirrored geometry.
+      const syncOps = ids.map(async id => {
+        const obj = objects[id]
+        if (obj.shapeType === 'cube' && !obj.params.width || obj.shapeType === 'import_mesh') {
+          // Sync with full transform — mirror will handle geometry + rotation
+          await workerSyncMesh(id, obj.vertices, obj.indices, { x: obj.transform.x, y: obj.transform.y, z: obj.transform.z, rotX: obj.transform.rotX, rotY: obj.transform.rotY, rotZ: obj.transform.rotZ, scaleX: obj.transform.scaleX, scaleY: obj.transform.scaleY, scaleZ: obj.transform.scaleZ }).catch(() => {})
+        } else {
+          return { objId: id, shapeType: obj.shapeType, params: obj.params, transform: { x: obj.transform.x, y: obj.transform.y, z: obj.transform.z, rotX: obj.transform.rotX, rotY: obj.transform.rotY, rotZ: obj.transform.rotZ, scaleX: obj.transform.scaleX, scaleY: obj.transform.scaleY, scaleZ: obj.transform.scaleZ } as const }
+        }
+      })
+      await Promise.all(syncOps)
+      // Sync regular primitives via workerSyncObjects
+      const regularEntries = ids.filter(id => objects[id] && objects[id].shapeType !== 'cube' || (objects[id] && objects[id].shapeType === 'cube' && objects[id].params.width))
+      if (regularEntries.length > 0) {
+        await workerSyncObjects(
+          regularEntries.map(id => {
+            const obj = objects[id]
+            return {
+              objId: obj.id,
+              shapeType: obj.shapeType,
+              params: obj.params,
+              transform: { x: obj.transform.x, y: obj.transform.y, z: obj.transform.z, rotX: obj.transform.rotX, rotY: obj.transform.rotY, rotZ: obj.transform.rotZ, scaleX: obj.transform.scaleX, scaleY: obj.transform.scaleY, scaleZ: obj.transform.scaleZ } as const,
+            }
+          }),
+        )
       }
-      const op: MirrorOperation = { type: 'mirror', ids, plane }
+      const newObjects = { ...objects }
+      const newIds: string[] = []
+      const originalIds: string[] = []
+      
+      for (const id of ids) {
+        originalIds.push(id)
+        const obj = objects[id]
+        
+        // ВСЕ объекты должны быть зарегистрированы в дереве при создании
+        // Если объект не в дереве (из-за rebuildFromHistory или старых данных) — создаём fallback ноду
+        const treeExists = getNode(id) !== undefined
+        
+        if (!treeExists) {
+          // Для простых объектов создаём primitive ноду
+          if (obj.shapeType && obj.params) {
+            createPrimitiveNode(id, obj.shapeType, obj.params, obj.transform)
+          } else {
+            // Для CSG/baked создаём baked ноду
+            createBakedNode(id, obj.vertices || new Float32Array(), obj.indices || new Uint32Array(), obj.normals || null, obj.transform)
+          }
+        }
+        
+        // СИНХРОНИЗИРУЕМ ТРАНСФОРМАЦИИ ИЗ STORE ПЕРЕД ОПЕРАЦИЕЙ
+        syncNodeTransform(id, obj.transform)
+        
+        // Клонируем поддерево и зеркалим
+        const treeId = `mirror_${nextId()}`
+        cloneSubtree(id, treeId)
+        mirrorTreeNode(treeId, plane)
+        
+        // Извлекаем зеркальный меш из дерева
+        const mesh = await rebuildNode(treeId)
+        
+        // Извлекаем трансформацию из зеркальной ноды
+        const clonedNode = getNode(treeId)
+        let finalTransform = { ...obj.transform }
+        
+        if (clonedNode) {
+          if (clonedNode.type === 'primitive' && clonedNode.localTransform) {
+            finalTransform = { ...clonedNode.localTransform }
+          } else if (clonedNode.type === 'baked' && clonedNode.localTransform) {
+            finalTransform = { ...clonedNode.localTransform }
+          } else if (clonedNode.type === 'boolean' && clonedNode.children) {
+            // Для boolean нод извлекаем трансформацию из первого дочернего элемента
+            const firstChild = getNode(clonedNode.children[0])
+            if (firstChild && firstChild.localTransform) {
+              finalTransform = { ...firstChild.localTransform }
+            }
+          }
+        }
+        
+        // СОЗДАЕМ НОВЫЙ ОБЪЕКТ с уникальным ID
+        const newId = nextId()
+        const newObj = makeObject({
+          ...obj,
+          id: newId,
+          transform: finalTransform,
+          vertices: mesh.vertices,
+          indices: mesh.indices,
+          normals: mesh.normals
+        })
+        newObjects[newId] = newObj
+        newIds.push(newId)
+        
+        // ✅ РЕГИСТРИРУЕМ в дереве — зеркальная копия как полноценная нода
+        if (clonedNode?.type === 'primitive' && obj.shapeType && obj.params) {
+          createPrimitiveNode(newId, obj.shapeType, obj.params, finalTransform)
+        } else {
+          createBakedNode(newId, mesh.vertices || new Float32Array(), mesh.indices || new Uint32Array(), mesh.normals || null, finalTransform)
+        }
+        
+        // Удаляем временную зеркальную ноду из дерева
+        deleteNode(treeId)
+      }
+      
+      const op: MirrorOperation = { type: 'mirror', originalIds, ids: newIds, plane }
       const newOps = [...operations.slice(0, historyIndex), op]
       set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true, busy: false, lastCsgMs: performance.now() - t0 })
-      cacheSnapshot(newOps.length, newObjects)
+      cacheSnapshotWithTree(newOps.length, newObjects)
     } catch (e) { set({ busy: false }); console.error('mirrorSelected:', e) }
   },
 
@@ -408,13 +675,21 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         const obj = newObjects[id]
         const dx = axis === 'X' ? delta : 0, dy = axis === 'Y' ? delta : 0, dz = axis === 'Z' ? delta : 0
         const nt: TransformNR = { ...obj.transform, x: obj.transform.x + dx, y: obj.transform.y + dy, z: obj.transform.z + dz }
-        const mesh = await workerBuildShape(id, obj.shapeType, obj.params, nt)
-        newObjects[id] = makeObject({ ...obj, transform: nt, vertices: mesh.vertices, indices: mesh.indices, normals: mesh.normals })
+        // FIX (CRIT-CSG-3): For CSG results and imported meshes, sync via workerSyncMesh.
+        // workerBuildShape with shapeType='cube', params={} → default cube.
+        if (obj.shapeType === 'cube' && !obj.params.width || obj.shapeType === 'import_mesh') {
+          await workerSyncMesh(id, obj.vertices, obj.indices, nt).catch(() => {})
+          // Update the SceneObject with new transform (mesh geometry unchanged, only position shifted)
+          newObjects[id] = { ...obj, transform: nt }
+        } else {
+          const mesh = await workerBuildShape(id, obj.shapeType, obj.params, nt)
+          newObjects[id] = makeObject({ ...obj, transform: nt, vertices: mesh.vertices, indices: mesh.indices, normals: mesh.normals })
+        }
       }
       const op: AlignOperation & { deltas: Record<string, number> } = { type: 'align', ids, axis, anchor, deltas }
       const newOps = [...operations.slice(0, historyIndex), op]
       set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true, busy: false, lastCsgMs: performance.now() - t0 })
-      cacheSnapshot(newOps.length, newObjects)
+      cacheSnapshotWithTree(newOps.length, newObjects)
     } catch (e) { set({ busy: false }); console.error('alignSelected:', e) }
   },
 
@@ -429,7 +704,9 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const t0 = performance.now()
       const cached = getCachedSnapshot(newIdx)
       const newObjects = cached ?? await rebuildFromHistory(operations.slice(0, newIdx))
-      if (!cached) cacheSnapshot(newIdx, newObjects)
+      if (!cached) cacheSnapshotWithTree(newIdx, newObjects)
+      // Restore build tree from snapshot
+      restoreTreeFromSnapshot(newIdx)
       set({ historyIndex: newIdx, objects: newObjects, selectedIds: [], busy: false, lastCsgMs: performance.now() - t0 })
     } catch (e) { set({ busy: false }); console.error('undo:', e) }
   },
@@ -445,7 +722,9 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const t0 = performance.now()
       const cached = getCachedSnapshot(newIdx)
       const newObjects = cached ?? await rebuildFromHistory(operations.slice(0, newIdx))
-      if (!cached) cacheSnapshot(newIdx, newObjects)
+      if (!cached) cacheSnapshotWithTree(newIdx, newObjects)
+      // Restore build tree from snapshot
+      restoreTreeFromSnapshot(newIdx)
       set({ historyIndex: newIdx, objects: newObjects, selectedIds: [], busy: false, lastCsgMs: performance.now() - t0 })
     } catch (e) { set({ busy: false }); console.error('redo:', e) }
   },
@@ -461,7 +740,9 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const t0 = performance.now()
       const cached = getCachedSnapshot(newIdx)
       const newObjects = cached ?? await rebuildFromHistory(operations.slice(0, newIdx))
-      if (!cached) cacheSnapshot(newIdx, newObjects)
+      if (!cached) cacheSnapshotWithTree(newIdx, newObjects)
+      // Restore build tree from snapshot
+      restoreTreeFromSnapshot(newIdx)
       set({ historyIndex: newIdx, objects: newObjects, selectedIds: [], busy: false, lastCsgMs: performance.now() - t0 })
     } catch (e) { set({ busy: false }); console.error('jumpToHistory:', e) }
   },
@@ -471,6 +752,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     if (get().busy) return
     await workerClearAll()
     clearSnapshots()
+    clearTree()
     set({ operations: [], historyIndex: 0, objects: {}, selectedIds: [], modified: false, fileName: null, lastCsgMs: null })
   },
 
@@ -487,7 +769,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const t0 = performance.now()
       const newObjects = await rebuildFromHistory(doc.operations)
       set({ operations: doc.operations, historyIndex: doc.operations.length, objects: newObjects, selectedIds: [], fileName: picked.file.name, modified: false, busy: false, lastCsgMs: performance.now() - t0 })
-      cacheSnapshot(doc.operations.length, newObjects)
+      cacheSnapshotWithTree(doc.operations.length, newObjects)
     } catch (e) { set({ busy: false }); notify(`Ошибка открытия: ${e}`, 'error') }
   },
 
@@ -512,18 +794,101 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const { objects, operations, historyIndex } = get()
     const obj = objects[id]
     if (!obj || obj.shapeType === 'import_mesh') return
-    const mergedParams = { ...obj.params, ...params }
-    set({ busy: true })
-    try {
-      const t0 = performance.now()
-      const mesh = await workerBuildShape(id, obj.shapeType, mergedParams, obj.transform)
-      const ms = performance.now() - t0
-      const op: ResizeDimsOperation = { type: 'resize_dims', id, params: mergedParams }
+    
+    // ВСЕ объекты должны быть зарегистрированы в дереве
+    const treeExists = getNode(id) !== undefined
+    
+    // СИНХРОНИЗИРУЕМ ТРАНСФОРМАЦИЮ ИЗ STORE ПЕРЕД ОПЕРАЦИЕЙ
+    syncNodeTransform(id, obj.transform)
+    
+    if (!treeExists) {
+      // Для простых объектов создаём primitive ноду
+      if (obj.shapeType && obj.params) {
+        createPrimitiveNode(id, obj.shapeType, obj.params, obj.transform)
+      } else {
+        // Для CSG/baked создаём baked ноду
+        createBakedNode(id, obj.vertices || new Float32Array(), obj.indices || new Uint32Array(), obj.normals || null, obj.transform)
+      }
+    }
+    
+    // Для примитивов: обновляем params в дереве и пересобираем
+    if (obj.shapeType && obj.params) {
+      const mergedParams = { ...obj.params, ...params }
+      
+      // Обновляем params в ноде дерева
+      const node = getNode(id)
+      if (node && node.type === 'primitive') {
+        node.params = mergedParams
+      }
+      
+      set({ busy: true })
+      try {
+        const t0 = performance.now()
+        // Пересобираем меш с новыми параметрами
+        const mesh = await rebuildNode(id)
+        const ms = performance.now() - t0
+        
+        const newObj = makeObject({
+          ...obj,
+          params: mergedParams,
+          vertices: mesh.vertices,
+          indices: mesh.indices,
+          normals: mesh.normals
+        })
+        
+        const op: ResizeDimsOperation = { type: 'resize_dims', id, params: mergedParams }
+        const newOps = [...operations.slice(0, historyIndex), op]
+        const newObjects = { ...objects, [id]: newObj }
+        
+        set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true, busy: false, lastCsgMs: ms })
+        cacheSnapshotWithTree(newOps.length, newObjects)
+      } catch (e) { set({ busy: false }); console.error('resizeObject:', e) }
+    }
+    // Для CSG результатов: используем scale трансформацию
+    else {
+      const bbox = obj.aabb ?? computeAABB(obj.vertices)
+      const currentSize = {
+        x: bbox.max.x - bbox.min.x,
+        y: bbox.max.y - bbox.min.y,
+        z: bbox.max.z - bbox.min.z,
+      }
+      
+      const targetWidth = params.width ?? currentSize.x
+      const targetHeight = params.height ?? currentSize.y
+      const targetDepth = params.depth ?? currentSize.z
+      
+      // Вычисляем новый scale
+      const newTransform = {
+        ...obj.transform,
+        scaleX: targetWidth / currentSize.x,
+        scaleY: targetHeight / currentSize.y,
+        scaleZ: targetDepth / currentSize.z,
+      }
+      
+      // Для CSG объектов в дереве: создаём baked ноду с scale
+      const node = getNode(id)
+      if (node) {
+        node.localTransform = newTransform
+      }
+      
+      // Синхронизируем с worker
+      const mesh = await rebuildNode(id)
+      
+      const newObj = makeObject({
+        ...obj,
+        transform: newTransform,
+        vertices: mesh.vertices,
+        indices: mesh.indices,
+        normals: mesh.normals
+      })
+      
+      const op: ResizeDimsOperation = { type: 'resize_dims', id, params }
       const newOps = [...operations.slice(0, historyIndex), op]
-      const newObjects = { ...objects, [id]: makeObject({ ...obj, params: mergedParams, vertices: mesh.vertices, indices: mesh.indices, normals: mesh.normals }) }
-      set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true, busy: false, lastCsgMs: ms })
-      cacheSnapshot(newOps.length, newObjects)
-    } catch (e) { set({ busy: false }); console.error('resizeObject:', e) }
+      const newObjects = { ...objects, [id]: newObj }
+      
+      set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true })
+      cacheSnapshotWithTree(newOps.length, newObjects)
+    }
   },
 
   // ── Extrude ──
@@ -572,11 +937,11 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const { cx: ex, cy: ey, cz: ez, aabb } = extractAndCenterGetAABB(resultMesh.vertices)
       const newObj: SceneObject = { id: resultId, shapeType: 'cube', params: {}, color: obj.color, transform: { x: ex, y: ey, z: ez, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }, visible: true, locked: false, vertices: resultMesh.vertices, indices: resultMesh.indices, normals: resultMesh.normals, aabb }
       const addOp: AddShapeOperation = { type: 'add_shape', id: slabId, shapeType: 'cube', params: slabP, color: obj.color, transform: slabT }
-      const grpOp: GroupOperation = { type: 'group', ids: [id, slabId], isHull: false, isIntersect: false, resultId }
+      const grpOp: GroupOperation = { type: 'group', ids: [id, slabId], isHull: false, isIntersect: false, resultId, resultVertices: resultMesh.vertices, resultIndices: resultMesh.indices, resultNormals: resultMesh.normals ?? undefined, resultCenter: { x: ex, y: ey, z: ez } }
       const newObjects = { ...objects }; delete newObjects[id]; newObjects[resultId] = newObj
       const newOps = [...operations.slice(0, historyIndex), addOp, grpOp]
       set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, selectedIds: [resultId], modified: true, busy: false, lastCsgMs: ms })
-      cacheSnapshot(newOps.length, newObjects)
+      cacheSnapshotWithTree(newOps.length, newObjects)
     } catch (e) { set({ busy: false }); console.error('extrudeSelected:', e) }
   },
 
@@ -590,7 +955,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const newOps = [...operations.slice(0, historyIndex), op]
     const newObjects = { ...objects, [id]: { ...objects[id], name } }
     set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true })
-    cacheSnapshot(newOps.length, newObjects)
+    cacheSnapshotWithTree(newOps.length, newObjects)
   },
 
   // ── Autosave ──
@@ -612,7 +977,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const t0 = performance.now()
       const newObjects = await rebuildFromHistory(entry.operations)
       set({ operations: entry.operations, historyIndex: entry.historyIndex, objects: newObjects, selectedIds: [], fileName: entry.fileName, modified: false, busy: false, lastCsgMs: performance.now() - t0 })
-      cacheSnapshot(entry.historyIndex, newObjects)
+      cacheSnapshotWithTree(entry.historyIndex, newObjects)
       return true
     } catch (e) { set({ busy: false }); return false }
   },
@@ -628,6 +993,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const meta = await pmSave(name, ops, count)
       set({ currentProjectId: meta.id })
     }
+    // BUG-R8-2: Сбрасываем modified flag после успешного сохранения
+    set({ modified: false })
   },
 
   loadFromProject: async (id) => {
@@ -641,7 +1008,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const t0 = performance.now()
       const newObjects = await rebuildFromHistory(record.operations)
       set({ operations: record.operations, historyIndex: record.operations.length, objects: newObjects, selectedIds: [], fileName: null, modified: false, busy: false, lastCsgMs: performance.now() - t0, currentProjectId: id })
-      cacheSnapshot(record.operations.length, newObjects)
+      cacheSnapshotWithTree(record.operations.length, newObjects)
     } catch (e) { set({ busy: false }); console.error('loadFromProject:', e) }
   },
 }))

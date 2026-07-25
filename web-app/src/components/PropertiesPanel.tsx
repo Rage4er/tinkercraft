@@ -1,5 +1,5 @@
+import { useState, useEffect } from "react";
 import NumInput from "./NumInput";
-import MirrorButtons from "./MirrorButtons";
 import AlignButtons from "./AlignButtons";
 import CsgButtons from "./CsgButtons";
 import type { ShapeParams, SceneObject } from "../csg/types";
@@ -10,26 +10,18 @@ export default function PropertiesPanel({
   selectedIds,
   canResize,
   canFillet,
-  canExtrude,
-  canMirror,
-  canAlign,
   canCsg,
+  canAlign,
   filletRadius,
-  extrudeAxis,
-  extrudeDepth,
   objectList,
   operationsLength,
   onSetFilletRadius,
-  onSetExtrudeAxis,
-  onSetExtrudeDepth,
   onMoveAxis,
   onRotAxis,
   onScaleAxis,
   onResizeDim,
   onResizeObject,
   onApplyFillet,
-  onExtrude,
-  onMirror,
   onCsg,
   onAlign,
   onSetColor,
@@ -42,33 +34,50 @@ export default function PropertiesPanel({
   selectedIds: string[];
   canResize: boolean;
   canFillet: boolean;
-  canExtrude: boolean;
-  canMirror: boolean;
-  canAlign: boolean;
   canCsg: boolean;
+  canAlign: boolean;
   filletRadius: number;
-  extrudeAxis: "X" | "Y" | "Z";
-  extrudeDepth: number;
   objectList: SceneObject[];
   operationsLength: number;
   onSetFilletRadius: (v: number) => void;
-  onSetExtrudeAxis: (a: "X" | "Y" | "Z") => void;
-  onSetExtrudeDepth: (v: number) => void;
   onMoveAxis: (axis: "x" | "y" | "z", val: number) => void;
   onRotAxis: (axis: "rotX" | "rotY" | "rotZ", val: number) => void;
   onScaleAxis: (axis: "scaleX" | "scaleY" | "scaleZ", val: number) => void;
   onResizeDim: (dim: "width" | "height" | "depth", val: number) => void;
   onResizeObject: (id: string, params: ShapeParams) => void;
   onApplyFillet: (id: string, radius: number) => void;
-  onExtrude: (axis: "X" | "Y" | "Z", depth: number) => void;
-  onMirror: (plane: "XY" | "XZ" | "YZ") => void;
   onCsg: (op: "union" | "subtract" | "intersect") => void;
   onAlign: (axis: "X" | "Y" | "Z", anchor: "min" | "center" | "max") => void;
-  onSetColor: (id: string, color: string) => void;
+  onSetColor: (id: string, color: string, skipHistory?: boolean) => void;
   onToggleVisible: (id: string) => void;
   onShowProjects: () => void;
   onSaveToProject: (name: string) => void;
 }) {
+  // FIX: Draft color state — only commit to history on blur or object switch
+  const [draftColor, setDraftColor] = useState<string | null>(null);
+
+  // Apply draft color when object changes or when blur fires
+  const applyDraftColor = () => {
+    if (firstSelected && draftColor && draftColor !== firstSelected.color) {
+      onSetColor(firstSelected.id, draftColor);
+    }
+    setDraftColor(null);
+  };
+
+  // Preview color change in real-time (no history entry)
+  const handleColorChange = (color: string) => {
+    if (firstSelected) {
+      setDraftColor(color);
+      // Update store for visual feedback — skip history
+      onSetColor(firstSelected.id, color, true);
+    }
+  };
+
+  // Reset draft color when selected object changes
+  useEffect(() => {
+    setDraftColor(null);
+  }, [firstSelected?.id]);
+
   if (!firstSelected) {
     return (
       <>
@@ -123,13 +132,14 @@ export default function PropertiesPanel({
         <div className="flex-row-6">
           <div
             className="color-swatch"
-            style={{ background: firstSelected.color }}
+            style={{ background: draftColor || firstSelected.color }}
           />
           <input
             type="color"
-            value={firstSelected.color}
+            value={draftColor || firstSelected.color}
             className="color-input"
-            onChange={(e) => onSetColor(firstSelected.id, e.target.value)}
+            onChange={(e) => handleColorChange(e.target.value)}
+            onBlur={applyDraftColor}
           />
         </div>
       </div>
@@ -223,11 +233,37 @@ export default function PropertiesPanel({
         onChange={(v) => onScaleAxis("scaleZ", v)}
       />
 
-      {/* Resize dims — только для примитивов */}
+      {/* Resize dims — только для примитивов и CSG результатов */}
       {canResize && firstSelected.shapeType !== "import_mesh" && (
         <div className="csg-group">
           <div className="csg-group-title">Размеры (мм)</div>
-          {firstSelected.shapeType === "cube" && (
+          {firstSelected.shapeType === "cube" && !firstSelected.params.width && firstSelected.originalBboxSize ? (
+            // CSG result: show real bbox dimensions in mm
+            <>
+              <NumInput
+                label="Ширина"
+                min={0.1}
+                value={Math.round(firstSelected.originalBboxSize.x * 100) / 100}
+                disabled={busy}
+                onChange={(v) => onResizeObject(firstSelected.id, { width: v })}
+              />
+              <NumInput
+                label="Высота"
+                min={0.1}
+                value={Math.round(firstSelected.originalBboxSize.y * 100) / 100}
+                disabled={busy}
+                onChange={(v) => onResizeObject(firstSelected.id, { height: v })}
+              />
+              <NumInput
+                label="Глубина"
+                min={0.1}
+                value={Math.round(firstSelected.originalBboxSize.z * 100) / 100}
+                disabled={busy}
+                onChange={(v) => onResizeObject(firstSelected.id, { depth: v })}
+              />
+            </>
+          ) : firstSelected.shapeType === "cube" && firstSelected.params.width ? (
+            // Regular cube: show params
             <>
               <NumInput
                 label="Ширина"
@@ -251,7 +287,7 @@ export default function PropertiesPanel({
                 onChange={(v) => onResizeDim("depth", v)}
               />
             </>
-          )}
+          ) : null}
           {firstSelected.shapeType === "sphere" && (
             <>
               <NumInput
@@ -373,54 +409,8 @@ export default function PropertiesPanel({
         </div>
       )}
 
-      {/* Extrude */}
-      {canExtrude && (
-        <div className="csg-group">
-          <div className="csg-group-title">Выдавливание (Extrude)</div>
-          <div className="props-row">
-            <span className="props-label">Ось</span>
-            <div className="flex-row">
-              {(["X", "Y", "Z"] as const).map((a) => (
-                <button
-                  key={a}
-                  className={`btn${extrudeAxis === a ? " active" : ""} min-w-30`}
-                  onClick={() => onSetExtrudeAxis(a)}
-                >
-                  {a}
-                </button>
-              ))}
-            </div>
-          </div>
-          <NumInput
-            label="Глубина"
-            unit="мм"
-            min={0.1}
-            value={extrudeDepth}
-            onChange={onSetExtrudeDepth}
-          />
-          <div className="flex-row">
-            <button
-              className="btn primary flex-1"
-              disabled={!canExtrude}
-              onClick={() => onExtrude(extrudeAxis, extrudeDepth)}
-            >
-              ▲ +{extrudeAxis}
-            </button>
-            <button
-              className="btn flex-1"
-              disabled={!canExtrude}
-              onClick={() => onExtrude(extrudeAxis, -extrudeDepth)}
-            >
-              ▼ −{extrudeAxis}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Зеркало */}
-      {selectedIds.length === 1 && (
-        <MirrorButtons disabled={!canMirror} onMirror={onMirror} variant="full" />
-      )}
+      {/* Extrude — скрыто в свойствах, доступно на панели инструментов */}
+      {/* Mirror — скрыто в свойствах, доступно на панели инструментов */}
 
       {/* CSG + Align */}
       {selectedIds.length === 2 && (

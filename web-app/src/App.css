@@ -259,6 +259,25 @@ body {
 .tl-filter-row:hover { color: var(--text-primary); }
 .tl-filter-row input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; }
 
+/* Timeline filter dropdown */
+.tl-filter-dropdown {
+  position: relative;
+  padding: 3px 8px 4px;
+  border-bottom: 1px solid rgba(58,58,92,0.35);
+}
+.tl-filter-toggle {
+  font-size: 10px;
+  padding: 2px 6px;
+  width: 100%;
+  text-align: left;
+}
+.tl-filter-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 4px 0;
+}
+
 /* ---- Timeline ---- */
 .tl-empty { padding: 8px; font-size: 10px; color: var(--text-muted); font-style: italic; }
 .tl-list {

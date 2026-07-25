@@ -46,8 +46,8 @@ function makeFillet(id: string, radius: number): FilletOperation {
   return { type: 'fillet', id, radius }
 }
 
-function makeMirror(ids: string[], plane: MirrorOperation['plane']): MirrorOperation {
-  return { type: 'mirror', ids, plane }
+function makeMirror(originalIds: string[], newIds: string[], plane: MirrorOperation['plane']): MirrorOperation {
+  return { type: 'mirror', originalIds, ids: newIds, plane }
 }
 
 function makeAlign(ids: string[], axis: AlignOperation['axis'], deltas: Record<string, number>): AlignOperation {
@@ -113,40 +113,75 @@ describe('buildRebuildMeta: add_shape → move (scale)', () => {
 })
 
 describe('buildRebuildMeta: mirror (negate position)', () => {
-  it('mirrors across YZ plane negates X', () => {
+  it('mirrors across YZ plane negates X and preserves scale', () => {
     const ops: TinkerCraftOperation[] = [
       makeAddShape('a', 'cube', { width: 20, height: 20, depth: 20 }),
-      makeMove(['a'], { x: 10, y: 20, z: 30 }),
-      makeMirror(['a'], 'YZ'),
+      makeMoveWithScale(['a'], { x: 10, y: 20, z: 30 }, { x: 1, y: 1, z: 1 }), // scale 2
+      makeMirror(['a'], ['b'], 'YZ'),
     ]
     const { meta } = buildRebuildMeta(ops)
-    expect(meta['a'].transform.x).toBe(-10)
-    expect(meta['a'].transform.y).toBe(20)
-    expect(meta['a'].transform.z).toBe(30)
+    // Original 'a' is unchanged
+    expect(meta['a'].transform.x).toBe(10)
+    expect(meta['a'].transform.scaleX).toBe(2)
+    // New object 'b' has mirrored position but preserved scale
+    expect(meta['b'].transform.x).toBe(-10)
+    expect(meta['b'].transform.y).toBe(20)
+    expect(meta['b'].transform.z).toBe(30)
+    expect(meta['b'].transform.scaleX).toBe(2)
   })
 
-  it('mirrors across XZ plane negates Y', () => {
+  it('mirrors across XZ plane negates Y and preserves scale', () => {
     const ops: TinkerCraftOperation[] = [
       makeAddShape('a', 'cube', { width: 20, height: 20, depth: 20 }),
-      makeMove(['a'], { x: 10, y: 20, z: 30 }),
-      makeMirror(['a'], 'XZ'),
+      makeMoveWithScale(['a'], { x: 10, y: 20, z: 30 }, { x: 0.5, y: 1, z: 1 }), // scale: 1.5, 2, 2
+      makeMirror(['a'], ['b'], 'XZ'),
     ]
     const { meta } = buildRebuildMeta(ops)
-    expect(meta['a'].transform.x).toBe(10)
-    expect(meta['a'].transform.y).toBe(-20)
-    expect(meta['a'].transform.z).toBe(30)
+    expect(meta['b'].transform.x).toBe(10)
+    expect(meta['b'].transform.y).toBe(-20)
+    expect(meta['b'].transform.z).toBe(30)
+    expect(meta['b'].transform.scaleY).toBe(2)
   })
 
-  it('mirrors across XY plane negates Z', () => {
+  it('mirrors across XY plane negates Z and preserves scale', () => {
     const ops: TinkerCraftOperation[] = [
       makeAddShape('a', 'cube', { width: 20, height: 20, depth: 20 }),
-      makeMove(['a'], { x: 10, y: 20, z: 30 }),
-      makeMirror(['a'], 'XY'),
+      makeMoveWithScale(['a'], { x: 10, y: 20, z: 30 }, { x: 1, y: 1, z: 2 }), // scale: 2, 2, 3
+      makeMirror(['a'], ['b'], 'XY'),
     ]
     const { meta } = buildRebuildMeta(ops)
-    expect(meta['a'].transform.x).toBe(10)
-    expect(meta['a'].transform.y).toBe(20)
-    expect(meta['a'].transform.z).toBe(-30)
+    expect(meta['b'].transform.x).toBe(10)
+    expect(meta['b'].transform.y).toBe(20)
+    expect(meta['b'].transform.z).toBe(-30)
+    expect(meta['b'].transform.scaleZ).toBe(3)
+  })
+
+  it('preserves shapeType and params through mirror', () => {
+    const ops: TinkerCraftOperation[] = [
+      makeAddShape('a', 'cylinder', { radius: 5, height: 10, segments: 16 }),
+      makeMirror(['a'], ['b'], 'YZ'),
+    ]
+    const { meta } = buildRebuildMeta(ops)
+    expect(meta['b'].shapeType).toBe('cylinder')
+    expect(meta['b'].params.radius).toBe(5)
+    expect(meta['b'].params.height).toBe(10)
+  })
+
+  it('handles multi-select mirror', () => {
+    const ops: TinkerCraftOperation[] = [
+      makeAddShape('a', 'cube', { width: 20, height: 20, depth: 20 }),
+      makeAddShape('c', 'cube', { width: 10, height: 10, depth: 10 }),
+      makeMoveWithScale(['a'], { x: 10, y: 0, z: 0 }, { x: 1, y: 1, z: 1 }),  // scale 2, pos (10,0,0)
+      makeMoveWithScale(['c'], { x: -10, y: 0, z: 0 }, { x: 2, y: 2, z: 2 }), // scale 3, pos (-10,0,0)
+      makeMirror(['a', 'c'], ['b', 'd'], 'YZ'),
+    ]
+    const { meta } = buildRebuildMeta(ops)
+    // a → b: X mirrored, scale preserved
+    expect(meta['b'].transform.x).toBe(-10)
+    expect(meta['b'].transform.scaleX).toBe(2)
+    // c → d: X mirrored, scale preserved
+    expect(meta['d'].transform.x).toBe(10)
+    expect(meta['d'].transform.scaleX).toBe(3)
   })
 })
 

@@ -16,6 +16,12 @@ import {
   makeDefaultTransform,
   type RebuildTransform,
 } from '../csg/rebuildOps'
+import {
+  createPrimitiveNode,
+  createBooleanNode,
+  createBakedNode,
+  getNode,
+} from '../csg/history-tree'
 
 /** Metadata accumulated over the operation chain. Exported for testing. */
 export interface RebuildMeta {
@@ -67,12 +73,17 @@ export function buildRebuildMeta(ops: TinkerCraftOperation[]): {
       }
 
     } else if (op.type === 'mirror') {
-      for (const id of op.ids) {
-        const t = transforms[id]
-        if (t && meta[id]) {
+      // Mirror creates NEW objects. The originalIds hold the source objects'
+      // transforms. We mirror each and store under the corresponding new id.
+      const origIds = (op as { originalIds?: string[] }).originalIds ?? []
+      for (let i = 0; i < origIds.length && i < op.ids.length; i++) {
+        const origId = origIds[i]
+        const newId = op.ids[i]
+        const t = transforms[origId]
+        if (t && meta[origId]) {
           const nt = applyMirrorToTransform(t as unknown as RebuildTransform, op.plane) as TransformNR
-          transforms[id] = nt
-          meta[id] = { ...meta[id], transform: nt }
+          transforms[newId] = nt
+          meta[newId] = { ...meta[origId], transform: nt }
         }
       }
 
@@ -115,10 +126,24 @@ export function buildRebuildMeta(ops: TinkerCraftOperation[]): {
       const srcColor = op.ids[0] ? meta[op.ids[0]]?.color ?? '#89b4fa' : '#89b4fa'
       for (const id of op.ids) { delete meta[id]; delete transforms[id] }
       if (op.resultId) {
-        const nullT = makeDefaultTransform() as TransformNR
-        meta[op.resultId] = { color: srcColor, shapeType: 'cube', params: {}, transform: nullT, visible: true }
-        transforms[op.resultId] = nullT
+        // FIX (CRIT-CSG-2): Use resultCenter from the GroupOperation as the
+        // initial transform for CSG results. Without this, the transform would
+        // default to {0,0,0} and the CSG geometry would appear at the origin
+        // instead of at its actual position after undo/redo.
+        const startT: TransformNR = op.resultCenter
+          ? { x: op.resultCenter.x, y: op.resultCenter.y, z: op.resultCenter.z, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
+          : makeDefaultTransform() as TransformNR
+        meta[op.resultId] = { color: srcColor, shapeType: 'cube', params: {}, transform: startT, visible: true }
+        transforms[op.resultId] = startT
         csgResultIds.add(op.resultId)
+        // Store result mesh data for rebuild (FIX CRIT-CSG-2)
+        // This replaces shapeType-based reconstruction which loses all CSG geometry.
+        ;(meta[op.resultId] as RebuildMeta & { resultVertices?: Float32Array | number[]; resultIndices?: Uint32Array | number[]; resultNormals?: Float32Array | number[]; originalBboxSize?: { x: number; y: number; z: number } }).resultVertices = op.resultVertices
+        ;(meta[op.resultId] as RebuildMeta & { resultVertices?: Float32Array | number[]; resultIndices?: Uint32Array | number[]; resultNormals?: Float32Array | number[]; originalBboxSize?: { x: number; y: number; z: number } }).resultIndices = op.resultIndices
+        ;(meta[op.resultId] as RebuildMeta & { resultVertices?: Float32Array | number[]; resultIndices?: Uint32Array | number[]; resultNormals?: Float32Array | number[]; originalBboxSize?: { x: number; y: number; z: number } }).resultNormals = op.resultNormals
+        if (op.originalBboxSize) {
+          ;(meta[op.resultId] as RebuildMeta & { originalBboxSize?: { x: number; y: number; z: number } }).originalBboxSize = op.originalBboxSize
+        }
       }
     }
   }
@@ -135,10 +160,55 @@ export async function rebuildFromHistory(
   // For CSG results the worker returns geometry at world positions.  Center
   // each result's vertices and store the bbox offset as the pivot position,
   // matching what the direct csgBoolean action does.
+  // FIX (CRIT-CSG-2): If the GroupOperation has resultVertices/resultIndices,
+  // use those instead of the worker's rebuilt geometry — this preserves the
+  // exact CSG result from the original operation.
   const meshByObjId = new Map(result.results.map(m => [m.objId, m]))
   for (const id of csgResultIds) {
     const m = meshByObjId.get(id)
     if (m && meta[id]) {
+      const metaWithMesh = meta[id] as RebuildMeta & { resultVertices?: Float32Array | number[]; resultIndices?: Uint32Array | number[]; resultNormals?: Float32Array | number[] }
+      if (metaWithMesh.resultVertices && metaWithMesh.resultIndices) {
+        // Use the stored CSG result mesh data directly. The mesh is already
+        // centered at origin (extractAndCenter was applied when the CSG
+        // operation was performed). Now apply the accumulated transform
+        // (position/rotation/scale) from the operation chain.
+        const t = meta[id].transform
+        const storedVerts = new Float32Array(metaWithMesh.resultVertices)
+        const finalVerts = new Float32Array(storedVerts.length)
+        const { x: px, y: py, z: pz } = t
+        const rx = t.rotX * (Math.PI / 180), ry = t.rotY * (Math.PI / 180), rz = t.rotZ * (Math.PI / 180)
+        const Sx = t.scaleX, Sy = t.scaleY, Sz = t.scaleZ
+        // Precompute RS matrix (same as buildTransformMatrix but applied to vertices)
+        const cx = Math.cos(rx), sx_ = Math.sin(rx)
+        const cy = Math.cos(ry), sy_ = Math.sin(ry)
+        const cz = Math.cos(rz), sz_ = Math.sin(rz)
+        const r00 = cz * cy * Sx, r01 = (cz * sy_ * sx_ - sz_ * cx) * Sy, r02 = (cz * sy_ * cx + sz_ * sx_) * Sz
+        const r10 = sz_ * cy * Sx, r11 = (sz_ * sy_ * sx_ + cz * cx) * Sy, r12 = (sz_ * sy_ * sx_ - cz * sx_) * Sz
+        const r20 = -sy_ * Sx, r21 = cy * sx_ * Sy, r22 = cy * cx * Sz
+        for (let i = 0; i < storedVerts.length; i += 3) {
+          const vx = storedVerts[i], vy = storedVerts[i + 1], vz = storedVerts[i + 2]
+          // RS * v + pos
+          finalVerts[i]     = r00 * vx + r01 * vy + r02 * vz + px
+          finalVerts[i + 1] = r10 * vx + r11 * vy + r12 * vz + py
+          finalVerts[i + 2] = r20 * vx + r21 * vy + r22 * vz + pz
+        }
+        m.vertices = finalVerts
+        m.indices = new Uint32Array(metaWithMesh.resultIndices)
+        if (metaWithMesh.resultNormals) {
+          // Transform normals (no translation)
+          const storedNorms = new Float32Array(metaWithMesh.resultNormals)
+          const finalNorms = new Float32Array(storedNorms.length)
+          for (let i = 0; i < storedNorms.length; i += 3) {
+            const nx = storedNorms[i], ny = storedNorms[i + 1], nz = storedNorms[i + 2]
+            finalNorms[i]     = r00 * nx + r01 * ny + r02 * nz
+            finalNorms[i + 1] = r10 * nx + r11 * ny + r12 * nz
+            finalNorms[i + 2] = r20 * nx + r21 * ny + r22 * nz
+          }
+          m.normals = finalNorms
+        }
+        continue
+      }
       const { cx, cy, cz } = extractAndCenter(m.vertices)
       meta[id] = { ...meta[id], transform: { ...meta[id].transform, x: cx, y: cy, z: cz } }
     }
@@ -147,6 +217,9 @@ export async function rebuildFromHistory(
   const objects: Record<string, SceneObject> = {}
   for (const m of result.results) {
     const info = meta[m.objId]
+    // For CSG results, use originalBboxSize if available
+    const metaWithMesh = meta[m.objId] as RebuildMeta & { resultVertices?: Float32Array | number[]; resultIndices?: Uint32Array | number[]; resultNormals?: Float32Array | number[]; originalBboxSize?: { x: number; y: number; z: number } }
+    const originalBboxSize = metaWithMesh.originalBboxSize
     objects[m.objId] = makeObject({
       id: m.objId,
       name: info?.name,
@@ -159,7 +232,110 @@ export async function rebuildFromHistory(
       vertices: m.vertices,
       indices: m.indices,
       normals: m.normals,
+      originalBboxSize,
     })
   }
   return objects
+}
+
+// ---------------------------------------------------------------------------
+// BuildTree reconstruction (called after rebuildFromHistory)
+// ---------------------------------------------------------------------------
+
+/**
+ * Rebuild the build tree from operations.
+ * Called after rebuildFromHistory to keep the tree in sync with the scene.
+ * This is essential for undo/redo to work correctly with tree operations.
+ */
+export function rebuildBuildTree(ops: TinkerCraftOperation[]): void {
+  const transforms: Record<string, TransformNR> = {}
+
+  for (const op of ops) {
+    if (op.type === 'add_shape') {
+      createPrimitiveNode(op.id, op.shapeType, op.params, { ...op.transform })
+      transforms[op.id] = { ...op.transform }
+
+    } else if (op.type === 'import_mesh') {
+      transforms[op.id] = { ...op.transform }
+      // Baked nodes registered after mesh data is available
+
+    } else if (op.type === 'move') {
+      const d: Vec3 = op.delta
+      const rd = (op as { rotDelta?: Vec3 }).rotDelta
+      const sd = (op as { scaleDelta?: Vec3 }).scaleDelta
+      for (const id of op.ids) {
+        const t = transforms[id]
+        if (t) {
+          const nt = applyMoveDelta(t as unknown as RebuildTransform, d, rd, sd) as TransformNR
+          transforms[id] = nt
+          // Update tree node transform if it exists
+          const node = getNode(id)
+          if (node && node.localTransform) {
+            node.localTransform = { ...nt }
+          }
+        }
+      }
+
+    } else if (op.type === 'mirror') {
+      const origIds = (op as { originalIds?: string[] }).originalIds ?? []
+      for (let i = 0; i < origIds.length && i < op.ids.length; i++) {
+        const origId = origIds[i]
+        const newId = op.ids[i]
+        const t = transforms[origId]
+        if (t) {
+          const nt = applyMirrorToTransform(t as unknown as RebuildTransform, op.plane) as TransformNR
+          transforms[newId] = nt
+          // Register mirrored primitive in tree
+          const origNode = getNode(origId)
+          if (origNode && origNode.type === 'primitive') {
+            createPrimitiveNode(newId, origNode.shapeType!, { ...origNode.params! }, nt)
+          } else if (origNode && origNode.type === 'baked') {
+            createBakedNode(newId, origNode.vertices!, origNode.indices!, origNode.normals ?? null, nt)
+          } else {
+            // Fallback: create a placeholder primitive node
+            createPrimitiveNode(newId, 'cube', {}, nt)
+          }
+        }
+      }
+
+    } else if (op.type === 'group') {
+      for (const id of op.ids) { delete transforms[id] }
+      if (op.resultId) {
+        const startT: TransformNR = op.resultCenter
+          ? { x: op.resultCenter.x, y: op.resultCenter.y, z: op.resultCenter.z, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
+          : makeDefaultTransform() as TransformNR
+        transforms[op.resultId] = startT
+        // Register boolean node in tree
+        const isSubtract = (op as { subtractOp?: boolean }).subtractOp
+        const isIntersect = (op as { isIntersect?: boolean }).isIntersect
+        // Use treeOperation from GroupOperation if available, fallback to subtractOp/isIntersect
+        const treeOp = (op as { treeOperation?: 'union' | 'subtract' | 'intersect' }).treeOperation
+          ?? (isSubtract ? 'subtract' : isIntersect ? 'intersect' : 'union')
+        try {
+          // Pass the transform to the boolean node creation
+          createBooleanNode(op.resultId, treeOp, op.ids[0], op.ids[1], startT)
+        } catch {
+          // Tree creation failed (e.g., orphaned CSG) — skip
+          console.warn('[rebuildBuildTree] Failed to create boolean node:', op.resultId)
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Register baked nodes after rebuildFromHistory has the mesh data.
+ */
+export function registerBakedNodes(
+  objects: Record<string, SceneObject>,
+  ops: TinkerCraftOperation[],
+): void {
+  for (const op of ops) {
+    if (op.type === 'import_mesh' && objects[op.id]) {
+      const obj = objects[op.id]
+      if (obj.vertices && obj.indices) {
+        createBakedNode(op.id, obj.vertices, obj.indices, obj.normals ?? null, obj.transform)
+      }
+    }
+  }
 }

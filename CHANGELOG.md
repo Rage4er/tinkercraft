@@ -1,5 +1,19 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed — CSG позиционирование (BUG-CSG-POS-5) (2026-07-24)
+- Исправлена проблема с разлетающимися фигурами после булевых операций (union/subtract/intersect)
+- Правильное применение transform к результатам CSG операций в дереве
+- Исправлено центрирование и позиционирование CSG результатов
+- Исправлена проблема разлёта координат после булевых операций
+- При rebuild boolean node mesh центрируется (как `extractAndCenter`)
+- Применяется `localTransform` boolean node для правильного позиционирования
+- Файлы:
+  - `web-app/src/csg/worker-handlers.ts` — [`handleRebuildTreeNode()`](web-app/src/csg/worker-handlers.ts:676)
+  - `web-app/src/csg/history-tree.ts` — [`applyCSGMeshes()`](web-app/src/csg/history-tree.ts:418)
+
+
 Все заметные изменения в этом проекте документируются в этом файле.
 
 Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/),
@@ -8,6 +22,230 @@
 ---
 
 ## [Unreleased]
+
+### Fixed — WASM initialization error (2026-07-23)
+
+- **FIXED:** rebuildNode теперь безопасна для вызова из главного потока — проверяет инициализацию WASM через `isWasmReady()`
+- **FIXED:** При неинициализированном WASM rebuildNode автоматически вызывает воркер через `workerRebuildNode`
+- **FIXED:** Добавлен `ms` свойство в `ExtractedMesh` интерфейс
+- **FIXED:** Исправлен `collectSubtreeForWorker` — корректное преобразование TreeNode в формат воркера
+- **FIXED:** Исправлен `Array.from(node.normals || [])` для избежания ошибки с null/undefined
+
+### Added — BuildTree: Параметрическое дерево построения (2026-07-23)
+
+- **BUILD_TREE_SPEC.md:** Полная переработка подхода к зеркалу и всем операциям над сложными объектами (`web-app/src/csg/BUILD_TREE_SPEC.md`)
+  - **Новая архитектура:** Параметрическое дерево построения (TreeNode) вместо плоского списка объектов
+  - **Три типа нод:** `primitive` (листья: cube, sphere, cylinder, ...) и `boolean` (узлы: union, subtract, intersect) и `baked` (STL, non-manifold)
+  - **Baked-ноды:** STL-файлы теперь могут участвовать в дереве — `boolean(куб, STL)` валидная нода
+  - **Lazy rebuild:** Меш пересобирается по запросу с кэшированием по хешу
+  - **Worker rebuild:** `handleRebuildTreeNode` в worker.ts — rebuild из дерева в WASM, `workerRebuildNode` в client
+  - **Каскадная инвалидация O(depth):** `parentId` обратные ссылки, `invalidateCache` рекурсия по parentId, 1000 нод → 10 операций вместо 10000
+  - **isAncestor защита:** `createBooleanNode` проверяет циклы при создании — `isAncestor(childA, id)` + self-ref guard
+  - **visited Set в cloneSubtree:** защита от циклов при рекурсивном клонировании, shared children не дублируются
+  - **deleteNode сбрасывает parentId:** дети удаляемой ноды теряют связь с родителем
+  - **Мемоизация BBox:** `cachedBBox` в TreeNode, инвалидируется вместе с `cachedMesh`, избегает O(n) прохода по вершинам
+  - **Единый API:** `mirrorTreeNode`, `moveTreeNode`, `rotateTreeNode`, `cloneSubtree` — все операции через дерево
+  - **Синхронизация:** Store хранит меш для рендеринга, дерево — источник параметричности
+  - **Глубокое копирование TypedArray:** `cloneSubtree` делает `new Float32Array()` для избежания shared buffers
+  - **Transform-ноды:** Отложены на future (групповые операции, иерархическая анимация)
+- **history-tree.ts:** Ядро дерева (хранение, rebuild, mirror, move, rotate, clone, BBox, hash, cascade invalidation)
+- **types.ts:** `TreeNode`, `Point3D`, `BoundingBox`, `ExtractedMesh` с полной типизацией
+- **document-store.ts:** Интеграция дерева — `addShape` регистрирует primitive, `csgBoolean` создаёт boolean-ноду + `rebuildNode`, `mirrorSelected` клонирует + зеркалит поддерево с fallback-регистрацией, `moveObject` двигает всё поддерево, `deleteSelected` удаляет из дерева, `clearScene` очищает дерево
+- **worker-handlers.ts:** `handleRebuildTreeNode` — rebuild subtree из дерева в WASM
+- **worker-client.ts:** `workerRebuildNode` — вызов rebuild из дерева
+- **worker.ts:** Кейс `rebuildTreeNode` в обработчике сообщений
+- **rebuild.ts:** `rebuildBuildTree` и `registerBakedNodes` — sync дерева при undo/redo
+- **history-tree.test.ts:** 29 unit-тестов — createPrimitiveNode, createBooleanNode (включая self-ref и cycle guards), createBakedNode, deleteNode, computeNodeBBox (с memoization), isAncestor, mirrorTreeNode, moveTreeNode, cloneSubtree (с deep copy TypedArrays), cascade invalidation, rebuildNode
+- **types.ts:** `treeOperation` в GroupOperation — тип булевой операции для tree reconstruction при undo/redo
+- **snapshots.ts:** `cacheTreeSnapshot`, `getCachedTreeSnapshot` — кэширование дерева alongside objects; `serializeTree` — сериализация в plain objects (без cachedMesh/BBox/hash)
+- **document-store.ts:** `cacheSnapshotWithTree` — wrapper, заменяющий все cacheSnapshot; `restoreTreeFromSnapshot` — восстановление дерева при undo/redo/jumpToHistory
+- **rebuild.ts:** `rebuildBuildTree` использует `treeOperation` из GroupOperation
+- **FIXED:** `cacheSnapshotWithTree` — исправлена рекурсия (само-вызов на line 84 заменён на `cacheSnapshot`)
+- **FIXED:** Order of tree registration — `createPrimitiveNode`/`createBooleanNode`/`createBakedNode` теперь вызываются ДО `cacheSnapshotWithTree` в `addShape`, `addRawMesh`, `importStl`, `csgBoolean`. Раньше boolean/primtive/baked узлы не попадали в снапшот, из-за чего undo/redo терял их, и следующая CSG операция падала с `Node csg_N not found`
+- **FIXED:** `csgBoolean` — добавлена функция `ensureInTree`, которая гарантирует, что `idA` и `idB` зарегистрированы в `treeNodes` ДО вызова `createBooleanNode`. Это предотвращает ошибку "Node not found" в воркере, когда children boolean ноды отсутствуют в дереве
+- **FIXED:** `applyCSGMeshes` — `collectSubtree(node.id)` вместо `collectSubtree(node.children[0])` + `collectSubtree(node.children[1])`, чтобы целевая boolean нода включалась в поддерево, отправляемое в воркер
+- **Планируемые файлы:**
+  - `history-tree.ts` — ядро дерева (хранение, rebuild, mirror, move, rotate, clone)
+  - `types.ts` — `TreeNode`, `Point3D`, `BoundingBox`, `ExtractedMesh`
+  - `worker-handlers.ts` — `handleApplyCsg` для CSG между двумя мешами
+  - `worker-client.ts` — `workerRebuildNode` для пересборки из дерева
+  - `document-store.ts` — интеграция: `createPrimitiveNode`, `createBooleanNode`, `mirrorTreeNode`, `moveTreeNode`
+- **5 фаз внедрения:** A (базовая структура) → B (rebuild+CSG) → C (интеграция store) → D (mirror+transform) → E (undo/redo+polish)
+- **7 тест-кейсов:** union, зеркало CSG, двойное зеркало, move CSG, каскадная инвалидация, параметрическое редактирование, undo/redo
+- **Заменяет:** MIRROR_FIX_SPEC.md (гибридный подход зеркала) — архитектура дерева решает проблему зеркала как частный случай
+
+### Fixed — Mirror operation (2026-07-22)
+
+- **Комплексное исправление отзеркаливания с разделением логики для примитивов и CSG/импорта:**
+  - **Для примитивов:** Worker строит свежий примитив без TRS, применяет чистую матрицу зеркала, store использует applyMirrorToTransform для инвертирования позиции и соответствующих углов поворота (rotX для YZ, rotY для XZ, rotZ для XY)
+  - **Для CSG/импорта:** Worker сдвигает геометрию к origin, применяет матрицу зеркала, store сбрасывает scale/rotation до нейтральных значений, оставляя только зеркальную позицию
+  - **Исключение двойного применения трансформов:** Полная отделение геометрии от трансформов объекта - геометрия содержит только зеркальную форму, трансформы содержат только позицию, масштаб и поворот
+  - **Корректная обработка углов поворота:** Исправлена математика зеркального отражения углов - для каждой плоскости инвертируется соответствующий угол поворота
+  - **Сохранение масштаба без дублирования:** Масштаб применяется только один раз через трансформы объекта, не затрагивается в геометрии
+  - **Создание независимых копий:** `mirrorSelected` создает копии с уникальными ID, исходные объекты полностью сохраняются
+  - **Поддержка move/resize для всех типов объектов:** Для примитивов используется workerSyncObjects, для CSG/импорта - workerSyncMesh, обе операции корректно работают с новой логикой
+
+### Changed — Переименование документации (2026-07-22)
+
+- **MIGRATION_PLAN.md → DEVELOPMENT_PLAN.md** — файл переименован: проект не является миграцией CaDoodle, а вдохновлён им как референс
+- **README.md** — описание обновлено: TinkerCraft — независимый 3D CAD-редактор, вдохновлённый CaDoodle (не "веб-версия CaDoodle")
+- **AGENTS.md** — описание проекта обновлено, ссылки на MIGRATION_PLAN.md заменены на DEVELOPMENT_PLAN.md
+- **ARCHITECTURE.md** — упоминание "совместим с Java-оригиналом" заменено на "вдохновлён CaDoodle"
+- **CHANGELOG.md** — упоминание "совместимость с Java-оригиналом" заменено на "вдохновлён CaDoodle"
+- **CODE_REVIEW.md** — ссылки на MIGRATION_PLAN.md заменены на DEVELOPMENT_PLAN.md
+- **package.json** — описание обновлено
+
+### Fixed — Ruler: snap preview visualization (2026-07-22)
+
+- **Snap preview visualization:** Точки привязки теперь отображаются при движении мыши в режиме линейки, а не только после клика
+  - Заменены `snapPreviewPointRef` и `snapPreviewTypeRef` на `useState` для обеспечения перерисовки компонента
+  - `handlePointerMove` теперь обновляет состояние привязки, вызывая визуализацию индикатора
+  - Добавлен визуальный индикатор с правильной цветовой схемой: vertex=красный, edge=зелёный, circle=синий, face=жёлтый
+  - Сохранена существующая логика поиска привязки `findNearestSnap` и создания индикаторов `createSnapIndicator`
+
+### Fixed — Mirror: масштаб теряется при undo/redo (2026-07-22)
+
+- **CRIT-MIRROR-SCALE:** При зеркальном отражении отмасштабированных фигур масштаб терялся при undo/redo (rebuild из истории)
+  - `MirrorOperation` не хранил ссылку на оригинальный объект — `buildRebuildMeta` искал трансформ по `op.ids` (новые ID), которых не было в `transforms`
+  - Исправлено: добавлено поле `originalIds: string[]` в `MirrorOperation` — хранит ID объектов ДО зеркалирования
+  - `buildRebuildMeta` теперь ищет трансформ по `originalIds` и применяет зеркало к нему, создавая новый объект
+  - `handleRebuildScene` в worker-handlers.ts обновлён аналогично
+  - `mirrorSelected` в document-store.ts собирает массивы `originalIds` и `newIds`
+  - Добавлен тест multi-select mirror (2 объекта одновременно)
+
+### Fixed — Ruler: click-click measurement (2026-07-22)
+
+- **Ruler click-click:** Линейка теперь работает по двум кликам (click-click), а не требует удержания кнопки
+  - Вся логика измерения перенесена в `handlePointerDown` (`Viewport3D.tsx`)
+  - Первый `pointerDown` — сохраняет начальную точку, рисует маркер
+  - Второй `pointerDown` — сохраняет конечную точку, рисует линию, вызывает `onRulerMeasure`, сбрасывает состояние
+  - `handlePointerUp` в ruler mode больше не обрабатывает точки — только `stopPropagation` для OrbitControls
+  - `handlePointerMove` по-прежнему полностью игнорируется в ruler mode
+
+### Added — Ruler: snap to geometry (2026-07-22)
+
+- **Ruler snap:** Точки линейки привязываются к геометрии фигур при клике
+  - Добавлен модуль `src/components/snap-utils.ts` с утилитами snap
+  - Поддерживаемые типы привязок:
+    - **Точка (vertex)** — вершина/угол фигуры (красный маркер)
+    - **Ребро (edge)** — ближайшая точка на ребре (зелёный маркер)
+    - **Грань (face)** — центр bounding box фигуры (жёлтый маркер)
+    - **Центр (circle)** — центр окружности для сфер, цилиндров, торов (синий маркер)
+  - Приоритет привязок: vertex > edge > circle > face
+  - `Viewport3D.tsx`: `handlePointerDown` в ruler mode сначала ищет snap, fallback — проекция на Z=0
+  - `Viewport3D.tsx`: `handlePointerMove` в ruler mode обновляет превью snap-индикатора при наведении
+  - `Viewport3D.tsx`: `snapIndicatorRef` — визуальная сфера-индикатор привязки
+  - `Viewport3D.tsx`: `useEffect` для создания/удаления snap-индикатора в сцене
+  - `findNearestSnap()` — raycast → поиск вершин/рёбер/граней/центров → выбор лучшего кандидата
+  - `collectWorldVertices()` / `collectWorldEdges()` — сбор геометрии в мировом пространстве
+  - `closestPointOnSegment()` — ближайшая точка на отрезке (для edge snap)
+  - Визуальные маркеры: цветные сферы с `userData.isSnapIndicator`, авто-удаление при cleanup
+  - Константы радиусов привязки: `SNAP_VERTEX_RADIUS=2.0`, `SNAP_EDGE_RADIUS=2.0`, `SNAP_FACE_RADIUS=2.0`, `SNAP_CIRCLE_RADIUS=3.0`
+  - `snapLabel()` — текстовая метка типа привязки на русском языке
+
+### Fixed — UX: сворачиваемые фильтры, скрытие extrude/mirror (2026-07-21)
+
+- **UX-2:** Фильтры истории занимали много места на панели — свёрнуты в dropdown
+  - Чекбоксы фильтров заменены на кнопку "▼ Фильтр" с выпадающей панелью
+  - Добавлен CSS для `.tl-filter-dropdown`, `.tl-filter-toggle`, `.tl-filter-panel` (`App.css`)
+  - Добавлен state `filtersOpen` в LeftPanel (`LeftPanel.tsx`)
+- **UX-3:** Extrude (выдавливание) в панели свойств — неясный UX, перенесено на панель инструментов
+  - Убраны props: `canExtrude`, `extrudeAxis`, `extrudeDepth`, `onSetExtrudeAxis`, `onSetExtrudeDepth`, `onExtrude`
+  - Секция Extrude удалена из PropertiesPanel (`PropertiesPanel.tsx`)
+- **UX-4:** Mirror (зеркало) в панели свойств — дублирует панель инструментов
+  - Убраны props: `canMirror`, `onMirror`
+  - Секция Mirror удалена из PropertiesPanel (`PropertiesPanel.tsx`)
+  - Удалён unused import `MirrorButtons` (`PropertiesPanel.tsx`)
+- **UX-5:** Линейка — drag detection (4px) мешал второму клику для измерения
+  - `handlePointerMove` теперь игнорирует движение мыши в ruler mode
+  - `handlePointerUp` в ruler mode обрабатывает все клики независимо от drag flag
+  - Рuler работает click-click (две точки), а не drag-измерение (`Viewport3D.tsx`)
+  - `e.stopPropagation()` предотвращает обработку событий OrbitControls в ruler mode
+- **UX-6:** Гизмо вращался с фигурой — теперь всегда ориентирован по осям вида
+  - `tc.setSpace("world")` — гизмо всегда ориентирован по осям вида, не вращается с фигурой
+  - Убран `change` event handler, который сбрасывал rotation pivot'а и ломал вращение
+
+### Fixed — Зеркалирование сбрасывает вращение (2026-07-21)
+
+- **CRIT-MIRROR-1:** При зеркальном отражении фигуры угол поворота сбрасывался визуально
+  - `mirrorSelected` и `applyMirrorToTransform` инвертировали только позицию, но не вращение
+  - При отражении по плоскости вращение вокруг перпендикулярной оси должно инвертироваться (зеркало меняет handedness)
+  - `applyMirrorToTransform` теперь инвертирует `rotX` при YZ, `rotY` при XZ, `rotZ` при XY (`rebuildOps.ts`)
+  - `mirrorSelected` в document-store также инвертирует вращение (`document-store.ts`)
+  - Тест обновлён: `does not affect rotation or scale` → `mirrors rotation on the axis perpendicular to the plane` (`rebuildOps.test.ts`)
+- **CRIT-MIRROR-2:** Pivot в Three.js применял вращение к geometry, которая была зеркалена с учётом старого вращения
+  - `handleMirrorObject` зеркалит geometry, которая уже имеет transform (включая вращение) из кэша
+  - Pivot в Three.js применяет инвертированное вращение к geometry, которая была зеркалена с учётом старого вращения — рассинхрон
+  - `mirrorSelected` теперь sync'ит mesh С вращением (не БЕЗ вращения) перед зеркалением
+  - Worker зеркалит geometry относительно origin с учётом вращения, pivot применяет вращение к geometry, которая была mirror — корректно (`document-store.ts`)
+
+### Fixed — Resize CSG результата заменяется кубиком (2026-07-21)
+
+- **CRIT-RESIZE-1:** В свойствах объединённой фигуры есть размеры, при их изменении фигура заменяется кубиком этих размеров
+  - `resizeObject` rebuildит primitive из `shapeType/params`, но CSG результаты имеют `shapeType='cube' && !params.width`
+  - Rebuild создаёт default cube вместо масштабирования CSG-геометрии
+  - Для CSG результатов теперь используется сброс scale до 1 и задание размеров бондибокса в мм (`document-store.ts`)
+  - В свойствах объединённой фигуры отображается реальный размер бондибокса в мм (`PropertiesPanel.tsx`)
+  - `originalBboxSize` сохраняется в SceneObject и GroupOperation, используется для отображения размеров (`types.ts`)
+  - `csgBoolean` сохраняет `originalBboxSize` при создании CSG результата (`document-store.ts`)
+  - `rebuildFromHistory` восстанавливает `originalBboxSize` из GroupOperation (`rebuild.ts`)
+  - `buildRebuildMeta` извлекает `originalBboxSize` из GroupOperation (`rebuild.ts`)
+- **CRIT-MIRROR-2:** Pivot в Three.js применял вращение к geometry, которая была зеркалена с учётом старого вращения
+  - `handleMirrorObject` зеркалит geometry, которая уже имеет transform (включая вращение) из кэша
+  - Pivot в Three.js применяет инвертированное вращение к geometry, которая была зеркалена с учётом старого вращения — рассинхрон
+  - `mirrorSelected` теперь sync'ит mesh БЕЗ вращения (только позицию) перед зеркалением
+  - Pivot применяет инвертированное вращение к geometry, которая была зеркалена без вращения — корректно (`document-store.ts`)
+
+### Fixed — Resize CSG результата заменяется кубиком (2026-07-21)
+
+- **CRIT-RESIZE-1:** В свойствах объединённой фигуры есть размеры, при их изменении фигура заменяется кубиком этих размеров
+  - `resizeObject` rebuildит primitive из `shapeType/params`, но CSG результаты имеют `shapeType='cube' && !params.width`
+  - Rebuild создаёт default cube вместо масштабирования CSG-геометрии
+  - Для CSG результатов теперь используется scale-трансформация вместо rebuild'а (`document-store.ts`)
+  - Вычисляется bbox CSG-результата, scale = targetSize / currentSize
+  - Transform обновляется с новым scale, worker sync'ится через `workerSyncMesh` с новым scale
+
+### Fixed — История цвета: только финальный выбор (2026-07-21)
+
+- **UX-1:** При выборе цвета фигуры в историю записывались все промежуточные движения мыши по палитре
+  - input type="color" вызывал onChange при каждом движении мыши, каждый раз добавляя операцию color в историю
+  - Пользователь не мог отменить "микродвижения" мышью по палитре
+  - Добавлен draft color state в PropertiesPanel — промежуточные изменения хранятся локально
+  - Реальный цвет сохраняется в историю только при onBlur (закрытие палитры) или при смене выбранного объекта
+  - Добавлен optional параметр `skipHistory` в `setColor` — позволяет обновить цвет визуально без записи в историю
+  - Color swatch показывает draft цвет для визуальной обратной связи (`PropertiesPanel.tsx`)
+
+### Fixed — CSG координаты и цепочка операций (2026-07-21)
+
+- **CRIT-CSG-1:** CSG-результат появлялся в (0,0,0) при прямой операции (без вращения/масштаба operand'ов)
+  - `buildSRTMatrixAroundCenter` создавал identity-матрицу когда RS = identity (формула `tx = pos - RS·pos = 0`)
+  - `handleCsgBooleanSync` и `handleSyncObjects` использовали эту матрицу для примитивов, центрированных в (0,0,0)
+  - Результат: operand'ы не смещались в позицию, boolean выполнялся в (0,0,0), результат в (0,0,0)
+  - Rebuild из истории работал корректно (`applyTransform` применял translate отдельно) — рассинхронизация
+  - Добавлена `buildTransformMatrix()` — создаёт матрицу `[RS, 0; pos, 1]` (RS вокруг origin, затем translate)
+  - `handleCsgBooleanSync` и `handleSyncObjects` теперь используют `buildTransformMatrix` (`worker-handlers.ts`)
+  - `buildSRTMatrixAroundCenter` оставлен для `applySRAroundCenter` в `handleRebuildScene` (там геометрия уже смещена)
+  - Добавлены unit-тесты для `buildTransformMatrix` (`worker-matrix.test.ts`, +5 тестов)
+- **CRIT-CSG-2:** CSG-результат превращался в default cube при повторных CSG-операциях и при undo/redo
+  - Результат CSG хранился как `shapeType: 'cube', params: {}` — при rebuild воркер создавал default cube
+  - При цепочке CSG (A+B=C, затем C+D=E) operand C rebuildился как default cube вместо сложной CSG-геометрии
+  - Добавлены `resultVertices`, `resultIndices`, `resultNormals` в `GroupOperation` (`types.ts`)
+  - Добавлен `syncMesh` handler в воркер — кэширует произвольный mesh из vertices/indices (`worker-handlers.ts`)
+  - `document-store.csgBoolean` теперь sync'ит operandы через `workerSyncMesh` + **transform** перед CSG (`document-store.ts`)
+  - `handleSyncMesh` применяет полный TRS (buildSRAroundCenter) к sync'нутому mesh (`worker-handlers.ts`)
+  - `handleCsgBooleanSync` пропускает sync для operandов уже в кэше (CSG results, imported meshes) (`worker-handlers.ts`)
+  - `handleRebuildScene` применяет transform к resultVertices mesh'ам (`worker-handlers.ts`)
+  - `rebuildFromHistory` применяет accumulated TRS к stored mesh для CSG-результатов (`rebuild.ts`)
+  - **resultCenter:** `buildRebuildMeta` сбрасывал transform CSG results на {0,0,0}, теряя позицию центра. Добавлено поле `resultCenter` в GroupOperation, buildRebuildMeta использует его как начальную позицию (`types.ts`, `rebuild.ts`)
+  - `handleRebuildScene` использует resultCenter как начальную позицию currentTransforms (`worker-handlers.ts`)
+  - `extrudeSelected` также сохраняет resultVertices/resultIndices/resultCenter (`document-store.ts`)
+- **CRIT-CSG-3:** CSG-результат терял геометрию при move/mirror/align после CSG-операции
+  - `moveObject`, `mirrorSelected`, `alignSelected` sync'или worker кэш через `workerSyncObjects`/`workerBuildShape`, которые rebuildят primitive из `shapeType/params`
+  - Для CSG-результата (`shapeType='cube'`, `params={}`) это создавало default cube вместо реального mesh
+  - При цепочке CSG → move → CSG результат был неправильный
+  - `moveObject` теперь использует `workerSyncMesh` для CSG results и imported_mesh (`document-store.ts`)
+  - `mirrorSelected` теперь использует `workerSyncMesh` для CSG results и imported_mesh (`document-store.ts`)
+  - `alignSelected` теперь использует `workerSyncMesh` для CSG results и imported_mesh (`document-store.ts`)
 
 ### Fixed — Раунд 8: Критические исправления (Фаза A) (2026-07-16)
 
@@ -24,6 +262,28 @@
   - Подстроковая проверка `json.includes('constructor')` заменена на рекурсивную валидацию ключей `validateObjectKeys()` после `JSON.parse`
   - Легитимные имена объектов (например, `my_constructor_block`) больше не блокируются
   - Функция проверяет ключи объектов рекурсивно, включая массивы
+- **WARN-R8-2:** Stale closure в animation loop — добавлен `fpsUpdateRef` (`Viewport3D.tsx`)
+  - `onFpsUpdate` стабилизируется через ref-паттерн, аналогично другим callback props
+- **WARN-R8-4:** Удалён мёртвый код (`Viewport3D.tsx`)
+  - Удалены неиспользуемые: интерфейс `DragRect`, state `dragRect`, ref `currentMeshRef`
+
+### Fixed — Раунд 8: Безопасность, производительность, баги, доступность (2026-07-16)
+
+- **SEC-R8-1:** Добавлен лимит размера .doodle файла 50 МБ для защиты от ZIP bomb (`doodle-io.ts`)
+- **SEC-R8-2:** Задержка 1 секунда перед `URL.revokeObjectURL` для гарантии завершения скачивания (`stl-export.ts`)
+- **PERF-R8-1:** Clipboard хранит `Float32Array`/`Uint32Array` вместо `number[]` — экономия памяти в 8× (`helpers.ts`, `document-store.ts`)
+- **PERF-R8-2:** Добавлен таймаут 30 секунд для worker-запросов для предотвращения бесконечного ожидания (`worker-client.ts`)
+- **PERF-R8-3:** Добавлена функция `disposeWorker()` для корректной очистки при HMR (`worker-client.ts`)
+- **PERF-R8-4:** Вычисление `visible` в Timeline обёрнуто в `useMemo` для оптимизации рендеров (`Timeline.tsx`)
+- **WARN-R8-7:** Добавлена валидация схемы операций при загрузке .doodle — проверка типа каждой операции (`doodle-io.ts`)
+- **BUG-R8-1:** `importStl` теперь передаёт `normals` в `makeObject` для корректного рендеринга (`document-store.ts`)
+- **BUG-R8-2:** `saveToProject` теперь сбрасывает `modified` flag после успешного сохранения (`document-store.ts`)
+- **BUG-R8-3:** `moveObject` теперь делает early return если все delta ниже epsilon — не засоряет историю (`document-store.ts`)
+- **A11Y-1:** `Section.tsx` — добавлены `role="button"`, `tabIndex={0}`, `aria-expanded`, keyboard support (Enter/Space)
+- **A11Y-2:** `TextModal.tsx` — добавлены `role="dialog"`, `aria-modal="true"`, `aria-labelledby`
+- **A11Y-3:** `Toolbar.tsx` — добавлены `role="toolbar"`, `aria-label="Панель инструментов"`
+- **A11Y-4:** `StatusBar.tsx` — добавлены `role="status"`, `aria-live="polite"`
+- **A11Y-5:** `NumInput.tsx` — `<span>` заменён на `<label htmlFor>` для правильной связи label-input
 
 ### Changed — Раунд 8: DRY рефакторинг (2026-07-16)
 
@@ -281,7 +541,7 @@
 - **Фаза 4:** История операций с undo/redo, таймлайн с фильтрацией
 - **Фаза 4:** Зеркало по осям, выравнивание (align) по 3 осям
 - **Фаза 5:** Импорт/экспорт STL (бинарный + ASCII)
-- **Фаза 5:** Формат `.doodle` (ZIP + JSON) с совместимостью с Java-оригиналом
+- **Фаза 5:** Формат `.doodle` (ZIP + JSON) — вдохновлён CaDoodle
 - **Фаза 5:** Автосохранение в IndexedDB, восстановление сессии
 - **Фаза 5:** Менеджер проектов (несколько проектов в IndexedDB)
 - **Фаза 5:** 3D-текст через TextGeometry (opentype.js)

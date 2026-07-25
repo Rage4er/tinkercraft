@@ -1,0 +1,23 @@
+{
+  "name": "tinkercraft",
+  "version": "1.0.0",
+  "description": "TinkerCraft — браузерный 3D CAD-редактор. Параметрический 3D-редактор для образования и хобби, вдохновлённый CaDoodle.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Rage4er/tinkercraft.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Rage4er/tinkercraft/issues"
+  },
+  "homepage": "https://github.com/Rage4er/tinkercraft#readme",
+  "dependencies": {
+    "qwen-code": "^0.0.5"
+  }
+}

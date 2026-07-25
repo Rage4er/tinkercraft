@@ -369,9 +369,8 @@ export default function App() {
       {showPM && (
         <ProjectManagerModal
           onClose={() => setShowPM(false)}
-          onLoad={async (ops) => {
-            await loadFromProject("_direct");
-            void ops;
+          onLoad={async (id) => {
+            await loadFromProject(id);
           }}
           onSave={saveToProject}
           currentProjectId={currentProjectId ?? undefined}
@@ -527,26 +526,18 @@ export default function App() {
             selectedIds={selectedIds}
             canResize={canResize}
             canFillet={canFillet}
-            canExtrude={canExtrude}
-            canMirror={canMirror}
-            canAlign={canAlign}
             canCsg={canCsg}
+            canAlign={canAlign}
             filletRadius={filletRadius}
-            extrudeAxis={extrudeAxis}
-            extrudeDepth={extrudeDepth}
             objectList={objectList}
             operationsLength={operations.length}
             onSetFilletRadius={setFilletRadius}
-            onSetExtrudeAxis={setExtrudeAxis}
-            onSetExtrudeDepth={setExtrudeDepth}
             onMoveAxis={handleMoveAxis}
             onRotAxis={handleRotAxis}
             onScaleAxis={handleScaleAxis}
             onResizeDim={handleResizeDim}
             onResizeObject={resizeObject}
             onApplyFillet={applyFillet}
-            onExtrude={extrudeSelected}
-            onMirror={mirrorSelected}
             onCsg={csgBoolean}
             onAlign={alignSelected}
             onSetColor={setColor}

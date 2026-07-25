@@ -12,6 +12,13 @@ import type { SceneObject, TransformNR } from "../csg/types";
 import { computeAABB } from "../store/helpers";
 import WebGLFallback from "./WebGLFallback";
 import ViewCube from "./ViewCube";
+import {
+  findNearestSnap,
+  createSnapIndicator,
+  removeSnapIndicators,
+  type SnapType,
+  type SnapResult,
+} from "./snap-utils";
 
 export type GizmoMode = "translate" | "rotate" | "scale" | null;
 
@@ -25,7 +32,6 @@ interface DragRect {
   endX: number;
   endY: number;
 }
-
 interface Props {
   busy: boolean;
   workerOk: boolean;
@@ -111,7 +117,6 @@ export default function Viewport3D({
     null,
   );
   const [cubeCtrl, setCubeCtrl] = useState<OrbitControls | null>(null);
-  const [dragRect, setDragRect] = useState<DragRect | null>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const initRanRef = useRef(false); // <-- added to track initialization
@@ -132,9 +137,12 @@ export default function Viewport3D({
   const rulerLineRef = useRef<THREE.Line | null>(null);
   const rulerMarkersRef = useRef<THREE.Mesh[]>([]);
   const rulerPointsRef = useRef<THREE.Vector3[]>([]);
+  // Snap-индикатор (маленькая сфера, показывающая привязку при наведении)
+  const snapIndicatorRef = useRef<THREE.Mesh | null>(null);
+  const [snapPreviewPoint, setSnapPreviewPoint] = useState<THREE.Vector3 | null>(null);
+  const [snapPreviewType, setSnapPreviewType] = useState<SnapType>(null);
   const rafRef = useRef<number | null>(null);
   const fpsRef = useRef({ last: performance.now(), frames: 0 });
-  const currentMeshRef = useRef<THREE.Object3D | null>(null);
 
   const fitTargetRef = useRef<FitTarget | null>(null);
   // Keep cameraModeRef in sync with prop
@@ -152,10 +160,21 @@ export default function Viewport3D({
     snapValueRef.current = snapValue;
   }, [snapValue]);
 
+  const rulerModeRef = useRef(rulerMode);
+  useEffect(() => {
+    rulerModeRef.current = rulerMode;
+  }, [rulerMode]);
+
   const selectedIdsRef = useRef(selectedIds);
   useEffect(() => {
     selectedIdsRef.current = selectedIds;
   }, [selectedIds]);
+
+  // WARN-R8-2: stabilize onFpsUpdate via ref to avoid stale closure in animation loop
+  const fpsUpdateRef = useRef(onFpsUpdate);
+  useEffect(() => {
+    fpsUpdateRef.current = onFpsUpdate;
+  }, [onFpsUpdate]);
 
   const pointerDownPos = useRef<{ x: number; y: number } | null>(null);
   const isDraggingRef = useRef(false);
@@ -248,7 +267,7 @@ export default function Viewport3D({
 
     const tc = new TransformControls(camera, renderer.domElement);
     tc.setSize(0.8);
-    tc.setSpace("local"); // Use local space so gizmo moves relative to object's own axes
+    tc.setSpace("world"); // Always aligned to world axes, doesn't rotate with object
     tc.addEventListener("dragging-changed", (e: { value: unknown }) => {
       controls.enabled = !e.value;
     });
@@ -337,7 +356,7 @@ export default function Viewport3D({
       const now = performance.now();
       fpsRef.current.frames++;
       if (now - fpsRef.current.last >= 500) {
-        onFpsUpdate(
+        fpsUpdateRef.current(
           Math.round(
             (fpsRef.current.frames * 1000) / (now - fpsRef.current.last),
           ),
@@ -488,8 +507,36 @@ export default function Viewport3D({
     if (!rulerMode) {
       rulerPointsRef.current = [];
       clearRulerVisuals();
+      removeSnapIndicators(sceneRef.current);
+      snapIndicatorRef.current = null;
+      setSnapPreviewPoint(null);
+      setSnapPreviewType(null);
     }
   }, [rulerMode, clearRulerVisuals]);
+
+  // ---- Snap indicator update (preview при наведении в rulerMode) ----
+  useEffect(() => {
+    const pt = snapPreviewPoint;
+    const type = snapPreviewType;
+
+    const scene = sceneRef.current;
+    if (!scene) return;
+
+    // Удалить старый индикатор
+    if (snapIndicatorRef.current) {
+      scene.remove(snapIndicatorRef.current);
+      snapIndicatorRef.current.geometry.dispose();
+      (snapIndicatorRef.current.material as THREE.Material).dispose();
+      snapIndicatorRef.current = null;
+    }
+
+    // Создать новый, если есть превью
+    if (pt && rulerMode) {
+      const indicator = createSnapIndicator(pt, type);
+      scene.add(indicator);
+      snapIndicatorRef.current = indicator;
+    }
+  }, [snapPreviewPoint, snapPreviewType, rulerMode]);
 
   // ---- Drag-select helpers ----
   const performDragSelect = useCallback(
@@ -551,30 +598,102 @@ export default function Viewport3D({
   // ---- Click / Drag ----
   const handlePointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
+      // Ruler mode: click-click measurement с snap к геометрии
+      if (rulerModeRef.current) {
+        const scene = sceneRef.current;
+        const camera = cameraRef.current;
+        const container = containerRef.current;
+        if (!scene || !camera || !container) {
+          e.stopPropagation();
+          return;
+        }
+
+        const rect = container.getBoundingClientRect();
+        const x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+        const y = -(((e.clientY - rect.top) / rect.height) * 2 - 1);
+        const screenPos = new THREE.Vector2(x, y);
+        const raycaster = new THREE.Raycaster();
+        raycaster.setFromCamera(screenPos, camera);
+
+        // Сначала пробуем snap к геометрии
+        const snapResult = findNearestSnap(raycaster, meshMapRef, camera, screenPos);
+        let point: THREE.Vector3;
+        if (snapResult) {
+          point = snapResult.point;
+        } else {
+          // Fallback: проецируем на рабочую плоскость (Z=0)
+          const ndc = new THREE.Vector3(x, y, 0);
+          ndc.unproject(camera);
+          const dir = ndc.sub(camera.position).normalize();
+          const groundZ = 0;
+          const distance = (groundZ - camera.position.z) / dir.z;
+          if (!Number.isFinite(distance) || distance < 0) {
+            e.stopPropagation();
+            return;
+          }
+          point = camera.position.clone().add(dir.clone().multiplyScalar(distance));
+        }
+
+        if (rulerPointsRef.current.length === 0) {
+          // Первый клик: сохраняем начальную точку
+          rulerPointsRef.current = [point];
+          updateRulerVisuals(rulerPointsRef.current);
+        } else {
+          // Второй клик: завершаем измерение
+          rulerPointsRef.current.push(point);
+          updateRulerVisuals(rulerPointsRef.current);
+          onRulerMeasure?.(rulerPointsRef.current[0].distanceTo(point));
+          // Сброс для следующего измерения
+          rulerPointsRef.current = [];
+        }
+
+        // Предотвращаем обработку OrbitControls
+        e.stopPropagation();
+        return;
+      }
       pointerDownPos.current = { x: e.clientX, y: e.clientY };
       isDraggingRef.current = false;
-
-      if (rulerMode) {
-        const point = getWorldPointFromPointer(e);
-        if (!point) return;
-
-        const points = rulerPointsRef.current;
-        if (points.length === 0 || points.length >= 2) {
-          rulerPointsRef.current = [point];
-        } else {
-          rulerPointsRef.current = [points[0], point];
-        }
-        updateRulerVisuals(rulerPointsRef.current);
-        if (points.length === 1 && onRulerMeasure) {
-          onRulerMeasure(points[0].distanceTo(point));
-        }
-      }
     },
-    [getWorldPointFromPointer, onRulerMeasure, rulerMode, updateRulerVisuals],
+    [meshMapRef, updateRulerVisuals, onRulerMeasure],
   );
 
   const handlePointerMove = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
+      // Ruler mode: обновляем snap-превью при наведении
+      if (rulerModeRef.current) {
+        const scene = sceneRef.current;
+        const camera = cameraRef.current;
+        const container = containerRef.current;
+        if (!scene || !camera || !container) return;
+
+        const rect = container.getBoundingClientRect();
+        const x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+        const y = -(((e.clientY - rect.top) / rect.height) * 2 - 1);
+        const ndc = new THREE.Vector3(x, y, 0);
+        ndc.unproject(camera);
+
+        const dir = ndc.sub(camera.position).normalize();
+        const groundZ = 0;
+        const distance = (groundZ - camera.position.z) / dir.z;
+        if (!Number.isFinite(distance) || distance < 0) return;
+
+        const worldPoint = camera.position.clone().add(dir.clone().multiplyScalar(distance));
+        const screenPos = new THREE.Vector2(x, y);
+        const raycaster = new THREE.Raycaster();
+        raycaster.setFromCamera(screenPos, camera);
+
+        const result = findNearestSnap(raycaster, meshMapRef, camera, screenPos);
+        if (result) {
+          setSnapPreviewPoint(result.point);
+          setSnapPreviewType(result.type);
+        } else {
+          setSnapPreviewPoint(null);
+          setSnapPreviewType(null);
+        }
+        return;
+      }
+
+      // Нерuler mode: существующая логика drag-select
       if (!pointerDownPos.current) return;
       const dx = e.clientX - pointerDownPos.current.x;
       const dy = e.clientY - pointerDownPos.current.y;
@@ -585,6 +704,13 @@ export default function Viewport3D({
 
   const handlePointerUp = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
+      // Ruler mode: measurement already handled in pointerDown
+      // Only prevent OrbitControls — no measurement logic here
+      if (rulerModeRef.current) {
+        e.stopPropagation();
+        return;
+      }
+
       const start = pointerDownPos.current;
       pointerDownPos.current = null;
 
@@ -592,55 +718,37 @@ export default function Viewport3D({
 
       // If it was a click (not drag) — select object via Raycaster
       if (!isDraggingRef.current) {
-        if (rulerMode) {
-          const point = getWorldPointFromPointer(e);
-          if (point && rulerPointsRef.current.length === 1) {
-            rulerPointsRef.current = [rulerPointsRef.current[0], point];
-            updateRulerVisuals(rulerPointsRef.current);
-            onRulerMeasure?.(rulerPointsRef.current[0].distanceTo(point));
+        // Raycaster для выбора объекта
+        const camera = activeCameraRef.current ?? cameraRef.current;
+        const container = containerRef.current;
+        if (camera && container) {
+          const rect = container.getBoundingClientRect();
+          const x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+          const y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+          const raycaster = new THREE.Raycaster();
+          raycaster.setFromCamera(new THREE.Vector2(x, y), camera);
+          const meshes: THREE.Mesh[] = [];
+          for (const entry of meshMapRef.current.values()) {
+            if (entry.mesh.visible) meshes.push(entry.mesh);
           }
-        } else {
-          // Raycaster для выбора объекта
-          const camera = activeCameraRef.current ?? cameraRef.current;
-          const container = containerRef.current;
-          if (camera && container) {
-            const rect = container.getBoundingClientRect();
-            const x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-            const y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
-            const raycaster = new THREE.Raycaster();
-            raycaster.setFromCamera(new THREE.Vector2(x, y), camera);
-            const meshes: THREE.Mesh[] = [];
-            for (const entry of meshMapRef.current.values()) {
-              if (entry.mesh.visible) meshes.push(entry.mesh);
-            }
-            const hits = raycaster.intersectObjects(meshes, false);
-            if (hits.length > 0) {
-              const id = hits[0].object.userData.objectId as string;
-              onSelect(id, e.shiftKey);
-            } else {
-              onSelect(null, false);
-            }
+          const hits = raycaster.intersectObjects(meshes, false);
+          if (hits.length > 0) {
+            const id = hits[0].object.userData.objectId as string;
+            onSelect(id, e.shiftKey);
+          } else {
+            onSelect(null, false);
           }
         }
         return;
       }
 
       // If it was a drag (box selection)
-      if (rulerMode) {
-        const point = getWorldPointFromPointer(e);
-        if (point && rulerPointsRef.current.length === 1) {
-          rulerPointsRef.current = [rulerPointsRef.current[0], point];
-          updateRulerVisuals(rulerPointsRef.current);
-          onRulerMeasure?.(rulerPointsRef.current[0].distanceTo(point));
-        }
+      if (isDraggingRef.current) {
+        // Box selection — handled by the existing drag logic
       }
     },
     [
-      getWorldPointFromPointer,
-      onRulerMeasure,
       onSelect,
-      rulerMode,
-      updateRulerVisuals,
     ],
   );
 

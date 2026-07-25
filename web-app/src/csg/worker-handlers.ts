@@ -4,10 +4,11 @@
 // isolated functions for better readability and testability.
 // ============================================================
 
-import { buildSRTMatrixAroundCenter } from './worker-matrix'
+import { buildSRTMatrixAroundCenter, buildTransformMatrix } from './worker-matrix'
 import { FILLET_EPSILON, FILLET_MIN_RADIUS } from '../constants'
 import type { RebuildTransform } from './rebuildOps'
 import { applyMoveDelta, applyMirrorToTransform, applyAlignToTransform } from './rebuildOps'
+import type { MirrorOperation } from './types'
 
 // --- Type definitions (moved from worker.ts to avoid circular deps) ---
 
@@ -442,6 +443,19 @@ export interface MirrorObjectMessage {
   type: 'mirrorObject'
   objId: string
   plane: 'XY' | 'XZ' | 'YZ'
+  shapeType?: string
+  params?: Record<string, number>
+  transform?: {
+    x: number
+    y: number
+    z: number
+    rotX: number
+    rotY: number
+    rotZ: number
+    scaleX: number
+    scaleY: number
+    scaleZ: number
+  }
 }
 
 export interface RebuildSceneMessage {
@@ -570,12 +584,169 @@ export async function handleBuildImportedMesh(msg: BuildImportedMeshMessage): Pr
         objId: msg.objId,
         vertices: mesh.vertices,
         indices: mesh.indices,
+        normals: mesh.normals,
         tris: mesh.tris,
         ms: performance.now() - t0,
-        nonManifold: true,
       },
-      [mesh.vertices.buffer, mesh.indices.buffer],
+      buildTransferList(mesh),
     )
+  }
+}
+
+// --- BuildTree: rebuild a node from its tree definition ---
+
+export interface RebuildTreeNodeMessage {
+  reqId: string
+  type: 'rebuildTreeNode'
+  nodeId: string
+  nodes: Array<{
+    id: string
+    type: 'primitive' | 'boolean' | 'baked'
+    shapeType?: string
+    params?: Record<string, number>
+    localTransform?: { x: number; y: number; z: number; rotX: number; rotY: number; rotZ: number; scaleX: number; scaleY: number; scaleZ: number }
+    vertices?: number[]
+    indices?: number[]
+    normals?: number[]
+    operation?: 'union' | 'subtract' | 'intersect'
+    children?: string[]
+  }>
+  nodeIdPath: string[]
+}
+
+/** RebuildTreeNodeMessage node data type */
+export type RebuildTreeNodeData = RebuildTreeNodeMessage['nodes'][number]
+
+/**
+ * Rebuild a tree node using worker. Sends node definition, rebuilds the subtree,
+ * returns the extracted mesh. Used by history-tree rebuildNode when cache misses.
+ *
+ * NOTE: Returns mesh in WORLD coordinates (children transforms applied).
+ * Centering and localTransform application is done by caller (applyCSGMeshes in history-tree.ts).
+ */
+export async function handleRebuildTreeNode(msg: RebuildTreeNodeMessage): Promise<void> {
+  const t0 = performance.now()
+  const wasm = getWasm()
+
+  // Build a map of id → node data
+  const nodeMap = new Map<string, RebuildTreeNodeMessage['nodes'][number]>()
+  for (const n of msg.nodes) {
+    nodeMap.set(n.id, n)
+  }
+
+  // Recursive function to rebuild a node and return ManifoldObject
+  function rebuildNode(id: string): ManifoldObject | null {
+    const nd = nodeMap.get(id)
+    if (!nd) return null
+
+    let m: ManifoldObject | null = null
+
+    if (nd.type === 'primitive') {
+      // Build primitive
+      const shapeType = nd.shapeType || 'cube'
+      const params = nd.params || {}
+      m = buildPrimitive(shapeType, params as Record<string, number>)
+      // Apply transform
+      const t = nd.localTransform || { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
+      const matrix = buildTransformMatrix(
+        { x: t.x, y: t.y, z: t.z },
+        { rotX: t.rotX, rotY: t.rotY, rotZ: t.rotZ },
+        { scaleX: t.scaleX, scaleY: t.scaleY, scaleZ: t.scaleZ },
+      )
+      const transformed = m.transform(matrix)
+      m.delete()
+      m = transformed
+
+    } else if (nd.type === 'baked') {
+      if (nd.vertices && nd.indices) {
+        m = new wasm.Manifold({
+          numProp: 3,
+          vertProperties: new Float32Array(nd.vertices),
+          triVerts: new Uint32Array(nd.indices),
+        })
+        // Apply position transform (scale=1, rot=0 for baked)
+        const t = nd.localTransform || { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
+        const matrix = buildTransformMatrix(
+          { x: t.x, y: t.y, z: t.z },
+          { rotX: 0, rotY: 0, rotZ: 0 },
+          { scaleX: 1, scaleY: 1, scaleZ: 1 },
+        )
+        const transformed = m.transform(matrix)
+        m.delete()
+        m = transformed
+      }
+
+    } else if (nd.type === 'boolean' && nd.children && nd.operation) {
+      const childA = rebuildNode(nd.children[0])
+      const childB = rebuildNode(nd.children[1])
+      if (childA && childB) {
+        if (nd.operation === 'subtract') {
+          m = childA.subtract(childB)
+        } else if (nd.operation === 'intersect') {
+          m = childA.intersect(childB)
+        } else {
+          m = childA.add(childB)
+        }
+        childA.delete()
+        childB.delete()
+        
+        // FIX (BUG-CSG-POS-4): Center geometry at origin only.
+        // Children have their transforms applied (world coordinates), so the boolean result
+        // is also in world coordinates. We center it (extractAndCenter behavior).
+        // DO NOT apply boolean node's localTransform here — it's applied in history-tree.ts
+        // in the applyCSGMeshes function.
+        const mesh = m.getMesh()
+        const verts = mesh.vertProperties
+        const numVerts = verts.length / mesh.numProp
+        let cx = 0, cy = 0, cz = 0
+        for (let i = 0; i < numVerts; i++) {
+          cx += verts[i * mesh.numProp]
+          cy += verts[i * mesh.numProp + 1]
+          cz += verts[i * mesh.numProp + 2]
+        }
+        cx /= numVerts; cy /= numVerts; cz /= numVerts
+        
+        // Translate to center only
+        const centerMatrix = buildTransformMatrix(
+          { x: -cx, y: -cy, z: -cz },
+          { rotX: 0, rotY: 0, rotZ: 0 },
+          { scaleX: 1, scaleY: 1, scaleZ: 1 },
+        )
+        const centered = m.transform(centerMatrix)
+        m.delete()
+        m = centered
+      }
+    }
+
+    return m
+  }
+
+  try {
+    // Rebuild the target node
+    const result = rebuildNode(msg.nodeId)
+    if (!result) {
+      safePostMessage({ reqId: msg.reqId, type: 'error', message: `Node ${msg.nodeId} not found` })
+      return
+    }
+
+    const mesh = extractMesh(result)
+    result.delete()
+
+    safePostMessage(
+      {
+        reqId: msg.reqId,
+        type: 'mesh',
+        objId: msg.nodeId,
+        vertices: mesh.vertices,
+        indices: mesh.indices,
+        normals: mesh.normals,
+        tris: mesh.tris,
+        ms: performance.now() - t0,
+      },
+      buildTransferList(mesh),
+    )
+  } catch (e: unknown) {
+    safePostMessage({ reqId: msg.reqId, type: 'error', message: (e as Error).message })
   }
 }
 
@@ -610,7 +781,10 @@ export async function handleRebuildScene(msg: RebuildSceneMessage): Promise<void
       shapeInfos.set(op.id as string, { shapeType: st, params: par, filletRadius: 0 })
       currentTransforms.set(op.id as string, { ...t })
     } else if (op.type === 'import_mesh') {
-      const t: RebuildTransform = { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
+      const raw = op.transform as { x: number; y: number; z: number; rotX: number; rotY: number; rotZ: number; scaleX?: number; scaleY?: number; scaleZ?: number } | undefined
+      const t: RebuildTransform = raw
+        ? { x: raw.x, y: raw.y, z: raw.z, rotX: raw.rotX, rotY: raw.rotY, rotZ: raw.rotZ, scaleX: raw.scaleX ?? 1, scaleY: raw.scaleY ?? 1, scaleZ: raw.scaleZ ?? 1 }
+        : { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
       currentTransforms.set(op.id as string, t)
       shapeInfos.set(op.id as string, { shapeType: 'import_mesh', params: {}, filletRadius: 0 })
     } else if (op.type === 'fillet') {
@@ -634,8 +808,15 @@ export async function handleRebuildScene(msg: RebuildSceneMessage): Promise<void
           const nt = applyMoveDelta(t, d, rd, sd)
           currentTransforms.set(id, nt)
           if (info) {
-            const m = applyTransform(buildPrimitiveWithFillet(info.shapeType, info.params, info.filletRadius), nt)
-            setCached(id, m)
+            const fresh = buildPrimitiveWithFillet(info.shapeType, info.params, info.filletRadius)
+            const fullMatrix = buildTransformMatrix(
+              { x: nt.x, y: nt.y, z: nt.z },
+              { rotX: nt.rotX, rotY: nt.rotY, rotZ: nt.rotZ },
+              { scaleX: nt.scaleX, scaleY: nt.scaleY, scaleZ: nt.scaleZ },
+            )
+            const tm = fresh.transform(fullMatrix)
+            fresh.delete()
+            setCached(id, tm)
           }
         } else {
           const cm = cache.get(id)
@@ -644,13 +825,24 @@ export async function handleRebuildScene(msg: RebuildSceneMessage): Promise<void
       }
     } else if (op.type === 'mirror') {
       const flip = getMirrorMatrix(op.plane as string)
-      for (const id of op.ids as string[]) {
-        const cm = cache.get(id)
-        if (cm) setCached(id, cm.transform(flip))
-        const t = currentTransforms.get(id)
-        if (t) {
-          const nt = applyMirrorToTransform(t, op.plane as 'XY' | 'XZ' | 'YZ')
-          currentTransforms.set(id, nt)
+      // Mirror creates NEW objects. Look up transforms from originalIds.
+      const mirrorOp = op as unknown as MirrorOperation
+      const origIds = mirrorOp.originalIds ?? []
+      for (let i = 0; i < origIds.length && i < mirrorOp.ids.length; i++) {
+        const origId = origIds[i]
+        const newId = mirrorOp.ids[i]
+        const cm = cache.get(newId)
+        if (cm) {
+          setCached(newId, cm.transform(flip))
+        } else {
+          const origT = currentTransforms.get(origId)
+          const origShape = shapeInfos.get(origId)
+          if (origT && origShape) {
+            const nt = applyMirrorToTransform(origT, op.plane as 'XY' | 'XZ' | 'YZ')
+            const m = applyTransform(buildPrimitiveWithFillet(origShape.shapeType, origShape.params, origShape.filletRadius), nt)
+            setCached(newId, m)
+            currentTransforms.set(newId, nt)
+          }
         }
       }
     } else if (op.type === 'align') {
@@ -696,22 +888,70 @@ export async function handleRebuildScene(msg: RebuildSceneMessage): Promise<void
       }
     } else if (op.type === 'group') {
       const ids = op.ids as string[]
-      let a = cache.get(ids[0])
-      let b = cache.get(ids[1])
-      if (a && b) {
-        const tA = currentTransforms.get(ids[0])
-        const tB = currentTransforms.get(ids[1])
-        if (tA && hasSR(tA)) a = applySRAroundCenter(a, tA)
-        if (tB && hasSR(tB)) b = applySRAroundCenter(b, tB)
-        let result: ManifoldObject
-        const isIntersect = op.isIntersect as boolean
-        const subtractOp = op.subtractOp as boolean | undefined
-        if (isIntersect) result = a.intersect(b)
-        else if (subtractOp) result = a.subtract(b)
-        else result = a.add(b)
-        disposeCached(ids[0])
-        disposeCached(ids[1])
-        setCached(op.resultId as string, result)
+      const resultId = op.resultId as string | undefined
+      // FIX (CRIT-CSG-2): If resultVertices/resultIndices are stored in the
+      // operation, use them directly instead of rebuilding from operands.
+      // This preserves exact CSG geometry through undo/redo.
+      const resultVerts = op.resultVertices as Float32Array | number[] | undefined
+      const resultIdxs = op.resultIndices as Uint32Array | number[] | undefined
+      if (resultVerts && resultIdxs && resultId) {
+        // Build Manifold from stored vertices/indices
+        const wasm = getWasm()
+        const verts = new Float32Array(resultVerts)
+        const tris = new Uint32Array(resultIdxs)
+        try {
+          let m = new wasm.Manifold({
+            numProp: 3,
+            vertProperties: verts,
+            triVerts: tris,
+          })
+          // Apply accumulated transform (from move/mirror/align after group).
+          // FIX (CRIT-CSG-2): If resultCenter is stored, use it as the initial
+          // position — the mesh is centered at origin, so translation = resultCenter.
+          let t: RebuildTransform | undefined
+          if (currentTransforms.has(resultId)) {
+            t = currentTransforms.get(resultId) as RebuildTransform
+          } else if (op.resultCenter) {
+            // First group operation with resultCenter — use it as initial position
+            t = { x: (op.resultCenter as { x: number; y: number; z: number }).x, y: (op.resultCenter as { x: number; y: number; z: number }).y, z: (op.resultCenter as { x: number; y: number; z: number }).z, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
+            currentTransforms.set(resultId, t)
+          }
+          if (t) {
+            if (hasSR(t)) {
+              m = applySRAroundCenter(m, t)
+            } else {
+              const tm = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, t.x, t.y, t.z, 1]
+              m = m.transform(tm)
+            }
+          }
+          disposeCached(ids[0])
+          disposeCached(ids[1])
+          setCached(resultId, m)
+        } catch {
+          // Non-manifold — cache as null
+          disposeCached(ids[0])
+          disposeCached(ids[1])
+          setCached(resultId, null)
+        }
+      } else if (ids.length >= 2) {
+        // Fallback: rebuild CSG from operands (legacy path for pre-fix operations)
+        let a = cache.get(ids[0])
+        let b = cache.get(ids[1])
+        if (a && b) {
+          const tA = currentTransforms.get(ids[0])
+          const tB = currentTransforms.get(ids[1])
+          if (tA && hasSR(tA)) a = applySRAroundCenter(a, tA)
+          if (tB && hasSR(tB)) b = applySRAroundCenter(b, tB)
+          let result: ManifoldObject
+          const isIntersect = op.isIntersect as boolean
+          const subtractOp = op.subtractOp as boolean | undefined
+          if (isIntersect) result = a.intersect(b)
+          else if (subtractOp) result = a.subtract(b)
+          else result = a.add(b)
+          disposeCached(ids[0])
+          disposeCached(ids[1])
+          setCached(resultId as string, result)
+        }
       }
     } else if (op.type === 'delete') {
       for (const id of op.ids as string[]) {
@@ -803,7 +1043,7 @@ export interface SyncObjectsMessage {
 
 /** Rebuild worker cache entries from store data. Fixes stale cache after undo/redo and move operations. */
 export async function handleSyncObjects(msg: SyncObjectsMessage): Promise<void> {
-  // Build fresh primitives with full SRT (position + rotation + scale) around center.
+  // Build fresh primitives with full TRS (position + rotation + scale) around origin.
   // For imported meshes (non-manifold, cached as null) we skip.
   for (const e of msg.entries) {
     // Skip if already cached as non-manifold (imported mesh that couldn't be manifold-created)
@@ -812,8 +1052,9 @@ export async function handleSyncObjects(msg: SyncObjectsMessage): Promise<void> 
 
     const params = sanitizeParams(e.params)
     const m = buildPrimitive(e.shapeType, params)
-    // Apply full SRT around center (matches what handleRebuildScene does for primitives)
-    const fullMatrix = buildSRTMatrixAroundCenter(
+    // Apply TRS: rotation/scale around origin, then translate to position.
+    // buildTransformMatrix creates [RS, 0; pos, 1] — correct for primitives centered at origin.
+    const fullMatrix = buildTransformMatrix(
       { x: e.transform.x, y: e.transform.y, z: e.transform.z },
       { rotX: e.transform.rotX, rotY: e.transform.rotY, rotZ: e.transform.rotZ },
       { scaleX: e.transform.scaleX, scaleY: e.transform.scaleY, scaleZ: e.transform.scaleZ },
@@ -842,27 +1083,34 @@ export interface CsgBooleanSyncMessage {
 
 /**
  * Combined sync + CSG boolean in one handler (PERF-R6-2).
- * Rebuilds both operands in cache with fresh SRT, then performs the boolean.
+ * Rebuilds both operands in cache with fresh TRS, then performs the boolean.
+ * Uses buildTransformMatrix (TRS around origin) for primitives centered at (0,0,0).
+ *
+ * FIX (CRIT-CSG-2): If an operand is already in cache (e.g., synced via workerSyncMesh
+ * for CSG results or imported meshes), skip rebuilding it from shapeType/params to avoid
+ * overwriting the actual mesh with a default cube or losing imported geometry.
  */
 export async function handleCsgBooleanSync(msg: CsgBooleanSyncMessage): Promise<void> {
   const t0 = performance.now()
 
-  // Sync operand A
-  if (msg.shapeA) {
+  // Sync operand A — build primitive at origin, apply TRS
+  // FIX (CRIT-CSG-2): Skip sync if operand already in cache (from workerSyncMesh).
+  // This preserves CSG results and imported meshes that can't be rebuilt from shapeType/params.
+  if (msg.shapeA && !cache.has(msg.idA)) {
     const params = sanitizeParams(msg.shapeA.params)
     const m = buildPrimitive(msg.shapeA.shapeType, params)
-    const fullMatrix = buildSRTMatrixAroundCenter(
+    const fullMatrix = buildTransformMatrix(
       { x: msg.transformA.x, y: msg.transformA.y, z: msg.transformA.z },
       { rotX: msg.transformA.rotX, rotY: msg.transformA.rotY, rotZ: msg.transformA.rotZ },
       { scaleX: msg.transformA.scaleX, scaleY: msg.transformA.scaleY, scaleZ: msg.transformA.scaleZ },
     )
     setCached(msg.idA, m.transform(fullMatrix))
   }
-  // Sync operand B
-  if (msg.shapeB) {
+  // Sync operand B — build primitive at origin, apply TRS
+  if (msg.shapeB && !cache.has(msg.idB)) {
     const params = sanitizeParams(msg.shapeB.params)
     const m = buildPrimitive(msg.shapeB.shapeType, params)
-    const fullMatrix = buildSRTMatrixAroundCenter(
+    const fullMatrix = buildTransformMatrix(
       { x: msg.transformB.x, y: msg.transformB.y, z: msg.transformB.z },
       { rotX: msg.transformB.rotX, rotY: msg.transformB.rotY, rotZ: msg.transformB.rotZ },
       { scaleX: msg.transformB.scaleX, scaleY: msg.transformB.scaleY, scaleZ: msg.transformB.scaleZ },
@@ -907,10 +1155,50 @@ export async function handleMirrorObject(msg: MirrorObjectMessage): Promise<void
   const t0 = performance.now()
   const src = cache.get(msg.objId)
   if (!src) throw new Error(`Object not found: ${msg.objId}`)
-  const m = src.transform(getMirrorMatrix(msg.plane))
-  setCached(msg.objId, m)
+  
+  let mesh: MeshResult
+  
+  // Для примитивов (shapeType и params присутствуют) - строим свежий примитив
+  if (msg.shapeType && msg.params) {
+    const fresh = buildPrimitive(msg.shapeType, msg.params)
+    const mirror = getMirrorMatrix(msg.plane)
+    const mirrored = fresh.transform(mirror)
+    
+    // Применяем полную трансформацию (position, rotation, scale) к зеркальному мешу
+    if (msg.transform) {
+      const transformMatrix = buildTransformMatrix(
+        { x: msg.transform.x, y: msg.transform.y, z: msg.transform.z },
+        { rotX: msg.transform.rotX, rotY: msg.transform.rotY, rotZ: msg.transform.rotZ },
+        { scaleX: msg.transform.scaleX, scaleY: msg.transform.scaleY, scaleZ: msg.transform.scaleZ }
+      )
+      const fullyTransformed = mirrored.transform(transformMatrix)
+      setCached(msg.objId, fullyTransformed)
+      mesh = extractMesh(fullyTransformed)
+    } else {
+      setCached(msg.objId, mirrored)
+      mesh = extractMesh(mirrored)
+    }
+  }
+  // Для CSG / импорта (shapeType/params отсутствуют) - сдвигаем к origin, зеркалим
+  else {
+    if (!msg.transform) throw new Error(`Transform is required for CSG/import objects`)
+    
+    // 1. Зеркалим геометрию (только mirror matrix, без position/scale/rotation)
+    const mirror = getMirrorMatrix(msg.plane)
+    const mirrored = src.transform(mirror)
+    
+    // 2. Применяем полную трансформацию (position, rotation, scale) к зеркальному мешу
+    const transformMatrix = buildTransformMatrix(
+      { x: msg.transform.x, y: msg.transform.y, z: msg.transform.z },
+      { rotX: msg.transform.rotX, rotY: msg.transform.rotY, rotZ: msg.transform.rotZ },
+      { scaleX: msg.transform.scaleX, scaleY: msg.transform.scaleY, scaleZ: msg.transform.scaleZ }
+    )
+    const fullyTransformed = mirrored.transform(transformMatrix)
+    
+    setCached(msg.objId, fullyTransformed)
+    mesh = extractMesh(fullyTransformed)
+  }
 
-  const mesh = extractMesh(m)
   safePostMessage(
     {
       reqId: msg.reqId,
@@ -924,4 +1212,47 @@ export async function handleMirrorObject(msg: MirrorObjectMessage): Promise<void
     },
     buildTransferList(mesh),
   )
+}
+
+// --- Sync mesh from vertices/indices (for CSG results) ---
+
+export interface SyncMeshMessage {
+  reqId: string
+  type: 'syncMesh'
+  objId: string
+  vertices: Float32Array | number[]
+  indices: Uint32Array | number[]
+  transform: RebuildTransform
+}
+
+/**
+ * Sync a mesh into worker cache from raw vertices/indices.
+ * Used for CSG results and imported meshes that cannot be rebuilt from shapeType+params.
+ * Applies full SRT around center (same as handleRebuildScene for primitives).
+ */
+export async function handleSyncMesh(msg: SyncMeshMessage): Promise<void> {
+  const wasm = getWasm()
+  const verts = new Float32Array(msg.vertices)
+  const tris = new Uint32Array(msg.indices)
+  try {
+    let m = new wasm.Manifold({
+      numProp: 3,
+      vertProperties: verts,
+      triVerts: tris,
+    })
+    // Apply transform (position, rotation, scale) around center
+    if (hasSR(msg.transform)) {
+      m = applySRAroundCenter(m, msg.transform)
+    } else {
+      // Only translation — use simple translate matrix
+      const tm = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, msg.transform.x, msg.transform.y, msg.transform.z, 1]
+      m = m.transform(tm)
+    }
+    setCached(msg.objId, m)
+    safePostMessage({ reqId: msg.reqId, type: 'ok' })
+  } catch (me) {
+    // Non-manifold — cache as null (CSG not supported for this object)
+    setCached(msg.objId, null)
+    safePostMessage({ reqId: msg.reqId, type: 'ok' })
+  }
 }

@@ -82,10 +82,27 @@ function getWorker(): Worker {
   return _worker
 }
 
-function send<T>(type: string, data: Record<string, unknown>): Promise<T> {
+function send<T>(type: string, data: Record<string, unknown>, timeoutMs = 30000): Promise<T> {
   return new Promise((resolve, reject) => {
     const reqId = nextReqId()
-    _pending.set(reqId, [resolve as PendingResolve, reject])
+    
+    // PERF-R8-2: Таймаут для предотвращения бесконечного ожидания
+    const timer = setTimeout(() => {
+      _pending.delete(reqId)
+      reject(new Error(`Worker timeout: ${type} (>${timeoutMs}ms)`))
+    }, timeoutMs)
+    
+    _pending.set(reqId, [
+      (v: unknown) => {
+        clearTimeout(timer)
+        resolve(v as T)
+      },
+      (r: unknown) => {
+        clearTimeout(timer)
+        reject(r)
+      }
+    ])
+    
     getWorker().postMessage({ reqId, type, ...data })
   })
 }
@@ -113,7 +130,7 @@ export async function workerApplyFillet(
 }
 
 export async function workerBuildImportedMesh(
-  objId: string, vertices: number[], indices: number[],
+  objId: string, vertices: Float32Array | number[], indices: Uint32Array | number[],
 ): Promise<MeshResult> {
   await waitReady()
   return send<MeshResult>('buildImportedMesh', { objId, vertices, indices })
@@ -135,6 +152,16 @@ export async function workerSyncObjects(
 ): Promise<void> {
   await waitReady()
   await send<unknown>('syncObjects', { entries })
+}
+
+export async function workerSyncMesh(
+  objId: string,
+  vertices: Float32Array | number[],
+  indices: Uint32Array | number[],
+  transform?: TransformNR,
+): Promise<void> {
+  await waitReady()
+  await send<unknown>('syncMesh', { objId, vertices, indices, transform: transform ?? { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 } })
 }
 
 export async function workerCsgBoolean(
@@ -163,10 +190,10 @@ export async function workerCsgBooleanWithSync(
 }
 
 export async function workerMirrorObject(
-  objId: string, plane: 'XY' | 'XZ' | 'YZ',
+  objId: string, plane: 'XY' | 'XZ' | 'YZ', shapeType?: string, params?: Record<string, number>, transform?: any,
 ): Promise<MeshResult> {
   await waitReady()
-  return send<MeshResult>('mirrorObject', { objId, plane })
+  return send<MeshResult>('mirrorObject', { objId, plane, shapeType, params, transform })
 }
 
 export async function workerRebuildScene(
@@ -186,4 +213,37 @@ export async function workerClearAll(): Promise<void> {
   await send<unknown>('clearAll', {})
 }
 
+export async function workerRebuildNode(
+  nodeId: string,
+  nodes: Array<{
+    id: string
+    type: 'primitive' | 'boolean' | 'baked'
+    shapeType?: string
+    params?: Record<string, number>
+    localTransform?: { x: number; y: number; z: number; rotX: number; rotY: number; rotZ: number; scaleX: number; scaleY: number; scaleZ: number }
+    vertices?: number[]
+    indices?: number[]
+    normals?: number[]
+    operation?: 'union' | 'subtract' | 'intersect'
+    children?: string[]
+  }>,
+): Promise<MeshResult> {
+  await waitReady()
+  return send<MeshResult>('rebuildTreeNode', { nodeId, nodes })
+}
+
 export function isWorkerReady(): boolean { return _ready }
+
+/**
+ * PERF-R8-3: Terminate worker and cleanup state.
+ * Used for HMR cleanup to prevent "ghost" workers accumulating.
+ */
+export function disposeWorker(): void {
+  if (_worker) {
+    _worker.terminate()
+    _worker = null
+    _ready = false
+    _readyPromise = null
+    _pending.clear()
+  }
+}

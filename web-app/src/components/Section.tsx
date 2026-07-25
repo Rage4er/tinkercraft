@@ -15,7 +15,19 @@ export default function Section({
   const [open, setOpen] = useState(defaultOpen);
   return (
     <div className="section">
-      <div className="section-title" onClick={() => setOpen((o) => !o)}>
+      <div 
+        className="section-title" 
+        onClick={() => setOpen((o) => !o)}
+        onKeyDown={(e) => { 
+          if (e.key === 'Enter' || e.key === ' ') { 
+            e.preventDefault(); 
+            setOpen((o) => !o) 
+          }
+        }}
+        role="button"
+        tabIndex={0}
+        aria-expanded={open}
+      >
         <span>{title}</span>
         <span className="flex-row" style={{ marginLeft: "auto", marginRight: 4 }}>
           {badge !== undefined && <span className="badge">{badge}</span>}

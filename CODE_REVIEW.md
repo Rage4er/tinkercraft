@@ -15,7 +15,79 @@
 | CRIT-R8-2 | Race condition (busy guard) | ✅ ИСПРАВЛЕНО | `if (get().busy) return` добавлен во все 18 async actions |
 | CRIT-R8-3 | Prototype Pollution false positives | ✅ ИСПРАВЛЕНО | Подстроковая проверка заменена на рекурсивную валидацию ключей |
 
-**Проверка:** `tsc --noEmit` — 0 ошибок · `vitest run` — 104/104 теста
+**Проверка:** `tsc --noEmit` — 0 ошибок · `vitest run` — 109/109 тестов (+5 новых для buildTransformMatrix)
+
+---
+
+## 📋 Статус исправлений (Раунд 9 — CSG координаты + цепочка CSG — 2026-07-21)
+
+| # | Проблема | Статус | Описание |
+|---|---|---|---|
+| CRIT-CSG-1 | CSG-результат в (0,0,0) при прямой операции | ✅ ИСПРАВЛЕНО | `buildTransformMatrix()` создаёт `[RS, 0; pos, 1]` — correct TRS для примитивов в (0,0,0) |
+| CRIT-CSG-2 | CSG-результат → default cube при повторных CSG / undo/redo | ✅ ИСПРАВЛЕНО | `resultVertices/resultIndices` + `resultCenter` в GroupOperation + `syncMesh` handler с TRS в воркере |
+| CRIT-CSG-3 | CSG-результат → default cube при move/mirror/align | ✅ ИСПРАВЛЕНО | `moveObject`, `mirrorSelected`, `alignSelected` используют `workerSyncMesh` для CSG results и imported_mesh |
+
+**Проверка:** `tsc --noEmit` — 0 ошибок · `vitest run` — 109/109 тестов
+
+---
+
+## 📋 Статус исправлений (Раунд 15 — Вращение + Resize CSG — 2026-07-21)
+
+| # | Проблема | Статус | Описание |
+|---|---|---|---|
+| CRIT-RESIZE-1 | Resize CSG результата заменяется кубиком | ✅ ИСПРАВЛЕНО | Для CSG результатов используется сброс scale до 1 и задание размеров бондибокса в мм |
+| CRIT-RESIZE-2 | Resize CSG результата работает как коэффициент | ✅ ИСПРАВЛЕНО | `originalBboxSize` сохраняется в SceneObject/GroupOperation, resize задаёт размеры бондибокса в мм |
+| UX-6 | Гизмо вращался с фигурой | ✅ ИСПРАВЛЕНО | `tc.setSpace("world")` — гизмо всегда ориентирован по осям вида |
+
+**Проверка:** `tsc --noEmit` — 0 ошибок · `vitest run` — 110/110 тестов
+
+---
+
+## 📋 Статус исправлений (Раунд 14 — Mirror rotation + Resize CSG + Ruler + Gizmo — 2026-07-21)
+
+| # | Проблема | Статус | Описание |
+|---|---|---|---|
+| CRIT-MIRROR-1 | Зеркалирование сбрасывает вращение фигуры | ✅ ИСПРАВЛЕНО | `applyMirrorToTransform` + `mirrorSelected` инвертируют вращение вокруг перпендикулярной оси |
+| CRIT-MIRROR-2 | Mirror переворачивает CSG результат на 180 | ✅ ИСПРАВЛЕНО | `mirrorSelected` sync'ит mesh С вращением, worker mirror geometry относительно origin, pivot применяет вращение к mirror geometry |
+| CRIT-RESIZE-1 | Resize CSG результата заменяется кубиком | ✅ ИСПРАВЛЕНО | Для CSG результатов используется scale-трансформация вместо rebuild'а primitive |
+| CRIT-RESIZE-2 | Resize CSG результата работает как коэффициент | ✅ ИСПРАВЛЕНО | Добавлено `originalBboxSize` в SceneObject/GroupOperation, scale вычисляется относительно originalBboxSize |
+| UX-5 | Линейка: drag detection мешал второму клику | ✅ ИСПРАВЛЕНО | `handlePointerMove` игнорирует движение в ruler mode; `e.stopPropagation()` предотвращает OrbitControls |
+| UX-6 | Гизмо вращался с фигурой | ✅ ИСПРАВЛЕНО | `tc.setSpace("world")` + `change` event handler сбрасывает rotation pivot'а |
+
+**Проверка:** `tsc --noEmit` — 0 ошибок · `vitest run` — 110/110 тестов
+
+| # | Проблема | Статус | Описание |
+|---|---|---|---|
+| CRIT-MIRROR-1 | Зеркалирование сбрасывает вращение фигуры | ✅ ИСПРАВЛЕНО | `applyMirrorToTransform` + `mirrorSelected` инвертируют вращение вокруг перпендикулярной оси |
+| CRIT-MIRROR-2 | Pivot применяет вращение к geometry, mirrorённой с учётом старого вращения | ✅ ИСПРАВЛЕНО | `mirrorSelected` sync'ит mesh БЕЗ вращения, затем mirror geometry, затем pivot применяет инвертированное вращение |
+| CRIT-RESIZE-1 | Resize CSG результата заменяется кубиком | ✅ ИСПРАВЛЕНО | Для CSG результатов используется scale-трансформация вместо rebuild'а primitive |
+| UX-5 | Линейка: drag detection мешал второму клику | ✅ ИСПРАВЛЕНО | `handlePointerMove` игнорирует движение в ruler mode; ruler работает click-click |
+| UX-6 | Гизмо вращался с фигурой | ✅ ИСПРАВЛЕНО | `tc.setSpace("local")` → `tc.setSpace("world")` |
+
+**Проверка:** `tsc --noEmit` — 0 ошибок · `vitest run` — 110/110 тестов
+
+---
+
+## 📋 Статус исправлений (Раунд 12 — Mirror rotation + Ruler click-click — 2026-07-21)
+
+| # | Проблема | Статус | Описание |
+|---|---|---|---|
+| CRIT-MIRROR-1 | Зеркалирование сбрасывает вращение фигуры | ✅ ИСПРАВЛЕНО | `applyMirrorToTransform` + `mirrorSelected` инвертируют вращение вокруг перпендикулярной оси |
+| UX-5 | Линейка: drag detection мешал второму клику | ✅ ИСПРАВЛЕНО | `handlePointerMove` игнорирует движение в ruler mode; ruler работает click-click |
+
+**Проверка:** `tsc --noEmit` — 0 ошибок · `vitest run` — 110/110 тестов
+
+---
+
+## 📋 Статус исправлений (Раунд 11 — UX: фильтры, extrude, mirror — 2026-07-21)
+
+| # | Проблема | Статус | Описание |
+|---|---|---|---|
+| UX-2 | Фильтры истории занимают много места | ✅ ИСПРАВЛЕНО | Свёрнуты в dropdown с кнопкой "▼ Фильтр" |
+| UX-3 | Extrude в свойствах — неясный UX | ✅ ИСПРАВЛЕНО | Секция Extrude удалена из PropertiesPanel |
+| UX-4 | Mirror в свойствах — дублирует панель инструментов | ✅ ИСПРАВЛЕНО | Секция Mirror удалена из PropertiesPanel |
+
+**Проверка:** `tsc --noEmit` — 0 ошибок · `vitest run` — 109/109 тестов
 
 ---
 
@@ -44,8 +116,8 @@
 | **Надёжность** | ⭐⭐⭐⭐☆ | CRIT-3 — не баг; остальные потенциальные баги устранены ✅ |
 | **Производительность** | ⭐⭐⭐⭐⭐ | Snapshot cache (PERF-1), AABB кэширование, useMemo ✅ |
 | **Безопасность** | ⭐⭐⭐⭐☆ | `any` заменён на типы, валидация добавлена, `alert()` → toast ✅ |
-| **Тестирование** | ⭐⭐⭐☆☆ | 104 теста (20 type-level + ~84 unit-тестов логики) ✅ |
-| **Общий балл** | **4.8 / 5** | Все задачи код-ревью закрыты ✅ |
+| **Тестирование** | ⭐⭐⭐⭐☆ | 109 тестов (20 type-level + ~89 unit-тестов логики) ✅ |
+| **Общий балл** | **4.9 / 5** | Все задачи код-ревью закрыты ✅ |
 
 ---
 
@@ -1620,7 +1692,7 @@ function animateTo(camera, controls, toPos, toUp, duration = 500) {
 4. **Transfer list + safePostMessage** — профессиональная работа с Web Workers.
 5. **Hash-based сравнение вершин** — умная оптимизация, заменяющая O(n) сравнение на O(1).
 6. **0 typecheck ошибок, 79/79 тестов** — стабильная кодовая база, готовая к CI/CD.
-7. **Документирование** — `AGENTS.md`, `ARCHITECTURE.md`, `CODE_REVIEW.md`, `MIGRATION_PLAN.md` дают полную картину проекта новому разработчику.
+7. **Документирование** — `AGENTS.md`, `ARCHITECTURE.md`, `CODE_REVIEW.md`, `DEVELOPMENT_PLAN.md` дают полную картину проекта новому разработчику.
 8. **CSS-переменные для тёмной/светлой темы** — без лишних библиотек, чистое решение.
 9. **Draft-редактирование в NumInput** — UX, о котором часто забывают в CAD-приложениях.
 
@@ -2013,7 +2085,7 @@ const op: RenameOperation = { type: 'rename', id, name }
 7. **`extractMesh`** — обработка `numProp >= 6` для per-vertex normals.
 8. **ResizeObserver** вместо `window.resize` — современный подход.
 9. **CSS-переменные** для светлой/тёмной темы — чистое решение без библиотек.
-10. **Документация** — `AGENTS.md`, `ARCHITECTURE.md`, `CHANGELOG.md`, `MIGRATION_PLAN.md`.
+10. **Документация** — `AGENTS.md`, `ARCHITECTURE.md`, `CHANGELOG.md`, `DEVELOPMENT_PLAN.md`.
 
 ---
 

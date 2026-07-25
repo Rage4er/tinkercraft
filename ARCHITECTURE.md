@@ -76,7 +76,7 @@ Web Worker с manifold-3d (WASM). Воркер кэширует manifold-объ�
 Импорт/экспорт файлов:
 - `stl-import.ts` — бинарный + ASCII STL, `mergeCoincidentVertices()`
 - `stl-export.ts` — бинарный STL
-- `doodle-io.ts` — ZIP + JSON (.doodle формат, совместим с Java-оригиналом)
+- `doodle-io.ts` — ZIP + JSON (.doodle формат, вдохновлён CaDoodle)
 - `autosave.ts` — IndexedDB автосохранение
 - `project-manager.ts` — IndexedDB CRUD для проектов
 

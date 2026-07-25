@@ -5,7 +5,7 @@
 
 ## Проект
 
-**TinkerCraft Web** — браузерный 3D CAD-редактор. Миграция десктопного Java-приложения CaDoodle на React + Three.js + manifold-3d.
+**TinkerCraft Web** — браузерный 3D CAD-редактор. Вдохновлён CaDoodle, реализован с нуля на React + Three.js + manifold-3d.
 
 ## Стек
 
@@ -52,7 +52,8 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 | `src/csg/worker.ts` | WASM worker — manifold-3d операции, типобезопасные интерфейсы |
 | `src/csg/worker-client.ts` | Promise-обёртка над воркером |
 | `src/csg/types.ts` | Типы операций, сцены, параметров |
-| `src/components/Viewport3D.tsx` | Three.js вьюпорт, гизмо, raycaster |
+| `src/components/Viewport3D.tsx` | Three.js вьюпорт, гизмо, raycaster, ruler, snap-to-geometry |
+| `src/components/snap-utils.ts` | Привязка (snap) к геометрии: vertex, edge, face, circle |
 | `src/components/Toolbar.tsx` | Тулбар (файл, undo, view, gizmo, CSG, тема) |
 | `src/components/LeftPanel.tsx` | Палитра фигур + список объектов + история |
 | `src/components/PropertiesPanel.tsx` | Панель свойств (трансформ, resize, fillet, extrude, CSG) |
@@ -119,8 +120,8 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 - `✅ НЕ БАГ` — проблема проверена, не требует исправления
 - Обновите таблицу «Статус исправлений» и приоритеты действий
 
-### MIGRATION_PLAN.md
-Если изменение затрагивает фазы миграции или известные проблемы:
+### DEVELOPMENT_PLAN.md
+Если изменение затрагивает фазы разработки или известные проблемы:
 - Обновите статус задачи (🔲 → 🔄 → ✅)
 - Обновите таблицу «Известные проблемы и технический долг»
 
@@ -132,7 +133,7 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 ### Чек-лист перед завершением задачи
 1. [ ] `CHANGELOG.md` обновлён
 2. [ ] `CODE_REVIEW.md` обновлён (если затронуты проблемы из ревью)
-3. [ ] `MIGRATION_PLAN.md` обновлён (если затронуты фазы/проблемы)
+3. [ ] `DEVELOPMENT_PLAN.md` обновлён (если затронуты фазы/проблемы)
 4. [ ] `pnpm typecheck` — 0 ошибок
 5. [ ] `pnpm test` — все тесты проходят
 
@@ -147,6 +148,15 @@ Worker НЕ центрирует геометрию. Центрирование 
 ### Валидация ввода
 Используйте `clamp(v, min, max)` и `sanitizeParams(params)` из `worker.ts` для валидации пользовательских параметров перед отправкой в воркер.
 
+### Привязка линейки к геометрии (snap-to-geometry)
+При включённой `rulerMode` точки клика линейки привязываются к геометрии фигур через `findNearestSnap()` (`snap-utils.ts`):
+- Raycast → поиск вершин/рёбер/граней/центров → выбор лучшего кандидата
+- Приоритет: vertex > edge > circle > face
+- Fallback (если raycast не попал) — проекция на рабочую плоскость Z=0
+- Визуальный индикатор — цветная сфера (`createSnapIndicator`)
+- Цвета: vertex=красный, edge=зелёный, circle=синий, face=жёлтый
+- Константы радиусов: `SNAP_VERTEX_RADIUS=2.0`, `SNAP_EDGE_RADIUS=2.0`, `SNAP_FACE_RADIUS=2.0`, `SNAP_CIRCLE_RADIUS=3.0`
+
 ## Известные ограничения (не баги)
 
 - Fillet работает только для cube (требует специфичной математики для других форм)
@@ -154,6 +164,6 @@ Worker НЕ центрирует геометрию. Центрирование 
 ## Документация
 
 - `CODE_REVIEW.md` — результаты код-ревью с приоритетами
-- `MIGRATION_PLAN.md` — план миграции (Фазы 0–7)
+- `DEVELOPMENT_PLAN.md` — план разработки (Фазы 0–7)
 - `ARCHITECTURE.md` — описание архитектуры
 - `CHANGELOG.md` — история изменений

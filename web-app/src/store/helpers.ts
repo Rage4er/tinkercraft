@@ -99,6 +99,6 @@ export interface ClipEntry {
   color: string
   transform: TransformNR
   // For import_mesh:
-  importVertices?: number[]
-  importIndices?: number[]
+  importVertices?: Float32Array
+  importIndices?: Uint32Array
 }

@@ -9,6 +9,8 @@ import type { TinkerCraftFile, TinkerCraftOperation } from '../csg/types'
 const FORMAT_VERSION = '1.0.0'
 /** Максимальный размер model.json (5 МБ) для защиты от DoS */
 const MAX_MODEL_JSON_SIZE = 5 * 1024 * 1024
+/** SEC-R8-1: Максимальный размер .doodle файла (50 МБ) для защиты от ZIP bomb */
+const MAX_DOODLE_SIZE = 50 * 1024 * 1024
 
 /** Ключи, которые могут привести к prototype pollution через JSON.parse. */
 const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype'])
@@ -34,9 +36,22 @@ function validateObjectKeys(obj: unknown, path: string): void {
   }
 }
 
+/** WARN-R8-7: Валидные типы операций для проверки схемы .doodle */
+const VALID_OP_TYPES = new Set([
+  'add_shape', 'import_mesh', 'move', 'resize_dims', 'fillet',
+  'mirror', 'align', 'group', 'delete', 'visibility', 'color', 'rename',
+])
+
 // ---- Разобрать .doodle файл ----
 
 export async function parseDoodle(buffer: ArrayBuffer): Promise<TinkerCraftFile> {
+  // SEC-R8-1: Проверка размера .doodle файла для защиты от ZIP bomb
+  if (buffer.byteLength > MAX_DOODLE_SIZE) {
+    throw new Error(
+      `Некорректный .doodle: размер ${buffer.byteLength} байт превышает лимит ${MAX_DOODLE_SIZE} байт`,
+    )
+  }
+
   const zip = await JSZip.loadAsync(buffer)
 
   const modelFile = zip.file('model.json')
@@ -71,6 +86,11 @@ export async function parseDoodle(buffer: ArrayBuffer): Promise<TinkerCraftFile>
     version = raw.version ?? FORMAT_VERSION
   } else {
     throw new Error('Некорректный model.json: ожидается массив операций или { version, operations }')
+  }
+
+  // WARN-R8-7: Валидация схемы операций — проверка типа каждой операции
+  if (!operations.every(op => op && typeof op === 'object' && VALID_OP_TYPES.has((op as { type?: string }).type ?? ''))) {
+    throw new Error('Некорректный model.json: обнаружена операция с неизвестным типом')
   }
 
   let thumbnail: string | undefined

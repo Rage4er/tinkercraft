@@ -4,15 +4,14 @@
 // ============================================================
 
 import { useState, useEffect, useCallback } from 'react'
-import type { TinkerCraftOperation } from '../csg/types'
 import {
-  listProjects, saveProject, loadProject, deleteProject, updateProject,
+  listProjects, saveProject, deleteProject, updateProject,
   type ProjectMeta,
 } from '../io/project-manager'
 
 interface Props {
   onClose:   () => void
-  onLoad:    (ops: TinkerCraftOperation[]) => void
+  onLoad:    (id: string) => void
   onSave:    (name: string) => Promise<void>
   currentProjectId?: string
   setCurrentProjectId: (id: string | undefined) => void
@@ -42,10 +41,8 @@ export default function ProjectManagerModal({ onClose, onLoad, onSave, currentPr
   }
 
   async function handleLoad(id: string) {
-    const record = await loadProject(id)
-    if (!record) return
     setCurrentProjectId(id)
-    onLoad(record.operations)
+    onLoad(id)
     onClose()
   }
 
