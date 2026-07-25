@@ -1,6 +1,182 @@
 # Changelog
 
+### Added — Сравнительный вердикт CaDoodle vs TinkerCraft: Mirror (2026-07-25)
+- Добавлена секция сравнительного вердикта в CODE_REVIEW.md: 14 критериев, таблица преимуществ, ранжирование проблем по severity
+- Вердикт: CaDoodle имеет меньше дефектов в mirror (0 vs 10), но TinkerCraft решает более сложную задачу (Build Tree)
+- 3 проблемы HIGH (MIRROR-3, MIRROR-5, MIRROR-8), 3 MEDIUM (MIRROR-1, MIRROR-6, MIRROR-10)
+- Рекомендация: исправить HIGH в первую очередь, после чего TinkerCraft превзойдёт CaDoodle
+
 ## [Unreleased]
+
+### Fixed — Сброс расположения фигур при трансформации объединенных фигур (BUG-CSG-POS-5/6) (2026-07-26)
+
+Глубокий анализ выявил **три уровня проблем** в `moveObject` при трансформации CSG-результатов:
+
+**Уровень 1 — Stale worker cache (BUG-CSG-POS, предыдущий фикс):**
+`syncOperand` не синхронизировал регулярные примитивы → воркер использовал старые координаты.
+Исправлено: `syncOperand` теперь синхронизирует все типы объектов.
+
+**Уровень 2 — `moveTreeNode` рекурсирует в children (BUG-CSG-POS-5):**
+`moveTreeNode` для boolean-нод рекурсировал в children (исходные операнды) и сдвигал их позиции,
+а `localTransform` самой boolean-ноды **не обновлялся**. После `rebuildNode` воркер пересчитывал
+центроид и применял **устаревший** `localTransform` → результат смещался.
+
+**Уровень 3 — Двойное применение TRS (BUG-CSG-POS-6):**
+`rebuildNode` (через `rebuildPrimitive`/`applyCSGMeshes`) запекает **полный TRS** в вершины через
+`buildTransformMatrix`. Но `handleBuildShape` (воркер) применяет **только translation** — rotation/scale
+обрабатываются через pivot в Viewport3D. Перестройка меша в `moveObject` приводила к двойному
+применению rotation/scale (один раз в вершинах, второй раз через pivot).
+
+**Решение:** `moveObject` больше **не перестраивает меш**. Вершин остаются центрированными в origin
+(как при начальном создании), обновляется только `obj.transform`. Viewport3D применяет полный TRS
+через pivot. Это согласуется с моделью `handleBuildShape` (translation only в меш, полный TRS в pivot).
+
+Дополнительно:
+- `syncNodeTransform` теперь всегда устанавливает `localTransform`, даже если он был `undefined`
+- `applyNodeTransform` добавлен в `history-tree.ts` (используется в других операциях)
+
+**Файлы:** `src/store/document-store.ts` (moveObject), `src/csg/history-tree.ts` (syncNodeTransform, applyNodeTransform)
+
+### Fixed — Сброс расположения фигур при булевых операциях (BUG-CSG-POS) (2026-07-25)
+
+Две причины сброса позиции CSG-результата исправлены в `document-store.ts` → `csgBoolean`:
+
+1. **Неверная трансформация результата:** Результат CSG центрировался в origin, но позиция
+   вычислялась как **среднее трансформаций** обоих операндов (включая rotation и scale).
+   Это приводило к:
+   - Неправильной позиции для subtract/intersect (среднее позиций ≠ центроид результата)
+   - Двойному применению rotation/scale (они уже «запечены» в геометрию воркером)
+
+   **Исправление:** позиция результата = центроид `(cx, cy, cz)`, rotation = 0, scale = 1
+   (как уже делается в `extrudeSelected` и `rebuildFromHistory`).
+
+2. **Stale worker cache для перемещённых примитивов:** `syncOperand` синхронизировал
+   только CSG-результаты и импортированные меши. Обычные примитивы, перемещённые через
+   `moveObject`, оставались в кэше воркера со **старой позицией** (т.к. `moveObject`
+   использует `workerRebuildNode`, который не обновляет основной `cache` Map).
+   `handleCsgBooleanSync` пропускал пересборку через `!cache.has`, и булева операция
+   выполнялась с неверными координатами операндов.
+
+   **Исправление:** `syncOperand` теперь синхронизирует ВСЕ типы объектов:
+   - CSG results / imported meshes → `workerSyncMesh` (как раньше)
+   - Regular primitives → `workerSyncObjects` (rebuild с актуальной трансформацией)
+
+### Added — Глубокий анализ процесса Mirror в CaDoodle (2026-07-25)
+
+Проведён пошаговый анализ всего процесса зеркала в референсном проекте CaDoodle (Java). Документировано 6 шагов, 8 наборов переносимых параметров.
+
+**Ключевые особенности архитектуры CaDoodle:**
+- Нет копирования объектов — хендлы хранят ссылки на оригинальные CSG
+- Операция Mirror extends CaDoodleOperation — сохраняется в историю
+- Предпросмотр через `op.process(ta)` — полупрозрачный меш
+- Плоскость зеркала через bounding box выделения (не origin)
+- Учитывается рабочая плоскость (workplane)
+- Нет разделения store/worker — CSG-объекты единый источник истины
+- 3D стрелки как UI хендлы (конус + цилиндр)
+
+**Файлы:**
+- [`MirrorSessionManager.java`](reference/java-source/mirror/MirrorSessionManager.java)
+- [`MirrorHandle.java`](reference/java-source/mirror/MirrorHandle.java)
+- [`SelectionSession.java:2370`](reference/java-source/controls/SelectionSession.java:2370)
+- [`ControlSprites.java:478`](reference/java-source/controls/ControlSprites.java:478)
+
+### Added — Глубокий анализ процесса Mirror (2026-07-25)
+
+Проведён пошаговый анализ всего процесса зеркала в TinkerCraft — от UI до финального объекта в store. Документировано 10 шагов, 10 наборов переносимых параметров.
+
+**Выявлены 6 новых проблем:**
+- MIRROR-5: Потеря параметричности boolean → baked при mirror
+- MIRROR-6: Fallback-ноды не удаляются после mirror
+- MIRROR-7: Трансформ boolean ноды из первого child (некорректный)
+- MIRROR-8: Scale не инвертируется при mirror
+- MIRROR-9: Двойная синхронизация для import_mesh
+- MIRROR-10: Нет проверки успешности sync перед mirror
+
+**Файлы:**
+- [`document-store.ts:536-654`](web-app/src/store/document-store.ts:536) — `mirrorSelected`
+- [`history-tree.ts:566-623`](web-app/src/csg/history-tree.ts:566) — `mirrorTreeNode` / `mirrorNodeRecursive`
+- [`history-tree.ts:747-808`](web-app/src/csg/history-tree.ts:747) — `cloneSubtree`
+- [`history-tree.ts:320-360`](web-app/src/csg/history-tree.ts:320) — `rebuildNode`
+- [`helpers.ts:77-79`](web-app/src/store/helpers.ts:77) — `makeObject`
+
+### Added — Верификация раунда 16 (2026-07-25)
+
+Проведена верификация всех 18 утверждений код-ревью раунда 16. Точность ~50% — 8 полностью верных из 18.
+
+**Результаты:**
+- ✅ Полностью верно: 8 (CRIT-R16-3, CRIT-R16-4, PERF-R16-4, CODE-R16-1/2/3/4, SEC-R16-1, SEC-R16-3, TEST-R16-3)
+- ⚠️ Частично верно / преувеличено: 7 (CRIT-R16-1, CRIT-R16-2, PERF-R16-2, PERF-R16-3, SEC-R16-2, TEST-R16-1, TEST-R16-2)
+- ❌ Неверно: 1 (PERF-R16-1)
+
+**Ключевые ошибки ревьюера:**
+- PERF-R16-1 — фактическая ошибка: функция не вызывает `computeAABB`, два прохода неизбежны
+- PERF-R16-2 — `Array.from` только в одной из двух указанных функций
+- PERF-R16-3 — 32 из 33 вызовов уже используют селекторы Zustand
+- SEC-R16-2 — `document-store.ts` не содержит пустых `catch`
+- TEST-R16-2 — `rebuild-integration.test.ts` уже исправлен, `as any` почти нет
+- Четыре «критические» проблемы в реальности имеют средний/низкий приоритет
+
+**Файл:** [`CODE_REVIEW.md`](CODE_REVIEW.md#-верификация-раунда-16-2026-07-25)
+
+### Added — Анализ механики Mirror: сравнение с CaDoodle (2026-07-25)
+
+Проведён анализ реализации зеркала (Mirror) в референсном проекте CaDoodle (Java) и сравнение с текущей реализацией в TinkerCraft.
+
+**Архитектура CaDoodle:**
+- [`MirrorSessionManager`](reference/java-source/mirror/MirrorSessionManager.java) — оркестратор трёх `MirrorHandle` (X/Y/Z)
+- [`MirrorHandle`](reference/java-source/mirror/MirrorHandle.java) — 3D UI-хендл (двойная стрелка) на углу bounding box'а выделения
+- Операция `Mirror` создаётся через `new Mirror().setNames(selected).setLocation(ax)` и добавляется в историю через `ap.addOp(op)`
+- Предпросмотр: `op.process(ta)` возвращает CSG-результат, рендерится полупрозрачным при наведении
+
+**Ключевые различия:**
+- Плоскость зеркала: CaDoodle — через центр BBox выделения, TinkerCraft — через origin (0,0,0)
+- UI: CaDoodle — 3D хендлы на BBox, TinkerCraft — выпадающий список
+- Предпросмотр: CaDoodle — полупрозрачный меш, TinkerCraft — отсутствует
+- Baked nodes с вращением: CaDoodle — `CSG.transform()` (корректно), TinkerCraft — только позиция (потенциальный баг)
+
+**Рекомендации:**
+- Рассмотреть зеркало относительно центра выделения (как в CaDoodle)
+- Добавить предпросмотр результата
+- Исправить mirror для baked nodes с ненулевым вращением
+- Рассмотреть 3D-хендлы для выбора плоскости
+
+**Файлы:**
+- [`reference/java-source/mirror/MirrorSessionManager.java`](reference/java-source/mirror/MirrorSessionManager.java)
+- [`reference/java-source/mirror/MirrorHandle.java`](reference/java-source/mirror/MirrorHandle.java)
+- [`web-app/src/store/document-store.ts:530`](web-app/src/store/document-store.ts:530) — `mirrorSelected`
+- [`web-app/src/csg/history-tree.ts:566`](web-app/src/csg/history-tree.ts:566) — `mirrorTreeNode`
+
+### Added — Код-ревью раунд 16: Глубокий аудит (2026-07-25)
+
+Полное код-ревью проекта после внедрения Build Tree. Проверены все ключевые модули: store, csg, components, io. Выявлено 20+ проблем.
+
+**Критические:**
+- Утечка WASM-памяти в [`handleRebuildScene`](web-app/src/csg/worker-handlers.ts:756) при ошибках — нет `try/finally` для освобождения `ManifoldObject`
+- Мутация `vertices` в [`extractAndCenter`](web-app/src/store/helpers.ts:29) — неожиданный побочный эффект для вызывающего кода
+- `any` в [`collectSubtreeForWorker`](web-app/src/csg/history-tree.ts:366) и [`applyCSGMeshes`](web-app/src/csg/history-tree.ts:426) — нарушение strict типизации
+- [`JSON.stringify`](web-app/src/csg/history-tree.ts:254) в `computeNodeHash` — проблема производительности на больших деревьях
+
+**Производительность:**
+- Двойной проход по вершинам в [`extractAndCenterGetAABB`](web-app/src/store/helpers.ts:44)
+- [`Array.from()`](web-app/src/csg/history-tree.ts:446) в hot path (`collectSubtreeForWorker`, `applyCSGMeshes`)
+- Избыточные ререндеры через Zustand (деструктуризация всего store)
+- [`computeVertsHash`](web-app/src/components/Viewport3D.tsx:68) — возможны коллизии
+
+**Читаемость:**
+- Дублирование матричной математики между [`rebuild.ts`](web-app/src/store/rebuild.ts:154) и [`worker-matrix.ts`](web-app/src/csg/worker-matrix.ts:15)
+- Магические числа в [`Viewport3D.tsx`](web-app/src/components/Viewport3D.tsx:97)
+- Смешение русского и английского в комментариях
+- [`GizmoMode`](web-app/src/store/ui-store.ts:11) с `null` как значение
+
+**Безопасность:**
+- Отсутствие валидации входящих данных в worker
+- `try/catch` с пустым `catch` в некоторых местах
+- [`setCached`](web-app/src/csg/worker-handlers.ts:108) без проверки на disposed объекты
+
+**Тестирование:**
+- Нет тестов для `handleCsgBooleanSync`, `rebuildFromHistory`, `handleRebuildScene`
+- Тесты используют `as any` для обхода типов
+- Нет тестов для [`snap-utils.ts`](web-app/src/components/snap-utils.ts)
 
 ### Fixed — CSG позиционирование (BUG-CSG-POS-5) (2026-07-24)
 - Исправлена проблема с разлетающимися фигурами после булевых операций (union/subtract/intersect)

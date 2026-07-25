@@ -380,18 +380,18 @@ function collectSubtreeForWorker(rootId: string): Array<{
 
   function collect(id: string): void {
     if (visited.has(id)) return
-    
+
     const node = treeNodes.get(id)
     if (!node) return
-    
+
     visited.add(id)
-    
+
     // Convert TreeNode to worker-compatible format
     const workerNode: any = {
       id: node.id,
       type: node.type,
     }
-    
+
     if (node.shapeType !== undefined) workerNode.shapeType = node.shapeType
     if (node.params !== undefined) workerNode.params = node.params as Record<string, number>
     if (node.localTransform !== undefined) workerNode.localTransform = node.localTransform
@@ -400,9 +400,9 @@ function collectSubtreeForWorker(rootId: string): Array<{
     if (node.normals !== undefined) workerNode.normals = Array.from(node.normals || [])
     if (node.operation !== undefined) workerNode.operation = node.operation
     if (node.children !== undefined) workerNode.children = node.children
-    
+
     nodes.push(workerNode)
-    
+
     // Recursively collect children
     if (node.children) {
       for (const childId of node.children) {
@@ -457,14 +457,14 @@ async function applyCSGMeshes(node: TreeNode): Promise<ExtractedMesh> {
   }))
 
   const result = await workerRebuildNode(node.id, nodeData)
-  
+
   // Worker centers the mesh but does NOT apply the boolean node's localTransform.
   // We need to apply the localTransform here to position the result correctly.
   // First, convert to Float32Array
   let vertices = new Float32Array(result.vertices);
   const indices = new Uint32Array(result.indices);
   const normals = result.normals ? new Float32Array(result.normals) : null;
-  
+
   // Apply localTransform if it exists
   if (node.localTransform) {
     const t = node.localTransform;
@@ -473,7 +473,7 @@ async function applyCSGMeshes(node: TreeNode): Promise<ExtractedMesh> {
       { rotX: t.rotX, rotY: t.rotY, rotZ: t.rotZ },
       { scaleX: t.scaleX, scaleY: t.scaleY, scaleZ: t.scaleZ },
     );
-    
+
     // Apply transformation to vertices
     for (let i = 0; i < vertices.length; i += 3) {
       const x = vertices[i], y = vertices[i + 1], z = vertices[i + 2];
@@ -481,7 +481,7 @@ async function applyCSGMeshes(node: TreeNode): Promise<ExtractedMesh> {
       vertices[i + 1] = matrix[1] * x + matrix[5] * y + matrix[9] * z + matrix[13];
       vertices[i + 2] = matrix[2] * x + matrix[6] * y + matrix[10] * z + matrix[14];
     }
-    
+
     // Apply transformation to normals if they exist
     if (normals) {
       for (let i = 0; i < normals.length; i += 3) {
@@ -492,7 +492,7 @@ async function applyCSGMeshes(node: TreeNode): Promise<ExtractedMesh> {
       }
     }
   }
-  
+
   return {
     vertices,
     indices,
@@ -727,12 +727,37 @@ export function rotateTreeNode(
 /**
  * Sync transform from store to tree node.
  * Ensures tree has the latest transform before operations.
+ * Always sets localTransform, even if it was previously undefined (e.g., boolean
+ * nodes created without a transform in older code paths).
  */
 export function syncNodeTransform(id: string, transform: TransformNR): void {
   const node = treeNodes.get(id)
-  if (node && node.localTransform) {
+  if (node) {
     node.localTransform = { ...transform }
   }
+}
+
+/**
+ * Set the full transform (position + rotation + scale) on a node and invalidate
+ * its cache. Unlike moveTreeNode (which recurses into children for boolean nodes
+ * and only applies translation), this function:
+ *
+ * 1. Sets the node's own localTransform to the full new transform (TRS)
+ * 2. Does NOT recurse into children — children define the shape, localTransform
+ *    positions/scales/rotates the result
+ * 3. Invalidates the cache for this node and all ancestors
+ *
+ * This is the correct way to update a CSG result's transform in the tree.
+ * moveTreeNode's recursion into children causes double-positioning bugs because
+ * the boolean node's localTransform becomes stale (never updated), while
+ * children move — the worker re-centers the result and applies the old
+ * localTransform, producing vertices at the wrong position.
+ */
+export function applyNodeTransform(id: string, transform: TransformNR): void {
+  const node = treeNodes.get(id)
+  if (!node) return
+  node.localTransform = { ...transform }
+  invalidateCache(id)
 }
 
 // ---------------------------------------------------------------------------

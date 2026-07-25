@@ -11,7 +11,7 @@
 | Референс (CaDoodle) | ~17 600 строк Java (оригинал для вдохновения) |
 | Зависимость BowlerStudio | ~100 000+ строк Java (оригинал) |
 | Текущий объём TS/TSX кода | ~6 700 строк (18 файлов) |
-| Прогресс | **Фазы 0–6 завершены, Фаза 7 — код-ревью раунд 1** ✅ |
+| Прогресс | **Фазы 0–6 завершены, Фаза 7 — код-ревью раунды 1–16** ✅ |
 | Статус | MVP готов, Фаза 7 — исправления и улучшения |
 
 ---
@@ -28,102 +28,84 @@
 - [x] manifold-3d 3.0.1 WASM зависимость
 - [x] Zustand 5 для управления состоянием
 - [x] COOP/COEP заголовки для SharedArrayBuffer (WASM worker)
-- [x] ErrorBoundary + WebGL fallback компонент
 
 **Результаты:**
-- [x] TypeScript-типизация формата `.doodle` — `csg/types.ts`
-- [x] CSG proof-of-concept с замерами производительности
-- [x] ADR по методу реализации Fillet зафиксирован (выбран подход: edge chamfering)
-- [x] Монорепозиторий настроен (pnpm + Vite + TypeScript strict)
-- [x] Базовый UI: панель инструментов, палитра фигур, панель свойств, строка состояния
+- [x] Рабочий dev-сервер на порту 5000
+- [x] Базовая структура проекта
+- [x] Интеграция Three.js + WASM worker
 
 ---
 
 ### ✅ Фаза 1 — Базовый 3D вьюпорт
 
-- [x] Three.js WebGLRenderer с антиалиасингом + тенями
-- [x] PerspectiveCamera (FOV 45, near 0.1, far 10 000)
-- [x] OrbitControls с демпфированием + ограничениями полярного угла
-- [x] Сетка + AxesHelper + теневая плоскость
-- [x] Направленный солнечный свет + заливающий свет
-- [x] Счётчик FPS (скользящее среднее за 500 мс)
-- [x] ViewCube (клик по грани → орбита → фиксированный вид)
-- [x] ViewCube — исправление гимбалов (копирование кватерниона, без lookAt)
-- [x] ResizeObserver → обновление рендерера + пропорций камеры
-- [x] Fit-to-view (AABB, анимация с lerp)
-- [x] Кнопка сброса вида (клавиша H)
+- [x] Компонент `Viewport3D.tsx` (Three.js рендерер, OrbitControls, освещение, сетка)
+- [x] Компонент `App.tsx` (главный layout, клавиатурные сокращения)
+- [x] Компонент `Toolbar.tsx` (панель инструментов)
+- [x] Компонент `StatusBar.tsx` (строка состояния)
+- [x] Навигационный куб `ViewCube.tsx`
+- [x] Адаптивный layout (левая панель, вьюпорт, правая панель)
 
 **Результаты:**
-- [x] Three.js сцена со светом и тенью
-- [x] OrbitControls (вращение, панорамирование, зум)
-- [x] Навигационный куб с анимированным перелётом
-- [x] FitView / ResetView с анимацией
+- [x] 3D вьюпорт с орбитальным управлением
+- [x] Навигационный куб с анимацией перелёта
+- [x] Базовый UI layout
 
 ---
 
 ### ✅ Фаза 2 — Примитивные фигуры (CSG Worker)
 
-- [x] Выделенный Web Worker с manifold-3d WASM
-- [x] Правильный порядок осей `Manifold.cube([w,h,d])` (Y-вверх)
-- [x] Примитивы: куб, сфера, цилиндр, конус
-- [x] Передача меша из Worker → основной поток через Float32Array + Uint32Array
-- [x] Динамическое создание Three.js Mesh из результата manifold
-- [x] Палитра фигур UI (иконки + сетка)
-- [x] Поиск по фигурам
+- [x] Web Worker (`csg/worker.ts`) с типобезопасным интерфейсом
+- [x] Примитивы: куб, цилиндр, конус, тор, призма, пирамида
+- [x] Скругление (fillet) для куба
+- [x] Импорт STL (бинарный + ASCII)
+- [x] 3D текст (TextGeometry + opentype.js)
+- [x] Палитра фигур (`LeftPanel.tsx`)
 
 **Результаты:**
-- [x] CSG Web Worker — manifold-3d в отдельном потоке
-- [x] Генераторы примитивов (куб, сфера, цилиндр, конус)
-- [x] ShapesPalette с категориями и поиском
+- [x] 6 примитивов + текст + STL импорт
+- [x] Рабочий CSG worker с кэшированием
+- [x] Палитра фигур с drag-to-create
 
 ---
 
 ### ✅ Фаза 3 — Управление сценой и выделение
 
-- [x] Zustand DocumentStore (лог операций + historyIndex)
-- [x] Выделение объектов по клику (raycasting)
-- [x] Мультивыделение через Shift/Ctrl
-- [x] Выделение рамкой (прямоугольное лассо, NDC AABB)
-- [x] TransformControls (перемещение/вращение/масштаб, клавиши G/R/S)
-- [x] Привязка к сетке (0 / 0.1 / 0.5 / 1 / 5 / 10 мм)
-- [x] Панель свойств (позиция X/Y/Z, rotX/Y/Z, выбор цвета, видимость)
-- [x] Панель размеров (Ш/В/Г для кубов; радиус, высота для цилиндра/конуса/сферы)
+- [x] Выделение объектов (клик, drag-select, Ctrl+клик)
+- [x] Гизмо перемещения/вращения/масштаба
+- [x] Панель свойств (`PropertiesPanel.tsx`): трансформ, resize, цвет
+- [x] Undo/Redo (Zustand history + snapshot cache)
+- [x] Копировать/вставить (clipboard)
+- [x] Удаление (Del, контекстное меню)
+- [x] Переименование (двойной клик в дереве)
 
 **Результаты:**
-- [x] Выделение: клик + Shift/Ctrl+клик + drag-select
-- [x] Гизмо Move/Scale/Rotation (TransformControls)
-- [x] Гизмо сохраняет позицию/поворот в store через moveObject + undo/redo
-- [x] Список объектов в левой панели (клик → выбор, Shift/Ctrl → мульти)
-- [x] Рабочая плоскость с настраиваемой привязкой
-- [x] Числовые поля позиции/вращения в панели свойств
+- [x] Полное управление сценой
+- [x] Snapshot cache для мгновенного undo/redo
+- [x] Гизмо с тремя режимами
 
 ---
 
 ### ✅ Фаза 4 — Булевы операции CSG
 
-- [x] Union / Subtract / Intersect через CSG-воркер
-- [x] Воркер перестраивает manifold из лога операций (rebuildScene)
-- [x] Undo / Redo (historyIndex + rebuildFromHistory)
-- [x] Таймлайн истории с фильтрацией по типу операций
-- [x] Переход по истории (клик на шаге таймлайна)
-- [x] Копировать / Вставить (буфер обмена в store)
-- [x] Удаление выделенного (Del / Backspace)
+- [x] Union / Subtract / Intersect через manifold-3d
+- [x] Цепочка CSG операций (результат → новая операция)
+- [x] Группировка (Group → CSG результат)
+- [x] Разгруппировка (Ungroup)
+- [x] Кнопки CSG в тулбаре и панели свойств
 
 **Результаты:**
-- [x] Булевы операции (Union/Subtract/Intersect)
-- [x] `TinkerCraftDocument` с полным undo/redo
-- [x] Таймлайн с фильтрацией и переходом по клику
-- [x] Клавиатурные сочетания: Ctrl+Z/Y, Del, Ctrl+A, Ctrl+C/V
+- [x] Все три булевы операции
+- [x] Группировка/разгруппировка
+- [x] CSG цепочка (результат как новый операнд)
 
 ---
 
 ### ✅ Фаза 5 — Продвинутые операции
 
-- [x] Зеркалирование (плоскости YZ / XZ / XY)
-- [x] Выравнивание выделенных объектов (X/Y/Z, мин/центр/макс)
-- [x] Скругление (только для кубов, слайдер радиуса)
-- [x] Экструзия (вытягивание объекта вдоль ±X/Y/Z на глубину, CSG объединение с пластиной)
-- [x] Импорт STL (парсинг бинарных + ASCII файлов)
+- [x] Зеркалирование (Mirror: XY/XZ/YZ плоскости)
+- [x] Выравнивание (Align: 9 позиций)
+- [x] Инструмент скругления (Fillet)
+- [x] Инструмент экструзии (Extrude)
 - [x] Экспорт STL (бинарный, все видимые объекты объединены)
 - [x] Сохранение/загрузка `.doodle` (сериализация JSON через JSZip)
 - [x] Автосохранение в IndexedDB (восстановление сессии при перезагрузке)
@@ -163,6 +145,81 @@
 ---
 
 ### 🔄 Фаза 7 — Исправления и улучшения (в процессе)
+
+#### ✅ Код-ревью раунд 16 (2026-07-25)
+
+Глубокий аудит проекта после внедрения Build Tree. Выявлено 18 проблем. Полный отчёт в [`CODE_REVIEW.md`](CODE_REVIEW.md#-раунд-16--глубокий-аудит-2026-07-25).
+
+**⚠️ Верификация (2026-07-25):** Точность ~50% — 8/18 полностью верных. Четыре «критические» проблемы в реальности имеют средний/низкий приоритет. Полный отчёт верификации в [`CODE_REVIEW.md`](CODE_REVIEW.md#-верификация-раунда-16-2026-07-25).
+
+**Проблемы (скорректированный приоритет после верификации):**
+
+| # | Проблема | Файл | Скорректированный приоритет |
+|---|----------|------|----------------------------|
+| CRIT-R16-1 | `handleRebuildScene` без `try/finally` | [`worker-handlers.ts:756`](web-app/src/csg/worker-handlers.ts:756) | ⚠️ WARN (утечка временная, до следующего rebuild) |
+| CRIT-R16-2 | Мутация `vertices` в `extractAndCenter` | [`helpers.ts:29`](web-app/src/store/helpers.ts:29) | 📝 COSM (JSDoc уже документирует поведение) |
+| CRIT-R16-3 | `any` в `collectSubtreeForWorker` / `applyCSGMeshes` | [`history-tree.ts:366`](web-app/src/csg/history-tree.ts:366) | ⚠️ WARN (нарушение strict: true) |
+| CRIT-R16-4 | `JSON.stringify` в `computeNodeHash` | [`history-tree.ts:254`](web-app/src/csg/history-tree.ts:254) | ⚡ PERF низкий (вызывается только при rebuild) |
+
+#### ✅ Анализ Mirror: сравнение с CaDoodle (2026-07-25)
+
+Проведён анализ реализации зеркала (Mirror) в референсном проекте CaDoodle (Java) и сравнение с текущей реализацией в TinkerCraft. Полный отчёт в [`CODE_REVIEW.md`](CODE_REVIEW.md#-анализ-mirror-сравнение-с-cadoodle-2026-07-25).
+
+#### ✅ Глубокий анализ процесса Mirror в CaDoodle (2026-07-25)
+#### ✅ Сравнительный вердикт CaDoodle vs TinkerCraft (2026-07-25)
+
+Проведён пошаговый анализ всего процесса зеркала в CaDoodle — от UI до применения операции. Полный отчёт в [`CODE_REVIEW.md`](CODE_REVIEW.md#-глубокий-анализ-процесса-mirror-в-cadoodle-java-2026-07-25).
+
+**6 шагов процесса:**
+1. Активация режима Mirror (SelectionSession.onMirror)
+2. Инициализация MirrorHandle (3 хендла: X/Y/Z)
+3. Создание операции Mirror + предпросмотр (op.process(ta))
+4. Применение операции (ap.addOp(op).join())
+5. Позиционирование хендлов на BBox выделения
+6. Очистка и завершение
+
+**Ключевые отличия от TinkerCraft:**
+- Нет копирования объектов — только ссылки
+- Предпросмотр через op.process() — полупрозрачный меш
+- Плоскость через BBox выделения, не origin
+- Учитывается рабочая плоскость
+- Нет разделения store/worker
+- 3D стрелки как UI хендлы
+- Параметричность сохраняется (CSG → CSG)
+
+**Выявленные расхождения:**
+
+| # | Проблема | Приоритет | Сложность |
+|---|----------|-----------|-----------|
+| MIRROR-1 | Плоскость зеркала через origin вместо центра BBox выделения | Средний | Средняя |
+| MIRROR-2 | Отсутствие предпросмотра результата | Средний | Средняя |
+| MIRROR-3 | Baked nodes с ненулевым вращением — rotation не инвертируется | Высокий | Низкая |
+| MIRROR-4 | 3D хендлы вместо выпадающего списка | Низкий | Высокая |
+
+**Приоритетные задачи:**
+
+| Задача | Приоритет | Сложность | Статус |
+|--------|-----------|-----------|--------|
+| `handleRebuildScene` — `try/finally` для освобождения ManifoldObject | ⚠️ WARN | Средняя | 🔲 |
+| `extractAndCenter` — копирование массива или переименование | 📝 COSM | Низкая | 🔲 |
+| `collectSubtreeForWorker` / `applyCSGMeshes` — замена `any` | ⚠️ WARN | Средняя | 🔲 |
+| `computeNodeHash` — замена `JSON.stringify` на конкатенацию | ⚡ PERF | Низкая | 🔲 |
+| Тесты для `handleCsgBooleanSync`, `rebuildFromHistory`, `handleRebuildScene` | 🧪 Тесты | Высокая | 🔲 |
+| Тесты для `snap-utils.ts` | 🧪 Тесты | Высокая | 🔲 |
+| Zustand селекторы — уменьшение ререндеров | ⚡ Произв. | Средняя | 🔲 |
+| Выделение общей матричной математики | 📝 Читаем. | Средняя | 🔲 |
+| Инвертировать вращение для baked nodes при mirror | Высокий | Низкая | 🔲 |
+| Сохранять параметричность boolean → boolean при mirror | Высокий | Средняя | 🔲 |
+| Инвертировать scale при mirror | Высокий | Низкая | 🔲 |
+| Mirror через центр BBox выделения вместо origin | Средний | Средняя | 🔲 |
+| Предпросмотр результата mirror | Средний | Средняя | 🔲 |
+| Удалять fallback-ноды после mirror | Средний | Низкая | 🔲 |
+| Корректный трансформ для boolean нод при mirror | Средний | Средняя | 🔲 |
+| Проверка успешности sync перед mirror | Средний | Низкая | 🔲 |
+| Исправить двойную синхронизацию import_mesh | Низкий | Низкая | 🔲 |
+| 3D хендлы для выбора плоскости mirror | Низкий | Высокая | 🔲 |
+
+---
 
 #### ✅ Исправленные баги
 
@@ -267,91 +324,83 @@
 | CSG | manifold-3d 3.0.1+ (WASM, выделенный Worker, типобезопасный интерфейс) |
 | Персистентность | IndexedDB (автосохранение + несколько проектов), JSZip (.doodle) |
 | PWA | Vite + manifest.json + COOP/COEP заголовки |
-| Сборка | Vite + pnpm workspace |
-| Тестирование | Vitest 4.1 (104 теста: type-level + unit) |
 
 ---
 
 ## Структура файлов
 
-> **Примечание:** Изначальный план предполагал монорепозиторий `packages/` (csg-engine, three-viewport, ui).
-> Фактически проект реализован в едином `web-app/` — структура ниже отражает реальное состояние.
-
 ```
-tinkercraft/
-├── web-app/                       # Единое приложение (Vite + React)
-│   ├── src/
-│   │   ├── App.tsx                # layout, state, keyboard shortcuts (553 строки)
-│   │   ├── App.css                # CSS переменные тёмной/светлой темы + toast
-│   │   ├── constants.ts           # ALL_SHAPES, SNAP_VALUES, OP_FILTER_LABELS
-│   │   ├── main.tsx               # React корень
-│   │   │
-│   │   ├── csg/                   # manifold-3d обёртка + Web Worker
-│   │   │   ├── worker.ts          # Web Worker с manifold-3d (типизирован)
-│   │   │   ├── worker-client.ts   # типизированный RPC клиент
-│   │   │   ├── types.ts           # все типы операций
-│   │   │   ├── types.test.ts      # type-level тесты
-│   │   │   └── (engine.ts)        # удалён — мёртвый код
-│   │   │
-│   │   ├── store/
-│   │   │   ├── document-store.ts  # Zustand store — действия (500 строк)
-│   │   │   ├── helpers.ts         # утилиты (extractAndCenter, computeAABB, makeObject)
-│   │   │   ├── types.ts           # DocumentStore interface
-│   │   │   ├── rebuild.ts         # rebuildFromHistory — восстановление из истории
-│   │   │   ├── snapshots.ts       # кэш snapshot'ов для undo/redo (PERF-1)
-│   │   │   ├── document-store.test.ts  # unit-тесты computeAABB + extractAndCenter
-│   │   │   └── notifications.ts   # toast-уведомления (замена alert)
-│   │   │
-│   │   ├── components/
-│   │   │   ├── Viewport3D.tsx     # Three.js canvas, гизмо, raycaster
-│   │   │   ├── ViewCube.tsx       # навигационный куб
-│   │   │   ├── ComponentTree.tsx  # дерево объектов
-│   │   │   ├── Toolbar.tsx        # тулбар (файл, undo, view, gizmo, CSG)
-│   │   │   ├── LeftPanel.tsx      # палитра фигур + список объектов + история
-│   │   │   ├── PropertiesPanel.tsx # панель свойств (трансформ, resize, fillet)
-│   │   │   ├── TextModal.tsx      # модалка 3D текста
-│   │   │   ├── StatusBar.tsx      # статус-бар
-│   │   │   ├── NumInput.tsx       # numeric input с draft-редактированием
-│   │   │   ├── Section.tsx        # collapsible section
-│   │   │   ├── Timeline.tsx       # история операций + opIcon/opLabel
-│   │   │   ├── MirrorButtons.tsx  # переиспользуемые кнопки зеркала (WARN-3)
-│   │   │   ├── CsgButtons.tsx     # переиспользуемые кнопки CSG (WARN-3)
-│   │   │   ├── AlignButtons.tsx   # переиспользуемые кнопки выравнивания (WARN-3)
-│   │   │   ├── ProjectManagerModal.tsx
-│   │   │   ├── ToastContainer.tsx # toast рендер
-│   │   │   ├── ErrorBoundary.tsx
-│   │   │   └── WebGLFallback.tsx
-│   │   │
-│   │   └── io/
-│   │       ├── doodle-io.ts       # .doodle сериализация (JSZip)
-│   │       ├── stl-export.ts      # STL экспорт (бинарный)
-│   │       ├── stl-export.test.ts # unit-тесты
-│   │       ├── stl-import.ts      # STL импорт (бинарный + ASCII)
-│   │       ├── stl-import.test.ts # unit-тесты mergeCoincidentVertices
-│   │       ├── autosave.ts        # IndexedDB автосохранение
-│   │       └── project-manager.ts # IndexedDB CRUD
-│   │
-│   ├── vite.config.ts
-│   ├── tsconfig.json
-│   ├── package.json
-│   └── pnpm-workspace.yaml
-│
-├── CODE_REVIEW.md                 # Код-ревью и статус исправлений
-├── DEVELOPMENT_PLAN.md            # Этот файл
-└── README.md
+web-app/
+├── src/
+│   ├── App.tsx              # Главный компонент (layout, shortcuts)
+│   ├── App.css              # Глобальные стили, темы
+│   ├── constants.ts         # Константы (ALL_SHAPES, SNAP_VALUES, и т.д.)
+│   ├── main.tsx             # Точка входа
+│   ├── components/
+│   │   ├── Viewport3D.tsx   # Three.js вьюпорт (936 строк)
+│   │   ├── Toolbar.tsx      # Панель инструментов
+│   │   ├── LeftPanel.tsx    # Палитра фигур + список объектов
+│   │   ├── PropertiesPanel.tsx # Панель свойств
+│   │   ├── ViewCube.tsx     # Навигационный куб
+│   │   ├── StatusBar.tsx    # Строка состояния
+│   │   ├── TextModal.tsx    # Модалка 3D текста
+│   │   ├── Timeline.tsx     # История операций
+│   │   ├── ComponentTree.tsx # Дерево компонентов
+│   │   ├── NumInput.tsx     # Numeric input
+│   │   ├── Section.tsx      # Collapsible section
+│   │   ├── MirrorButtons.tsx # Кнопки зеркала
+│   │   ├── CsgButtons.tsx   # Кнопки CSG
+│   │   ├── AlignButtons.tsx # Кнопки выравнивания
+│   │   ├── snap-utils.ts    # Привязка к геометрии (468 строк)
+│   │   ├── ErrorBoundary.tsx
+│   │   ├── WebGLFallback.tsx
+│   │   ├── ToastContainer.tsx
+│   │   └── ProjectManagerModal.tsx
+│   ├── store/
+│   │   ├── document-store.ts # Zustand store (1014 строк)
+│   │   ├── ui-store.ts      # UI state (тема, камера, модалки)
+│   │   ├── helpers.ts       # AABB, центрирование, makeObject
+│   │   ├── types.ts         # DocumentStore interface
+│   │   ├── rebuild.ts       # rebuildFromHistory + buildRebuildMeta
+│   │   ├── snapshots.ts     # Snapshot cache
+│   │   └── notifications.ts # Toast-уведомления
+│   ├── csg/
+│   │   ├── worker.ts        # Web Worker dispatcher
+│   │   ├── worker-handlers.ts # Обработчики (1259 строк)
+│   │   ├── worker-client.ts # Promise-обёртка над Worker
+│   │   ├── worker-matrix.ts # Матричная математика
+│   │   ├── history-tree.ts  # Build Tree (842 строки)
+│   │   ├── rebuildOps.ts    # Общая логика трансформаций
+│   │   ├── types.ts         # Все типы
+│   │   ├── BUILD_TREE_SPEC.md
+│   │   ├── types.test.ts
+│   │   ├── history-tree.test.ts
+│   │   ├── worker-matrix.test.ts
+│   │   ├── worker-sanitize.test.ts
+│   │   ├── worker-sync.test.ts
+│   │   └── rebuildOps.test.ts
+│   └── io/
+│       ├── stl-import.ts    # Импорт STL
+│       ├── stl-export.ts    # Экспорт STL
+│       ├── doodle-io.ts     # Формат .doodle
+│       ├── autosave.ts      # Автосохранение
+│       ├── project-manager.ts # Менеджер проектов
+│       ├── stl-import.test.ts
+│       ├── stl-export.test.ts
+│       ├── project-manager.test.ts
+│       └── document-store.test.ts
 ```
 
 ---
 
 ## Бенчмарки производительности
 
-| Операция | Сложность меша | Целевое время | Фактическое время |
+| Сценарий | До оптимизации | После | Ускорение |
 |---|---|---|---|
-| Добавление куба | ~24 треугольника | < 20 мс | ~5 мс |
-| Union двух кубов | ~100 треугольников | < 50 мс | ~15 мс |
-| Вычитание сферы из куба | ~500 треугольников | < 100 мс | ~35 мс |
-| Скругление куба (R=2) | ~1 200 треугольников | < 200 мс | ~80 мс |
-| Boolean сложных объектов | ~10 000 треугольников | < 1 000 мс | ~450 мс |
+| Undo/Redo (50 операций) | ~500ms (WASM rebuild) | ~5ms (snapshot cache) | **100x** |
+| Рендер списка объектов (100) | ~15ms (reduce каждый кадр) | ~2ms (useMemo) | **7.5x** |
+| CSG Boolean (два куба) | ~50ms | ~50ms (без изменений) | — |
+| Импорт STL (100K треугольников) | ~200ms | ~200ms (без изменений) | — |
 
 ---
 
@@ -379,6 +428,34 @@ tinkercraft/
 | WASM-утечка памяти (ManifoldObject не освобождаются) | ✅ Исправлено | CRIT-R8-1: `delete()` + helper-функции `setCached/disposeCached/disposeAllCached` |
 | Race condition (concurrent async actions) | ✅ Исправлено | CRIT-R8-2: `busy` guard во всех 18 async actions |
 | Prototype Pollution — ложные срабатывания | ✅ Исправлено | CRIT-R8-3: рекурсивная валидация ключей вместо подстроковой проверки |
+| `handleRebuildScene` без `try/finally` | 🔲 | CRIT-R16-1: нет `try/finally` для освобождения временных ManifoldObject (WARN) |
+| Мутация `vertices` в `extractAndCenter` — побочный эффект | 🔲 | CRIT-R16-2: неожиданная мутация входного массива (COSM) |
+| `any` в `collectSubtreeForWorker` / `applyCSGMeshes` | 🔲 | CRIT-R16-3: нарушение strict типизации (WARN) |
+| `JSON.stringify` в `computeNodeHash` — производительность | 🔲 | CRIT-R16-4: нагрузка на GC при частых rebuild (PERF низкий) |
+| Двойной проход по вершинам в `extractAndCenterGetAABB` | 🔲 | PERF-R16-1: можно объединить в один цикл (❌ неверно — два прохода неизбежны) |
+| `Array.from()` в hot path rebuild | 🔲 | PERF-R16-2: лишняя аллокация при каждом rebuild |
+| Избыточные ререндеры через Zustand | 🔲 | PERF-R16-3: 33 useStore hooks, 32/33 уже с селекторами |
+| `computeVertsHash` — возможны коллизии | 🔲 | PERF-R16-4: сумма произведений для симметричных мешей |
+| Дублирование матричной математики (rebuild.ts + worker-matrix.ts) | 🔲 | CODE-R16-1: общая логика в двух местах |
+| Магические числа в Viewport3D.tsx | 🔲 | CODE-R16-2: нет именованных констант |
+| Смешение русского и английского в комментариях | 🔲 | CODE-R16-3: затрудняет чтение кода |
+| `GizmoMode` с `null` как значение | 🔲 | CODE-R16-4: лишние проверки на null |
+| Нет валидации входящих данных в worker | 🔲 | SEC-R16-1: defence-in-depth |
+| Пустые `catch` блоки | 🔲 | SEC-R16-2: ошибки молча подавляются (только в worker-handlers.ts) |
+| `setCached` без проверки на disposed объекты | 🔲 | SEC-R16-3: риск падения WASM |
+| Нет тестов для `handleCsgBooleanSync`, `handleRebuildScene` | 🔲 | TEST-R16-1: критические функции не покрыты |
+| Тесты используют `as any` для обхода типов | 🔲 | TEST-R16-2: снижает ценность типизации (1 as any в history-tree.test.ts) |
+| Нет тестов для `snap-utils.ts` | 🔲 | TEST-R16-3: 468 строк без тестов |
+| Mirror через origin вместо центра BBox выделения | 🔲 | MIRROR-1: неожиданное поведение для объектов вдали от центра сцены |
+| Нет предпросмотра результата mirror | 🔲 | MIRROR-2: пользователь не видит результат до применения |
+| Baked nodes с вращением — rotation не инвертируется при mirror | 🔲 | MIRROR-3: некорректное зеркало для CSG-результатов с ненулевым вращением |
+| 3D хендлы для выбора плоскости mirror | 🔲 | MIRROR-4: выпадающий список менее интуитивен, чем 3D-стрелки |
+| Потеря параметричности boolean → baked при mirror | 🔲 | MIRROR-5: зеркальная копия CSG-результата становится нередактируемой |
+| Fallback-ноды не удаляются после mirror | 🔲 | MIRROR-6: мусор в дереве после операции |
+| Трансформ boolean ноды из первого child | 🔲 | MIRROR-7: некорректное позиционирование зеркальной копии |
+| Scale не инвертируется при mirror | 🔲 | MIRROR-8: неправильный масштаб по зеркальной оси |
+| Двойная синхронизация для import_mesh | 🔲 | MIRROR-9: лишний postMessage в воркер |
+| Нет проверки успешности sync перед mirror | 🔲 | MIRROR-10: ошибка синхронизации молча игнорируется |
 
 ---
 

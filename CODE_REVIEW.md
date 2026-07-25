@@ -7,6 +7,36 @@
 
 ---
 
+## 📋 Статус исправлений (BUG-CSG-POS-5/6 — Сброс позиции при трансформации CSG — 2026-07-26)
+
+| ID | Проблема | Статус | Описание исправления |
+|---|---|---|---|
+| BUG-CSG-POS-5 | `moveTreeNode` рекурсирует в children boolean-ноды, localTransform не обновляется | ✅ ИСПРАВЛЕНО | `moveObject` больше не использует `moveTreeNode`. Вместо этого `syncNodeTransform` обновляет `localTransform` ноды напрямую. |
+| BUG-CSG-POS-6 | `rebuildNode` запекает полный TRS в вершины, Viewport3D применяет TRS снова → двойное применение | ✅ ИСПРАВЛЕНО | `moveObject` больше не перестраивает меш. Вершин остаются центрированными (как при `handleBuildShape`), обновляется только `transform`. |
+| BUG-CSG-POS (уровень 1) | Stale worker cache для перемещённых примитивов при CSG | ✅ ИСПРАВЛЕНО | `syncOperand` синхронизирует все типы объектов (см. запись от 2026-07-25). |
+
+**Корневая причина:** Модель рендеринга требует, чтобы вершины были центрированы в origin, а `transform` нёс полный TRS. `handleBuildShape` (воркер) применяет только translation к мешу — rotation/scale обрабатываются Viewport3D через pivot. Но `rebuildNode` применял полный TRS через `buildTransformMatrix`, нарушая это соглашение и вызывая двойное применение rotation/scale.
+
+**Дополнительные изменения:**
+- `syncNodeTransform` всегда устанавливает `localTransform` (даже если был `undefined`)
+- `applyNodeTransform` добавлен для операций, требующих перестройки дерева
+
+---
+
+## 📋 Статус исправлений (BUG-CSG-POS — Сброс позиции при CSG — 2026-07-25)
+
+| ID | Проблема | Статус | Описание исправления |
+|---|---|---|---|
+| BUG-CSG-POS-1 | CSG результат позиционируется по среднему трансформов операндов (rotation/scale double-applied) | ✅ ИСПРАВЛЕНО | `csgBoolean` использует центроид `(cx, cy, cz)` как позицию, rotation=0, scale=1. Аналогично `extrudeSelected` и `rebuildFromHistory`. |
+| BUG-CSG-POS-2 | Stale worker cache для перемещённых примитивов при CSG | ✅ ИСПРАВЛЕНО | `syncOperand` теперь синхронизирует ВСЕ типы объектов: CSG/imported → `workerSyncMesh`, regular primitives → `workerSyncObjects`. Ранее регулярные примитивы не синхронизировались, и `handleCsgBooleanSync` использовал stale cache через `!cache.has` check. |
+
+**Связанные ранее зафиксированные проблемы:**
+- CRIT-CSG-2 (Раунд 9) — CSG-результат → default cube при повторных CSG / undo/redo — ✅ ИСПРАВЛЕНО
+- CRIT-CSG-3 (Раунд 9) — CSG-результат → default cube при move/mirror/align — ✅ ИСПРАВЛЕНО
+- CODE_REVIEW строка ~1880: "После `moveObject` worker-кэш содержит старую геометрию" — теперь полностью исправлено для CSG path
+
+---
+
 ## 📋 Статус исправлений (раунд 8 — Фаза A — 2026-07-16)
 
 | # | Проблема | Статус | Описание |
@@ -2347,4 +2377,1549 @@ const op: RenameOperation = { type: 'rename', id, name }
 
 ---
 
+## 🔍 РАУНД 16 — Глубокий аудит (2026-07-25)
+
+**Контекст:** Полное код-ревью проекта после внедрения Build Tree (`history-tree.ts`), рефакторинга worker (`worker-handlers.ts`), и накопления ~6700 строк TypeScript. Проверены все ключевые модули: store, csg, components, io.
+
+### 📊 Сводка
+
+| Категория | Найдено | Критических | Важных | Низких |
+|-----------|---------|-------------|--------|--------|
+| Критические | 4 | 4 | 0 | 0 |
+| Производительность | 4 | 0 | 3 | 1 |
+| Читаемость/Структура | 4 | 0 | 2 | 2 |
+| Безопасность | 3 | 0 | 2 | 1 |
+| Тестирование | 3 | 0 | 2 | 1 |
+| **Итого** | **18** | **4** | **9** | **5** |
+
+---
+
+### 🔴 КРИТИЧЕСКИЕ
+
+#### CRIT-R16-1. Утечка WASM-памяти в `handleRebuildScene` при ошибках
+
+**Файл:** [`web-app/src/csg/worker-handlers.ts:756`](web-app/src/csg/worker-handlers.ts:756)
+
+**Проблема:** В `handleRebuildScene` при возникновении ошибки в процессе обработки объектов, ранее созданные `ManifoldObject` не освобождаются. Нет `try/finally` блока, гарантирующего вызов `safeDelete()` для всех временных объектов.
+
+**Рекомендация:** Обернуть тело функции в `try/finally`. В `finally` блоке освобождать все временные `ManifoldObject`, созданные в процессе обработки.
+
+```typescript
+// Было:
+export async function handleRebuildScene(msg: RebuildSceneMessage): Promise<void> {
+  const wasm = getWasm();
+  // ... создание временных объектов
+  if (error) throw error; // утечка!
+}
+
+// Стало:
+export async function handleRebuildScene(msg: RebuildSceneMessage): Promise<void> {
+  const wasm = getWasm();
+  const temporaries: ManifoldObject[] = [];
+  try {
+    // ... создание временных объектов, добавляем в temporaries
+  } finally {
+    temporaries.forEach(m => safeDelete(m));
+  }
+}
+```
+
+---
+
+#### CRIT-R16-2. Мутация `vertices` в `extractAndCenter` — неожиданный побочный эффект
+
+**Файл:** [`web-app/src/store/helpers.ts:29`](web-app/src/store/helpers.ts:29)
+
+**Проблема:** Функция `extractAndCenter` модифицирует переданный `Float32Array` in-place, сдвигая все вершины к центру. Вызывающий код не ожидает мутации — это может привести к трудноотловимым багам, если исходный массив используется повторно.
+
+**Рекомендация:** Создавать копию массива перед мутацией, либо явно документировать побочный эффект в JSDoc и названии функции (например, `extractAndCenterInPlace`).
+
+```typescript
+// Вариант 1: копирование
+export function extractAndCenter(vertices: Float32Array): { cx: number; cy: number; cz: number } {
+  const { min, max } = computeAABB(vertices);
+  const cx = (min[0] + max[0]) / 2;
+  const cy = (min[1] + max[1]) / 2;
+  const cz = (min[2] + max[2]) / 2;
+  const copy = new Float32Array(vertices);
+  for (let i = 0; i < copy.length; i += 3) {
+    copy[i] -= cx;
+    copy[i + 1] -= cy;
+    copy[i + 2] -= cz;
+  }
+  return { cx, cy, cz };
+}
+```
+
+---
+
+#### CRIT-R16-3. `any` в `collectSubtreeForWorker` и `applyCSGMeshes`
+
+**Файлы:** [`web-app/src/csg/history-tree.ts:366`](web-app/src/csg/history-tree.ts:366), [`web-app/src/csg/history-tree.ts:426`](web-app/src/csg/history-tree.ts:426)
+
+**Проблема:** Функции `collectSubtreeForWorker` и `applyCSGMeshes` используют `any` для возвращаемых значений и промежуточных данных. Это нарушает строгую типизацию проекта (`strict: true`) и скрывает потенциальные ошибки несоответствия типов.
+
+**Рекомендация:** Заменить `any` на конкретные интерфейсы. Для `collectSubtreeForWorker` — определить интерфейс `SubtreeNode` с явными полями. Для `applyCSGMeshes` — использовать `ExtractedMesh` и связанные типы.
+
+```typescript
+interface SubtreeNode {
+  id: string;
+  type: TreeNode['type'];
+  shapeType?: string;
+  params?: ShapeParams;
+  transform?: TransformNR;
+  children?: string[];
+  mesh?: ExtractedMesh;
+}
+```
+
+---
+
+#### CRIT-R16-4. `JSON.stringify` в `computeNodeHash` — проблема производительности
+
+**Файл:** [`web-app/src/csg/history-tree.ts:254`](web-app/src/csg/history-tree.ts:254)
+
+**Проблема:** Функция `computeNodeHash` использует `JSON.stringify` для сериализации узла дерева при каждом вычислении хеша. На больших деревьях (50+ узлов) это создаёт значительную нагрузку на GC и CPU, особенно при частых rebuild.
+
+**Рекомендация:** Использовать структурированную конкатенацию ключевых полей с разделителями, либо библиотеку для быстрого хеширования (например, `xxhash-wasm`). Для начала — заменить `JSON.stringify` на целенаправленную сериализацию только значимых полей.
+
+```typescript
+function computeNodeHash(node: TreeNode): string {
+  const parts: string[] = [node.id, node.type];
+  if (node.type === 'primitive') {
+    parts.push(node.shapeType, JSON.stringify(node.params));
+  }
+  if (node.transform) {
+    parts.push(JSON.stringify(node.transform));
+  }
+  if (node.children?.length) {
+    parts.push(...node.children);
+  }
+  return parts.join('|');
+}
+```
+
+---
+
+### ⚡ ПРОИЗВОДИТЕЛЬНОСТЬ
+
+#### PERF-R16-1. Двойной проход по вершинам в `extractAndCenterGetAABB`
+
+**Файл:** [`web-app/src/store/helpers.ts:44`](web-app/src/store/helpers.ts:44)
+
+**Проблема:** Функция `extractAndCenterGetAABB` сначала вызывает `computeAABB` (один проход), затем делает второй проход для центрирования. Можно объединить в один проход.
+
+**Рекомендация:** Объединить вычисление AABB и центрирование в один цикл по вершинам.
+
+---
+
+#### PERF-R16-2. `Array.from()` в hot path
+
+**Файл:** [`web-app/src/csg/history-tree.ts:446`](web-app/src/csg/history-tree.ts:446)
+
+**Проблема:** В `collectSubtreeForWorker` и `applyCSGMeshes` используется `Array.from(nodes.values())` в hot path rebuild. При каждом rebuild создаётся новый массив из `Map`, что добавляет нагрузку на GC.
+
+**Рекомендация:** Кэшировать результат или использовать итератор напрямую, если массив нужен только для однократного прохода.
+
+---
+
+#### PERF-R16-3. Избыточные ререндеры через Zustand
+
+**Файл:** [`web-app/src/App.tsx:22`](web-app/src/App.tsx:22)
+
+**Проблема:** Множество компонентов используют деструктуризацию всего store (`useDocumentStore()`), что вызывает ререндер при любом изменении состояния. В [`App.tsx`](web-app/src/App.tsx:22) — 33 вызова `useStore` hooks.
+
+**Рекомендация:** Использовать селекторы для подписки только на необходимые поля. Для компонентов, которым нужно много полей, рассмотреть `useShallow` из Zustand.
+
+---
+
+#### PERF-R16-4. `computeVertsHash` — возможны коллизии
+
+**Файл:** [`web-app/src/components/Viewport3D.tsx:68`](web-app/src/components/Viewport3D.tsx:68)
+
+**Проблема:** Функция `computeVertsHash` использует сумму произведений координат вершин. Для симметричных мешей возможны коллизии (разные меши с одинаковым хешем). Это может привести к некорректному кэшированию геометрии.
+
+**Рекомендация:** Использовать криптографический хеш (например, FNV-1a или xxhash) или комбинировать с количеством вершин/индексов для уменьшения вероятности коллизий.
+
+---
+
+### 📝 ЧИТАЕМОСТЬ И СТРУКТУРА
+
+#### CODE-R16-1. Дублирование матричной математики
+
+**Файлы:** [`web-app/src/store/rebuild.ts:154`](web-app/src/store/rebuild.ts:154), [`web-app/src/csg/worker-matrix.ts:15`](web-app/src/csg/worker-matrix.ts:15)
+
+**Проблема:** Логика построения матриц трансформации дублируется между `rebuild.ts` (функция `rebuildFromHistory`) и `worker-matrix.ts`. При изменении формата трансформаций нужно править в двух местах.
+
+**Рекомендация:** Вынести общую матричную математику в отдельный модуль (например, `src/csg/matrix-utils.ts`), который импортируется и в store, и в worker-handlers.
+
+---
+
+#### CODE-R16-2. Магические числа в `Viewport3D.tsx`
+
+**Файл:** [`web-app/src/components/Viewport3D.tsx:97`](web-app/src/components/Viewport3D.tsx:97)
+
+**Проблема:** В компоненте `Viewport3D` (936 строк) используются магические числа без именованных констант: радиусы сфер, дистанции кликов, углы обзора, множители скорости.
+
+**Рекомендация:** Вынести все магические числа в именованные константы в начале файла или в `constants.ts`.
+
+---
+
+#### CODE-R16-3. Смешение русского и английского в комментариях
+
+**Файлы:** `web-app/src/csg/worker-handlers.ts`, `web-app/src/store/document-store.ts`, `web-app/src/csg/history-tree.ts`
+
+**Проблема:** Комментарии в коде написаны на смеси русского и английского языков. Это затрудняет чтение кода разработчиками, не знающими русского.
+
+**Рекомендация:** Привести все комментарии к единому языку (предпочтительно английскому, как язык кода).
+
+---
+
+#### CODE-R16-4. `GizmoMode` с `null` как значение
+
+**Файл:** [`web-app/src/store/ui-store.ts:11`](web-app/src/store/ui-store.ts:11)
+
+**Проблема:** Тип `GizmoMode` включает `null` как одно из значений, что приводит к необходимости проверок на `null` во всех компонентах, использующих этот тип. Лучше использовать отдельное значение `'none'` или `'idle'`.
+
+**Рекомендация:** Заменить `null` на строковое значение `'none'` в типе `GizmoMode` и во всех местах использования.
+
+---
+
+### 🔒 БЕЗОПАСНОСТЬ
+
+#### SEC-R16-1. Отсутствие валидации входящих данных в worker
+
+**Файл:** [`web-app/src/csg/worker.ts:25`](web-app/src/csg/worker.ts:25)
+
+**Проблема:** Web Worker не валидирует входящие сообщения. Любой вызов `postMessage` с произвольными данными может привести к неожиданному поведению. Хотя в текущей архитектуре worker изолирован, это defence-in-depth проблема.
+
+**Рекомендация:** Добавить валидацию типа сообщения и структуры данных в начале каждого обработчика. Использовать schema validation (Zod) или ручную проверку критических полей.
+
+---
+
+#### SEC-R16-2. `try/catch` с пустым `catch`
+
+**Файлы:** `web-app/src/csg/worker-handlers.ts`, `web-app/src/store/document-store.ts`
+
+**Проблема:** В некоторых местах используется `try/catch` с пустым блоком `catch`, что молча подавляет ошибки и затрудняет отладку.
+
+**Рекомендация:** В пустых `catch` блоках как минимум логировать ошибку через `console.error` или `notify()`.
+
+---
+
+#### SEC-R16-3. `setCached` без проверки на disposed объекты
+
+**Файл:** [`web-app/src/csg/worker-handlers.ts:108`](web-app/src/csg/worker-handlers.ts:108)
+
+**Проблема:** Функция `setCached` сохраняет `ManifoldObject` в кэш без проверки, не был ли объект уже disposed. Использование disposed объекта может привести к падению WASM.
+
+**Рекомендация:** Добавить проверку `isDisposed()` перед сохранением в кэш, если такой метод доступен в API manifold-3d, либо вести собственный флаг состояния.
+
+---
+
+### 🧪 ТЕСТИРОВАНИЕ
+
+#### TEST-R16-1. Нет тестов для критических функций
+
+**Проблема:** Следующие функции не покрыты тестами:
+- [`handleCsgBooleanSync`](web-app/src/csg/worker-handlers.ts:1093) — синхронная CSG операция
+- [`rebuildFromHistory`](web-app/src/store/rebuild.ts:154) — основной механизм undo/redo
+- [`handleRebuildScene`](web-app/src/csg/worker-handlers.ts:756) — полный rebuild сцены
+
+**Рекомендация:** Добавить unit-тесты для этих функций. Для `rebuildFromHistory` — тест с 2-3 операциями и проверкой итогового состояния объектов.
+
+---
+
+#### TEST-R16-2. Тесты используют `as any` для обхода типов
+
+**Файлы:** [`web-app/src/store/document-store.test.ts`](web-app/src/store/document-store.test.ts), [`web-app/src/csg/history-tree.test.ts`](web-app/src/csg/history-tree.test.ts), [`web-app/src/store/rebuild-integration.test.ts`](web-app/src/store/rebuild-integration.test.ts)
+
+**Проблема:** Тесты активно используют `as any` и `as unknown as` для обхода TypeScript, что снижает ценность типизации в тестах и может скрывать несоответствия типов.
+
+**Рекомендация:** Создавать правильные тестовые данные через фабричные функции, а не через приведение типов.
+
+---
+
+#### TEST-R16-3. Нет тестов для `snap-utils.ts`
+
+**Файл:** [`web-app/src/components/snap-utils.ts`](web-app/src/components/snap-utils.ts)
+
+**Проблема:** Модуль привязки к геометрии (468 строк) не имеет unit-тестов. Критическая функциональность (raycasting, поиск ближайших вершин/рёбер/граней) не проверяется.
+
+**Рекомендация:** Добавить тесты для `findNearestSnap`, `closestVertex`, `closestEdge`, `closestPointOnSegment` с использованием mock-сцены Three.js.
+
+---
+
+### 🎯 ПЛАН ДЕЙСТВИЙ РАУНДА 16
+
+| # | Задача | Приоритет | Сложность | Статус |
+|---|--------|-----------|-----------|--------|
+| 1 | `handleRebuildScene` — `try/finally` для освобождения ManifoldObject | 🔴 Крит. | Средняя | 🔲 |
+| 2 | `extractAndCenter` — копирование массива или переименование | 🔴 Крит. | Низкая | 🔲 |
+| 3 | `collectSubtreeForWorker` / `applyCSGMeshes` — замена `any` на интерфейсы | 🔴 Крит. | Средняя | 🔲 |
+| 4 | `computeNodeHash` — замена `JSON.stringify` на конкатенацию | 🔴 Крит. | Низкая | 🔲 |
+| 5 | `extractAndCenterGetAABB` — объединение проходов | ⚡ Произв. | Низкая | 🔲 |
+| 6 | `Array.from()` в hot path — оптимизация | ⚡ Произв. | Средняя | 🔲 |
+| 7 | Zustand селекторы — уменьшение ререндеров | ⚡ Произв. | Средняя | 🔲 |
+| 8 | `computeVertsHash` — улучшение хеш-функции | ⚡ Произв. | Низкая | 🔲 |
+| 9 | Выделение общей матричной математики | 📝 Читаем. | Средняя | 🔲 |
+| 10 | Магические числа → константы в Viewport3D | 📝 Читаем. | Низкая | 🔲 |
+| 11 | Комментарии — единый язык (английский) | 📝 Читаем. | Низкая | 🔲 |
+| 12 | `GizmoMode` — замена `null` на `'none'` | 📝 Читаем. | Низкая | 🔲 |
+| 13 | Валидация входящих данных в worker | 🔒 Безоп. | Средняя | 🔲 |
+| 14 | Пустые `catch` блоки — логирование ошибок | 🔒 Безоп. | Низкая | 🔲 |
+| 15 | `setCached` — проверка disposed объектов | 🔒 Безоп. | Средняя | 🔲 |
+| 16 | Тесты для `handleCsgBooleanSync`, `rebuildFromHistory`, `handleRebuildScene` | 🧪 Тесты | Высокая | 🔲 |
+| 17 | Замена `as any` в тестах на фабричные функции | 🧪 Тесты | Средняя | 🔲 |
+| 18 | Тесты для `snap-utils.ts` | 🧪 Тесты | Высокая | 🔲 |
+
+---
+
+### ✅ ЧТО СТОИТ ПОХВАЛИТЬ (раунд 16)
+
+1. **Build Tree (`history-tree.ts`)** — продуманная архитектура параметрического дерева построения с lazy rebuild, кэшированием и cascade invalidation. 29 тестов покрывают основные сценарии.
+2. **Worker-handlers рефакторинг** — чёткое разделение на обработчики, типобезопасные интерфейсы сообщений.
+3. **Snapshot cache (`snapshots.ts`)** — эффективный механизм мгновенного undo/redo.
+4. **STL импорт/экспорт** — корректная обработка бинарного и ASCII форматов, per-vertex нормали.
+5. **Качество тестов** — 104 теста, из них 29 для Build Tree, интеграционные тесты для rebuild.
+6. **Архитектура в целом** — чистое разделение ответственности между store, worker и компонентами.
+
+---
+
+### 📊 ИТОГОВАЯ ОЦЕНКА
+
+| Критерий | Оценка |
+|----------|--------|
+| Архитектура | 8/10 — Build Tree, snapshot cache, чёткое разделение слоёв |
+| Типизация | 7/10 — strict mode, но `any` просачивается в тестах и hot path |
+| Производительность | 7/10 — snapshot cache решает главную проблему, но есть микро-оптимизации |
+| Безопасность | 7/10 — базовая валидация есть, но defence-in-depth отсутствует |
+| Тестирование | 7/10 — 104 теста, но критические функции не покрыты |
+| Читаемость | 6/10 — дублирование, магические числа, смешение языков |
+| **Общая** | **7/10** — крепкий проект с понятной архитектурой и несколькими точками для улучшения |
+
+---
+
+*Раунд 16 завершён. Выявлено 18 проблем (4 критических, 9 важных, 5 низких). Рекомендуется в первую очередь исправить CRIT-R16-1 (утечка WASM-памяти) и CRIT-R16-2 (мутация массива), затем CRIT-R16-3 (any) и CRIT-R16-4 (JSON.stringify).*
+
+---
+
+## 🔍 Анализ Mirror: сравнение с CaDoodle (2026-07-25)
+
+**Контекст:** Проведён анализ реализации зеркала (Mirror) в референсном проекте CaDoodle (Java) и сравнение с текущей реализацией в TinkerCraft. Цель — выявить расхождения в поведении и потенциальные улучшения.
+
+### 📊 Сводка
+
+| Аспект | CaDoodle (Java) | TinkerCraft (TS) | Статус |
+|--------|----------------|------------------|--------|
+| Плоскость зеркала | Через центр BBox выделения | Через origin (0,0,0) | ⚠️ Отличие |
+| UI выбора плоскости | 3D хендлы (стрелки) на BBox | Выпадающий список | ⚠️ Отличие |
+| Предпросмотр | Полупрозрачный меш при наведении | Нет | ❌ Отсутствует |
+| Простые фигуры | `CSG.transform()` (матрица отражения) | `mirrorPoint()` в дереве | ✅ Аналогично |
+| CSG-результаты | `CSG.transform()` напрямую | Рекурсивный обход дерева | ✅ Корректно |
+| Baked nodes с вращением | `CSG.transform()` (вся геометрия) | Только позиция, rotation не инвертируется | ⚠️ Потенциальный баг |
+| Синхронизация кэша | Не требуется (единое состояние) | `workerSyncMesh`/`workerSyncObjects` | ⚠️ Overhead |
+| История операций | `CaDoodleOperation` | `MirrorOperation` в `operations[]` | ✅ Аналогично |
+
+---
+
+### 🏗️ Архитектура Mirror в CaDoodle
+
+**Поток вызова:**
+```
+MainController.onMirror()
+  → SelectionSession.onMirror()
+    → ControlSprites.initializeMirror(selectedCSG, bounds, meshes)
+      → MirrorSessionManager.initialize(bounds, engine, ta, selected, meshes)
+        → MirrorHandle.initialize() для X, Y, Z осей
+```
+
+**Ключевые компоненты:**
+
+1. **`MirrorSessionManager`** ([`MirrorSessionManager.java`](reference/java-source/mirror/MirrorSessionManager.java)) — оркестратор, управляет тремя `MirrorHandle` (по одному на ось X/Y/Z). Хранит `List<CSG> ta` (выделенные CSG-объекты), `List<String> selected` (имена), `HashMap<CSG, MeshView> meshes` (соответствие CSG→MeshView), `Bounds b` (bounding box выделения).
+
+2. **`MirrorHandle`** ([`MirrorHandle.java`](reference/java-source/mirror/MirrorHandle.java)) — UI-хендл для каждой оси:
+   - Визуализируется как двойная стрелка (`getDoubbleArrow()` — конус + цилиндр, повёрнутые на 180°)
+   - Позиционируется на углу bounding box'а выделения:
+     - X: `center.x, min.y, min.z`
+     - Y: `max.x, center.y, min.z`
+     - Z: `max.x, max.y, center.z`
+   - При клике создаёт операцию `Mirror` и добавляет в историю через `ap.addOp(op).join()` ([`MirrorHandle.java:130-141`](reference/java-source/mirror/MirrorHandle.java:130))
+
+3. **Создание операции** ([`MirrorHandle.java:258-283`](reference/java-source/mirror/MirrorHandle.java:258)):
+   ```java
+   op = new Mirror()
+     .setNames(selected)                          // какие объекты
+     .setWorkplane(ap.get().getWorkplane())       // рабочая плоскость
+     .setLocation(ax);                            // ось: x/y/z
+   ```
+
+4. **Предпросмотр** ([`MirrorHandle.java:263`](reference/java-source/mirror/MirrorHandle.java:263)):
+   ```java
+   for (CSG indicator : op.process(ta)) {  // ta = выделенные CSG
+     MeshView indicatorMesh = indicator.newMesh();
+     // полупрозрачный рендер (alpha=0.75)
+     visualizers.put(indicator, indicatorMesh);
+   }
+   ```
+   - `op.process(ta)` применяет mirror к CSG-объектам и возвращает результат для предпросмотра
+   - Результат показывается полупрозрачным при наведении на хендл
+
+5. **Применение** — через `ap.addOp(op)`:
+   - `Mirror` — `CaDoodleOperation`, сохраняется в историю (`CaDoodleFile`)
+   - Применяется к полному списку CSG-объектов через `process()`
+   - Работает на уровне CSG (библиотека `eu.mihosoft.vrl.v3d`)
+
+---
+
+### 🔄 Текущая реализация в TinkerCraft
+
+**Поток вызова:**
+```
+App.tsx (handleMirror)
+  → document-store.ts (mirrorSelected)
+    → workerSyncMesh / workerSyncObjects (синхронизация кэша воркера)
+    → cloneSubtree + mirrorTreeNode (в дереве построения)
+    → rebuildNode (извлечение меша из дерева)
+    → makeObject (создание нового объекта в store)
+```
+
+**Математика** ([`history-tree.ts:577-583`](web-app/src/csg/history-tree.ts:577)):
+```typescript
+function mirrorPoint(p: Point3D, plane: 'XY' | 'XZ' | 'YZ'): Point3D {
+  switch (plane) {
+    case 'YZ': return { x: -p.x, y: p.y, z: p.z }
+    case 'XZ': return { x: p.x, y: -p.y, z: p.z }
+    case 'XY': return { x: p.x, y: p.y, z: -p.z }
+  }
+}
+```
+
+Вращение инвертируется для оси, перпендикулярной плоскости ([`history-tree.ts:597-599`](web-app/src/csg/history-tree.ts:597)):
+```typescript
+rotX: plane === 'YZ' ? -t.rotX : t.rotX,
+rotY: plane === 'XZ' ? -t.rotY : t.rotY,
+rotZ: plane === 'XY' ? -t.rotZ : t.rotZ,
+```
+
+**Синхронизация кэша** ([`document-store.ts:542-566`](web-app/src/store/document-store.ts:542)):
+- `workerSyncMesh` для CSG-результатов и импортированных мешей (с полным трансформом)
+- `workerSyncObjects` для обычных примитивов
+
+---
+
+### ⚠️ Выявленные проблемы
+
+#### MIRROR-1. Плоскость зеркала через origin вместо BBox
+
+**Проблема:** В TinkerCraft зеркало всегда проходит через origin (0,0,0). В CaDoodle — через центр bounding box'а выделения. Для объектов, расположенных далеко от центра сцены, результат в TinkerCraft может быть неожиданным.
+
+**Пример:** Объект на позиции `(100, 0, 0)` при зеркале через YZ-плоскость в TinkerCraft окажется на `(-100, 0, 0)` — на расстоянии 200 единиц от оригинала. В CaDoodle он оказался бы рядом с оригиналом.
+
+**Рекомендация:** Рассчитать центр выделения (среднее арифметическое позиций всех выбранных объектов) и использовать его как временное смещение для mirror-операции.
+
+---
+
+#### MIRROR-2. Отсутствие предпросмотра
+
+**Проблема:** В TinkerCraft нет предпросмотра результата зеркала. Пользователь выбирает плоскость из выпадающего списка и операция применяется сразу. В CaDoodle при наведении на хендл показывается полупрозрачный результат.
+
+**Рекомендация:** Добавить предпросмотр через временный меш (аналогично CaDoodle) при выборе плоскости в UI.
+
+---
+
+#### MIRROR-3. Baked nodes с ненулевым вращением
+
+**Проблема:** Для baked nodes (CSG-результаты) [`mirrorNodeRecursive`](web-app/src/csg/history-tree.ts:604-614) инвертирует только позицию, но НЕ вращение:
+```typescript
+if (node.type === 'baked' && node.localTransform) {
+    const t = node.localTransform
+    const mirroredPos = mirrorPoint({ x: t.x, y: t.y, z: t.z }, plane)
+    node.localTransform = {
+      ...t,
+      x: mirroredPos.x, y: mirroredPos.y, z: mirroredPos.z,
+      // rotX/rotY/rotZ остаются без изменений!
+    }
+}
+```
+
+Если baked node имеет ненулевое вращение, зеркало будет некорректным — геометрия отразится, но вращение останется исходным.
+
+**Рекомендация:** Для baked nodes с ненулевым вращением либо инвертировать вращение (как для primitive), либо перестраивать меш через воркер с применением mirror-матрицы к геометрии.
+
+---
+
+#### MIRROR-4. 3D хендлы вместо выпадающего списка
+
+**Проблема:** В TinkerCraft выбор плоскости зеркала осуществляется через выпадающий список в панели свойств. В CaDoodle используются 3D-стрелки на bounding box'е, которые визуально показывают, где пройдёт плоскость зеркала.
+
+**Рекомендация:** Рассмотреть реализацию 3D-хендлов (аналогично CaDoodle) для более интуитивного выбора плоскости зеркала.
+
+---
+
+### 🎯 ПЛАН ДЕЙСТВИЙ
+
+| # | Задача | Приоритет | Сложность | Статус |
+|---|--------|-----------|-----------|--------|
+| 1 | Mirror через центр BBox выделения вместо origin | Средний | Средняя | 🔲 |
+| 2 | Предпросмотр результата mirror | Средний | Средняя | 🔲 |
+| 3 | Инвертировать вращение для baked nodes при mirror | Высокий | Низкая | 🔲 |
+| 4 | 3D хендлы для выбора плоскости mirror | Низкий | Высокая | 🔲 |
+
+---
+
+*Анализ Mirror завершён. Выявлено 4 расхождения с CaDoodle, из которых MIRROR-3 (baked nodes rotation) требует немедленного исправления, MIRROR-1 (плоскость через origin) и MIRROR-2 (предпросмотр) — среднего приоритета для улучшения UX.*
+
+---
+
+## 🔬 Глубокий анализ процесса Mirror в TinkerCraft (2026-07-25)
+
+**Контекст:** Пошаговый разбор всего процесса зеркала — от нажатия кнопки в UI до создания финального объекта в store. Цель: выявить все промежуточные состояния, переносимые параметры и потенциальные проблемы.
+
+### 📋 ПОЛНАЯ ДИАГРАММА ПОТОКА
+
+```
+UI (PropertiesPanel / MirrorButtons)
+  │ handleMirror(plane)
+  ▼
+App.tsx
+  │ store.mirrorSelected(plane)
+  ▼
+document-store.ts :: mirrorSelected()
+  │
+  ├── Шаг 1: Фильтрация selectedIds
+  ├── Шаг 2: Синхронизация кэша воркера
+  │   ├── 2a: workerSyncMesh() для CSG-результатов и import_mesh
+  │   └── 2b: workerSyncObjects() для обычных примитивов
+  ├── Шаг 3: Для КАЖДОГО выделенного объекта:
+  │   ├── 3a: Проверка существования ноды в дереве
+  │   │   └── Если нет → createPrimitiveNode() или createBakedNode() (fallback)
+  │   ├── 3b: syncNodeTransform() — синхронизация трансформа из store в дерево
+  │   ├── 3c: cloneSubtree(id, treeId) — полное копирование поддерева
+  │   ├── 3d: mirrorTreeNode(treeId, plane) — зеркало скопированного поддерева
+  │   ├── 3e: rebuildNode(treeId) — извлечение меша из зеркальной ноды
+  │   ├── 3f: Извлечение finalTransform из зеркальной ноды
+  │   ├── 3g: makeObject() — создание нового SceneObject
+  │   ├── 3h: createPrimitiveNode/BakedNode — регистрация в дереве
+  │   └── 3i: deleteNode(treeId) — удаление временной ноды
+  │
+  └── Шаг 4: Сохранение операции в историю
+      └── cacheSnapshotWithTree()
+```
+
+---
+
+### ШАГ 1: Фильтрация selectedIds
+
+**Файл:** [`document-store.ts:539-541`](web-app/src/store/document-store.ts:539)
+
+```typescript
+const { selectedIds, objects, operations, historyIndex } = get()
+const ids = selectedIds.filter(id => objects[id])
+if (ids.length === 0) return
+```
+
+**Что происходит:** Берутся все выбранные ID, фильтруются по существованию в `objects`. Если ничего не выбрано — выход.
+
+**Переносимые параметры:** Только `selectedIds` (массив строк) и `objects` (Record<string, SceneObject>).
+
+---
+
+### ШАГ 2: Синхронизация кэша воркера
+
+**Файл:** [`document-store.ts:544-573`](web-app/src/store/document-store.ts:544)
+
+**2a. Для CSG-результатов и import_mesh:**
+```typescript
+const syncOps = ids.map(async id => {
+  const obj = objects[id]
+  if (obj.shapeType === 'cube' && !obj.params.width || obj.shapeType === 'import_mesh') {
+    await workerSyncMesh(id, obj.vertices, obj.indices, fullTransform)
+  } else {
+    return { objId: id, shapeType, params, transform } // для workerSyncObjects
+  }
+})
+await Promise.all(syncOps)
+```
+
+**2b. Для обычных примитивов:**
+```typescript
+const regularEntries = ids.filter(id => /* не CSG и не import_mesh */)
+if (regularEntries.length > 0) {
+  await workerSyncObjects(regularEntries.map(id => ({ objId, shapeType, params, transform })))
+}
+```
+
+**Что переносится в воркер:**
+- `objId` — ID объекта
+- `shapeType` — тип фигуры (`'cube'`, `'cylinder'`, и т.д.)
+- `params` — параметры фигуры (`{ width, height, depth }`)
+- `transform` — полный трансформ: `{ x, y, z, rotX, rotY, rotZ, scaleX, scaleY, scaleZ }`
+
+**Проблема:** Два последовательных `postMessage` (сначала `workerSyncMesh`, потом `workerSyncObjects`). Для каждого выделенного объекта — минимум 1 сообщение в воркер. Для N объектов с CSG-результатами — N сообщений.
+
+---
+
+### ШАГ 3: Обработка каждого выделенного объекта
+
+**Файл:** [`document-store.ts:578-647`](web-app/src/store/document-store.ts:578)
+
+#### 3a. Проверка существования ноды в дереве
+
+```typescript
+const treeExists = getNode(id) !== undefined
+if (!treeExists) {
+  if (obj.shapeType && obj.params) {
+    createPrimitiveNode(id, obj.shapeType, obj.params, obj.transform)
+  } else {
+    createBakedNode(id, obj.vertices, obj.indices, obj.normals, obj.transform)
+  }
+}
+```
+
+**Что переносится:**
+- Для primitive: `id`, `shapeType`, `params` (ShapeParams), `transform` (TransformNR)
+- Для baked: `id`, `vertices` (Float32Array), `indices` (Uint32Array), `normals` (Float32Array|null), `transform` (TransformNR)
+
+**Проблема:** Fallback для объектов, не зарегистрированных в дереве. Это может происходить после `rebuildFromHistory` или при загрузке старых файлов. Создаётся временная нода, которая НЕ удаляется после операции — остаётся в дереве навсегда.
+
+#### 3b. Синхронизация трансформа
+
+```typescript
+syncNodeTransform(id, obj.transform)
+```
+
+**Что делает:** Обновляет `localTransform` в существующей ноде дерева значением из store. Нужно, потому что store и дерево могут рассинхронизироваться (например, после undo/redo).
+
+#### 3c. Клонирование поддерева
+
+**Файл:** [`history-tree.ts:747-808`](web-app/src/csg/history-tree.ts:747)
+
+```typescript
+const treeId = `mirror_${nextId()}`
+cloneSubtree(id, treeId)
+```
+
+**`cloneSubtree(sourceId, newRootId, newIdMap)` — рекурсивное копирование:**
+
+| Тип ноды | Что копируется | Способ копирования |
+|----------|---------------|-------------------|
+| `primitive` | `shapeType`, `params`, `localTransform` | `{ ...source.params }`, `{ ...source.localTransform }` — shallow copy объектов |
+| `baked` | `vertices`, `indices`, `normals`, `localTransform` | `new Float32Array(source.vertices!)` — **deep copy** TypedArray |
+| `boolean` | `operation`, `children[]` | Рекурсивный cloneRecursive для каждого child |
+
+**Важно:** `cloneSubtree` создаёт НОВЫЕ ID для всех скопированных нод через `nextIdForTree()`. Сохраняет маппинг старых ID → новые ID в `newIdMap`.
+
+**Что НЕ копируется:**
+- `cachedMesh` — кэш меша не переносится (будет перестроен через `rebuildNode`)
+- `cacheHash` — хеш не переносится
+- `cachedBBox` — bounding box не переносится
+
+#### 3d. Зеркалирование скопированного поддерева
+
+**Файл:** [`history-tree.ts:566-623`](web-app/src/csg/history-tree.ts:566)
+
+```typescript
+mirrorTreeNode(treeId, plane)
+```
+
+**Рекурсивный обход (`mirrorNodeRecursive`):**
+
+**Для primitive нод:**
+```typescript
+// Инвертируется позиция по оси, перпендикулярной плоскости
+const mirroredPos = mirrorPoint({ x: t.x, y: t.y, z: t.z }, plane)
+// Инвертируется вращение по оси, перпендикулярной плоскости
+rotX: plane === 'YZ' ? -t.rotX : t.rotX,
+rotY: plane === 'XZ' ? -t.rotY : t.rotY,
+rotZ: plane === 'XY' ? -t.rotZ : t.rotZ,
+// scale НЕ инвертируется!
+```
+
+**Для baked нод:**
+```typescript
+// Инвертируется ТОЛЬКО позиция
+// rotation НЕ инвертируется (комментарий: «normals already in mesh»)
+// scale НЕ инвертируется
+```
+
+**Для boolean нод:**
+```typescript
+// Рекурсивный обход всех children
+node.children.forEach(childId => {
+  const child = treeNodes.get(childId)
+  if (child) mirrorNodeRecursive(child, plane)
+})
+```
+
+**Проблемы:**
+1. **Baked nodes с вращением** — rotation не инвертируется (MIRROR-3)
+2. **Scale не инвертируется** — отрицательный scale (зеркальный) не применяется. Для объектов с scale ≠ 1 результат может быть некорректным
+3. **Плоскость через origin** — не через центр выделения (MIRROR-1)
+
+#### 3e. Извлечение меша из зеркальной ноды
+
+```typescript
+const mesh = await rebuildNode(treeId)
+```
+
+**`rebuildNode`** ([`history-tree.ts:320-360`](web-app/src/csg/history-tree.ts:320)):
+1. Вычисляет `computeNodeHash(node)` — хеш на основе `JSON.stringify` полей ноды
+2. Если `cachedMesh` и `cacheHash` совпадают — возвращает кэш
+3. Иначе:
+   - Если WASM готов локально:
+     - `primitive` → `rebuildPrimitive(node)` — создаёт через WASM, применяет `buildTransformMatrix`
+     - `baked` → `transformBakedMesh(node)` — применяет `localTransform` к вершинам
+     - `boolean` → `applyCSGMeshes(node)` — отправляет в воркер, применяет `localTransform`
+   - Если WASM не готов: `collectSubtreeForWorker` + `workerRebuildNode`
+4. Кэширует результат
+
+**Что возвращается:** `ExtractedMesh` — `{ vertices: Float32Array, indices: Uint32Array, normals: Float32Array|null, tris: number, ms: number }`
+
+**Важно:** Меш возвращается в МИРОВЫХ координатах (с применённым `localTransform`). Это значит, что позиция уже «запечена» в вершинах.
+
+#### 3f. Извлечение финального трансформа
+
+```typescript
+const clonedNode = getNode(treeId)
+let finalTransform = { ...obj.transform }
+
+if (clonedNode) {
+  if (clonedNode.type === 'primitive' && clonedNode.localTransform) {
+    finalTransform = { ...clonedNode.localTransform }
+  } else if (clonedNode.type === 'baked' && clonedNode.localTransform) {
+    finalTransform = { ...clonedNode.localTransform }
+  } else if (clonedNode.type === 'boolean' && clonedNode.children) {
+    const firstChild = getNode(clonedNode.children[0])
+    if (firstChild && firstChild.localTransform) {
+      finalTransform = { ...firstChild.localTransform }
+    }
+  }
+}
+```
+
+**Что переносится:** `localTransform` из зеркальной ноды — уже с инвертированными позицией и вращением.
+
+**Проблема:** Для boolean нод берётся `localTransform` первого дочернего элемента. Это НЕ то же самое, что трансформ самой boolean ноды (у boolean нод нет собственного `localTransform` — трансформ хранится на детях). Если первый child имеет нерепрезентативный трансформ, позиционирование будет некорректным.
+
+#### 3g. Создание нового SceneObject
+
+```typescript
+const newId = nextId()
+const newObj = makeObject({
+  ...obj,                    // все поля оригинала (color, visible, name, и т.д.)
+  id: newId,                 // новый ID
+  transform: finalTransform, // зеркальный трансформ
+  vertices: mesh.vertices,   // зеркальный меш
+  indices: mesh.indices,
+  normals: mesh.normals
+})
+newObjects[newId] = newObj
+```
+
+**`makeObject`** ([`helpers.ts:77-79`](web-app/src/store/helpers.ts:77)):
+```typescript
+export function makeObject(partial: Omit<SceneObject, 'aabb'>): SceneObject {
+  return { ...partial, aabb: computeAABB(partial.vertices) }
+}
+```
+
+**Что переносится из оригинала:**
+| Поле | Значение | Источник |
+|------|----------|----------|
+| `id` | Новый `nextId()` | Генератор |
+| `shapeType` | Из оригинала | `...obj` |
+| `params` | Из оригинала | `...obj` |
+| `transform` | Зеркальный (`finalTransform`) | Из mirror-ноды |
+| `vertices` | Зеркальный меш | Из `rebuildNode` |
+| `indices` | Зеркальный меш | Из `rebuildNode` |
+| `normals` | Зеркальный меш | Из `rebuildNode` |
+| `color` | Из оригинала | `...obj` |
+| `visible` | Из оригинала | `...obj` |
+| `name` | Из оригинала | `...obj` |
+| `aabb` | Вычисляется заново | `computeAABB(vertices)` |
+
+**Что НЕ переносится:**
+- `cachedRawVertices` — если был, не переносится (будет создан заново при рендере)
+- Старый `aabb` — вычисляется заново для нового меша
+
+#### 3h. Регистрация в дереве
+
+```typescript
+if (clonedNode?.type === 'primitive' && obj.shapeType && obj.params) {
+  createPrimitiveNode(newId, obj.shapeType, obj.params, finalTransform)
+} else {
+  createBakedNode(newId, mesh.vertices, mesh.indices, mesh.normals, finalTransform)
+}
+```
+
+**Что переносится:**
+- Для primitive: `newId`, `shapeType`, `params` (из оригинала), `finalTransform` (зеркальный)
+- Для baked: `newId`, `vertices/indices/normals` (зеркальный меш), `finalTransform` (зеркальный)
+
+**Проблема:** Если оригинал был boolean node, а `clonedNode.type` определился как `'boolean'`, то создаётся baked node (else-ветка). Это означает потерю параметричности — зеркальная копия boolean node становится baked (нередактируемой).
+
+#### 3i. Удаление временной ноды
+
+```typescript
+deleteNode(treeId)
+```
+
+Удаляет временное mirror-поддерево из дерева. Все созданные в `cloneSubtree` ноды с префиксом `mirror_` удаляются.
+
+---
+
+### ШАГ 4: Сохранение в историю
+
+```typescript
+const op: MirrorOperation = { type: 'mirror', originalIds, ids: newIds, plane }
+const newOps = [...operations.slice(0, historyIndex), op]
+set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true, busy: false, lastCsgMs: performance.now() - t0 })
+cacheSnapshotWithTree(newOps.length, newObjects)
+```
+
+**`MirrorOperation`** ([`types.ts:69-74`](web-app/src/csg/types.ts:69)):
+```typescript
+export interface MirrorOperation {
+  type: 'mirror'
+  originalIds: string[]   // ID объектов ДО зеркалирования
+  ids: string[]           // ID нового объекта(ов) после зеркалирования
+  plane: 'XY' | 'XZ' | 'YZ'
+}
+```
+
+**Что сохраняется в истории:** Только мета-информация (originalIds, newIds, plane). Сами объекты сохраняются через `cacheSnapshotWithTree`.
+
+---
+
+### 📊 СВОДКА ПЕРЕНОСИМЫХ ПАРАМЕТРОВ
+
+| Шаг | Откуда | Куда | Что переносится | Формат |
+|-----|--------|------|-----------------|--------|
+| 1 | Zustand store | Локальные переменные | `selectedIds`, `objects` | `string[]`, `Record<string, SceneObject>` |
+| 2a | store | Worker (workerSyncMesh) | `id, vertices, indices, transform` | `string, Float32Array, Uint32Array, TransformNR` |
+| 2b | store | Worker (workerSyncObjects) | `objId, shapeType, params, transform` | `string, string, ShapeParams, TransformNR` |
+| 3a | store | Build Tree | `id, shapeType, params/vertices, transform` | `string, string, ShapeParams/Float32Array, TransformNR` |
+| 3b | store | Build Tree (syncNodeTransform) | `id, transform` | `string, TransformNR` |
+| 3c | Build Tree | Build Tree (clone) | `shapeType, params, transform, vertices, indices, normals` | shallow/deep copy |
+| 3d | Build Tree | Build Tree (mirror) | `transform` (мутируется) | `TransformNR` (in-place) |
+| 3e | Build Tree | ExtractedMesh | `vertices, indices, normals` | `Float32Array, Uint32Array, Float32Array|null` |
+| 3f | Build Tree | Локальная переменная | `localTransform` | `TransformNR` |
+| 3g | store + mesh | Новый SceneObject | Все поля оригинала + новый mesh + новый transform | `SceneObject` |
+| 3h | store + Build Tree | Build Tree | `id, shapeType, params/vertices, transform` | `string, string, ShapeParams/Float32Array, TransformNR` |
+| 4 | store | История (operations) | `originalIds, newIds, plane` | `MirrorOperation` |
+
+---
+
+### ⚠️ ВЫЯВЛЕННЫЕ ПРОБЛЕМЫ (дополнительные к MIRROR-1..4)
+
+#### MIRROR-5. Потеря параметричности для boolean → baked
+
+**Проблема:** Если оригинал — boolean node (CSG-результат), зеркальная копия создаётся как baked node (строка 642). Это означает, что:
+- Нельзя изменить параметры CSG-операции для копии
+- Нельзя изменить операнды
+- Копия — «плоский» меш без истории построения
+
+**Где:** [`document-store.ts:639-643`](web-app/src/store/document-store.ts:639)
+
+**Рекомендация:** Для boolean оригиналов создавать boolean ноду в дереве, а не baked. Для этого нужно клонировать всё поддерево boolean операции и зарегистрировать его под новым ID.
+
+---
+
+#### MIRROR-6. Fallback-ноды не удаляются
+
+**Проблема:** Если объект не был в дереве (шаг 3a), создаётся fallback-нода через `createPrimitiveNode` или `createBakedNode`. Эта нода НЕ удаляется после завершения mirror — остаётся в дереве навсегда. При следующем mirror того же объекта нода уже существует, и fallback не срабатывает, но «мусорная» нода от первого mirror остаётся.
+
+**Где:** [`document-store.ts:586-594`](web-app/src/store/document-store.ts:586)
+
+**Рекомендация:** Удалять fallback-ноду после завершения операции, если она была создана в этом вызове.
+
+---
+
+#### MIRROR-7. Трансформ boolean ноды из первого child
+
+**Проблема:** Для boolean нод `finalTransform` извлекается из `localTransform` первого дочернего элемента (строка 618). Если первый child имеет нерепрезентативный трансформ (например, операнд Subtract, который находится далеко от центра), позиционирование зеркальной копии будет некорректным.
+
+**Где:** [`document-store.ts:616-622`](web-app/src/store/document-store.ts:616)
+
+**Рекомендация:** Для boolean нод вычислять центр всех дочерних элементов и использовать его как позицию, либо использовать bounding box boolean результата.
+
+---
+
+#### MIRROR-8. Scale не инвертируется при mirror
+
+**Проблема:** Функция `mirrorNodeRecursive` не инвертирует scale. Для primitive нод инвертируется только позиция и вращение. Если объект имеет scale ≠ 1, зеркальная копия будет иметь неправильный масштаб по зеркальной оси.
+
+**Пример:** Объект с `scaleX: 2` при mirror через YZ-плоскость должен получить `scaleX: -2` (отрицательный масштаб = отражение). В текущей реализации scale остаётся `2`.
+
+**Где:** [`history-tree.ts:589-601`](web-app/src/csg/history-tree.ts:589)
+
+**Рекомендация:** Инвертировать scale по оси, перпендикулярной плоскости зеркала (аналогично rotation):
+```typescript
+scaleX: plane === 'YZ' ? -t.scaleX : t.scaleX,
+scaleY: plane === 'XZ' ? -t.scaleY : t.scaleY,
+scaleZ: plane === 'XY' ? -t.scaleZ : t.scaleZ,
+```
+
+---
+
+#### MIRROR-9. Двойная синхронизация для CSG-результатов
+
+**Проблема:** Для CSG-результатов (`cube` без `params.width`) сначала вызывается `workerSyncMesh` (строка 553), а потом объект всё равно попадает в `regularEntries` (строка 560) и для него вызывается `workerSyncObjects`. Условие фильтрации:
+```typescript
+const regularEntries = ids.filter(id =>
+  objects[id] && objects[id].shapeType !== 'cube'
+  || (objects[id] && objects[id].shapeType === 'cube' && objects[id].params.width)
+)
+```
+Из-за приоритета операторов `&&` над `||`, CSG-результат (`shapeType === 'cube' && !params.width`) НЕ проходит в regularEntries. Но `import_mesh` с `shapeType !== 'cube'` проходит — и для него вызываются оба sync.
+
+**Где:** [`document-store.ts:551-560`](web-app/src/store/document-store.ts:551)
+
+**Рекомендация:** Добавить явное исключение для `import_mesh` в фильтре regularEntries, либо переписать логику на единый проход.
+
+---
+
+#### MIRROR-10. Нет проверки успешности sync перед mirror
+
+**Проблема:** `workerSyncMesh` вызывается с `.catch(() => {})` (строка 553) — ошибки синхронизации молча подавляются. Если sync не удался, mirror продолжится с устаревшими данными в кэше воркера, что приведёт к некорректному результату.
+
+**Где:** [`document-store.ts:553`](web-app/src/store/document-store.ts:553)
+
+**Рекомендация:** Проверять результат sync и прерывать операцию при ошибке.
+
+---
+
+### 🎯 ОБНОВЛЁННЫЙ ПЛАН ДЕЙСТВИЙ
+
+| # | Задача | Приоритет | Сложность | Статус |
+|---|--------|-----------|-----------|--------|
+| MIRROR-3 | Инвертировать вращение для baked nodes при mirror | Высокий | Низкая | 🔲 |
+| MIRROR-5 | Сохранять параметричность boolean → boolean при mirror | Высокий | Средняя | 🔲 |
+| MIRROR-8 | Инвертировать scale при mirror | Высокий | Низкая | 🔲 |
+| MIRROR-1 | Mirror через центр BBox выделения вместо origin | Средний | Средняя | 🔲 |
+| MIRROR-2 | Предпросмотр результата mirror | Средний | Средняя | 🔲 |
+| MIRROR-6 | Удалять fallback-ноды после mirror | Средний | Низкая | 🔲 |
+| MIRROR-7 | Корректный трансформ для boolean нод при mirror | Средний | Средняя | 🔲 |
+| MIRROR-10 | Проверка успешности sync перед mirror | Средний | Низкая | 🔲 |
+| MIRROR-9 | Исправить двойную синхронизацию import_mesh | Низкий | Низкая | 🔲 |
+| MIRROR-4 | 3D хендлы для выбора плоскости mirror | Низкий | Высокая | 🔲 |
+
+---
+
+*Глубокий анализ процесса Mirror завершён. Документировано 10 шагов, 10 переносимых наборов параметров, выявлено 6 дополнительных проблем (MIRROR-5..10) к已有的 4 (MIRROR-1..4).*
+
+---
+
+## 🔬 Глубокий анализ процесса Mirror в CaDoodle (Java) (2026-07-25)
+
+**Контекст:** Пошаговый разбор всего процесса зеркала в референсном проекте CaDoodle — от нажатия кнопки в UI до применения операции к CSG-объектам. Цель: полное понимание архитектуры для сравнения с TinkerCraft.
+
+### 📋 ПОЛНАЯ ДИАГРАММА ПОТОКА
+
+```
+MainController.onMirror() (кнопка 'M' / клавиша 'M')
+  │
+  ▼
+SelectionSession.onMirror()
+  │ getExecutor().submit(() -> { ... })
+  ▼
+ControlSprites.initializeMirror(selectedCSG, bounds, meshes)
+  │
+  ▼
+MirrorSessionManager.initialize(bounds, engine, ta, selected, meshes)
+  │
+  ├── MirrorHandle.initialize() для X оси
+  ├── MirrorHandle.initialize() для Y оси
+  └── MirrorHandle.initialize() для Z оси
+        │
+        ├── Шаг 1: Создание Mirror операции
+        │     op = new Mirror().setNames(selected).setWorkplane(wp).setLocation(ax)
+        │
+        ├── Шаг 2: Предпросмотр (preview)
+        │     for (CSG indicator : op.process(ta)) { ... }
+        │
+        └── Шаг 3: Ожидание клика
+              └── onClickEvent → setMyOperation()
+                    │
+                    ├── Шаг 4: ap.addOp(op).join() — применение операции
+                    └── Шаг 5: updateState() — обновление предпросмотра
+```
+
+---
+
+### ШАГ 0: Инициализация
+
+**Файл:** [`ControlSprites.java:364-365`](reference/java-source/controls/ControlSprites.java:364)
+
+```java
+align = new AlignManager(session, selection, workplaneOffset, ap);
+mirror = new MirrorSessionManager(selection, ap, this, workplaneOffset);
+```
+
+**`MirrorSessionManager`** ([`MirrorSessionManager.java:34-46`](reference/java-source/mirror/MirrorSessionManager.java:34)):
+```java
+public MirrorSessionManager(Affine selection, ActiveProject ap, ControlSprites controlSprites,
+    Affine workplaneOffset) {
+  this.selection = selection;
+  this.controlSprites = controlSprites;
+  x = new MirrorHandle(MirrorOrientation.x, workplaneOffset, selection, null, ap, controlSprites, workplaneOffset);
+  y = new MirrorHandle(MirrorOrientation.y, workplaneOffset, selection, null, ap, controlSprites, workplaneOffset);
+  z = new MirrorHandle(MirrorOrientation.z, workplaneOffset, selection, null, ap, controlSprites, workplaneOffset);
+  handles = Arrays.asList(x, y, z);
+  hide();
+}
+```
+
+**Создаются 3 `MirrorHandle`** — по одному на каждую ось (X, Y, Z). Каждый хендл:
+- Создаёт визуальную двойную стрелку (`getDoubbleArrow()` — конус + цилиндр, повёрнутые на 180°)
+- Назначает цвет: X=красный, Y=зелёный, Z=синий
+- Регистрирует события: `MOUSE_ENTERED` (показать предпросмотр), `MOUSE_EXITED` (скрыть), `MOUSE_CLICKED` (применить)
+- Изначально скрыт (`mesh.setVisible(false)`)
+
+---
+
+### ШАГ 1: Активация режима Mirror
+
+**Файл:** [`SelectionSession.java:2370-2380`](reference/java-source/controls/SelectionSession.java:2370)
+
+```java
+public void onMirror() {
+  if (getControls() == null) return;
+  getExecutor().submit(() -> {
+    getControls().setMode(SpriteDisplayMode.Mirror);
+    List<CSG> selectedCSG = getSelectedCSG(selectedSnapshot());
+    Bounds b = getSellectedBounds(selectedCSG);
+    getControls().initializeMirror(selectedCSG, b, getMeshes());
+  });
+}
+```
+
+**Что происходит:**
+1. Переключает режим UI в `SpriteDisplayMode.Mirror`
+2. Получает список выбранных CSG-объектов через `getSelectedCSG(selectedSnapshot())`
+3. Вычисляет bounding box выделения через `getSellectedBounds(selectedCSG)`
+4. Передаёт всё в `ControlSprites.initializeMirror()`
+
+**Переносимые параметры:**
+| Параметр | Тип | Описание |
+|----------|-----|----------|
+| `selectedCSG` | `List<CSG>` | Выбранные CSG-объекты (с геометрией, цветом, именем) |
+| `b` | `Bounds` | Bounding box выделения (min/max/center) |
+| `meshes` | `HashMap<CSG, MeshView>` | Соответствие CSG → MeshView для рендера |
+
+---
+
+### ШАГ 2: Инициализация MirrorHandle
+
+**Файл:** [`MirrorHandle.java:242-256`](reference/java-source/mirror/MirrorHandle.java:242)
+
+```java
+public void initialize(Bounds b, BowlerStudio3dEngine eng, List<CSG> t, List<String> sel,
+    HashMap<CSG, MeshView> meshes) {
+  this.b = b;
+  this.engine = eng;
+  this.ta = t;          // выделенные CSG-объекты
+  this.selected = sel;  // имена выделенных объектов
+  this.meshes = meshes;
+  material.setDiffuseColor(myColor);
+  BowlerStudio.runLater(() -> mesh.setVisible(true));
+  mesh.addEventFilter(MouseEvent.MOUSE_EXITED, exited);
+  mesh.addEventFilter(MouseEvent.MOUSE_ENTERED, entered);
+  mesh.addEventFilter(MouseEvent.MOUSE_CLICKED, onClickEvent);
+  updateState();
+  ap.addListener(this);
+}
+```
+
+**Что сохраняется в хендле:**
+- `this.ta` — ссылка на оригинальные CSG-объекты (НЕ копия!)
+- `this.selected` — имена объектов
+- `this.meshes` — соответствие CSG→MeshView
+- `this.b` — bounding box выделения
+
+**Важно:** Хендл хранит ССЫЛКИ на оригинальные объекты, не копии. Любые изменения в `ta` отразятся на хендле.
+
+---
+
+### ШАГ 3: Создание операции Mirror и предпросмотр
+
+**Файл:** [`MirrorHandle.java:258-283`](reference/java-source/mirror/MirrorHandle.java:258)
+
+```java
+public void updateState() {
+  op = new Mirror()
+    .setNames(selected)                    // какие объекты зеркалить
+    .setWorkplane(ap.get().getWorkplane()) // рабочая плоскость
+    .setLocation(ax);                      // ось: x/y/z
+  clearVisualizers();
+  op.setCaDoodleFile(ap.get());
+
+  for (CSG indicator : op.process(ta)) {  // ta = выделенные CSG
+    MeshView indicatorMesh = indicator.newMesh();
+    indicatorMesh.setMouseTransparent(true);
+
+    // Настройка материала
+    PhongMaterial material = new PhongMaterial();
+    if (indicator.isHole()) {
+      material.setDiffuseColor(new Color(0.25, 0.25, 0.25, 0.75)); // серый для отверстий
+    } else {
+      Color c = indicator.getColor();
+      material.setDiffuseColor(new Color(c.getRed(), c.getGreen(), c.getBlue(), 0.75)); // цветной
+    }
+    material.setSpecularColor(javafx.scene.paint.Color.WHITE);
+    indicatorMesh.setMaterial(material);
+
+    engine.addUserNode(indicatorMesh);
+    indicatorMesh.setVisible(false);       // скрыт до наведения
+    visualizers.put(indicator, indicatorMesh);
+  }
+}
+```
+
+**Ключевой вызов:** `op.process(ta)` — применяет mirror к CSG-объектам и возвращает результат.
+
+**Что делает `Mirror.process()` (из библиотеки BowlerStudio, класс не в репозитории):**
+1. Берёт CSG-объекты из `ta` по именам из `selected`
+2. Применяет к ним трансформацию отражения относительно рабочей плоскости
+3. Возвращает новые CSG-объекты — результат зеркала
+
+**Предпросмотр:**
+- Результат `op.process()` рендерится как полупрозрачный меш (alpha=0.75)
+- Цвет сохраняется из оригинала (или серый для отверстий)
+- Меш скрыт (`setVisible(false)`) — показывается только при наведении на хендл
+- При наведении (`MOUSE_ENTERED`): `visualizers.get(key).setVisible(true)`
+- При уходе (`MOUSE_EXITED`): `visualizers.get(key).setVisible(false)`
+
+---
+
+### ШАГ 4: Применение операции (клик по хендлу)
+
+**Файл:** [`MirrorHandle.java:116-141`](reference/java-source/mirror/MirrorHandle.java:116)
+
+```java
+onClickEvent = event -> {
+  material.setDiffuseColor(myColor);
+  setMyOperation();
+};
+
+private void setMyOperation() {
+  new Thread(() -> {
+    try {
+      ap.addOp(op).join();  // <-- применение операции
+    } catch (InterruptedException e) {
+      Log.error(e);
+    }
+    updateState();          // <-- обновление предпросмотра
+  }).start();
+}
+```
+
+**`ap.addOp(op)`** ([`ActiveProject.java:262-264`](reference/java-source/ActiveProject.java:262)):
+```java
+public Thread addOp(CaDoodleOperation h) {
+  Thread t = get().addOperation(h);  // CaDoodleFile.addOperation()
+  timeoutThread(h, t);
+  return t;
+}
+```
+
+**Что делает `CaDoodleFile.addOperation(Mirror)`:**
+1. Добавляет `Mirror` операцию в список операций файла (история)
+2. Вызывает `process()` на всех операциях для перестроения сцены
+3. Оповещает всех слушателей (`ICaDoodleStateUpdate`) об изменении состояния
+4. Сохраняет новое состояние CSG-объектов
+
+**Важно:** `op.join()` — ожидает завершения операции в отдельном потоке. После завершения вызывается `updateState()` для обновления предпросмотра.
+
+---
+
+### ШАГ 5: Позиционирование хендлов
+
+**Файл:** [`MirrorHandle.java:143-232`](reference/java-source/mirror/MirrorHandle.java:143)
+
+```java
+public void updateControls(double screenW, double screenH, double zoom, double az, double el,
+    double xI, double yI, double zI, List<String> selectedCSG, Bounds b, TransformNR cf) {
+  // ...
+  double X = 0, Y = 0, Z = 0;
+  switch (ax) {
+    case x:  X = b.getCenter().x; Y = b.getMin().y;    Z = b.getMin().z;    break;
+    case y:  X = b.getMax().x;    Y = b.getCenter().y;  Z = b.getMin().z;    break;
+    case z:  X = b.getMax().x;    Y = b.getMax().y;     Z = b.getCenter().z; break;
+  }
+
+  TransformNR target = new TransformNR(X, Y, Z);
+  // Ориентация стрелки в зависимости от оси
+  double rx = 0, ry = 0, rz = 0;
+  if (ax == MirrorOrientation.x) { rx = 0;  ry = -90; rz = 90; }
+  if (ax == MirrorOrientation.y) { rx = 0;  ry = 90;  rz = 0;  }
+  if (ax == MirrorOrientation.z) { rx = -90; ry = 0;   rz = 0;  }
+
+  // Масштабирование относительно камеры
+  double distance = Math.sqrt(...); // расстояние от камеры до цели
+  double scaleFactor = ((distance / 1000.0) * 0.75);
+  scaleFactor = Math.max(0.001, Math.min(90.0, scaleFactor));
+  setScale(scaleFactor);
+
+  BowlerStudio.runLater(() -> {
+    scaleTF.setX(getScale());
+    scaleTF.setY(getScale());
+    scaleTF.setZ(getScale());
+    TransformFactory.nrToAffine(pureRot, cameraOrient);
+    TransformFactory.nrToAffine(target.setRotation(new RotationNR()), location);
+  });
+}
+```
+
+**Позиция каждого хендла на bounding box'е:**
+| Ось | X | Y | Z |
+|-----|---|---|---|
+| X | center.x | min.y | min.z |
+| Y | max.x | center.y | min.z |
+| Z | max.x | max.y | center.z |
+
+**Ориентация стрелки:**
+| Ось | rx | ry | rz |
+|-----|----|----|----|
+| X | 0 | -90 | 90 |
+| Y | 0 | 90 | 0 |
+| Z | -90 | 0 | 0 |
+
+**Масштабирование:** Размер стрелки автоматически подстраивается под расстояние до камеры (baseScale=0.75, baseDistance=1000.0), clamped в [0.001, 90.0].
+
+---
+
+### ШАГ 6: Очистка и завершение
+
+**Файл:** [`MirrorHandle.java:294-304`](reference/java-source/mirror/MirrorHandle.java:294)
+
+```java
+public void hide() {
+  BowlerStudio.runLater(() -> mesh.setVisible(false));
+  mesh.removeEventFilter(MouseEvent.MOUSE_EXITED, exited);
+  mesh.removeEventFilter(MouseEvent.MOUSE_ENTERED, entered);
+  mesh.removeEventFilter(MouseEvent.MOUSE_CLICKED, onClickEvent);
+  for (CSG key : visualizers.keySet()) {
+    visualizers.get(key).setVisible(false);
+  }
+  clearVisualizers();
+  ap.removeListener(this);
+}
+```
+
+**`clearVisualizers()`** ([`MirrorHandle.java:285-292`](reference/java-source/mirror/MirrorHandle.java:285)):
+```java
+private void clearVisualizers() {
+  ArrayList<CSG> toRem = new ArrayList<>();
+  toRem.addAll(visualizers.keySet());
+  for (CSG obj : toRem) {
+    MeshView mv = visualizers.remove(obj);
+    engine.removeUserNode(mv);
+  }
+}
+```
+
+**Что очищается:**
+- Визуальный хендл (стрелка) скрывается
+- Все event filter'ы удаляются
+- Все предпросмотровые меши удаляются из сцены
+- Хендл отписывается от изменений ActiveProject
+
+---
+
+### 📊 СВОДКА ПЕРЕНОСИМЫХ ПАРАМЕТРОВ (CaDoodle)
+
+| Шаг | Откуда | Куда | Что переносится | Формат |
+|-----|--------|------|-----------------|--------|
+| 0 | ControlSprites | MirrorSessionManager | `selection, ap, controlSprites, workplaneOffset` | `Affine, ActiveProject, ControlSprites, Affine` |
+| 0 | MirrorSessionManager | MirrorHandle (x3) | `ax, workplaneOffset, selection, ap, controlSprites` | `MirrorOrientation, Affine, Affine, ActiveProject, ControlSprites` |
+| 1 | SelectionSession | ControlSprites | `selectedCSG, b, meshes` | `List<CSG>, Bounds, HashMap<CSG,MeshView>` |
+| 2 | ControlSprites | MirrorSessionManager | `b, engine, ta, selected, meshes` | `Bounds, Engine, List<CSG>, List<String>, HashMap` |
+| 2 | MirrorSessionManager | MirrorHandle (x3) | `b, engine, ta, selected, meshes` | (те же, per-handle) |
+| 3 | MirrorHandle | Mirror.op | `selected, workplane, ax` | `List<String>, TransformNR, MirrorOrientation` |
+| 3 | Mirror.op.process(ta) | visualizers[] | CSG-результаты mirror | `List<CSG>` (новые объекты) |
+| 4 | MirrorHandle | ActiveProject | `op` (CaDoodleOperation) | `Mirror` (extends CaDoodleOperation) |
+| 4 | ActiveProject | CaDoodleFile | `op` в список операций | `List<CaDoodleOperation>` |
+| 5 | Camera/Engine | MirrorHandle | `screenW, screenH, zoom, az, el, x, y, z, cf` | примитивы + `TransformNR` |
+
+---
+
+### ⚠️ КЛЮЧЕВЫЕ ОСОБЕННОСТИ АРХИТЕКТУРЫ CaDoodle
+
+1. **Нет копирования объектов** — хендлы хранят ССЫЛКИ на оригинальные CSG-объекты. Mirror применяется к ним через `op.process(ta)` без создания копий.
+
+2. **Операция как объект** — `Mirror` extends `CaDoodleOperation`. Операция содержит всю информацию для воспроизведения: имена объектов, рабочая плоскость, ось. Сохраняется в историю.
+
+3. **Предпросмотр через process()** — тот же `op.process(ta)` используется и для предпросмотра, и для финального применения. Разница только в том, что предпросмотр рендерится полупрозрачным.
+
+4. **Bounding box выделения** — плоскость зеркала определяется через bounding box ВСЕХ выбранных объектов, а не каждого отдельно. Это даёт более интуитивный результат при зеркале группы объектов.
+
+5. **Рабочая плоскость (workplane)** — mirror учитывает текущую рабочую плоскость. При изменении workplane хендлы пересчитывают позицию через `onWorkplaneChange()`.
+
+6. **Асинхронное применение** — `ap.addOp(op)` запускается в отдельном потоке. `join()` ожидает завершения. После завершения — `updateState()` для обновления предпросмотра.
+
+7. **Нет разделения store/worker** — в CaDoodle нет отдельного store и worker. CSG-объекты — единственный источник истины. Mirror применяется непосредственно к CSG через библиотеку `eu.mihosoft.vrl.v3d`.
+
+8. **UI хендлы как 3D объекты** — стрелки mirror — полноценные 3D CSG-объекты (конус + цилиндр), рендерятся через JavaFX MeshView. Позиционируются на bounding box'е выделения.
+
+---
+
+### 📊 СРАВНЕНИЕ ПОТОКОВ: CaDoodle vs TinkerCraft
+
+| Аспект | CaDoodle | TinkerCraft |
+|--------|----------|-------------|
+| **Количество шагов** | 6 | 10 |
+| **Копирование объектов** | Нет (ссылки) | Да (cloneSubtree + deep copy TypedArray) |
+| **Предпросмотр** | `op.process(ta)` → полупрозрачный меш | Нет |
+| **Плоскость зеркала** | Через BBox выделения | Через origin (0,0,0) |
+| **Синхронизация** | Не требуется | workerSyncMesh + workerSyncObjects |
+| **История** | CaDoodleFile.addOperation(Mirror) | MirrorOperation в operations[] + snapshot |
+| **Параметричность** | Сохраняется (CSG → CSG) | Теряется (boolean → baked) |
+| **UI** | 3D стрелки на BBox | Выпадающий список |
+| **Рабочая плоскость** | Учитывается | Не учитывается |
+| **Асинхронность** | Thread + join() | async/await + busy guard |
+
+---
+
+*Глубокий анализ процесса Mirror в CaDoodle завершён. Документировано 6 шагов, 8 переносимых наборов параметров. Выявлено 7 ключевых особенностей архитектуры, отличающих CaDoodle от TinkerCraft.*
+
+---
+
+## ✅ Верификация раунда 16 (2026-07-25)
+
+**Контекст:** Пользователь проверил все 18 утверждений раунда 16 против реального кода. Результаты показывают точность ~50% — 8 полностью верных из 18.
+
+### 📊 Сводка верификации
+
+| Статус | Количество | Проблемы |
+|--------|-----------|----------|
+| ✅ Полностью верно | 8 | CRIT-R16-3, CRIT-R16-4, PERF-R16-4, CODE-R16-1/2/3/4, SEC-R16-1, SEC-R16-3, TEST-R16-3 |
+| ⚠️ Частично верно / преувеличено | 7 | CRIT-R16-1, CRIT-R16-2, PERF-R16-2, PERF-R16-3, SEC-R16-2, TEST-R16-1, TEST-R16-2 |
+| ❌ Неверно | 1 | PERF-R16-1 |
+
+**Точность:** ~50% (8/18 полностью верных; ~15/18 содержат долю истины, но 7 содержат фактические ошибки)
+
+---
+
+### 🔴 Критические — проверка
+
+#### CRIT-R16-1. `handleRebuildScene` без `try/finally` — ⚠️ Частично верно
+
+**Факт:** `try/finally` действительно отсутствует (строки 756–986). Но утверждение про «утечку» преувеличено: функция вызывает `disposeAllCached()` в начале (строка 758), а все созданные объекты попадают в cache через `setCached()`. При следующем rebuild весь кэш очищается. Утечка временная (до следующего rebuild), а не постоянная.
+
+**Вердикт:** Проблема реальна, но категория «критическая» — слишком сильно. Скорее WARN.
+
+---
+
+#### CRIT-R16-2. Мутация `vertices` в `extractAndCenter` — ⚠️ Верно, но преувеличена
+
+**Факт:** Мутация in-place подтверждена (строки 32–34: `vertices[i] -= c.x`). Однако JSDoc уже документирует это: «Shifts vertices so bbox center is at origin». Проблема в отсутствии слова `InPlace` в названии, а не в неожиданной мутации.
+
+**Вердикт:** Категория «критическая» несоразмерна. Скорее COSM.
+
+---
+
+#### CRIT-R16-3. `any` в `collectSubtreeForWorker` и `applyCSGMeshes` — ✅ Верно
+
+**Факт:** Подтверждено — `Array<any>` (строка 378), `workerNode: any` (строка 390). Реальное нарушение `strict: true`.
+
+**Вердикт:** ✅ Полностью верно.
+
+---
+
+#### CRIT-R16-4. `JSON.stringify` в `computeNodeHash` — ✅ Верно (но severity спорный)
+
+**Факт:** Подтверждено — `JSON.stringify` на строках 256 и 263. Однако для boolean-узлов (строки 270–277) уже используется конкатенация. Хеш вычисляется только при rebuild, не в каждом кадре.
+
+**Вердикт:** «Критическая» для производительности — слишком сильно. Скорее PERF низкой приоритетности.
+
+---
+
+### ⚡ Производительность — проверка
+
+#### PERF-R16-1. Двойной проход в `extractAndCenterGetAABB` — ❌ Неверно
+
+**Факт:** Утверждение «сначала вызывает `computeAABB`» ложно. Функция НЕ вызывает `computeAABB` — она инлайнит вычисление AABB (строки 54–58). Два прохода неизбежны: нельзя сдвинуть вершины к центру, не зная центра (для которого нужен первый проход). Рекомендация «объединить в один проход» невыполнима.
+
+**Вердикт:** ❌ Фактическая ошибка. Комментарий «Single pass: O(n)» в коде вводит в заблуждение (два прохода, оба O(n)), но конкретные утверждения ревью неверны.
+
+---
+
+#### PERF-R16-2. `Array.from()` в hot path — ⚠️ Частично неверно
+
+**Факт:** Утверждение, что `Array.from(nodes.values())` используется в обоих `collectSubtreeForWorker` и `applyCSGMeshes`, неверно. Только `applyCSGMeshes` (строка 446) использует `Array.from`. `collectSubtreeForWorker` использует `Array<any>` с `push` (строка 378).
+
+**Вердикт:** Одна из двух функций указана неверно. Вызывать один `Array.from` за rebuild «hot path» проблемой — натяжка.
+
+---
+
+#### PERF-R16-3. Избыточные ререндеры через Zustand — ⚠️ Вводит в заблуждение
+
+**Факт:** Количество 33 вызовов `useStore` в `App.tsx` примерно верно (32 `useUiStore` + 1 `useDocumentStore`). Но утверждение «деструктуризация всего store» неверно: 32 из 33 вызовов уже используют селекторы (`useUiStore(s => s.fps)`). Только `useDocumentStore()` (строка 106) без селектора.
+
+**Вердикт:** Большинство вызовов уже следуют рекомендации. Проблема сведена к одному вызову.
+
+---
+
+#### PERF-R16-4. `computeVertsHash` коллизии — ✅ Верно
+
+**Факт:** Подтверждено (строки 68–76) — сумма произведений, возможны коллизии для симметричных мешей.
+
+**Вердикт:** ✅ Полностью верно. Реальный, хотя и низкорисковый, concern.
+
+---
+
+### 📝 Читаемость и структура — проверка
+
+#### CODE-R16-1. Дублирование матричной математики — ✅ Верно
+
+**Факт:** Подтверждено. `rebuild.ts` (строки 180–188) инлайнит вычисление RS-матрицы (`r00`–`r22`), дублируя `worker-matrix.ts:buildSRTMatrixAroundCenter` (строки 31–39). Комментарий в коде даже говорит: «same as buildTransformMatrix but applied to vertices».
+
+**Вердикт:** ✅ Полностью верно.
+
+#### CODE-R16-2. Магические числа в Viewport3D — ✅ Верно
+
+**Факт:** Файл 935 строк, магические числа присутствуют.
+
+**Вердикт:** ✅ Полностью верно.
+
+#### CODE-R16-3. Смешение русского и английского — ✅ Верно
+
+**Факт:** Подтверждено — русские комментарии в `worker-matrix.ts`, `worker-handlers.ts`, `document-store.ts`.
+
+**Вердикт:** ✅ Полностью верно.
+
+#### CODE-R16-4. `GizmoMode` с `null` — ✅ Верно
+
+**Факт:** Подтверждено — `Viewport3D.tsx:23`: `type GizmoMode = "translate" | "rotate" | "scale" | null`.
+
+**Вердикт:** ✅ Полностью верно.
+
+---
+
+### 🔒 Безопасность — проверка
+
+#### SEC-R16-1. Нет валидации в worker — ✅ Верно
+
+**Факт:** Подтверждено — `worker.ts` использует `as unknown as` касты без валидации структуры сообщений.
+
+**Вердикт:** ✅ Полностью верно.
+
+#### SEC-R16-2. Пустые `catch` блоки — ⚠️ Частично неверно
+
+**Факт:** В `worker-handlers.ts` найдено 2 пустых `catch` (строки 104, 930), оба с комментариями (`/* already disposed */` и `// Non-manifold`). Утверждение, что `document-store.ts` содержит пустые `catch` — неверно (grep не нашёл ни одного).
+
+**Вердикт:** Одна из двух указанных функций не содержит пустых catch.
+
+#### SEC-R16-3. `setCached` без проверки disposed — ✅ Верно (но низкая ценность)
+
+**Факт:** `setCached` (строки 108–111) не проверяет, не disposed ли входящий объект `m`. Однако `setCached` вызывается с только что созданными объектами, риск минимален.
+
+**Вердикт:** ✅ Верно, но практическая ценность низкая.
+
+---
+
+### 🧪 Тестирование — проверка
+
+#### TEST-R16-1. Нет тестов для критических функций — ⚠️ Частично неверно
+
+**Факт:**
+- `handleCsgBooleanSync` — тестов нет ✅ (верно)
+- `handleRebuildScene` — тестов нет ✅ (верно)
+- `rebuildFromHistory` — частично неверно: `buildRebuildMeta()` (ядро логики) тестируется в `rebuild-integration.test.ts` (329 строк, 12+ тестов с type-safe фабриками). Сама `rebuildFromHistory` не тестируется, т.к. требует WASM/worker.
+
+**Вердикт:** Две из трёх функций действительно без тестов. Третья имеет частичное покрытие через `buildRebuildMeta`.
+
+#### TEST-R16-2. Тесты используют `as any` — ⚠️ Преувеличено/устарело
+
+**Факт:** Найдено всего 1 `as any` (`history-tree.test.ts:333`) и 2 `as unknown as number` в `worker-sanitize.test.ts` (для тестирования невалидных входов — легитимно). `rebuild-integration.test.ts` уже исправлен — заголовок гласит «instead of 'as any' casts», использует type-safe фабрики.
+
+**Вердикт:** Утверждение «тесты активно используют `as any`» устарело.
+
+#### TEST-R16-3. Нет тестов для `snap-utils.ts` — ✅ Верно
+
+**Факт:** Файл `snap-utils.test.ts` не найден.
+
+**Вердикт:** ✅ Полностью верно.
+
+---
+
+### 📊 Итоговая оценка точности
+
+| Метрика | Раунд 7 | Раунд 16 |
+|---------|---------|----------|
+| Точность | ~78% | ~50% |
+| Полностью верно | 16/23 | 8/18 |
+| Частично верно | 4/23 | 7/18 |
+| Неверно | 3/23 | 1/18 |
+| Систематические ошибки | Преувеличение severity | Преувеличение severity, фактические ошибки в деталях |
+
+### 🎯 УРОКИ ДЛЯ БУДУЩИХ РЕВЬЮ (раунд 16)
+
+1. **Не преувеличивать severity** — 4 «критические» проблемы в реальности имеют средний/низкий приоритет. Критическая = утечка памяти/данных/безопасность, а не стиль кода.
+2. **Проверять фактические вызовы функций** — PERF-R16-1: утверждение «вызывает computeAABB» оказалось ложным. Нужно читать код функции, а не предполагать.
+3. **Не экстраполировать** — PERF-R16-2: `Array.from` в одной функции не означает, что он в обеих. PERF-R16-3: 32/33 селекторов — не «деструктуризация всего store».
+4. **Проверять актуальность кода** — TEST-R16-2: `rebuild-integration.test.ts` уже исправлен, `as any` почти нет.
+5. **Проверять grep-ом утверждения о пустых catch** — SEC-R16-2: `document-store.ts` не содержит пустых catch.
+6. **Severity должен соответствовать impact** — `JSON.stringify` в хеше (CRIT-R16-4) не критичен для производительности, если вызывается только при rebuild.
+
+---
+
+*Верификация раунда 16 завершена. Точность ~50% — значительное ухудшение по сравнению с раундом 7 (78%). Основные проблемы: преувеличение severity (4 «критических» → реально 0), фактические ошибки в деталях (PERF-R16-1), неверная экстраполяция (PERF-R16-2/3). Уроки учтены для будущих ревью.*
+
+---
+
 *Верификация раунда 7 завершена. Точность ~78% — неприемлемо для код-ревью, где каждое утверждение должно быть верифицируемо. Основные направления (WARN-4.2..4.6, WARN-4.9..4.10, SEC-4.1, COSM-4.2..4.3) выверены правильно. Количественные данные и 5 утверждений требуют коррекции.*
+
+## 🏆 Сравнительный вердикт: CaDoodle vs TinkerCraft — реализация Mirror (2026-07-25)
+
+### 📊 Итоговая таблица
+
+| Критерий | CaDoodle (Java) | TinkerCraft (TS) | Преимущество |
+|---|---|---|---|
+| **Плоскость зеркала** | BBox выделения (MIRROR-1) | Через origin (0,0,0) | **CaDoodle** |
+| **Предпросмотр** | Полупрозрачные визуализаторы (MIRROR-2) | Отсутствует | **CaDoodle** |
+| **UI выбора оси** | 3D хендлы в сцене (MIRROR-4) | Выпадающий список | **TinkerCraft** (проще) |
+| **Rotation baked nodes** | N/A (нет baked nodes) | Не инвертируется (MIRROR-3) | **CaDoodle** (нет проблемы) |
+| **Scale при mirror** | Инвертируется автоматически | Сохраняется (MIRROR-8) | **CaDoodle** |
+| **Параметричность boolean** | Сохраняется (CSG — единственный источник) | Теряется → baked (MIRROR-5) | **CaDoodle** |
+| **Обработка ошибок sync** | N/A (синхронная модель) | Нет проверки (MIRROR-10) | **CaDoodle** (нет проблемы) |
+| **Чистота после mirror** | Единая операция | Fallback-ноды не удаляются (MIRROR-6) | **CaDoodle** |
+| **Трансформ boolean** | Из CSG-результата | Из первого child (MIRROR-7) | **CaDoodle** |
+| **Двойная синхронизация** | N/A | Для CSG-результатов (MIRROR-9) | **CaDoodle** |
+| **Архитектура** | Монолитная, CSG-centric | Модульная, Build Tree | **TinkerCraft** (современнее) |
+| **Тесты** | Отсутствуют | 4 теста mirrorTreeNode | **TinkerCraft** |
+| **Типобезопасность** | Динамическая типизация | TypeScript strict | **TinkerCraft** |
+| **Производительность** | JavaFX 3D + CSG каждый раз | WASM + кэширование | **TinkerCraft** |
+
+### 🏅 Общий вердикт
+
+**CaDoodle имеет меньше проблем в реализации Mirror (0 известных дефектов против 10 в TinkerCraft).**
+
+Однако это сравнение **нечестное** по двум причинам:
+
+1. **Архитектурная сложность**: TinkerCraft решает принципиально более сложную задачу — поддержку Build Tree (параметрическое дерево построения с primitive/boolean/baked nodes). CaDoodle использует плоскую модель, где CSG-объект = единственный источник истины. Build Tree добавляет ~5 из 10 проблем (MIRROR-3, MIRROR-5, MIRROR-6, MIRROR-7, MIRROR-9).
+
+2. **Зрелость**: CaDoodle — зрелый продукт с годами разработки. TinkerCraft — молодой проект, где mirror был добавлен недавно и ещё не прошёл полный цикл итераций.
+
+### 🔴 Критические проблемы TinkerCraft (требуют исправления)
+
+| Проблема | Severity | Файл | Суть |
+|---|---|---|---|
+| MIRROR-3 | **HIGH** | [`history-tree.ts:604-614`](web-app/src/csg/history-tree.ts:604) | Baked nodes: rotation не инвертируется |
+| MIRROR-5 | **HIGH** | [`document-store.ts:641-643`](web-app/src/store/document-store.ts:641) | Boolean → baked: потеря параметричности |
+| MIRROR-8 | **HIGH** | [`rebuildOps.ts:78-81`](web-app/src/csg/rebuildOps.ts:78) | Scale не инвертируется (явный комментарий "сохраняем") |
+| MIRROR-1 | MEDIUM | [`history-tree.ts:577-583`](web-app/src/csg/history-tree.ts:577) | Плоскость через origin вместо BBox |
+| MIRROR-6 | MEDIUM | [`document-store.ts:584-594`](web-app/src/store/document-store.ts:584) | Fallback-ноды не удаляются после mirror |
+| MIRROR-10 | MEDIUM | [`document-store.ts:549-558`](web-app/src/store/document-store.ts:549) | Нет проверки успешности sync |
+
+### 📈 Траектория
+
+TinkerCraft находится на правильном пути: архитектура с Build Tree — это **современное и правильное решение**, которое в перспективе даст больше возможностей (параметрическое редактирование, non-destructive workflow). Текущие проблемы mirror — это «болезни роста» новой архитектуры, а не фундаментальные дефекты.
+
+**Рекомендация**: исправить MIRROR-3, MIRROR-5, MIRROR-8 (HIGH) в первую очередь, затем MIRROR-1, MIRROR-6, MIRROR-10 (MEDIUM). После исправлений TinkerCraft превзойдёт CaDoodle по качеству реализации mirror за счёт модульности, типобезопасности и тестов.
+
+---
+
+*Вердикт составлен на основе глубокого анализа исходного кода обоих проектов. CaDoodle проанализирован по исходникам Java (MirrorSessionManager.java, MirrorHandle.java, SelectionSession.java, ActiveProject.java). TinkerCraft — по TypeScript (document-store.ts, history-tree.ts, rebuildOps.ts, types.ts).*
