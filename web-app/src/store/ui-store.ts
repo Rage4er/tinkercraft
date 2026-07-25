@@ -73,7 +73,7 @@ export const useUiStore = create<UiStore>((set) => ({
   workerOk: false,
   setWorkerOk: (v) => set({ workerOk: v }),
 
-  gizmoMode: null,
+  gizmoMode: 'none',
   setGizmoMode: (mode) =>
     set((s) => ({ gizmoMode: typeof mode === 'function' ? (mode as (prev: GizmoMode) => GizmoMode)(s.gizmoMode) : mode })),
 

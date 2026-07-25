@@ -2,11 +2,11 @@
 // Zustand store — TinkerCraftDocument с полным undo/redo
 // ============================================================
 //
-// Utilities (computeAABB, extractAndCenter, makeObject, nextId, colorForIndex)
+// Utilities (computeAABB, extractAndCenterInPlace, makeObject, nextId, colorForIndex)
 // moved to ./helpers.ts
 // DocumentStore interface — in ./types.ts
 // rebuildFromHistory — in ./rebuild.ts
-// Re-export computeAABB and extractAndCenter — for unit tests.
+// Re-export computeAABB and extractAndCenterInPlace — for unit tests.
 
 import { create } from 'zustand/react'
 import type {
@@ -30,9 +30,8 @@ import { downloadStl } from '../io/stl-export'
 import { openStlFilePicker, parseStlFile } from '../io/stl-import'
 import { autosaveSession, restoreSession } from '../io/autosave'
 
-// Re-export for backward compatibility (unit tests import from here)
-export { computeAABB, extractAndCenter, extractAndCenterGetAABB } from './helpers'
-import { computeAABB, extractAndCenter, extractAndCenterGetAABB, makeObject, nextId, colorForIndex } from './helpers'
+export { computeAABB, extractAndCenterInPlace, extractAndCenterGetAABB } from './helpers'
+import { computeAABB, extractAndCenterInPlace, extractAndCenterGetAABB, makeObject, nextId, colorForIndex } from './helpers'
 import type { ClipEntry } from './helpers'
 import type { DocumentStore } from './types'
 import { rebuildFromHistory } from './rebuild'

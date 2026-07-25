@@ -77,7 +77,7 @@ export default function Toolbar({
   onClearScene: () => void;
 }) {
   return (
-    <div 
+    <div
       className="toolbar"
       role="toolbar"
       aria-label="Панель инструментов"
@@ -164,8 +164,8 @@ export default function Toolbar({
         >
           ⤡ Scale
         </button>
-        {gizmoMode !== null && (
-          <button className="btn danger" onClick={() => onGizmo(null)} title="Выйти (Esc)">
+        {gizmoMode !== "none" && (
+          <button className="btn danger" onClick={() => onGizmo("none")} title="Выйти (Esc)">
             ✕
           </button>
         )}

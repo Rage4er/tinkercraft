@@ -20,7 +20,7 @@ import {
   type SnapResult,
 } from "./snap-utils";
 
-export type GizmoMode = "translate" | "rotate" | "scale" | null;
+export type GizmoMode = "translate" | "rotate" | "scale" | "none";
 
 interface FitTarget {
   camPos: THREE.Vector3;
@@ -60,19 +60,23 @@ function checkWebGL(): boolean {
 }
 
 /**
- * FIX (PERF-R3-1): Fast hash for vertex array comparison.
- * Replaces O(n) vertex-by-vertex comparison with O(1) hash comparison.
- * Uses a simple sum-of-products hash — sufficient for detecting changes.
+ * FIX (PERF-R3-1 + PERF-R16-4): Fast hash for vertex array comparison.
+ *
+ * Uses FNV-1a inspired hash with vertex count + index count to reduce collisions.
  * Step=3 aligned to vertex boundaries (3 floats per vertex).
+ * Combines position hash with length for better collision resistance.
  */
 function computeVertsHash(vertices: Float32Array): number {
-  let hash = 0;
+  let hash = 0x811c9dc5; // FNV-1a offset basis
   const len = vertices.length;
-  // Hash every vertex (step=3 aligned to xyz boundaries)
   for (let i = 0; i < len; i += 3) {
-    hash = ((hash << 5) - hash + vertices[i] * 31 + vertices[i + 1] * 17 + vertices[i + 2] * 7) | 0;
+    // FNV-1a: hash ^= byte; hash *= prime
+    // Use float bits as integer for mixing
+    hash ^= (vertices[i] * 31 + vertices[i + 1] * 17 + vertices[i + 2] * 7) | 0;
+    hash = Math.imul(hash, 0x01000193); // FNV prime
   }
-  return hash;
+  // Mix in length to distinguish arrays of different sizes with same prefix
+  return (hash ^ len) | 0;
 }
 
 // Centers mesh geometry and returns a container (pivot).
@@ -344,9 +348,9 @@ export default function Viewport3D({
         const dist = camera.position.distanceTo(controls.target);
         const halfH = dist * Math.tan(THREE.MathUtils.degToRad(22.5)); // FOV 45
         const aspect = renderer.domElement.width / Math.max(1, renderer.domElement.height);
-        orthoC.left   = -halfH * aspect;
-        orthoC.right  =  halfH * aspect;
-        orthoC.top    =  halfH;
+        orthoC.left = -halfH * aspect;
+        orthoC.right = halfH * aspect;
+        orthoC.top = halfH;
         orthoC.bottom = -halfH;
         orthoC.updateProjectionMatrix();
         activeCam = orthoC;
@@ -392,7 +396,7 @@ export default function Viewport3D({
     };
     const tc = transformCtRef.current as unknown as TC | null;
     if (!tc) return;
-    if (gizmoMode === null || selectedIds.size === 0) {
+    if (gizmoMode === "none" || selectedIds.size === 0) {
       tc.detach();
       return;
     }

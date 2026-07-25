@@ -8,6 +8,35 @@
 
 ## [Unreleased]
 
+### Fixed — Код-ревью раунд 16: 7 исправлений (2026-07-26)
+
+Исправлены подтверждённые проблемы из код-ревью раунда 16:
+
+1. **CRIT-R16-1** — `handleRebuildScene` обёрнут в `try/catch` с `disposeAllCached()` при ошибке
+   и отправкой error-сообщения обратно в main thread (`worker-handlers.ts`)
+
+2. **CRIT-R16-2** — `extractAndCenter` переименована в `extractAndCenterInPlace` для явного
+   указания in-place мутации. JSDoc обновлён. Все вызывающие сайты обновлены
+   (`helpers.ts`, `document-store.ts`, `rebuild.ts`, `document-store.test.ts`)
+
+3. **CRIT-R16-3** — `any` заменён на интерфейс `WorkerNode` в `collectSubtreeForWorker`
+   (`history-tree.ts`). `applyCSGMeshes` уже использовал типизированные данные.
+
+4. **CRIT-R16-4** — `JSON.stringify` в `computeNodeHash` заменён на структурированную
+   конкатенацию ключевых полей с разделителями (`history-tree.ts`)
+
+5. **PERF-R16-4** — `computeVertsHash` переписан на FNV-1a inspired hash с mixing
+   и учётом длины массива для уменьшения коллизий (`Viewport3D.tsx`)
+
+6. **CODE-R16-4** — `GizmoMode` тип: `null` заменён на `'none'` во всех файлах
+   (`Viewport3D.tsx`, `ui-store.ts`, `App.tsx`, `Toolbar.tsx`)
+
+7. **SEC-R16-2** — Пустой `catch` в `handleRebuildScene` (non-manifold fallback)
+   теперь логирует ошибку через `console.warn` (`worker-handlers.ts`)
+
+**Файлы:** `worker-handlers.ts`, `helpers.ts`, `history-tree.ts`, `document-store.ts`,
+`rebuild.ts`, `document-store.test.ts`, `Viewport3D.tsx`, `ui-store.ts`, `App.tsx`, `Toolbar.tsx`
+
 ### Fixed — Сброс расположения фигур при трансформации объединенных фигур (BUG-CSG-POS-5/6) (2026-07-26)
 
 Глубокий анализ выявил **три уровня проблем** в `moveObject` при трансформации CSG-результатов:

@@ -25,8 +25,15 @@ export function computeCenter(vertices: Float32Array): Vec3 {
   return { x: (min.x + max.x) / 2, y: (min.y + max.y) / 2, z: (min.z + max.z) / 2 }
 }
 
-/** Shifts vertices so bbox center is at origin; returns the offset. */
-export function extractAndCenter(vertices: Float32Array): { cx: number; cy: number; cz: number } {
+/** Shifts vertices so bbox center is at origin; MUTATES the input array in-place.
+ *
+ * FIX (CRIT-R16-2): Renamed from extractAndCenter to make the in-place
+ * mutation explicit. Callers that need to preserve the original array
+ * should pass a copy.
+ *
+ * @returns the offset {cx, cy, cz} that was subtracted from all vertices.
+ */
+export function extractAndCenterInPlace(vertices: Float32Array): { cx: number; cy: number; cz: number } {
   if (vertices.length === 0) return { cx: 0, cy: 0, cz: 0 }
   const c = computeCenter(vertices)
   for (let i = 0; i < vertices.length; i += 3) {
@@ -39,7 +46,7 @@ export function extractAndCenter(vertices: Float32Array): { cx: number; cy: numb
 // center is at the origin, returns the offset, and returns the AABB of
 // the CENTERED geometry (after shifting). Single-pass: O(n).
 //
-// Prefer this over extractAndCenter() + makeObject() (two passes) for
+// Prefer this over extractAndCenterInPlace() + makeObject() (two passes) for
 // CSG results where both centering and AABB-caching are needed.
 export function extractAndCenterGetAABB(vertices: Float32Array): {
   cx: number; cy: number; cz: number

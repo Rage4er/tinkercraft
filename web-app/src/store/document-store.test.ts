@@ -1,9 +1,9 @@
 // ============================================================
-// Unit tests — document-store: computeAABB, extractAndCenter
+// Unit tests — document-store: computeAABB, extractAndCenterInPlace
 // ============================================================
 
 import { describe, it, expect } from 'vitest'
-import { computeAABB, extractAndCenter } from './document-store'
+import { computeAABB, extractAndCenterInPlace } from './document-store'
 
 describe('computeAABB', () => {
   it('computes correct min/max for a simple box', () => {
@@ -52,7 +52,7 @@ describe('computeAABB', () => {
   })
 })
 
-describe('extractAndCenter', () => {
+describe('extractAndCenterInPlace', () => {
   it('shifts vertices so bbox center is at origin', () => {
     // Box from (10,20,30) to (30,40,50) — center at (20,30,40)
     const verts = new Float32Array([
@@ -65,7 +65,7 @@ describe('extractAndCenter', () => {
       30, 40, 50,
       10, 40, 50,
     ])
-    const { cx, cy, cz } = extractAndCenter(verts)
+    const { cx, cy, cz } = extractAndCenterInPlace(verts)
     expect(cx).toBe(20)
     expect(cy).toBe(30)
     expect(cz).toBe(40)
@@ -83,14 +83,14 @@ describe('extractAndCenter', () => {
   it('modifies the input array in-place', () => {
     const verts = new Float32Array([0, 0, 0, 10, 0, 0, 0, 10, 0])
     const original = new Float32Array(verts)
-    extractAndCenter(verts)
+    extractAndCenterInPlace(verts)
     // The array should have changed
     expect(verts).not.toEqual(original)
   })
 
   it('returns zero center for empty array', () => {
     const verts = new Float32Array(0)
-    const { cx, cy, cz } = extractAndCenter(verts)
+    const { cx, cy, cz } = extractAndCenterInPlace(verts)
     expect(cx).toBe(0)
     expect(cy).toBe(0)
     expect(cz).toBe(0)
@@ -109,7 +109,7 @@ describe('extractAndCenter', () => {
       -5, 5, 5,
     ])
     const original = new Float32Array(verts)
-    const { cx, cy, cz } = extractAndCenter(verts)
+    const { cx, cy, cz } = extractAndCenterInPlace(verts)
     expect(cx).toBe(0)
     expect(cy).toBe(0)
     expect(cz).toBe(0)

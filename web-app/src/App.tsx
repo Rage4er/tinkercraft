@@ -194,18 +194,18 @@ export default function App() {
       }
       if (!ctrl && e.key === "g") {
         e.preventDefault();
-        setGizmoMode((m) => (m === "translate" ? null : "translate"));
+        setGizmoMode((m) => (m === "translate" ? "none" : "translate"));
       }
       if (!ctrl && e.key === "r") {
         e.preventDefault();
-        setGizmoMode((m) => (m === "rotate" ? null : "rotate"));
+        setGizmoMode((m) => (m === "rotate" ? "none" : "rotate"));
       }
       if (!ctrl && e.key === "s") {
         e.preventDefault();
-        setGizmoMode((m) => (m === "scale" ? null : "scale"));
+        setGizmoMode((m) => (m === "scale" ? "none" : "scale"));
       }
       if (e.key === "Escape") {
-        setGizmoMode(null);
+        setGizmoMode("none");
         kb.clearSelection();
         setRulerActive(false);
       }
@@ -412,7 +412,7 @@ export default function App() {
             m === "perspective" ? "orthographic" : "perspective",
           )
         }
-        onGizmo={(mode) => setGizmoMode((m) => (m === mode ? null : mode))}
+        onGizmo={(mode) => setGizmoMode((m) => (m === mode ? "none" : mode))}
         onToggleRuler={() => {
           setRulerActive((r) => !r);
           setRulerDist(null);

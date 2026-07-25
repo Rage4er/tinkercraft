@@ -8,7 +8,7 @@ import type {
   TransformNR, Vec3, AlignOperation,
 } from '../csg/types'
 import { workerRebuildScene } from '../csg/worker-client'
-import { extractAndCenter, makeObject } from './helpers'
+import { extractAndCenterInPlace, makeObject } from './helpers'
 import {
   applyMoveDelta,
   applyMirrorToTransform,
@@ -136,13 +136,13 @@ export function buildRebuildMeta(ops: TinkerCraftOperation[]): {
         meta[op.resultId] = { color: srcColor, shapeType: 'cube', params: {}, transform: startT, visible: true }
         transforms[op.resultId] = startT
         csgResultIds.add(op.resultId)
-        // Store result mesh data for rebuild (FIX CRIT-CSG-2)
-        // This replaces shapeType-based reconstruction which loses all CSG geometry.
-        ;(meta[op.resultId] as RebuildMeta & { resultVertices?: Float32Array | number[]; resultIndices?: Uint32Array | number[]; resultNormals?: Float32Array | number[]; originalBboxSize?: { x: number; y: number; z: number } }).resultVertices = op.resultVertices
-        ;(meta[op.resultId] as RebuildMeta & { resultVertices?: Float32Array | number[]; resultIndices?: Uint32Array | number[]; resultNormals?: Float32Array | number[]; originalBboxSize?: { x: number; y: number; z: number } }).resultIndices = op.resultIndices
-        ;(meta[op.resultId] as RebuildMeta & { resultVertices?: Float32Array | number[]; resultIndices?: Uint32Array | number[]; resultNormals?: Float32Array | number[]; originalBboxSize?: { x: number; y: number; z: number } }).resultNormals = op.resultNormals
+          // Store result mesh data for rebuild (FIX CRIT-CSG-2)
+          // This replaces shapeType-based reconstruction which loses all CSG geometry.
+          ; (meta[op.resultId] as RebuildMeta & { resultVertices?: Float32Array | number[]; resultIndices?: Uint32Array | number[]; resultNormals?: Float32Array | number[]; originalBboxSize?: { x: number; y: number; z: number } }).resultVertices = op.resultVertices
+          ; (meta[op.resultId] as RebuildMeta & { resultVertices?: Float32Array | number[]; resultIndices?: Uint32Array | number[]; resultNormals?: Float32Array | number[]; originalBboxSize?: { x: number; y: number; z: number } }).resultIndices = op.resultIndices
+          ; (meta[op.resultId] as RebuildMeta & { resultVertices?: Float32Array | number[]; resultIndices?: Uint32Array | number[]; resultNormals?: Float32Array | number[]; originalBboxSize?: { x: number; y: number; z: number } }).resultNormals = op.resultNormals
         if (op.originalBboxSize) {
-          ;(meta[op.resultId] as RebuildMeta & { originalBboxSize?: { x: number; y: number; z: number } }).originalBboxSize = op.originalBboxSize
+          ; (meta[op.resultId] as RebuildMeta & { originalBboxSize?: { x: number; y: number; z: number } }).originalBboxSize = op.originalBboxSize
         }
       }
     }
@@ -189,7 +189,7 @@ export async function rebuildFromHistory(
         for (let i = 0; i < storedVerts.length; i += 3) {
           const vx = storedVerts[i], vy = storedVerts[i + 1], vz = storedVerts[i + 2]
           // RS * v + pos
-          finalVerts[i]     = r00 * vx + r01 * vy + r02 * vz + px
+          finalVerts[i] = r00 * vx + r01 * vy + r02 * vz + px
           finalVerts[i + 1] = r10 * vx + r11 * vy + r12 * vz + py
           finalVerts[i + 2] = r20 * vx + r21 * vy + r22 * vz + pz
         }
@@ -201,7 +201,7 @@ export async function rebuildFromHistory(
           const finalNorms = new Float32Array(storedNorms.length)
           for (let i = 0; i < storedNorms.length; i += 3) {
             const nx = storedNorms[i], ny = storedNorms[i + 1], nz = storedNorms[i + 2]
-            finalNorms[i]     = r00 * nx + r01 * ny + r02 * nz
+            finalNorms[i] = r00 * nx + r01 * ny + r02 * nz
             finalNorms[i + 1] = r10 * nx + r11 * ny + r12 * nz
             finalNorms[i + 2] = r20 * nx + r21 * ny + r22 * nz
           }
@@ -209,7 +209,7 @@ export async function rebuildFromHistory(
         }
         continue
       }
-      const { cx, cy, cz } = extractAndCenter(m.vertices)
+      const { cx, cy, cz } = extractAndCenterInPlace(m.vertices)
       meta[id] = { ...meta[id], transform: { ...meta[id].transform, x: cx, y: cy, z: cz } }
     }
   }

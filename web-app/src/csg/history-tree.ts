@@ -250,22 +250,27 @@ export function bboxCenter(bbox: BoundingBox): Point3D {
 // Hash, ancestor check, and cascade invalidation
 // ---------------------------------------------------------------------------
 
-/** Compute a hash to verify cache validity */
+/** Compute a hash to verify cache validity.
+ *
+ * FIX (CRIT-R16-4): Replaced JSON.stringify with structured string concatenation
+ * for better performance. Only significant fields are included.
+ */
 function computeNodeHash(node: TreeNode): string {
   if (node.type === 'primitive') {
-    return JSON.stringify({
-      shapeType: node.shapeType,
-      params: node.params,
-      transform: node.localTransform,
-    })
+    const t = node.localTransform
+    const p = node.params
+    // Build a compact string from significant fields
+    const tStr = t
+      ? `${t.x},${t.y},${t.z},${t.rotX},${t.rotY},${t.rotZ},${t.scaleX},${t.scaleY},${t.scaleZ}`
+      : 'none'
+    const pStr = p
+      ? Object.keys(p).sort().map(k => `${k}:${p[k]}`).join(',')
+      : 'none'
+    return `p:${node.shapeType ?? '?'}|${pStr}|${tStr}`
   }
   if (node.type === 'baked' && node.vertices && node.indices && node.localTransform) {
-    return JSON.stringify({
-      type: 'baked',
-      vertLen: node.vertices.length,
-      idxLen: node.indices.length,
-      transform: node.localTransform,
-    })
+    const t = node.localTransform
+    return `b:${node.vertices.length},${node.indices.length}|${t.x},${t.y},${t.z},${t.rotX},${t.rotY},${t.rotZ},${t.scaleX},${t.scaleY},${t.scaleZ}`
   }
   if (node.type === 'boolean' && node.children) {
     const childHashes = node.children
@@ -360,22 +365,28 @@ export async function rebuildNode(nodeId: string): Promise<ExtractedMesh> {
 }
 
 /**
- * Collect subtree data for worker rebuild.
- * Returns all nodes in the subtree with their current state.
+ * Worker-compatible node representation (plain object, no TypedArrays).
+ * FIX (CRIT-R16-3): Replaced `any` with a proper interface.
  */
-function collectSubtreeForWorker(rootId: string): Array<{
+interface WorkerNode {
   id: string
   type: 'primitive' | 'boolean' | 'baked'
   shapeType?: string
   params?: Record<string, number>
-  localTransform?: { x: number; y: number; z: number; rotX: number; rotY: number; rotZ: number; scaleX: number; scaleY: number; scaleZ: number }
+  localTransform?: TransformNR
   vertices?: number[]
   indices?: number[]
   normals?: number[]
   operation?: 'union' | 'subtract' | 'intersect'
   children?: string[]
-}> {
-  const nodes: Array<any> = []
+}
+
+/**
+ * Collect subtree data for worker rebuild.
+ * Returns all nodes in the subtree with their current state.
+ */
+function collectSubtreeForWorker(rootId: string): WorkerNode[] {
+  const nodes: WorkerNode[] = []
   const visited = new Set<string>()
 
   function collect(id: string): void {
@@ -387,7 +398,7 @@ function collectSubtreeForWorker(rootId: string): Array<{
     visited.add(id)
 
     // Convert TreeNode to worker-compatible format
-    const workerNode: any = {
+    const workerNode: WorkerNode = {
       id: node.id,
       type: node.type,
     }
@@ -419,7 +430,7 @@ function collectSubtreeForWorker(rootId: string): Array<{
  * Apply a CSG boolean operation between two child nodes.
  * Uses workerRebuildNode for efficient tree-based CSG.
  *
- * FIX (BUG-CSG-POS-3): Center the result mesh (like extractAndCenter does on first creation)
+ * FIX (BUG-CSG-POS-3): Center the result mesh (like extractAndCenterInPlace does on first creation)
  * and apply boolean node's localTransform. Children have their transforms applied (world coords),
  * so boolean result is also in world coordinates. We must center it and apply localTransform.
  */
