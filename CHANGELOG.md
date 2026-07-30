@@ -9,6 +9,21 @@
 
 ## [Unreleased]
 
+### Fixed — Mirror: 3 HIGH-бага (MIRROR-3, MIRROR-5, MIRROR-8) (2026-07-30)
+
+1. **MIRROR-3** — Baked nodes с вращением: rotation и scale теперь инвертируются
+   при mirror, как и для primitives (`history-tree.ts` — `mirrorNodeRecursive`)
+
+2. **MIRROR-8** — Scale не инвертировался при mirror: исправлено в
+   `mirrorNodeRecursive` (history-tree) и `applyMirrorToTransform` (rebuildOps.ts).
+   Scale теперь negate по оси, перпендикулярной плоскости отражения
+
+3. **MIRROR-5** — Потеря параметричности boolean → baked при mirror:
+   boolean-ноды теперь клонируются как subtree (`cloneSubtree`) вместо
+   создания baked-ноды (`document-store.ts` — `mirrorSelected`)
+
+**Файлы:** `history-tree.ts`, `rebuildOps.ts`, `document-store.ts`
+
 ### Fixed — Код-ревью раунд 16: 4 дополнительных исправления (2026-07-30)
 
 Финальная группа исправлений по код-ревью раунда 16 (всего исправлено 17 из 18):

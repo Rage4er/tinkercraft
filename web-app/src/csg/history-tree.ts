@@ -609,15 +609,22 @@ function mirrorNodeRecursive(
       x: mirroredPos.x,
       y: mirroredPos.y,
       z: mirroredPos.z,
+      // FIX (MIRROR-3): Invert rotation around the axis perpendicular to mirror plane
       rotX: plane === 'YZ' ? -t.rotX : t.rotX,
       rotY: plane === 'XZ' ? -t.rotY : t.rotY,
       rotZ: plane === 'XY' ? -t.rotZ : t.rotZ,
+      // FIX (MIRROR-8): Negate scale along the mirrored axis
+      scaleX: plane === 'YZ' ? -t.scaleX : t.scaleX,
+      scaleY: plane === 'XZ' ? -t.scaleY : t.scaleY,
+      scaleZ: plane === 'XY' ? -t.scaleZ : t.scaleZ,
     }
     return
   }
 
   if (node.type === 'baked' && node.localTransform) {
-    // Baked: only position, no rotation inversion (normals already in mesh)
+    // FIX (MIRROR-3): Invert rotation AND scale for baked nodes too.
+    // Baked nodes are pre-computed geometry (from CSG or import), but their
+    // localTransform still carries rotation/scale that must be mirrored.
     const t = node.localTransform
     const mirroredPos = mirrorPoint({ x: t.x, y: t.y, z: t.z }, plane)
     node.localTransform = {
@@ -625,6 +632,12 @@ function mirrorNodeRecursive(
       x: mirroredPos.x,
       y: mirroredPos.y,
       z: mirroredPos.z,
+      rotX: plane === 'YZ' ? -t.rotX : t.rotX,
+      rotY: plane === 'XZ' ? -t.rotY : t.rotY,
+      rotZ: plane === 'XY' ? -t.rotZ : t.rotZ,
+      scaleX: plane === 'YZ' ? -t.scaleX : t.scaleX,
+      scaleY: plane === 'XZ' ? -t.scaleY : t.scaleY,
+      scaleZ: plane === 'XY' ? -t.scaleZ : t.scaleZ,
     }
     return
   }

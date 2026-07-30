@@ -131,7 +131,7 @@ describe('applyMirrorToTransform', () => {
     expect(result.rotX).toBe(-45) // YZ plane → negate rotX
     expect(result.rotY).toBe(30)  // unchanged
     expect(result.rotZ).toBe(15)  // unchanged
-    expect(result.scaleX).toBe(2) // scale unaffected
+    expect(result.scaleX).toBe(-2) // FIX (MIRROR-8): scale negated along mirrored axis
   })
 
   it('mirrors rotation for XZ and XY planes', () => {

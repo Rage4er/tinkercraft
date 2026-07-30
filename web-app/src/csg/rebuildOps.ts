@@ -50,10 +50,12 @@ export function applyMoveDelta(
 }
 
 /**
- * Применить зеркало к трансформации (позиция + вращение).
- * Геометрия зеркалится отдельно через manifold matrix.
- * При отражении по плоскости вращение вокруг перпендикулярной оси инвертируется
- * (зеркало меняет handedness координатной системы).
+ * Apply mirror to a transform (position + rotation + scale).
+ * Geometry is mirrored separately via manifold matrix.
+ *
+ * FIX (MIRROR-8): Also negate scale along the mirrored axis.
+ * Mirror flips the coordinate system handedness, so scale must be
+ * negated on the axis perpendicular to the mirror plane.
  */
 export function applyMirrorToTransform(
   t: RebuildTransform,
@@ -62,23 +64,19 @@ export function applyMirrorToTransform(
   const nt = { ...t }
   if (plane === 'YZ') {
     nt.x = -nt.x
-    // Отражение по X инвертирует вращение вокруг X-оси
     nt.rotX = -nt.rotX
+    nt.scaleX = -nt.scaleX
   }
   if (plane === 'XZ') {
     nt.y = -nt.y
-    // Отражение по Y инвертирует вращение вокруг Y-оси
     nt.rotY = -nt.rotY
+    nt.scaleY = -nt.scaleY
   }
   if (plane === 'XY') {
     nt.z = -nt.z
-    // Отражение по Z инвертирует вращение вокруг Z-оси
     nt.rotZ = -nt.rotZ
+    nt.scaleZ = -nt.scaleZ
   }
-  // ВАЖНО: Сохраняем масштаб без изменений при отзеркаливании
-  nt.scaleX = t.scaleX
-  nt.scaleY = t.scaleY
-  nt.scaleZ = t.scaleZ
   return nt
 }
 

@@ -113,7 +113,7 @@ describe('buildRebuildMeta: add_shape → move (scale)', () => {
 })
 
 describe('buildRebuildMeta: mirror (negate position)', () => {
-  it('mirrors across YZ plane negates X and preserves scale', () => {
+  it('mirrors across YZ plane negates X and scaleX', () => {
     const ops: TinkerCraftOperation[] = [
       makeAddShape('a', 'cube', { width: 20, height: 20, depth: 20 }),
       makeMoveWithScale(['a'], { x: 10, y: 20, z: 30 }, { x: 1, y: 1, z: 1 }), // scale 2
@@ -123,14 +123,14 @@ describe('buildRebuildMeta: mirror (negate position)', () => {
     // Original 'a' is unchanged
     expect(meta['a'].transform.x).toBe(10)
     expect(meta['a'].transform.scaleX).toBe(2)
-    // New object 'b' has mirrored position but preserved scale
+    // New object 'b' has mirrored position and negated scale along mirrored axis
     expect(meta['b'].transform.x).toBe(-10)
     expect(meta['b'].transform.y).toBe(20)
     expect(meta['b'].transform.z).toBe(30)
-    expect(meta['b'].transform.scaleX).toBe(2)
+    expect(meta['b'].transform.scaleX).toBe(-2)
   })
 
-  it('mirrors across XZ plane negates Y and preserves scale', () => {
+  it('mirrors across XZ plane negates Y and scaleY', () => {
     const ops: TinkerCraftOperation[] = [
       makeAddShape('a', 'cube', { width: 20, height: 20, depth: 20 }),
       makeMoveWithScale(['a'], { x: 10, y: 20, z: 30 }, { x: 0.5, y: 1, z: 1 }), // scale: 1.5, 2, 2
@@ -140,10 +140,10 @@ describe('buildRebuildMeta: mirror (negate position)', () => {
     expect(meta['b'].transform.x).toBe(10)
     expect(meta['b'].transform.y).toBe(-20)
     expect(meta['b'].transform.z).toBe(30)
-    expect(meta['b'].transform.scaleY).toBe(2)
+    expect(meta['b'].transform.scaleY).toBe(-2)
   })
 
-  it('mirrors across XY plane negates Z and preserves scale', () => {
+  it('mirrors across XY plane negates Z and scaleZ', () => {
     const ops: TinkerCraftOperation[] = [
       makeAddShape('a', 'cube', { width: 20, height: 20, depth: 20 }),
       makeMoveWithScale(['a'], { x: 10, y: 20, z: 30 }, { x: 1, y: 1, z: 2 }), // scale: 2, 2, 3
@@ -153,7 +153,7 @@ describe('buildRebuildMeta: mirror (negate position)', () => {
     expect(meta['b'].transform.x).toBe(10)
     expect(meta['b'].transform.y).toBe(20)
     expect(meta['b'].transform.z).toBe(-30)
-    expect(meta['b'].transform.scaleZ).toBe(3)
+    expect(meta['b'].transform.scaleZ).toBe(-3)
   })
 
   it('preserves shapeType and params through mirror', () => {
@@ -176,12 +176,12 @@ describe('buildRebuildMeta: mirror (negate position)', () => {
       makeMirror(['a', 'c'], ['b', 'd'], 'YZ'),
     ]
     const { meta } = buildRebuildMeta(ops)
-    // a → b: X mirrored, scale preserved
+    // a → b: X mirrored, scale negated along X axis
     expect(meta['b'].transform.x).toBe(-10)
-    expect(meta['b'].transform.scaleX).toBe(2)
-    // c → d: X mirrored, scale preserved
+    expect(meta['b'].transform.scaleX).toBe(-2)
+    // c → d: X mirrored, scale negated along X axis
     expect(meta['d'].transform.x).toBe(10)
-    expect(meta['d'].transform.scaleX).toBe(3)
+    expect(meta['d'].transform.scaleX).toBe(-3)
   })
 })
 

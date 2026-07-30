@@ -643,8 +643,12 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         newIds.push(newId)
 
         // ✅ РЕГИСТРИРУЕМ в дереве — зеркальная копия как полноценная нода
+        // FIX (MIRROR-5): Keep boolean nodes parametric instead of baking to mesh.
         if (clonedNode?.type === 'primitive' && obj.shapeType && obj.params) {
           createPrimitiveNode(newId, obj.shapeType, obj.params, finalTransform)
+        } else if (clonedNode?.type === 'boolean' && clonedNode.children) {
+          // Clone the mirrored boolean subtree to keep it parametric
+          cloneSubtree(treeId, newId)
         } else {
           createBakedNode(newId, mesh.vertices || new Float32Array(), mesh.indices || new Uint32Array(), mesh.normals || null, finalTransform)
         }
