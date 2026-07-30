@@ -1,11 +1,47 @@
 // ============================================================
-// Worker Matrix — чистая математика трансформаций для тестов
+// Worker Matrix — pure transform math for tests and shared use
 // ============================================================
 
 /**
- * Вычислить матрицу RS×T вокруг центра объекта.
+ * Compute RS (Rotation × Scale) matrix elements from transform parameters.
  *
- * Формула: T(pos) × RS × T(-pos), где:
+ * FIX (CODE-R16-1): Extracted shared logic to eliminate duplication between
+ * rebuild.ts and worker-matrix.ts. Returns row-indexed elements r<row><col>.
+ *
+ * @param rot   Rotation in degrees (rotX, rotY, rotZ)
+ * @param scale Scale factors (scaleX, scaleY, scaleZ)
+ * @returns 9 elements: [r00, r01, r02, r10, r11, r12, r20, r21, r22]
+ */
+export function computeRSMatrix(
+  rot: { rotX: number; rotY: number; rotZ: number },
+  scale: { scaleX: number; scaleY: number; scaleZ: number },
+): [number, number, number, number, number, number, number, number, number] {
+  const Sx = scale.scaleX, Sy = scale.scaleY, Sz = scale.scaleZ
+  const rx = rot.rotX * (Math.PI / 180)
+  const ry = rot.rotY * (Math.PI / 180)
+  const rz = rot.rotZ * (Math.PI / 180)
+
+  const cx = Math.cos(rx), sx_ = Math.sin(rx)
+  const cy = Math.cos(ry), sy_ = Math.sin(ry)
+  const cz = Math.cos(rz), sz_ = Math.sin(rz)
+
+  return [
+    cz * cy * Sx,
+    (cz * sy_ * sx_ - sz_ * cx) * Sy,
+    (cz * sy_ * cx + sz_ * sx_) * Sz,
+    sz_ * cy * Sx,
+    (sz_ * sy_ * sx_ + cz * cx) * Sy,
+    (sz_ * sy_ * sx_ - cz * sx_) * Sz,
+    -sy_ * Sx,
+    cy * sx_ * Sy,
+    cy * cx * Sz,
+  ]
+}
+
+/**
+ * Build SRT matrix around object center.
+ *
+ * Formula: T(pos) × RS × T(-pos), where:
  * - RS = Scale × Rotation (Euler XYZ, column-major)
  * - T(-pos) = translate to origin
  * - T(pos) = translate back
@@ -18,25 +54,7 @@ export function buildSRTMatrixAroundCenter(
   scale: { scaleX: number; scaleY: number; scaleZ: number },
 ): number[] {
   const { x: px, y: py, z: pz } = pos
-  const Sx = scale.scaleX, Sy = scale.scaleY, Sz = scale.scaleZ
-  const rx = rot.rotX * (Math.PI / 180)
-  const ry = rot.rotY * (Math.PI / 180)
-  const rz = rot.rotZ * (Math.PI / 180)
-
-  const cx = Math.cos(rx), sx_ = Math.sin(rx)
-  const cy = Math.cos(ry), sy_ = Math.sin(ry)
-  const cz = Math.cos(rz), sz_ = Math.sin(rz)
-
-  // RS matrix elements (row-indexed: r<row><col>)
-  const r00 = cz * cy * Sx
-  const r01 = (cz * sy_ * sx_ - sz_ * cx) * Sy
-  const r02 = (cz * sy_ * cx + sz_ * sx_) * Sz
-  const r10 = sz_ * cy * Sx
-  const r11 = (sz_ * sy_ * sx_ + cz * cx) * Sy
-  const r12 = (sz_ * sy_ * cx - cz * sx_) * Sz
-  const r20 = -sy_ * Sx
-  const r21 = cy * sx_ * Sy
-  const r22 = cy * cx * Sz
+  const [r00, r01, r02, r10, r11, r12, r20, r21, r22] = computeRSMatrix(rot, scale)
 
   // Translation = pos − RS·pos
   const tx = px - (r00 * px + r01 * py + r02 * pz)
@@ -48,7 +66,7 @@ export function buildSRTMatrixAroundCenter(
     r00, r10, r20, 0,
     r01, r11, r21, 0,
     r02, r12, r22, 0,
-    tx,  ty,  tz,  1,
+    tx, ty, tz, 1,
   ]
 }
 
@@ -73,37 +91,19 @@ export function buildTransformMatrix(
   scale: { scaleX: number; scaleY: number; scaleZ: number },
 ): number[] {
   const { x: px, y: py, z: pz } = pos
-  const Sx = scale.scaleX, Sy = scale.scaleY, Sz = scale.scaleZ
-  const rx = rot.rotX * (Math.PI / 180)
-  const ry = rot.rotY * (Math.PI / 180)
-  const rz = rot.rotZ * (Math.PI / 180)
-
-  const cx = Math.cos(rx), sx_ = Math.sin(rx)
-  const cy = Math.cos(ry), sy_ = Math.sin(ry)
-  const cz = Math.cos(rz), sz_ = Math.sin(rz)
-
-  // RS matrix elements (column-major)
-  const r00 = cz * cy * Sx
-  const r01 = (cz * sy_ * sx_ - sz_ * cx) * Sy
-  const r02 = (cz * sy_ * cx + sz_ * sx_) * Sz
-  const r10 = sz_ * cy * Sx
-  const r11 = (sz_ * sy_ * sx_ + cz * cx) * Sy
-  const r12 = (sz_ * sy_ * sx_ - cz * sx_) * Sz
-  const r20 = -sy_ * Sx
-  const r21 = cy * sx_ * Sy
-  const r22 = cy * cx * Sz
+  const [r00, r01, r02, r10, r11, r12, r20, r21, r22] = computeRSMatrix(rot, scale)
 
   // Column-major 4×4: [RS, 0; pos, 1]
   return [
     r00, r10, r20, 0,
     r01, r11, r21, 0,
     r02, r12, r22, 0,
-    px,  py,  pz,  1,
+    px, py, pz, 1,
   ]
 }
 
 /**
- * Применить матрицу 4×4 к вектору 3D (с учётом homogeneous coordinate).
+ * Apply a 4×4 matrix to a 3D vector (with homogeneous coordinate).
  */
 export function applyMatrix4ToVec3(
   m: number[],

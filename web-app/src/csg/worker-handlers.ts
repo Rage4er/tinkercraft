@@ -104,8 +104,22 @@ function safeDelete(m: ManifoldObject | null | undefined): void {
   try { m.delete() } catch { /* already disposed */ }
 }
 
-/** Replace a cache entry, disposing the previous object if it exists. */
+/** Replace a cache entry, disposing the previous object if it exists.
+ *
+ * FIX (SEC-R16-3): Basic check against disposed objects — attempt a no-op
+ * access (toString) and skip caching if it fails, implying the object
+ * has been disposed.
+ */
 export function setCached(id: string, m: ManifoldObject | null): void {
+  if (m !== null) {
+    try {
+      // no-op access to verify the object is alive
+      (m as unknown as { toString(): string }).toString()
+    } catch {
+      // Object has been disposed — do not cache it
+      return
+    }
+  }
   safeDelete(cache.get(id))
   cache.set(id, m)
 }

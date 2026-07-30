@@ -22,6 +22,68 @@ import {
 
 export type GizmoMode = "translate" | "rotate" | "scale" | "none";
 
+// FIX (CODE-R16-2): Named constants for magic numbers used in Viewport3D
+
+// Camera defaults
+const CAMERA_FOV = 45;
+const CAMERA_NEAR = 0.1;
+const CAMERA_FAR = 10000;
+const DEFAULT_CAM_POS = new THREE.Vector3(150, -200, 120);
+const DEFAULT_CAM_TARGET = new THREE.Vector3(0, 0, 0);
+const ORTHO_HALF_FOV_DEG = 22.5; // half of CAMERA_FOV for ortho frustum
+
+// Controls
+const CONTROLS_DAMPING = 0.08;
+const CONTROLS_MIN_DIST = 10;
+const CONTROLS_MAX_DIST = 2000;
+const CONTROLS_MAX_POLAR = Math.PI - 0.01;
+const TRANSFORM_SIZE = 0.8;
+
+// Lighting
+const AMBIENT_INTENSITY = 0.45;
+const SUN_INTENSITY = 1.2;
+const SUN_POS = new THREE.Vector3(100, -80, 200);
+const SUN_SHADOW_SIZE = 2048;
+const SUN_SHADOW_RANGE = 200;
+const SUN_SHADOW_NEAR = 0.1;
+const SUN_SHADOW_FAR = 1000;
+const FILL_INTENSITY = 0.4;
+const FILL_POS = new THREE.Vector3(-100, 80, 50);
+const FILL_COLOR = 0x8888ff;
+
+// Scene
+const BG_COLOR = 0x1e1e2e;
+const GRID_SIZE = 400;
+const GRID_DIVISIONS = 40;
+const GRID_COLOR_MAJOR = 0x3a3a5c;
+const GRID_COLOR_MINOR = 0x2a2a4a;
+const GROUND_Z = -0.5;
+const GROUND_OPACITY = 0.25;
+const AXES_SIZE = 20;
+const AXES_POS = new THREE.Vector3(-170, -170, -0.4);
+
+// Selection highlight
+const EMISSIVE_SELECTED = 0x444466;
+const EMISSIVE_INTENSITY = 0.5;
+
+// Material defaults
+const MATERIAL_ROUGHNESS = 0.35;
+const MATERIAL_METALNESS = 0.1;
+
+// Interaction thresholds
+const DRAG_THRESHOLD_PX = 4;
+const TRANSFORM_EPS = 0.01;
+const SCALE_EPS = 0.001;
+const LERP_FACTOR = 0.12;
+const LERP_SETTLE_DIST = 0.5;
+const FPS_INTERVAL_MS = 500;
+const PIXEL_RATIO_CAP = 2;
+
+// Ruler markers
+const RULER_MARKER_RADIUS = 0.5;
+const RULER_MARKER_SEGMENTS = 8;
+const RULER_COLOR = "#facc15";
+
 interface FitTarget {
   camPos: THREE.Vector3;
   target: THREE.Vector3;
@@ -141,7 +203,7 @@ export default function Viewport3D({
   const rulerLineRef = useRef<THREE.Line | null>(null);
   const rulerMarkersRef = useRef<THREE.Mesh[]>([]);
   const rulerPointsRef = useRef<THREE.Vector3[]>([]);
-  // Snap-индикатор (маленькая сфера, показывающая привязку при наведении)
+  // Snap indicator (small sphere showing snap point on hover)
   const snapIndicatorRef = useRef<THREE.Mesh | null>(null);
   const [snapPreviewPoint, setSnapPreviewPoint] = useState<THREE.Vector3 | null>(null);
   const [snapPreviewType, setSnapPreviewType] = useState<SnapType>(null);
@@ -198,11 +260,11 @@ export default function Viewport3D({
       alpha: false,
       failIfMajorPerformanceCaveat: false,
     });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, PIXEL_RATIO_CAP));
     renderer.setSize(w, h);
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    renderer.setClearColor(0x1e1e2e);
+    renderer.setClearColor(BG_COLOR);
     container.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
@@ -210,67 +272,67 @@ export default function Viewport3D({
     sceneRef.current = scene;
 
     // Z-up coordinate system: X=right, Y=forward/depth, Z=up (height)
-    const camera = new THREE.PerspectiveCamera(45, w / h, 0.1, 10000);
+    const camera = new THREE.PerspectiveCamera(CAMERA_FOV, w / h, CAMERA_NEAR, CAMERA_FAR);
     camera.up.set(0, 0, 1);
-    camera.position.set(150, -200, 120);
-    camera.lookAt(0, 0, 0);
+    camera.position.copy(DEFAULT_CAM_POS);
+    camera.lookAt(DEFAULT_CAM_TARGET);
     cameraRef.current = camera;
 
     // Orthographic camera — frustum set dynamically each frame from persp distance
-    const ortho = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 10000);
+    const ortho = new THREE.OrthographicCamera(-1, 1, 1, -1, CAMERA_NEAR, CAMERA_FAR);
     ortho.up.set(0, 0, 1);
-    ortho.position.set(150, -200, 120);
+    ortho.position.copy(DEFAULT_CAM_POS);
     orthoCameraRef.current = ortho;
     activeCameraRef.current = camera;
 
-    scene.add(new THREE.AmbientLight(0xffffff, 0.45));
+    scene.add(new THREE.AmbientLight(0xffffff, AMBIENT_INTENSITY));
 
-    const sun = new THREE.DirectionalLight(0xffffff, 1.2);
+    const sun = new THREE.DirectionalLight(0xffffff, SUN_INTENSITY);
     // Z-up: high Z = above, Y = depth
-    sun.position.set(100, -80, 200);
+    sun.position.copy(SUN_POS);
     sun.castShadow = true;
-    sun.shadow.mapSize.width = sun.shadow.mapSize.height = 2048;
-    sun.shadow.camera.left = sun.shadow.camera.bottom = -200;
-    sun.shadow.camera.right = sun.shadow.camera.top = 200;
-    sun.shadow.camera.near = 0.1;
-    sun.shadow.camera.far = 1000;
+    sun.shadow.mapSize.width = sun.shadow.mapSize.height = SUN_SHADOW_SIZE;
+    sun.shadow.camera.left = sun.shadow.camera.bottom = -SUN_SHADOW_RANGE;
+    sun.shadow.camera.right = sun.shadow.camera.top = SUN_SHADOW_RANGE;
+    sun.shadow.camera.near = SUN_SHADOW_NEAR;
+    sun.shadow.camera.far = SUN_SHADOW_FAR;
     scene.add(sun);
 
-    const fill = new THREE.DirectionalLight(0x8888ff, 0.4);
-    fill.position.set(-100, 80, 50);
+    const fill = new THREE.DirectionalLight(FILL_COLOR, FILL_INTENSITY);
+    fill.position.copy(FILL_POS);
     scene.add(fill);
 
     // Grid in XY plane (Z=0 is the work surface in Z-up world)
-    const grid = new THREE.GridHelper(400, 40, 0x3a3a5c, 0x2a2a4a);
+    const grid = new THREE.GridHelper(GRID_SIZE, GRID_DIVISIONS, GRID_COLOR_MAJOR, GRID_COLOR_MINOR);
     grid.rotation.x = Math.PI / 2; // rotate from XZ to XY plane
-    grid.position.z = -0.5;
+    grid.position.z = GROUND_Z;
     scene.add(grid);
 
     // Shadow receiver: PlaneGeometry is already in XY plane — no rotation needed in Z-up
-    const groundGeo = new THREE.PlaneGeometry(400, 400);
-    const groundMat = new THREE.ShadowMaterial({ opacity: 0.25 });
+    const groundGeo = new THREE.PlaneGeometry(GRID_SIZE, GRID_SIZE);
+    const groundMat = new THREE.ShadowMaterial({ opacity: GROUND_OPACITY });
     const ground = new THREE.Mesh(groundGeo, groundMat);
-    ground.position.z = -0.5;
+    ground.position.z = GROUND_Z;
     ground.receiveShadow = true;
     scene.add(ground);
 
     // Axes helper on the XY work plane
-    const axes = new THREE.AxesHelper(20);
-    axes.position.set(-170, -170, -0.4);
+    const axes = new THREE.AxesHelper(AXES_SIZE);
+    axes.position.copy(AXES_POS);
     scene.add(axes);
 
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
-    controls.dampingFactor = 0.08;
-    controls.minDistance = 10;
-    controls.maxDistance = 2000;
-    controls.maxPolarAngle = Math.PI - 0.01; // allow full rotation including bottom view
+    controls.dampingFactor = CONTROLS_DAMPING;
+    controls.minDistance = CONTROLS_MIN_DIST;
+    controls.maxDistance = CONTROLS_MAX_DIST;
+    controls.maxPolarAngle = CONTROLS_MAX_POLAR; // allow full rotation including bottom view
     controlsRef.current = controls;
     setCubeCamera(camera);
     setCubeCtrl(controls);
 
     const tc = new TransformControls(camera, renderer.domElement);
-    tc.setSize(0.8);
+    tc.setSize(TRANSFORM_SIZE);
     tc.setSpace("world"); // Always aligned to world axes, doesn't rotate with object
     tc.addEventListener("dragging-changed", (e: { value: unknown }) => {
       controls.enabled = !e.value;
@@ -324,12 +386,12 @@ export default function Viewport3D({
       rafRef.current = requestAnimationFrame(animate);
       const ft = fitTargetRef.current;
       if (ft) {
-        camera.position.lerp(ft.camPos, 0.12);
-        controls.target.lerp(ft.target, 0.12);
+        camera.position.lerp(ft.camPos, LERP_FACTOR);
+        controls.target.lerp(ft.target, LERP_FACTOR);
         controls.update();
         if (
-          camera.position.distanceTo(ft.camPos) < 0.5 &&
-          controls.target.distanceTo(ft.target) < 0.5
+          camera.position.distanceTo(ft.camPos) < LERP_SETTLE_DIST &&
+          controls.target.distanceTo(ft.target) < LERP_SETTLE_DIST
         ) {
           camera.position.copy(ft.camPos);
           controls.target.copy(ft.target);
@@ -346,7 +408,7 @@ export default function Viewport3D({
         orthoC.position.copy(camera.position);
         orthoC.quaternion.copy(camera.quaternion);
         const dist = camera.position.distanceTo(controls.target);
-        const halfH = dist * Math.tan(THREE.MathUtils.degToRad(22.5)); // FOV 45
+        const halfH = dist * Math.tan(THREE.MathUtils.degToRad(ORTHO_HALF_FOV_DEG));
         const aspect = renderer.domElement.width / Math.max(1, renderer.domElement.height);
         orthoC.left = -halfH * aspect;
         orthoC.right = halfH * aspect;
@@ -359,7 +421,7 @@ export default function Viewport3D({
       renderer.render(scene, activeCam);
       const now = performance.now();
       fpsRef.current.frames++;
-      if (now - fpsRef.current.last >= 500) {
+      if (now - fpsRef.current.last >= FPS_INTERVAL_MS) {
         fpsUpdateRef.current(
           Math.round(
             (fpsRef.current.frames * 1000) / (now - fpsRef.current.last),
@@ -387,7 +449,7 @@ export default function Viewport3D({
     };
   }, [webglOk]);
 
-  // ---- Гизмо режим ----
+  // ---- Gizmo mode ----
   useEffect(() => {
     type TC = {
       detach(): void;
@@ -419,8 +481,8 @@ export default function Viewport3D({
       if (!camera || !controls) return;
       if (map.size === 0) {
         fitTargetRef.current = {
-          camPos: new THREE.Vector3(150, -200, 120),
-          target: new THREE.Vector3(0, 0, 0),
+          camPos: DEFAULT_CAM_POS.clone(),
+          target: DEFAULT_CAM_TARGET.clone(),
         };
         return;
       }
@@ -453,8 +515,8 @@ export default function Viewport3D({
     if (!resetViewRef) return;
     resetViewRef.current = () => {
       fitTargetRef.current = {
-        camPos: new THREE.Vector3(150, -200, 120),
-        target: new THREE.Vector3(0, 0, 0),
+        camPos: DEFAULT_CAM_POS.clone(),
+        target: DEFAULT_CAM_TARGET.clone(),
       };
     };
   }, [resetViewRef]);
@@ -482,7 +544,7 @@ export default function Viewport3D({
       clearRulerVisuals();
       rulerPointsRef.current = pts.map((p) => p.clone());
       const mat = new THREE.LineBasicMaterial({
-        color: "#facc15",
+        color: RULER_COLOR,
         linewidth: 2,
       });
       const geo = new THREE.BufferGeometry();
@@ -495,8 +557,8 @@ export default function Viewport3D({
 
       for (const p of pts) {
         const m = new THREE.Mesh(
-          new THREE.SphereGeometry(0.5, 8, 8),
-          new THREE.MeshBasicMaterial({ color: "#facc15" }),
+          new THREE.SphereGeometry(RULER_MARKER_RADIUS, RULER_MARKER_SEGMENTS, RULER_MARKER_SEGMENTS),
+          new THREE.MeshBasicMaterial({ color: RULER_COLOR }),
         );
         m.position.copy(p);
         scene.add(m);
@@ -518,7 +580,7 @@ export default function Viewport3D({
     }
   }, [rulerMode, clearRulerVisuals]);
 
-  // ---- Snap indicator update (preview при наведении в rulerMode) ----
+  // ---- Snap indicator update (preview on hover in rulerMode) ----
   useEffect(() => {
     const pt = snapPreviewPoint;
     const type = snapPreviewType;
@@ -526,7 +588,7 @@ export default function Viewport3D({
     const scene = sceneRef.current;
     if (!scene) return;
 
-    // Удалить старый индикатор
+    // Remove old indicator
     if (snapIndicatorRef.current) {
       scene.remove(snapIndicatorRef.current);
       snapIndicatorRef.current.geometry.dispose();
@@ -534,7 +596,7 @@ export default function Viewport3D({
       snapIndicatorRef.current = null;
     }
 
-    // Создать новый, если есть превью
+    // Create new one if preview exists
     if (pt && rulerMode) {
       const indicator = createSnapIndicator(pt, type);
       scene.add(indicator);
@@ -602,7 +664,7 @@ export default function Viewport3D({
   // ---- Click / Drag ----
   const handlePointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
-      // Ruler mode: click-click measurement с snap к геометрии
+      // Ruler mode: click-click measurement with snap to geometry
       if (rulerModeRef.current) {
         const scene = sceneRef.current;
         const camera = cameraRef.current;
@@ -619,13 +681,13 @@ export default function Viewport3D({
         const raycaster = new THREE.Raycaster();
         raycaster.setFromCamera(screenPos, camera);
 
-        // Сначала пробуем snap к геометрии
+        // First try snap to geometry
         const snapResult = findNearestSnap(raycaster, meshMapRef, camera, screenPos);
         let point: THREE.Vector3;
         if (snapResult) {
           point = snapResult.point;
         } else {
-          // Fallback: проецируем на рабочую плоскость (Z=0)
+          // Fallback: project onto work plane (Z=0)
           const ndc = new THREE.Vector3(x, y, 0);
           ndc.unproject(camera);
           const dir = ndc.sub(camera.position).normalize();
@@ -639,19 +701,19 @@ export default function Viewport3D({
         }
 
         if (rulerPointsRef.current.length === 0) {
-          // Первый клик: сохраняем начальную точку
+          // First click: save start point
           rulerPointsRef.current = [point];
           updateRulerVisuals(rulerPointsRef.current);
         } else {
-          // Второй клик: завершаем измерение
+          // Second click: complete measurement
           rulerPointsRef.current.push(point);
           updateRulerVisuals(rulerPointsRef.current);
           onRulerMeasure?.(rulerPointsRef.current[0].distanceTo(point));
-          // Сброс для следующего измерения
+          // Reset for next measurement
           rulerPointsRef.current = [];
         }
 
-        // Предотвращаем обработку OrbitControls
+        // Prevent OrbitControls from handling this
         e.stopPropagation();
         return;
       }
@@ -663,7 +725,7 @@ export default function Viewport3D({
 
   const handlePointerMove = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
-      // Ruler mode: обновляем snap-превью при наведении
+      // Ruler mode: update snap preview on hover
       if (rulerModeRef.current) {
         const scene = sceneRef.current;
         const camera = cameraRef.current;
@@ -697,11 +759,11 @@ export default function Viewport3D({
         return;
       }
 
-      // Нерuler mode: существующая логика drag-select
+      // Non-ruler mode: existing drag-select logic
       if (!pointerDownPos.current) return;
       const dx = e.clientX - pointerDownPos.current.x;
       const dy = e.clientY - pointerDownPos.current.y;
-      if (Math.hypot(dx, dy) > 4) isDraggingRef.current = true;
+      if (Math.hypot(dx, dy) > DRAG_THRESHOLD_PX) isDraggingRef.current = true;
     },
     [],
   );
@@ -722,7 +784,7 @@ export default function Viewport3D({
 
       // If it was a click (not drag) — select object via Raycaster
       if (!isDraggingRef.current) {
-        // Raycaster для выбора объекта
+        // Raycaster for object selection
         const camera = activeCameraRef.current ?? cameraRef.current;
         const container = containerRef.current;
         if (camera && container) {
@@ -763,8 +825,8 @@ export default function Viewport3D({
     const sel = selectedIdsRef.current;
     for (const [id, entry] of meshMapRef.current) {
       const mat = entry.mesh.material as THREE.MeshStandardMaterial;
-      mat.emissive.setHex(sel.has(id) ? 0x444466 : 0x000000);
-      mat.emissiveIntensity = sel.has(id) ? 0.5 : 0;
+      mat.emissive.setHex(sel.has(id) ? EMISSIVE_SELECTED : 0x000000);
+      mat.emissiveIntensity = sel.has(id) ? EMISSIVE_INTENSITY : 0;
     }
   }, [selectedIds]);
 
@@ -836,7 +898,7 @@ export default function Viewport3D({
         // still carries the visual transform for gizmo interaction.
         const t = obj.transform;
         const pivotPos = existing.pivot.position;
-        const eps = 0.01;
+        const eps = TRANSFORM_EPS;
         if (
           Math.abs(pivotPos.x - t.x) > eps ||
           Math.abs(pivotPos.y - t.y) > eps ||
@@ -858,9 +920,9 @@ export default function Viewport3D({
         }
         const pivotScl = existing.pivot.scale;
         if (
-          Math.abs(pivotScl.x - t.scaleX) > 0.001 ||
-          Math.abs(pivotScl.y - t.scaleY) > 0.001 ||
-          Math.abs(pivotScl.z - t.scaleZ) > 0.001
+          Math.abs(pivotScl.x - t.scaleX) > SCALE_EPS ||
+          Math.abs(pivotScl.y - t.scaleY) > SCALE_EPS ||
+          Math.abs(pivotScl.z - t.scaleZ) > SCALE_EPS
         ) {
           existing.pivot.scale.set(t.scaleX, t.scaleY, t.scaleZ);
         }
@@ -884,8 +946,8 @@ export default function Viewport3D({
 
         const material = new THREE.MeshStandardMaterial({
           color: obj.color,
-          roughness: 0.35,
-          metalness: 0.1,
+          roughness: MATERIAL_ROUGHNESS,
+          metalness: MATERIAL_METALNESS,
           side: THREE.DoubleSide,
         });
         const rawMesh = new THREE.Mesh(geometry, material);
@@ -893,8 +955,8 @@ export default function Viewport3D({
         rawMesh.receiveShadow = true;
         rawMesh.userData.objectId = obj.id;
         // Center geometry and get pivot object
-        // Worker запекает полный TRS в геометрию Manifold.
-        // Pivot.position = (0,0,0) после centerGeometry — применяем transform из store.
+        // Worker bakes full TRS into Manifold geometry.
+        // Pivot.position = (0,0,0) after centerGeometry — apply transform from store.
         const pivot = centerGeometry(rawMesh, obj.id);
         pivot.position.set(obj.transform.x, obj.transform.y, obj.transform.z);
         pivot.rotation.set(

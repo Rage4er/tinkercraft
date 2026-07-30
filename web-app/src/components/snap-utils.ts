@@ -149,9 +149,10 @@ function collectWorldEdges(
 }
 
 /**
- * Найти ближайшую вершину к точке target.
+ * Find the closest vertex to a target point.
+ * Exported for testing (TEST-R16-3).
  */
-function closestVertex(
+export function closestVertex(
   vertices: THREE.Vector3[],
   target: THREE.Vector3,
 ): { point: THREE.Vector3; distance: number } | null {
@@ -172,9 +173,10 @@ function closestVertex(
 }
 
 /**
- * Найти ближайшую точку на отрезке к target.
+ * Find the closest point on a line segment to a target point.
+ * Exported for testing (TEST-R16-3).
  */
-function closestPointOnSegment(
+export function closestPointOnSegment(
   from: THREE.Vector3,
   to: THREE.Vector3,
   target: THREE.Vector3,
@@ -190,10 +192,11 @@ function closestPointOnSegment(
 }
 
 /**
- * Найти ближайшее ребро к точке target.
- * Возвращает ближайшую точку на ребре (не обязательно середину).
+ * Find the closest edge to a target point.
+ * Returns the closest point on the edge (not necessarily the midpoint).
+ * Exported for testing (TEST-R16-3).
  */
-function closestEdge(
+export function closestEdge(
   edges: { from: THREE.Vector3; to: THREE.Vector3 }[],
   target: THREE.Vector3,
 ): { point: THREE.Vector3; distance: number } | null {

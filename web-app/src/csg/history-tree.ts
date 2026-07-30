@@ -454,18 +454,22 @@ async function applyCSGMeshes(node: TreeNode): Promise<ExtractedMesh> {
   collectSubtree(node.id) // ← include target node itself
 
   // Serialize to plain objects for worker
-  const nodeData = Array.from(nodes.values()).map(n => ({
-    id: n.id,
-    type: n.type,
-    shapeType: n.shapeType,
-    params: n.params as Record<string, number> | undefined,
-    localTransform: n.localTransform,
-    vertices: n.vertices ? Array.from(n.vertices) : undefined,
-    indices: n.indices ? Array.from(n.indices) : undefined,
-    normals: n.normals ? Array.from(n.normals) : undefined,
-    operation: n.operation,
-    children: n.children,
-  }))
+  // FIX (PERF-R16-2): Use direct iteration instead of Array.from() + .map()
+  const nodeData: WorkerNode[] = []
+  for (const n of nodes.values()) {
+    nodeData.push({
+      id: n.id,
+      type: n.type,
+      shapeType: n.shapeType,
+      params: n.params as Record<string, number> | undefined,
+      localTransform: n.localTransform,
+      vertices: n.vertices ? Array.from(n.vertices) : undefined,
+      indices: n.indices ? Array.from(n.indices) : undefined,
+      normals: n.normals ? Array.from(n.normals) : undefined,
+      operation: n.operation,
+      children: n.children,
+    })
+  }
 
   const result = await workerRebuildNode(node.id, nodeData)
 

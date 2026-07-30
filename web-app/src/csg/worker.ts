@@ -20,11 +20,40 @@ import {
   initWasm,
 } from './worker-handlers'
 
+// FIX (SEC-R16-1): Basic input validation for worker messages.
+// Validates that required fields exist and have correct types before
+// dispatching to handlers. This is defence-in-depth — the main thread
+// already constructs valid messages, but malformed data (e.g. from
+// corrupted autosave) should not crash the worker.
+
+const KNOWN_MESSAGE_TYPES = new Set([
+  'buildShape', 'applyFillet', 'buildImportedMesh', 'csgBoolean',
+  'csgBooleanSync', 'mirrorObject', 'rebuildScene', 'syncObjects',
+  'syncMesh', 'rebuildTreeNode', 'deleteObjects', 'clearAll',
+])
+
+function validateMessage(msg: { reqId: string; type: string;[k: string]: unknown }): string | null {
+  if (!msg || typeof msg !== 'object') return 'Message is not an object'
+  if (typeof msg.reqId !== 'string' || msg.reqId.length === 0) return 'Missing or invalid reqId'
+  if (typeof msg.type !== 'string' || !KNOWN_MESSAGE_TYPES.has(msg.type)) {
+    return `Unknown or missing message type: ${String(msg.type)}`
+  }
+  return null
+}
+
 const initPromise = initWasm()
 
 self.addEventListener('message', async (e: MessageEvent) => {
   await initPromise
   const msg = e.data as { reqId: string; type: string;[k: string]: unknown }
+
+  // FIX (SEC-R16-1): Validate message structure before processing
+  const validationError = validateMessage(msg)
+  if (validationError) {
+    safePostMessage({ reqId: msg?.reqId ?? 'unknown', type: 'error', message: validationError })
+    return
+  }
+
   try {
     switch (msg.type) {
       case 'buildShape': await handleBuildShape(msg as unknown as import('./worker-handlers').BuildShapeMessage); break

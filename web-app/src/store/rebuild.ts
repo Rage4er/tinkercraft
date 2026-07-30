@@ -22,6 +22,7 @@ import {
   createBakedNode,
   getNode,
 } from '../csg/history-tree'
+import { computeRSMatrix } from '../csg/worker-matrix'
 
 /** Metadata accumulated over the operation chain. Exported for testing. */
 export interface RebuildMeta {
@@ -177,15 +178,11 @@ export async function rebuildFromHistory(
         const storedVerts = new Float32Array(metaWithMesh.resultVertices)
         const finalVerts = new Float32Array(storedVerts.length)
         const { x: px, y: py, z: pz } = t
-        const rx = t.rotX * (Math.PI / 180), ry = t.rotY * (Math.PI / 180), rz = t.rotZ * (Math.PI / 180)
-        const Sx = t.scaleX, Sy = t.scaleY, Sz = t.scaleZ
-        // Precompute RS matrix (same as buildTransformMatrix but applied to vertices)
-        const cx = Math.cos(rx), sx_ = Math.sin(rx)
-        const cy = Math.cos(ry), sy_ = Math.sin(ry)
-        const cz = Math.cos(rz), sz_ = Math.sin(rz)
-        const r00 = cz * cy * Sx, r01 = (cz * sy_ * sx_ - sz_ * cx) * Sy, r02 = (cz * sy_ * cx + sz_ * sx_) * Sz
-        const r10 = sz_ * cy * Sx, r11 = (sz_ * sy_ * sx_ + cz * cx) * Sy, r12 = (sz_ * sy_ * sx_ - cz * sx_) * Sz
-        const r20 = -sy_ * Sx, r21 = cy * sx_ * Sy, r22 = cy * cx * Sz
+        // FIX (CODE-R16-1): Use shared computeRSMatrix instead of duplicated inline math
+        const [r00, r01, r02, r10, r11, r12, r20, r21, r22] = computeRSMatrix(
+          { rotX: t.rotX, rotY: t.rotY, rotZ: t.rotZ },
+          { scaleX: t.scaleX, scaleY: t.scaleY, scaleZ: t.scaleZ },
+        )
         for (let i = 0; i < storedVerts.length; i += 3) {
           const vx = storedVerts[i], vy = storedVerts[i + 1], vz = storedVerts[i + 2]
           // RS * v + pos

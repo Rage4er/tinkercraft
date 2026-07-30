@@ -11,6 +11,7 @@ import LeftPanel from "./components/LeftPanel";
 import PropertiesPanel from "./components/PropertiesPanel";
 import { useDocumentStore } from "./store/document-store";
 import { useUiStore } from "./store/ui-store";
+import { useShallow } from "zustand/shallow";
 import { isWorkerReady } from "./csg/worker-client";
 import { SNAP_VALUES, AUTOSAVE_DELAY_MS } from "./constants";
 import type {
@@ -63,6 +64,51 @@ export default function App() {
   const resetViewRef = useRef<(() => void) | null>(null);
   const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // FIX (PERF-R16-3): Use useShallow wrapper to prevent re-renders when
+  // only the store's internal reference changes but values are the same.
+  const docStore = useDocumentStore(
+    useShallow(s => ({
+      objects: s.objects,
+      selectedIds: s.selectedIds,
+      operations: s.operations,
+      historyIndex: s.historyIndex,
+      busy: s.busy,
+      lastCsgMs: s.lastCsgMs,
+      fileName: s.fileName,
+      modified: s.modified,
+      clipboard: s.clipboard,
+      currentProjectId: s.currentProjectId,
+      addShape: s.addShape,
+      addRawMesh: s.addRawMesh,
+      importStl: s.importStl,
+      deleteSelected: s.deleteSelected,
+      selectObjects: s.selectObjects,
+      clearSelection: s.clearSelection,
+      csgBoolean: s.csgBoolean,
+      undo: s.undo,
+      redo: s.redo,
+      jumpToHistory: s.jumpToHistory,
+      clearScene: s.clearScene,
+      openDoodle: s.openDoodle,
+      saveDoodle: s.saveDoodle,
+      moveObject: s.moveObject,
+      resizeObject: s.resizeObject,
+      extrudeSelected: s.extrudeSelected,
+      renameObject: s.renameObject,
+      setColor: s.setColor,
+      toggleVisible: s.toggleVisible,
+      exportStl: s.exportStl,
+      mirrorSelected: s.mirrorSelected,
+      alignSelected: s.alignSelected,
+      applyFillet: s.applyFillet,
+      copySelected: s.copySelected,
+      pasteClipboard: s.pasteClipboard,
+      triggerAutosave: s.triggerAutosave,
+      restoreAutosave: s.restoreAutosave,
+      saveToProject: s.saveToProject,
+      loadFromProject: s.loadFromProject,
+    })),
+  );
   const {
     objects,
     selectedIds,
@@ -103,7 +149,7 @@ export default function App() {
     restoreAutosave,
     saveToProject,
     loadFromProject,
-  } = useDocumentStore();
+  } = docStore;
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);

@@ -69,7 +69,7 @@ pnpm typecheck    # проверка типов TypeScript
 | 6 | Полировка UI и финальные штрихи | ✅ Завершена |
 | 7 | Исправления и улучшения | 🔄 В процессе |
 
-Подробности: [DEVELOPMENT_PLAN.md](./DEVELOPMENT_PLAN.md) · Результаты код-ревью: [CODE_REVIEW.md](./CODE_REVIEW.md)
+Подробности: [DEVELOPMENT_PLAN.md](./DEVELOPMENT_PLAN.md) · Активные проблемы: [CODE_REVIEW.md](./CODE_REVIEW.md) · Архив ревью: [CODE_REVIEW_ARCHIVE.md](./CODE_REVIEW_ARCHIVE.md)
 
 ---
 
@@ -85,7 +85,8 @@ tinkercraft/
 │       ├── components/    # Viewport3D, ViewCube, ComponentTree и др.
 │       └── io/            # STL/Doodle импорт-экспорт, autosave, проекты
 ├── reference/             # Оригинальный Java-проект CaDoodle (вдохновение)
-├── CODE_REVIEW.md         # Код-ревью и статус исправлений
+├── CODE_REVIEW.md         # Активные проблемы код-ревью
+├── CODE_REVIEW_ARCHIVE.md # Архив завершённых код-ревью
 ├── DEVELOPMENT_PLAN.md    # План разработки (Фазы 0–7)
 ├── CHANGELOG.md           # История изменений
 ├── CONTRIBUTING.md        # Правила контрибуции
