@@ -541,6 +541,89 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   },
 
   // ── Mirror ──
+
+  /**
+   * Preview mirror result without saving to history (MIRROR-2).
+   * Computes the mirrored mesh and stores it in ui-store for semi-transparent preview.
+   */
+  previewMirror: async (plane: 'XY' | 'XZ' | 'YZ') => {
+    if (get().busy) return
+    const { selectedIds, objects } = get()
+    const ids = selectedIds.filter(id => objects[id])
+    if (ids.length === 0) return
+    // Dynamically import ui-store to avoid circular dependency
+    const { useUiStore } = await import('./ui-store')
+    const setMirrorPreviewMesh = useUiStore.getState().setMirrorPreviewMesh
+    // Clear preview on any plane — will be re-set below
+    setMirrorPreviewMesh(null)
+    try {
+      const bboxes = ids.map(id => {
+        const obj = objects[id]
+        return obj.aabb ?? computeAABB(obj.vertices)
+      })
+      const centerX = bboxes.reduce((s, b) => s + (b.min.x + b.max.x) / 2, 0) / bboxes.length
+      const centerY = bboxes.reduce((s, b) => s + (b.min.y + b.max.y) / 2, 0) / bboxes.length
+      const centerZ = bboxes.reduce((s, b) => s + (b.min.z + b.max.z) / 2, 0) / bboxes.length
+      const mirrorCenter = { x: centerX, y: centerY, z: centerZ }
+
+      // Sync worker cache
+      const syncOps = ids.map(async id => {
+        const obj = objects[id]
+        if (obj.shapeType === 'cube' && !obj.params.width || obj.shapeType === 'import_mesh') {
+          await workerSyncMesh(id, obj.vertices, obj.indices, { x: obj.transform.x, y: obj.transform.y, z: obj.transform.z, rotX: obj.transform.rotX, rotY: obj.transform.rotY, rotZ: obj.transform.rotZ, scaleX: obj.transform.scaleX, scaleY: obj.transform.scaleY, scaleZ: obj.transform.scaleZ })
+        } else {
+          return { objId: id, shapeType: obj.shapeType, params: obj.params, transform: { x: obj.transform.x, y: obj.transform.y, z: obj.transform.z, rotX: obj.transform.rotX, rotY: obj.transform.rotY, rotZ: obj.transform.rotZ, scaleX: obj.transform.scaleX, scaleY: obj.transform.scaleY, scaleZ: obj.transform.scaleZ } as const }
+        }
+      })
+      await Promise.all(syncOps)
+      const regularEntries = ids.filter(id => {
+        const obj = objects[id]
+        if (!obj) return false
+        if (obj.shapeType === 'import_mesh') return false
+        return obj.shapeType !== 'cube' || (obj.shapeType === 'cube' && obj.params?.width)
+      })
+      if (regularEntries.length > 0) {
+        await workerSyncObjects(
+          regularEntries.map(id => {
+            const obj = objects[id]
+            return {
+              objId: obj.id,
+              shapeType: obj.shapeType,
+              params: obj.params,
+              transform: { x: obj.transform.x, y: obj.transform.y, z: obj.transform.z, rotX: obj.transform.rotX, rotY: obj.transform.rotY, rotZ: obj.transform.rotZ, scaleX: obj.transform.scaleX, scaleY: obj.transform.scaleY, scaleZ: obj.transform.scaleZ } as const,
+            }
+          }),
+        )
+      }
+
+      // Compute mirror for first selected object only (preview)
+      const id = ids[0]
+      const obj = objects[id]
+      const treeExists = getNode(id) !== undefined
+      if (!treeExists) {
+        if (obj.shapeType && obj.params) {
+          createPrimitiveNode(id, obj.shapeType, obj.params, obj.transform)
+        } else {
+          createBakedNode(id, obj.vertices || new Float32Array(), obj.indices || new Uint32Array(), obj.normals || null, obj.transform)
+        }
+      }
+      syncNodeTransform(id, obj.transform)
+      const treeId = `mirror_preview_${nextId()}`
+      cloneSubtree(id, treeId)
+      mirrorTreeNode(treeId, plane, mirrorCenter)
+      const mesh = await rebuildNode(treeId)
+      // Store preview mesh in ui-store
+      setMirrorPreviewMesh({
+        vertices: mesh.vertices,
+        indices: mesh.indices,
+        normals: mesh.normals ?? null,
+      })
+    } catch (e) {
+      console.error('previewMirror:', e)
+      setMirrorPreviewMesh(null)
+    }
+  },
+
   mirrorSelected: async (plane) => {
     if (get().busy) return
     const { selectedIds, objects, operations, historyIndex } = get()
@@ -573,7 +656,15 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       // to the outer try/catch, which logs the error and resets busy state.
       await Promise.all(syncOps)
       // Sync regular primitives via workerSyncObjects
-      const regularEntries = ids.filter(id => objects[id] && objects[id].shapeType !== 'cube' || (objects[id] && objects[id].shapeType === 'cube' && objects[id].params.width))
+      // FIX (MIRROR-9): Exclude import_mesh from regularEntries — it was already
+      // synced via workerSyncMesh in syncOps above. Without this exclusion,
+      // import_mesh objects get a redundant second sync via workerSyncObjects.
+      const regularEntries = ids.filter(id => {
+        const obj = objects[id]
+        if (!obj) return false
+        if (obj.shapeType === 'import_mesh') return false // already synced via workerSyncMesh
+        return obj.shapeType !== 'cube' || (obj.shapeType === 'cube' && obj.params?.width)
+      })
       if (regularEntries.length > 0) {
         await workerSyncObjects(
           regularEntries.map(id => {

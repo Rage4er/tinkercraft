@@ -94,6 +94,12 @@ interface DragRect {
   endX: number;
   endY: number;
 }
+interface MirrorPreviewMesh {
+  vertices: Float32Array;
+  indices: Uint32Array;
+  normals: Float32Array | null;
+}
+
 interface Props {
   busy: boolean;
   workerOk: boolean;
@@ -110,6 +116,10 @@ interface Props {
   rulerMode?: boolean;
   onRulerMeasure?: (dist: number) => void;
   cameraMode?: 'perspective' | 'orthographic';
+  // Mirror preview (MIRROR-2)
+  mirrorPreviewMesh?: MirrorPreviewMesh | null;
+  // Mirror plane visualizer (MIRROR-4): which plane to show as 3D indicator
+  mirrorPreviewPlane?: 'XY' | 'XZ' | 'YZ' | null;
 }
 
 function checkWebGL(): boolean {
@@ -176,6 +186,8 @@ export default function Viewport3D({
   busy,
   workerOk,
   cameraMode = 'perspective',
+  mirrorPreviewMesh = null,
+  mirrorPreviewPlane = null,
 }: Props) {
   const [webglOk] = useState<boolean>(() => checkWebGL());
   const [sceneReady, setSceneReady] = useState(false);
@@ -200,6 +212,13 @@ export default function Viewport3D({
       { mesh: THREE.Mesh; pivot: THREE.Object3D; helper?: THREE.BoxHelper }
     >
   >(new Map());
+  // Mirror preview mesh (MIRROR-2): semi-transparent preview of mirror result
+  const mirrorPreviewRef = useRef<{
+    mesh: THREE.Mesh;
+    pivot: THREE.Object3D;
+  } | null>(null);
+  // Mirror plane visualizer (MIRROR-4): semi-transparent plane indicator
+  const mirrorPlaneRef = useRef<THREE.Mesh | null>(null);
   const rulerLineRef = useRef<THREE.Line | null>(null);
   const rulerMarkersRef = useRef<THREE.Mesh[]>([]);
   const rulerPointsRef = useRef<THREE.Vector3[]>([]);
@@ -970,6 +989,100 @@ export default function Viewport3D({
       }
     }
   }, [objects, sceneReady]);
+
+  // ---- Mirror preview (MIRROR-2) ----
+  useEffect(() => {
+    const scene = sceneRef.current;
+    if (!scene) return;
+
+    // Remove existing preview
+    if (mirrorPreviewRef.current) {
+      scene.remove(mirrorPreviewRef.current.pivot);
+      mirrorPreviewRef.current.mesh.geometry.dispose();
+      (mirrorPreviewRef.current.mesh.material as THREE.Material).dispose();
+      mirrorPreviewRef.current = null;
+    }
+
+    if (!mirrorPreviewMesh) return;
+
+    // Create semi-transparent preview mesh
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute(
+      "position",
+      new THREE.Float32BufferAttribute(mirrorPreviewMesh.vertices, 3),
+    );
+    geometry.setIndex(new THREE.BufferAttribute(mirrorPreviewMesh.indices, 1));
+    geometry.computeVertexNormals();
+
+    const material = new THREE.MeshStandardMaterial({
+      color: 0x4488ff,
+      transparent: true,
+      opacity: 0.35,
+      roughness: 0.3,
+      metalness: 0.0,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.renderOrder = 999; // render on top
+    const pivot = centerGeometry(mesh, '__mirror_preview__');
+    scene.add(pivot);
+    mirrorPreviewRef.current = { mesh, pivot };
+  }, [mirrorPreviewMesh]);
+
+  // Mirror plane visualizer (MIRROR-4): semi-transparent plane indicator
+  useEffect(() => {
+    const scene = sceneRef.current;
+    if (!scene) return;
+
+    // Remove existing plane
+    if (mirrorPlaneRef.current) {
+      scene.remove(mirrorPlaneRef.current);
+      mirrorPlaneRef.current.geometry.dispose();
+      (mirrorPlaneRef.current.material as THREE.Material).dispose();
+      mirrorPlaneRef.current = null;
+    }
+
+    if (!mirrorPreviewPlane) return;
+
+    // Create a large semi-transparent plane aligned to the mirror plane
+    const planeSize = 100; // large enough to cover the scene
+    let geometry: THREE.PlaneGeometry;
+    let rotation: THREE.Euler;
+
+    switch (mirrorPreviewPlane) {
+      case 'XY':
+        // XY plane: normal is Z, no rotation needed
+        geometry = new THREE.PlaneGeometry(planeSize, planeSize);
+        rotation = new THREE.Euler(0, 0, 0);
+        break;
+      case 'XZ':
+        // XZ plane: normal is Y, rotate -90° around X
+        geometry = new THREE.PlaneGeometry(planeSize, planeSize);
+        rotation = new THREE.Euler(-Math.PI / 2, 0, 0);
+        break;
+      case 'YZ':
+        // YZ plane: normal is X, rotate 90° around Y
+        geometry = new THREE.PlaneGeometry(planeSize, planeSize);
+        rotation = new THREE.Euler(0, Math.PI / 2, 0);
+        break;
+    }
+
+    const material = new THREE.MeshStandardMaterial({
+      color: 0x4488ff,
+      transparent: true,
+      opacity: 0.15,
+      roughness: 0.5,
+      metalness: 0.0,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.rotation.copy(rotation);
+    mesh.renderOrder = 998; // behind preview mesh
+    scene.add(mesh);
+    mirrorPlaneRef.current = mesh;
+  }, [mirrorPreviewPlane]);
 
   return (
     <div

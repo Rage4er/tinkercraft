@@ -54,6 +54,10 @@ export default function App() {
   const setCameraMode = useUiStore(s => s.setCameraMode);
   const showTextModal = useUiStore(s => s.showTextModal);
   const setShowTextModal = useUiStore(s => s.setShowTextModal);
+  const mirrorPreviewMesh = useUiStore(s => s.mirrorPreviewMesh);
+  const setMirrorPreviewMesh = useUiStore(s => s.setMirrorPreviewMesh);
+  const mirrorPreviewPlane = useUiStore(s => s.mirrorPreviewPlane);
+  const setMirrorPreviewPlane = useUiStore(s => s.setMirrorPreviewPlane);
 
   // Text modal form state — stays local (form-only, not shared)
   const [textInput, setTextInput] = useState("Text");
@@ -99,6 +103,7 @@ export default function App() {
       toggleVisible: s.toggleVisible,
       exportStl: s.exportStl,
       mirrorSelected: s.mirrorSelected,
+      previewMirror: s.previewMirror,
       alignSelected: s.alignSelected,
       applyFillet: s.applyFillet,
       copySelected: s.copySelected,
@@ -141,6 +146,7 @@ export default function App() {
     toggleVisible,
     exportStl,
     mirrorSelected,
+    previewMirror,
     alignSelected,
     applyFillet,
     copySelected,
@@ -338,6 +344,24 @@ export default function App() {
   const canExtrude = selectedIds.length === 1 && !busy;
   const hasCopied = clipboard.length > 0;
 
+  // Mirror preview (MIRROR-2): debounce to avoid excessive worker calls
+  const previewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handlePreviewMirror = useCallback(
+    (plane: 'XY' | 'XZ' | 'YZ') => {
+      if (previewTimerRef.current) clearTimeout(previewTimerRef.current);
+      setMirrorPreviewPlane(plane);
+      previewTimerRef.current = setTimeout(() => {
+        previewMirror(plane);
+      }, 150); // 150ms debounce
+    },
+    [previewMirror, setMirrorPreviewPlane],
+  );
+  const handlePreviewMirrorEnd = useCallback(() => {
+    if (previewTimerRef.current) clearTimeout(previewTimerRef.current);
+    setMirrorPreviewMesh(null);
+    setMirrorPreviewPlane(null);
+  }, [setMirrorPreviewPlane]);
+
   const handleMoveAxis = useCallback(
     (axis: "x" | "y" | "z", val: number) => {
       if (firstSelected)
@@ -464,6 +488,8 @@ export default function App() {
           setRulerDist(null);
         }}
         onMirror={mirrorSelected}
+        onPreviewMirror={handlePreviewMirror}
+        onPreviewMirrorEnd={handlePreviewMirrorEnd}
         onAlign={alignSelected}
         onCsg={csgBoolean}
         onToggleTheme={() => setTheme(theme === "dark" ? "light" : "dark")}
@@ -536,6 +562,8 @@ export default function App() {
               busy={busy}
               workerOk={workerOk}
               cameraMode={cameraMode}
+              mirrorPreviewMesh={mirrorPreviewMesh}
+              mirrorPreviewPlane={mirrorPreviewPlane}
             />
           </ErrorBoundary>
 

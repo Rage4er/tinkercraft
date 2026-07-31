@@ -4526,3 +4526,201 @@ const visible = useMemo(() =>
 1. React.memo на горячих компонентах — заметно улучшит отзывчивость
 2. Базовая доступность (ARIA roles + keyboard) — минимальный порог для публичного продукта
 3. Worker timeout + dispose — стабильность при зависаниях WASM
+
+---
+
+## 🔍 РАУНД 17 + SOURCECRAFT — Совместное ревью (2025-07-31)
+
+**Ревьюеры:** Koda AI, SourceCraft Code Assistant
+**Дата ревью:** 2025-07-31
+**Тип:** Два независимых ревью → построчная верификация → согласованный вердикт
+**Точность Koda:** ~75% (9/15 подтверждено, 5 переоценены, 1 ошибочна)
+**Точность SourceCraft:** ~83% (12.5/15 подтверждено, 1 ошибка, 2 переоценки)
+**Итоговая точность:** ~79%
+
+### 📊 Сводка
+
+| Категория | Найдено | Подтверждено | Отозвано |
+|-----------|---------|--------------|----------|
+| 🔴 CRITICAL | 3 | 1 (CRIT-NEW-3) | 1 (CRIT-NEW-2 — ошибка чтения кода) |
+| 🟡 HIGH | 3 | 2 (HIGH-NEW-1, HIGH-NEW-2) | 1 (HIGH-NEW-3 — slab временный) |
+| 🟡 MEDIUM | 3 | 2 (MED-NEW-2, MED-NEW-3) | — |
+| 🟢 LOW | 3 | 3 (LOW-NEW-1, LOW-NEW-2, LOW-NEW-3) | — |
+| **Итого** | **12** | **9** | **2** |
+
+**Дополнительно выявлено (только Koda):** 15 проблем, из которых 12 подтверждены полностью или частично.
+
+### 🔴 КРИТИЧЕСКИЕ ПРОБЛЕМЫ (верифицированы)
+
+#### CRIT-17-1: Stale кэш boolean-узлов (computeNodeHash)
+
+**Файл:** `src/csg/history-tree.ts`, строки 275–282
+**Статус:** ✅ Подтверждено обеими сторонами
+
+**Суть:** `computeNodeHash` для boolean-узлов **не включает** `localTransform`.
+
+```typescript
+// history-tree.ts:275-282
+if (node.type === 'boolean' && node.children) {
+  const childHashes = node.children.map(id => {
+    const child = treeNodes.get(id)
+    return child ? computeNodeHash(child) : '?'
+  })
+  return `${node.operation}|${childHashes.join('|')}`  // ← localTransform отсутствует
+}
+```
+
+**Влияние:** При изменении позиции/вращения/масштаба CSG-результата кэш не инвалидируется → `rebuildNode` возвращает старый результат с неправильной трансформацией.
+
+**Решение:** Добавить `localTransform` в строку хеша boolean-узла.
+
+---
+
+#### CRIT-17-2: Отсутствие try/catch в resizeObject (else-ветка)
+
+**Файл:** `src/store/document-store.ts`, строки 983–1026
+**Статус:** ✅ Подтверждено (скорректировано: проблема не в busy-state, а в отсутствии try/catch)
+
+**Суть:** В `resizeObject` для CSG-результатов (else-ветка) отсутствует `try/catch` вокруг `await rebuildNode(id)`.
+
+```typescript
+// document-store.ts:983-1026 (else-ветка)
+else {
+  // busy НЕ установлен!
+  const mesh = await rebuildNode(id)  // ← нет try/catch
+  set({ operations: newOps, ... })     // ← не вызовется при ошибке
+}
+```
+
+**Влияние:** Если `rebuildNode` упадёт — `set` не вызывается, объект не обновляется, пользователь не видит ошибки. В отличии от `csgBoolean` или `mirrorSelected`, здесь нет уведомления.
+
+**Решение:** Обернуть блок в `try/catch` и вызвать `notify` при ошибке.
+
+---
+
+#### CRIT-NEW-2 (SourceCraft): resizeObject не обновляет snapshot — ❌ ОТОЗВАНО
+
+**Статус:** Ошибка чтения кода. `cacheSnapshotWithTree` ЕСТЬ на строке 1025.
+
+---
+
+### 🟡 HIGH / MEDIUM (верифицированы)
+
+#### HIGH-NEW-1: Дублирование sync-логики (SourceCraft + Koda)
+
+**Файл:** `src/store/document-store.ts`, строки 341–362, 570–597, 647–680
+**Статус:** ✅ Подтверждено обеими сторонами
+
+**Суть:** Три блока синхронизации worker cache с вариациями (~100 строк почти идентичного кода).
+
+**Решение:** Вынести в функцию `syncObjectsForOperation(ids, objects)`.
+
+---
+
+#### HIGH-NEW-2: alignSelected избыточный rebuild (SourceCraft + Koda)
+
+**Файл:** `src/store/document-store.ts`, строка 820
+**Статус:** ✅ Подтверждено обеими сторонами
+
+**Суть:** `workerBuildShape` перестраивает геометрию вместо `workerSyncObjects`.
+
+---
+
+#### HIGH-NEW-3: extrudeSelected slab в build tree — ⚠️ ОТОЗВАНО
+
+**Статус:** Slab — временный объект, не сохраняется в `newObjects`. Undo/redo использует `resultVertices` из `GroupOperation`.
+
+---
+
+#### MED-NEW-1: _idCounter не сбрасывается — ✅ СНИЖЕН до LOW
+
+**Файл:** `src/store/helpers.ts`, строки 89–90
+**Статус:** Не баг, особенность.
+
+---
+
+#### MED-NEW-2: resize_dims для CSG-результатов — ✅ Правдоподобно
+
+**Файл:** `src/csg/worker-handlers.ts`, строки 900–909
+**Статус:** `buildRebuildMeta` обрабатывает `resize_dims` только для примитивов.
+
+---
+
+#### MED-NEW-3: computeBakedBBox без R/S — ✅ Подтверждено
+
+**Файл:** `src/csg/history-tree.ts`, строки 214–238
+**Статус:** Применяется только translation. При rotation/scale AABB неверен.
+
+---
+
+### 🟢 LOW (верифицированы)
+
+| # | Проблема | Статус |
+|---|----------|--------|
+| LOW-NEW-1 | 'cube' shapeType для CSG | ✅ Принято (осознанное решение) |
+| LOW-NEW-2 | console.error вместо notify | ✅ Подтверждено |
+| LOW-NEW-3 | O(n) копирование operations | ✅ Теоретически верно, практического влияния нет |
+
+---
+
+### 📋 ДОПОЛНИТЕЛЬНЫЕ НАХОДКИ (только Koda, 15 проблем)
+
+| # | Проблема | Статус SourceCraft | Итоговый статус |
+|---|----------|-------------------|-----------------|
+| 1 | God Component (1149 строк) | ⚠️ Частично верно | ⚠️ Снижен до LOW (Zustand limitation) |
+| 2 | Дублирование raycaster-кода | ✅ Верно | ✅ Подтверждено (dead code + duplicate) |
+| 3 | Sequential await syncOperand | ✅ Верно | ✅ Подтверждено |
+| 4 | console.error vs notify | ✅ Верно | ✅ Подтверждено |
+| 5 | Рекурсия invalidateCache | ⚠️ Технически верно | ✅ Guard clause стоит усилий |
+| 6 | Смешение языков в константах | ✅ Верно | ✅ Подтверждено |
+| 7 | TypedArrays клонирование | ⚠️ Частично верно | ⚠️ Снижен (необходимо для корректности) |
+| 8 | shapeTypeForMesh не передаётся | ✅ Верно, важно | ✅ ВАЖНАЯ НАХОДКА |
+| 9 | busy state resizeObject | ❌ Неверно | ❌ Снят (busy не устанавливается) |
+| 10 | Тестирование | ✅ Верно | ✅ Подтверждено |
+| 11 | Рост кэша snapshot | ⚠️ Технически верно | ⚠️ Снижен (LRU — good practice) |
+| 12 | computeVertsHash асимметрия | ⚠️ Технически верно | ⚠️ Снижен (коллизия → лишнее обновление) |
+| 13 | rebuildBuildTree не вызывается | ✅ Верно, важно | ✅ ВАЖНАЯ НАХОДКА |
+| 14 | disposeWorker не вызывается | ✅ Верно | ✅ Подтверждено |
+| 15 | slabId не удаляется | ✅ Верно | ✅ Подтверждено |
+
+**Итого:** 9 полностью подтверждены, 5 снижены в приоритете, 1 снята.
+
+---
+
+### 🎯 ИТОГОВЫЙ ПЛАН ДЕЙСТВИЙ (согласованный)
+
+| Приоритет | Проблема | Файл | Сложность |
+|-----------|----------|------|-----------|
+| 🔴 CRITICAL | CRIT-17-1: boolean hash без localTransform | `history-tree.ts:275` | Очень низкая |
+| 🔴 CRITICAL | CRIT-17-2: resizeObject без try/catch | `document-store.ts:983` | Низкая |
+| 🟡 HIGH | HIGH-1: Дублирование sync-логики | `document-store.ts:341` | Средняя |
+| 🟡 HIGH | HIGH-2: alignSelected rebuild | `document-store.ts:820` | Низкая |
+| 🟡 HIGH | HIGH-5: rebuildBuildTree не вызывается | `document-store.ts:844` | Низкая |
+| 🟡 MEDIUM | HIGH-3: computeBakedBBox без R/S | `history-tree.ts:214` | Средняя |
+| 🟡 MEDIUM | HIGH-4: pasteClipboard build tree | `document-store.ts:238` | Низкая |
+| 🟢 LOW | LOW-1: circle-snap не работает | `Viewport3D.tsx:704` | Средняя |
+| 🟢 LOW | LOW-2: мёртвый код getWorldPointFromPointer | `Viewport3D.tsx:660` | Низкая |
+| 🟢 LOW | LOW-3: console.error вместо notify | `document-store.ts` | Низкая |
+| 🟢 LOW | LOW-4: slabId утечка в worker | `document-store.ts:1068` | Очень низкая |
+| 🟢 LOW | LOW-5: неограниченный snapshot cache | `snapshots.ts` | Низкая |
+| 🟢 LOW | LOW-6: sequential await syncOperand | `document-store.ts:361` | Очень низкая |
+| 🟢 LOW | LOW-7: рекурсия invalidateCache | `history-tree.ts:312` | Очень низкая |
+| 🟢 LOW | LOW-8: смешение языков в константах | `constants.ts:31` | Очень низкая |
+
+---
+
+### 💭 ОБЩИЕ НАБЛЮДЕНИЯ
+
+**Сильные стороны проекта:**
+1. **BuildTree** — параметрическое дерево с кэшированием и каскадной инвалидацией O(depth)
+2. **Worker communication** — Promise-обёртка с таймаутами, transferable objects, валидация
+3. **Snapshot cache** — использование иммутабельности Zustand для мгновенного undo/redo
+4. **Mirror preview** — live preview с debounce и визуализацией плоскости
+5. **Чёткая архитектура** — Worker → Store → Components
+
+**Основные проблемы текущего ревью:**
+- Краевые случаи (edge cases) в обработке ошибок и консистентности кэша
+- Дублирование логики синхронизации worker cache
+- Недостаточное покрытие тестами критических путей
+
+**Общий балл проекта:** 8.5/10 — высококачественный проект с продуманной архитектурой.

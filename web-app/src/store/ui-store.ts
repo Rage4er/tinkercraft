@@ -59,6 +59,13 @@ export interface UiStore {
   extrudeDepth: number
   setExtrudeDepth: (v: number) => void
 
+  // Mirror preview (MIRROR-2)
+  mirrorPreviewMesh: { vertices: Float32Array; indices: Uint32Array; normals: Float32Array | null } | null
+  setMirrorPreviewMesh: (mesh: { vertices: Float32Array; indices: Uint32Array; normals: Float32Array | null } | null) => void
+  // Mirror plane visualizer (MIRROR-4): which plane to show as 3D indicator
+  mirrorPreviewPlane: 'XY' | 'XZ' | 'YZ' | null
+  setMirrorPreviewPlane: (plane: 'XY' | 'XZ' | 'YZ' | null) => void
+
   // Panels
   activeTab: 'objects' | 'tree'
   setActiveTab: (v: 'objects' | 'tree') => void
@@ -114,4 +121,11 @@ export const useUiStore = create<UiStore>((set) => ({
   cameraMode: 'perspective',
   setCameraMode: (v) =>
     set((s) => ({ cameraMode: typeof v === 'function' ? v(s.cameraMode) : v })),
+
+  // Mirror preview (MIRROR-2)
+  mirrorPreviewMesh: null,
+  setMirrorPreviewMesh: (mesh) => set({ mirrorPreviewMesh: mesh }),
+  // Mirror plane visualizer (MIRROR-4)
+  mirrorPreviewPlane: null,
+  setMirrorPreviewPlane: (plane) => set({ mirrorPreviewPlane: plane }),
 }))

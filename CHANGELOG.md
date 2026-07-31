@@ -9,6 +9,11 @@
 
 ## [Unreleased]
 
+### Added — Mirror: live preview и 3D визуализация плоскости (MIRROR-2, MIRROR-4) (2026-07-31)
+- Live preview результата mirror при наведении на кнопку плоскости (`previewMirror` в document-store, `MirrorPreviewMesh` в Viewport3D)
+- 3D полупрозрачная плоскость-индикатор выбранной плоскости mirror в сцене (`mirrorPreviewPlane` в ui-store, `mirrorPlaneRef` в Viewport3D)
+- Debounce 150ms для preview чтобы избежать лишних вызовов worker
+
 ### Fixed — Mirror: 4 MEDIUM-проблемы (MIRROR-1, MIRROR-6, MIRROR-7, MIRROR-10) (2026-07-31)
 
 1. **MIRROR-1** — Mirror через центр BBox выделения вместо origin:
@@ -104,6 +109,7 @@
 - Код-ревью раунд 16: глубокий аудит (18 проблем)
 - BuildTree: параметрическое дерево построения (TreeNode: primitive/boolean/baked)
 - CODE_REVIEW_ARCHIVE.md — архив всех завершённых код-ревью
+- **CODE_REVIEW.md + DEVELOPMENT_PLAN.md — объединённый отчёт Раунда 17 + SourceCraft (15 проблем, ~83% точность)**
 
 ### Fixed
 - CRIT-R16-1: `handleRebuildScene` — `try/catch` с `disposeAllCached()` при ошибке

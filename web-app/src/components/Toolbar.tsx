@@ -35,6 +35,8 @@ export default function Toolbar({
   onGizmo,
   onToggleRuler,
   onMirror,
+  onPreviewMirror,
+  onPreviewMirrorEnd,
   onAlign,
   onCsg,
   onToggleTheme,
@@ -71,6 +73,8 @@ export default function Toolbar({
   onGizmo: (mode: GizmoMode) => void;
   onToggleRuler: () => void;
   onMirror: (plane: "XY" | "XZ" | "YZ") => void;
+  onPreviewMirror?: (plane: "XY" | "XZ" | "YZ") => void;
+  onPreviewMirrorEnd?: () => void;
   onAlign: (axis: "X" | "Y" | "Z", anchor: "min" | "center" | "max") => void;
   onCsg: (op: "union" | "subtract" | "intersect") => void;
   onToggleTheme: () => void;
@@ -181,7 +185,12 @@ export default function Toolbar({
         </button>
       </div>
 
-      <MirrorButtons disabled={!canMirror} onMirror={onMirror} />
+      <MirrorButtons
+        disabled={!canMirror}
+        onMirror={onMirror}
+        onPreviewMirror={onPreviewMirror}
+        onPreviewEnd={onPreviewMirrorEnd}
+      />
 
       <AlignButtons disabled={!canAlign} onAlign={onAlign} />
 

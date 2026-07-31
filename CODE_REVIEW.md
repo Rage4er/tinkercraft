@@ -11,20 +11,52 @@
 
 ## 📋 Активные проблемы
 
-### 🔴 Mirror — 10 проблем (MIRROR-1..10)
+### 🔴 Раунд 17 + SourceCraft — Код-ревью (15 проблем, верифицированы)
 
-| # | Проблема | Severity | Файл | Суть |
-|---|----------|----------|------|------|
-| MIRROR-1 | Плоскость зеркала через origin вместо центра BBox выделения | MEDIUM | [`history-tree.ts:577-583`](web-app/src/csg/history-tree.ts:577) | ✅ ИСПРАВЛЕНО — mirror через центр BBox выделения |
-| MIRROR-2 | Отсутствие предпросмотра результата | MEDIUM | — | Пользователь не видит результат до применения |
-| MIRROR-3 | Baked nodes с вращением — rotation не инвертируется | **HIGH** | [`history-tree.ts:604-614`](web-app/src/csg/history-tree.ts:604) | ✅ ИСПРАВЛЕНО |
-| MIRROR-4 | 3D хендлы для выбора плоскости mirror | LOW | — | Выпадающий список менее интуитивен, чем 3D-стрелки |
-| MIRROR-5 | Потеря параметричности boolean → baked при mirror | **HIGH** | [`document-store.ts:641-643`](web-app/src/store/document-store.ts:641) | ✅ ИСПРАВЛЕНО |
-| MIRROR-6 | Fallback-ноды не удаляются после mirror | MEDIUM | [`document-store.ts:584-594`](web-app/src/store/document-store.ts:584) | ✅ ИСПРАВЛЕНО — созданные fallback-ноды удаляются |
-| MIRROR-7 | Трансформ boolean ноды из первого child | MEDIUM | [`history-tree.ts:596-634`](web-app/src/csg/history-tree.ts:596) | ✅ ИСПРАВЛЕНО — используется собственный localTransform |
-| MIRROR-8 | Scale не инвертируется при mirror | **HIGH** | [`rebuildOps.ts:78-81`](web-app/src/csg/rebuildOps.ts:78) | ✅ ИСПРАВЛЕНО |
-| MIRROR-9 | Двойная синхронизация для import_mesh | LOW | [`document-store.ts:556-564`](web-app/src/store/document-store.ts:556) | Лишний postMessage в воркер |
-| MIRROR-10 | Нет проверки успешности sync перед mirror | MEDIUM | [`document-store.ts:549-558`](web-app/src/store/document-store.ts:549) | ✅ ИСПРАВЛЕНО — `.catch(() => {})` удалён, ошибки идут в try/catch |
+**Дата ревью:** 2025-07-31
+**Ревьюеры:** Koda AI, SourceCraft Code Assistant
+**Точность:** ~83% (12.5/15 подтверждено, 1 ошибка, 2 переоценки)
+
+#### 🔴 Критические (2)
+
+| # | Проблема | Файл | Severity | Описание | Решение |
+|---|----------|------|----------|----------|---------|
+| | **CRIT-17-1** | [`history-tree.ts:275-282`](web-app/src/csg/history-tree.ts:275) | **CRITICAL** | `computeNodeHash` для boolean-узлов **не включает** `localTransform`. При изменении позиции/вращения/масштаба CSG-результата кэш не инвалидируется → stale данные. | Добавить `localTransform` в строку хеша boolean-узла: `return \`${node.operation}\|${tStr}\|${childHashes.join('|')}\`` |
+| | **CRIT-17-2** | [`document-store.ts:983-1026`](web-app/src/store/document-store.ts:983) | **CRITICAL** | В `resizeObject` (else-ветка для CSG-результатов) отсутствует `try/catch` вокруг `await rebuildNode(id)`. При ошибке — молчаливая неудача, объект не обновляется, пользователь не видит ошибки. | Обернуть блок в `try/catch` и вызвать `notify` при ошибке. |
+
+#### 🟡 Среднее и высокое (5)
+
+| # | Проблема | Файл | Severity | Описание | Решение |
+|---|----------|------|----------|----------|---------|
+| | **HIGH-1** | [`document-store.ts:341-680`](web-app/src/store/document-store.ts:341) | **HIGH** | Дублирование логики синхронизации Worker cache в 3+ местах (`csgBoolean`, `previewMirror`, `mirrorSelected`). ~100 строк почти идентичного кода. | Вынести в функцию `syncObjectsForOperation(ids, objects)` |
+| | **HIGH-2** | [`document-store.ts:820`](web-app/src/store/document-store.ts:820) | **HIGH** | `alignSelected` перестраивает меши примитивов через `workerBuildShape` вместо `workerSyncObjects`. Лишняя нагрузка на WASM (~5-10ms на объект). | Использовать `workerSyncObjects` для обновления только трансформации. |
+| | **HIGH-3** | [`history-tree.ts:214-238`](web-app/src/csg/history-tree.ts:214) | **MEDIUM** | `computeBakedBBox` применяет только translation (`+ transform.x/y/z`), игнорируя `rot` и `scale`. BBox вращённых/масштабированных STL мешей неверен → ломает Box Selection. | Использовать `buildTransformMatrix` для проекции вершин при вычислении BBox. |
+| | **HIGH-4** | [`document-store.ts:238-267`](web-app/src/store/document-store.ts:238) | **MEDIUM** | `pasteClipboard` не регистрирует вставленные объекты в Build Tree. Fallback-логика в `csgBoolean`/`mirrorSelected` создаёт `baked` ноду вместо `primitive` — потеря параметричности. | Добавить `createPrimitiveNode`/`createBakedNode` в `pasteClipboard`. |
+| | **HIGH-5** | [`document-store.ts:844-845`](web-app/src/store/document-store.ts:844) | **HIGH** | `rebuildBuildTree` существует, но **нигде не вызывается**. После `openDoodle`/`restoreAutosave` дерево сборки пусто → CSG/Mirror работают через медленные fallback. | Вызвать `rebuildBuildTree(ops)` после `rebuildFromHistory` в `undo`, `redo`, `openDoodle`, `restoreAutosave`. |
+
+#### 🟢 Низкое (8)
+
+| # | Проблема | Файл | Severity | Описание | Решение |
+|---|----------|------|----------|----------|---------|
+| | **LOW-1** | [`Viewport3D.tsx:704`](web-app/src/components/Viewport3D.tsx:704) | **MEDIUM** | `findNearestSnap` вызывается без `shapeTypeForMesh` → `circleCenter` всегда `null`. Circle-snap (центр объекта) недоступен. | Собрать маппинг `id → shapeType` из `meshMapRef` и передать в `findNearestSnap`. |
+| | **LOW-2** | [`Viewport3D.tsx:660-681`](web-app/src/components/Viewport3D.tsx:660) | **LOW** | `getWorldPointFromPointer` — мёртвый код (нигде не вызывается). Проецирует на Y=0, rulerMode на Z=0. | Удалить функцию. Рефакторить дублирование в ruler-коде. |
+| | **LOW-3** | [`document-store.ts`](web-app/src/store/document-store.ts) | **LOW** | `console.error` вместо `notify` в `applyFillet`, `mirrorSelected`, `csgBoolean`, `resizeObject`. Нет обратной связи для пользователя. | Заменить `console.error` на `notify(message, 'error')`. |
+| | **LOW-4** | [`document-store.ts:1068`](web-app/src/store/document-store.ts:1068) | **LOW** | `slabId` (временный куб для extrude) не удаляется из кэша воркера после CSG. Засорение кэша при многократной экструзии. | Вызвать `workerDeleteObjects([slabId])` после получения результата. |
+| | **LOW-5** | [`snapshots.ts`](web-app/src/store/snapshots.ts) | **LOW** | `Map<number, SceneObject>` растёт бесконечно. `SceneObject` содержит `Float32Array`. При长线-сессии (200+ операций) — 50-100MB. | Добавить LRU-стратегию (удаление старых snapshot'ов при превышении лимита). |
+| | **LOW-6** | [`document-store.ts:361-362`](web-app/src/store/document-store.ts:361) | **LOW** | `await syncOperand(idA)` / `await syncOperand(idB)` выполняются последовательно. | Заменить на `Promise.all([syncOperand(idA), syncOperand(idB)])`. |
+| | **LOW-7** | [`history-tree.ts:312`](web-app/src/csg/history-tree.ts:312) | **LOW** | `invalidateCache` рекурсивна без защиты. При повреждённом дереве — `RangeError: Maximum call stack size exceeded`. | Добавить счётчик глубины (guard clause, `MAX_DEPTH = 100`). |
+| | **LOW-8** | [`constants.ts:31-43`](web-app/src/constants.ts:31) | **LOW** | `OP_FILTER_LABELS` — смесь языков: "Добавить" (рус), "Move" (англ), "Resize" (англ). | Стандартизировать все метки на русский язык. |
+
+### ❌ Отозванные проблемы (False Positives)
+
+| # | Проблема | Причина отзыва |
+|---|----------|----------------|
+| | CRIT-NEW-2: `resizeObject` не обновляет snapshot | `cacheSnapshotWithTree` ЕСТЬ на строке 1025 — ошибка чтения кода |
+| | HIGH-NEW-3: `extrudeSelected` slab в дереве | Slab — временный объект, undo/redo использует `resultVertices` из `GroupOperation` |
+| | God Component (разделение файлов) | Zustand `create<DocumentStore>()` не поддерживает разделение без middleware |
+| | `busy` не сбрасывается в `resizeObject` | `busy` не устанавливается в true для else-ветки — проблема в отсутствии `try/catch`, а не busy |
+
+---
 
 ### ⚠️ Раунд 16 — Код-ревью (18 проблем, верифицированы)
 
@@ -32,44 +64,44 @@
 
 | # | Проблема | Файл | Вердикт верификации | Скорректированный приоритет |
 |---|----------|------|---------------------|---------------------------|
-| CRIT-R16-1 | `handleRebuildScene` без `try/finally` — утечка WASM-памяти при ошибках | [`worker-handlers.ts:756`](web-app/src/csg/worker-handlers.ts:756) | ⚠️ Частично верно — утечка временная, до следующего rebuild | ✅ Исправлено |
-| CRIT-R16-2 | Мутация `vertices` в `extractAndCenter` — неожиданный побочный эффект | [`helpers.ts:29`](web-app/src/store/helpers.ts:29) | ⚠️ Верно, но преувеличено — JSDoc уже документирует поведение | ✅ Исправлено |
-| CRIT-R16-3 | `any` в `collectSubtreeForWorker` и `applyCSGMeshes` | [`history-tree.ts:366`](web-app/src/csg/history-tree.ts:366) | ✅ Верно — нарушение strict: true | ✅ Исправлено |
-| CRIT-R16-4 | `JSON.stringify` в `computeNodeHash` — проблема производительности | [`history-tree.ts:254`](web-app/src/csg/history-tree.ts:254) | ✅ Верно, но severity спорный — вызывается только при rebuild | ✅ Исправлено |
+| | CRIT-R16-1 | `handleRebuildScene` без `try/finally` — утечка WASM-памяти при ошибках | [`worker-handlers.ts:756`](web-app/src/csg/worker-handlers.ts:756) | ⚠️ Частично верно — утечка временная, до следующего rebuild | ✅ Исправлено |
+| | CRIT-R16-2 | Мутация `vertices` в `extractAndCenter` — неожиданный побочный эффект | [`helpers.ts:29`](web-app/src/store/helpers.ts:29) | ⚠️ Верно, но преувеличено — JSDoc уже документирует поведение | ✅ Исправлено |
+| | CRIT-R16-3 | `any` в `collectSubtreeForWorker` и `applyCSGMeshes` | [`history-tree.ts:366`](web-app/src/csg/history-tree.ts:366) | ✅ Верно — нарушение strict: true | ✅ Исправлено |
+| | CRIT-R16-4 | `JSON.stringify` в `computeNodeHash` — проблема производительности | [`history-tree.ts:254`](web-app/src/csg/history-tree.ts:254) | ✅ Верно, но severity спорный — вызывается только при rebuild | ✅ Исправлено |
 
 #### ⚡ Производительность (4)
 
 | # | Проблема | Файл | Вердикт | Статус |
 |---|----------|------|---------|--------|
-| PERF-R16-1 | Двойной проход по вершинам в `extractAndCenterGetAABB` | [`helpers.ts:44`](web-app/src/store/helpers.ts:44) | ❌ Неверно — функция не вызывает `computeAABB`, два прохода неизбежны | ❌ Закрыто |
-| PERF-R16-2 | `Array.from()` в hot path | [`history-tree.ts:446`](web-app/src/csg/history-tree.ts:446) | ⚠️ Частично неверно — только в одной из двух указанных функций | ✅ Исправлено |
-| PERF-R16-3 | Избыточные ререндеры через Zustand | — | ⚠️ Вводит в заблуждение — 32/33 уже с селекторами | ✅ Исправлено |
-| PERF-R16-4 | `computeVertsHash` — возможны коллизии | [`Viewport3D.tsx:68`](web-app/src/components/Viewport3D.tsx:68) | ✅ Верно — сумма произведений для симметричных мешей | ✅ Исправлено |
+| | PERF-R16-1 | Двойной проход по вершинам в `extractAndCenterGetAABB` | [`helpers.ts:44`](web-app/src/store/helpers.ts:44) | ❌ Неверно — функция не вызывает `computeAABB`, два прохода неизбежны | ❌ Закрыто |
+| | PERF-R16-2 | `Array.from()` в hot path | [`history-tree.ts:446`](web-app/src/csg/history-tree.ts:446) | ⚠️ Частично неверно — только в одной из двух указанных функций | ✅ Исправлено |
+| | PERF-R16-3 | Избыточные ререндеры через Zustand | — | ⚠️ Вводит в заблуждение — 32/33 уже с селекторами | ✅ Исправлено |
+| | PERF-R16-4 | `computeVertsHash` — возможны коллизии | [`Viewport3D.tsx:68`](web-app/src/components/Viewport3D.tsx:68) | ✅ Верно — сумма произведений для симметричных мешей | ✅ Исправлено |
 
 #### 📝 Читаемость (4)
 
 | # | Проблема | Файл | Вердикт | Статус |
 |---|----------|------|---------|--------|
-| CODE-R16-1 | Дублирование матричной математики | [`rebuild.ts:154`](web-app/src/store/rebuild.ts:154), [`worker-matrix.ts:15`](web-app/src/csg/worker-matrix.ts:15) | ✅ Верно | ✅ Исправлено |
-| CODE-R16-2 | Магические числа в Viewport3D | [`Viewport3D.tsx:97`](web-app/src/components/Viewport3D.tsx:97) | ✅ Верно | ✅ Исправлено |
-| CODE-R16-3 | Смешение русского и английского в комментариях |多处 | ✅ Верно | ✅ Исправлено |
-| CODE-R16-4 | `GizmoMode` с `null` как значение | [`ui-store.ts:11`](web-app/src/store/ui-store.ts:11) | ✅ Верно | ✅ Исправлено |
+| | CODE-R16-1 | Дублирование матричной математики | [`rebuild.ts:154`](web-app/src/store/rebuild.ts:154), [`worker-matrix.ts:15`](web-app/src/csg/worker-matrix.ts:15) | ✅ Верно | ✅ Исправлено |
+| | CODE-R16-2 | Магические числа в Viewport3D | [`Viewport3D.tsx:97`](web-app/src/components/Viewport3D.tsx:97) | ✅ Верно | ✅ Исправлено |
+| | CODE-R16-3 | Смешение русского и английского в комментариях |多处 | ✅ Верно | ✅ Исправлено |
+| | CODE-R16-4 | `GizmoMode` с `null` как значение | [`ui-store.ts:11`](web-app/src/store/ui-store.ts:11) | ✅ Верно | ✅ Исправлено |
 
 #### 🔒 Безопасность (3)
 
 | # | Проблема | Файл | Вердикт | Статус |
 |---|----------|------|---------|--------|
-| SEC-R16-1 | Отсутствие валидации входящих данных в worker | [`worker.ts`](web-app/src/csg/worker.ts) | ✅ Верно — `as unknown as` касты без валидации | ✅ Исправлено |
-| SEC-R16-2 | `try/catch` с пустым `catch` | [`worker-handlers.ts:104,930`](web-app/src/csg/worker-handlers.ts:104) | ⚠️ Частично неверно — только в worker-handlers.ts, не в document-store.ts | ✅ Исправлено |
-| SEC-R16-3 | `setCached` без проверки на disposed объекты | [`worker-handlers.ts:108`](web-app/src/csg/worker-handlers.ts:108) | ✅ Верно, но низкая ценность — вызывается с только что созданными объектами | ✅ Исправлено |
+| | SEC-R16-1 | Отсутствие валидации входящих данных в worker | [`worker.ts`](web-app/src/csg/worker.ts) | ✅ Верно — `as unknown as` касты без валидации | ✅ Исправлено |
+| | SEC-R16-2 | `try/catch` с пустым `catch` | [`worker-handlers.ts:104,930`](web-app/src/csg/worker-handlers.ts:104) | ⚠️ Частично неверно — только в worker-handlers.ts, не в document-store.ts | ✅ Исправлено |
+| | SEC-R16-3 | `setCached` без проверки на disposed объекты | [`worker-handlers.ts:108`](web-app/src/csg/worker-handlers.ts:108) | ✅ Верно, но низкая ценность — вызывается с только что созданными объектами | ✅ Исправлено |
 
 #### 🧪 Тестирование (3)
 
 | # | Проблема | Файл | Вердикт | Статус |
 |---|----------|------|---------|--------|
-| TEST-R16-1 | Нет тестов для критических функций | — | ⚠️ Частично неверно — `buildRebuildMeta` тестируется | ⚠️ Открыто |
-| TEST-R16-2 | Тесты используют `as any` для обхода типов | — | ⚠️ Преувеличено/устарело — всего 1 `as any` в history-tree.test.ts | ✅ Исправлено |
-| TEST-R16-3 | Нет тестов для `snap-utils.ts` | [`snap-utils.ts`](web-app/src/components/snap-utils.ts) | ✅ Верно — 468 строк без тестов | ✅ Исправлено |
+| | TEST-R16-1 | Нет тестов для критических функций | — | ⚠️ Частично неверно — `buildRebuildMeta` тестируется | ⚠️ Открыто |
+| | TEST-R16-2 | Тесты используют `as any` для обхода типов | — | ⚠️ Преувеличено/устарело — всего 1 `as any` в history-tree.test.ts | ✅ Исправлено |
+| | TEST-R16-3 | Нет тестов для `snap-utils.ts` | [`snap-utils.ts`](web-app/src/components/snap-utils.ts) | ✅ Верно — 468 строк без тестов | ✅ Исправлено |
 
 ---
 
@@ -96,32 +128,47 @@
 | **Раунд 16 — 17 исправлений** (2026-07-26) | CRIT-R16-1..4, PERF-R16-2/3/4, CODE-R16-1/2/3/4, SEC-R16-1/2/3, TEST-R16-2/3 | ✅ Исправлено |
 | **Mirror HIGH** (2026-07-30) | MIRROR-3, MIRROR-5, MIRROR-8 | ✅ Исправлено |
 | **Mirror MEDIUM** (2026-07-30) | MIRROR-1, MIRROR-6, MIRROR-7, MIRROR-10 | ✅ Исправлено |
+| **Mirror LOW** (2026-07-31) | MIRROR-2 (live preview), MIRROR-4 (3D plane), MIRROR-9 (double sync) | ✅ Исправлено |
+| **Раунд 17 + SourceCraft** (2025-07-31) | CRIT-17-1 (boolean hash), CRIT-17-2 (resizeObject try/catch), HIGH-1..5, LOW-1..8 | 🔄 Активные (15 проблем) |
 
 ---
 
 ## 🎯 План действий (приоритет)
 
-### 🔴 HIGH — исправить в первую очередь
+### 🔴 CRITICAL — исправить немедленно
 
-| # | Задача | Сложность | Файл |
-|---|--------|-----------|------|
-| — | (все HIGH исправлены) | — | — |
+| # | Задача | Сложность | Файл | Описание |
+|---|--------|-----------|------|----------|
+| | **CRIT-17-1** | Очень низкая | [`history-tree.ts:275`](web-app/src/csg/history-tree.ts:275) | Добавить `localTransform` в хеш boolean-узла (`computeNodeHash`) |
+| | **CRIT-17-2** | Низкая | [`document-store.ts:983`](web-app/src/store/document-store.ts:983) | Добавить `try/catch` + `notify` в `resizeObject` (else-ветка) |
 
-### 🟡 MEDIUM — следующий приоритет
+### 🟡 HIGH — следующий приоритет
 
-| # | Задача | Сложность | Файл |
-|---|--------|-----------|------|
-| — | (все MEDIUM исправлены) | — | — |
+| # | Задача | Сложность | Файл | Описание |
+|---|--------|-----------|------|----------|
+| | **HIGH-1** | Средняя | [`document-store.ts:341`](web-app/src/store/document-store.ts:341) | Рефакторинг дублирующегося sync-кода (3 блока → 1 функция) |
+| | **HIGH-2** | Низкая | [`document-store.ts:820`](web-app/src/store/document-store.ts:820) | Заменить `workerBuildShape` на `workerSyncObjects` в `alignSelected` |
+| | **HIGH-5** | Низкая | [`document-store.ts:844`](web-app/src/store/document-store.ts:844) | Вызвать `rebuildBuildTree` после `rebuildFromHistory` (undo, redo, openDoodle, restoreAutosave) |
 
-### 🟢 LOW — косметика/производительность
+### 🟡 MEDIUM — плановые улучшения
 
-| # | Задача | Сложность | Файл |
-|---|--------|-----------|------|
-| MIRROR-2 | Предпросмотр результата mirror | Средняя | — |
-| MIRROR-4 | 3D хендлы для выбора плоскости | Высокая | — |
-| MIRROR-9 | Исправить двойную синхронизацию import_mesh | Низкая | [`document-store.ts:556-564`](web-app/src/store/document-store.ts:556) |
-| PERF-R16-1 | Двойной проход — ❌ неверно, закрыто | Н/Д | — |
-| TEST-R16-1 | Тесты для `handleCsgBooleanSync`, `handleRebuildScene` | Высокая | — |
+| # | Задача | Сложность | Файл | Описание |
+|---|--------|-----------|------|----------|
+| | **HIGH-3** | Средняя | [`history-tree.ts:214`](web-app/src/csg/history-tree.ts:214) | Исправить `computeBakedBBox` — добавить R/S матрицу |
+| | **HIGH-4** | Низкая | [`document-store.ts:238`](web-app/src/store/document-store.ts:238) | Регистрация Build Tree нод в `pasteClipboard` |
+| | **LOW-1** | Средняя | [`Viewport3D.tsx:704`](web-app/src/components/Viewport3D.tsx:704) | Починить circle-snap (передать `shapeTypeForMesh`) |
+
+### 🟢 LOW — косметика / техдолг
+
+| # | Задача | Сложность | Файл | Описание |
+|---|--------|-----------|------|----------|
+| | **LOW-2** | Низкая | [`Viewport3D.tsx:660`](web-app/src/components/Viewport3D.tsx:660) | Удалить мёртвый код `getWorldPointFromPointer` |
+| | **LOW-3** | Низкая | [`document-store.ts`](web-app/src/store/document-store.ts) | Заменить `console.error` на `notify` |
+| | **LOW-4** | Очень низкая | [`document-store.ts:1068`](web-app/src/store/document-store.ts:1068) | Удалять `slabId` из worker кэша после extrude |
+| | **LOW-5** | Низкая | [`snapshots.ts`](web-app/src/store/snapshots.ts) | Добавить LRU-стратегию для snapshot cache |
+| | **LOW-6** | Очень низкая | [`document-store.ts:361`](web-app/src/store/document-store.ts:361) | Заменить sequential `await` на `Promise.all` |
+| | **LOW-7** | Очень низкая | [`history-tree.ts:312`](web-app/src/csg/history-tree.ts:312) | Добавить guard clause в `invalidateCache` |
+| | **LOW-8** | Очень низкая | [`constants.ts:31`](web-app/src/constants.ts:31) | Стандартизировать метки фильтров (русский язык) |
 
 ---
 
@@ -129,11 +176,12 @@
 
 | Метрика | Значение |
 |---------|----------|
-| Всего выявлено проблем | ~80+ (за всё время) |
-| Исправлено | ~77+ |
-| Активных | 3 (3 Mirror LOW) |
-| HIGH активных | 0 (все HIGH исправлены) |
+| Всего выявлено проблем | ~95+ (за всё время) |
+| Исправлено | ~80+ |
+| Активных | 15 (Раунд 17 + SourceCraft) |
+| HIGH активных | 3 (CRIT-17-1, CRIT-17-2, HIGH-1, HIGH-2, HIGH-5) |
 | Точность ревью (Раунд 16) | ~50% (8/18 полностью верных) |
+| Точность ревью (Раунд 17 + SourceCraft) | ~83% (12.5/15 подтверждено) |
 
 ---
 
