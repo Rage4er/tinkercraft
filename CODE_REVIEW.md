@@ -15,16 +15,16 @@
 
 | # | Проблема | Severity | Файл | Суть |
 |---|----------|----------|------|------|
-| MIRROR-1 | Плоскость зеркала через origin вместо центра BBox выделения | MEDIUM | [`history-tree.ts:577-583`](web-app/src/csg/history-tree.ts:577) | Неожиданное поведение для объектов вдали от центра сцены |
+| MIRROR-1 | Плоскость зеркала через origin вместо центра BBox выделения | MEDIUM | [`history-tree.ts:577-583`](web-app/src/csg/history-tree.ts:577) | ✅ ИСПРАВЛЕНО — mirror через центр BBox выделения |
 | MIRROR-2 | Отсутствие предпросмотра результата | MEDIUM | — | Пользователь не видит результат до применения |
-| MIRROR-3 | Baked nodes с вращением — rotation не инвертируется | **HIGH** | [`history-tree.ts:604-614`](web-app/src/csg/history-tree.ts:604) | ✅ ИСПРАВЛЕНО — rotation+scale инвертируются для baked nodes |
+| MIRROR-3 | Baked nodes с вращением — rotation не инвертируется | **HIGH** | [`history-tree.ts:604-614`](web-app/src/csg/history-tree.ts:604) | ✅ ИСПРАВЛЕНО |
 | MIRROR-4 | 3D хендлы для выбора плоскости mirror | LOW | — | Выпадающий список менее интуитивен, чем 3D-стрелки |
-| MIRROR-5 | Потеря параметричности boolean → baked при mirror | **HIGH** | [`document-store.ts:641-643`](web-app/src/store/document-store.ts:641) | ✅ ИСПРАВЛЕНО — boolean клонируется как subtree, не bake |
-| MIRROR-6 | Fallback-ноды не удаляются после mirror | MEDIUM | [`document-store.ts:584-594`](web-app/src/store/document-store.ts:584) | Мусор в дереве после операции |
-| MIRROR-7 | Трансформ boolean ноды из первого child | MEDIUM | [`history-tree.ts:596-634`](web-app/src/csg/history-tree.ts:596) | Некорректное позиционирование зеркальной копии |
-| MIRROR-8 | Scale не инвертируется при mirror | **HIGH** | [`rebuildOps.ts:78-81`](web-app/src/csg/rebuildOps.ts:78) | ✅ ИСПРАВЛЕНО — scale инвертируется по зеркальной оси |
+| MIRROR-5 | Потеря параметричности boolean → baked при mirror | **HIGH** | [`document-store.ts:641-643`](web-app/src/store/document-store.ts:641) | ✅ ИСПРАВЛЕНО |
+| MIRROR-6 | Fallback-ноды не удаляются после mirror | MEDIUM | [`document-store.ts:584-594`](web-app/src/store/document-store.ts:584) | ✅ ИСПРАВЛЕНО — созданные fallback-ноды удаляются |
+| MIRROR-7 | Трансформ boolean ноды из первого child | MEDIUM | [`history-tree.ts:596-634`](web-app/src/csg/history-tree.ts:596) | ✅ ИСПРАВЛЕНО — используется собственный localTransform |
+| MIRROR-8 | Scale не инвертируется при mirror | **HIGH** | [`rebuildOps.ts:78-81`](web-app/src/csg/rebuildOps.ts:78) | ✅ ИСПРАВЛЕНО |
 | MIRROR-9 | Двойная синхронизация для import_mesh | LOW | [`document-store.ts:556-564`](web-app/src/store/document-store.ts:556) | Лишний postMessage в воркер |
-| MIRROR-10 | Нет проверки успешности sync перед mirror | MEDIUM | [`document-store.ts:549-558`](web-app/src/store/document-store.ts:549) | Ошибка синхронизации молча игнорируется |
+| MIRROR-10 | Нет проверки успешности sync перед mirror | MEDIUM | [`document-store.ts:549-558`](web-app/src/store/document-store.ts:549) | ✅ ИСПРАВЛЕНО — `.catch(() => {})` удалён, ошибки идут в try/catch |
 
 ### ⚠️ Раунд 16 — Код-ревью (18 проблем, верифицированы)
 
@@ -95,6 +95,7 @@
 | **BUG-CSG-POS-5/6** (2026-07-26) | BUG-CSG-POS-5/6 (moveTreeNode рекурсия, двойное TRS) | ✅ Исправлено |
 | **Раунд 16 — 17 исправлений** (2026-07-26) | CRIT-R16-1..4, PERF-R16-2/3/4, CODE-R16-1/2/3/4, SEC-R16-1/2/3, TEST-R16-2/3 | ✅ Исправлено |
 | **Mirror HIGH** (2026-07-30) | MIRROR-3, MIRROR-5, MIRROR-8 | ✅ Исправлено |
+| **Mirror MEDIUM** (2026-07-30) | MIRROR-1, MIRROR-6, MIRROR-7, MIRROR-10 | ✅ Исправлено |
 
 ---
 
@@ -110,10 +111,7 @@
 
 | # | Задача | Сложность | Файл |
 |---|--------|-----------|------|
-| MIRROR-1 | Mirror через центр BBox выделения вместо origin | Средняя | [`history-tree.ts:577-583`](web-app/src/csg/history-tree.ts:577) |
-| MIRROR-6 | Удалять fallback-ноды после mirror | Низкая | [`document-store.ts:584-594`](web-app/src/store/document-store.ts:584) |
-| MIRROR-10 | Проверка успешности sync перед mirror | Низкая | [`document-store.ts:549-558`](web-app/src/store/document-store.ts:549) |
-| MIRROR-7 | Корректный трансформ для boolean нод при mirror | Средняя | [`history-tree.ts:596-634`](web-app/src/csg/history-tree.ts:596) |
+| — | (все MEDIUM исправлены) | — | — |
 
 ### 🟢 LOW — косметика/производительность
 
@@ -132,8 +130,8 @@
 | Метрика | Значение |
 |---------|----------|
 | Всего выявлено проблем | ~80+ (за всё время) |
-| Исправлено | ~73+ |
-| Активных | 7 (4 Mirror MEDIUM + 3 Mirror LOW + 0 HIGH) |
+| Исправлено | ~77+ |
+| Активных | 3 (3 Mirror LOW) |
 | HIGH активных | 0 (все HIGH исправлены) |
 | Точность ревью (Раунд 16) | ~50% (8/18 полностью верных) |
 

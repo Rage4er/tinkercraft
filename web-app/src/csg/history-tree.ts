@@ -577,33 +577,45 @@ function transformBakedMesh(node: TreeNode): ExtractedMesh {
 // Mirror tree
 // ---------------------------------------------------------------------------
 
-/** Mirror a node (and its entire subtree) relative to a plane through origin */
-export function mirrorTreeNode(nodeId: string, plane: 'XY' | 'XZ' | 'YZ'): void {
+/**
+ * Mirror a node (and its entire subtree) relative to a plane.
+ *
+ * FIX (MIRROR-1): If `center` is provided, mirroring is relative to that
+ * point instead of origin (0,0,0). This makes mirror behave intuitively
+ * for objects far from the scene origin.
+ */
+export function mirrorTreeNode(
+  nodeId: string,
+  plane: 'XY' | 'XZ' | 'YZ',
+  center?: Point3D,
+): void {
   const node = treeNodes.get(nodeId)
   if (!node) return
 
-  // Recursively mirror — each node mirrored relative to origin (0,0,0)
-  mirrorNodeRecursive(node, plane)
+  // Recursively mirror — each node mirrored relative to center (or origin)
+  mirrorNodeRecursive(node, plane, center ?? { x: 0, y: 0, z: 0 })
 
   // Invalidate cache
   invalidateCache(nodeId)
 }
 
-function mirrorPoint(p: Point3D, plane: 'XY' | 'XZ' | 'YZ'): Point3D {
+function mirrorPoint(p: Point3D, plane: 'XY' | 'XZ' | 'YZ', center: Point3D = { x: 0, y: 0, z: 0 }): Point3D {
+  // Mirror relative to center: p' = 2*center - p (on mirrored axis only)
   switch (plane) {
-    case 'YZ': return { x: -p.x, y: p.y, z: p.z }
-    case 'XZ': return { x: p.x, y: -p.y, z: p.z }
-    case 'XY': return { x: p.x, y: p.y, z: -p.z }
+    case 'YZ': return { x: 2 * center.x - p.x, y: p.y, z: p.z }
+    case 'XZ': return { x: p.x, y: 2 * center.y - p.y, z: p.z }
+    case 'XY': return { x: p.x, y: p.y, z: 2 * center.z - p.z }
   }
 }
 
 function mirrorNodeRecursive(
   node: TreeNode,
   plane: 'XY' | 'XZ' | 'YZ',
+  center: Point3D = { x: 0, y: 0, z: 0 },
 ): void {
   if (node.type === 'primitive' && node.localTransform) {
     const t = node.localTransform
-    const mirroredPos = mirrorPoint({ x: t.x, y: t.y, z: t.z }, plane)
+    const mirroredPos = mirrorPoint({ x: t.x, y: t.y, z: t.z }, plane, center)
     node.localTransform = {
       ...t,
       x: mirroredPos.x,
@@ -626,7 +638,7 @@ function mirrorNodeRecursive(
     // Baked nodes are pre-computed geometry (from CSG or import), but their
     // localTransform still carries rotation/scale that must be mirrored.
     const t = node.localTransform
-    const mirroredPos = mirrorPoint({ x: t.x, y: t.y, z: t.z }, plane)
+    const mirroredPos = mirrorPoint({ x: t.x, y: t.y, z: t.z }, plane, center)
     node.localTransform = {
       ...t,
       x: mirroredPos.x,
@@ -645,7 +657,7 @@ function mirrorNodeRecursive(
   if (node.type === 'boolean' && node.children) {
     node.children.forEach(childId => {
       const child = treeNodes.get(childId)
-      if (child) mirrorNodeRecursive(child, plane)
+      if (child) mirrorNodeRecursive(child, plane, center)
     })
   }
 }

@@ -9,6 +9,27 @@
 
 ## [Unreleased]
 
+### Fixed — Mirror: 4 MEDIUM-проблемы (MIRROR-1, MIRROR-6, MIRROR-7, MIRROR-10) (2026-07-31)
+
+1. **MIRROR-1** — Mirror через центр BBox выделения вместо origin:
+   `mirrorTreeNode` принимает опциональный `center`, `mirrorPoint` зеркалит
+   относительно центра (`2*center - p`). `mirrorSelected` вычисляет центр
+   BBox всех выделенных объектов (`history-tree.ts`, `document-store.ts`)
+
+2. **MIRROR-6** — Fallback-ноды не удалялись после mirror: созданные
+   fallback-ноды (для объектов не в дереве) теперь отслеживаются и
+   удаляются после операции (`document-store.ts`)
+
+3. **MIRROR-7** — Трансформ boolean ноды из первого child: теперь
+   используется собственный `localTransform` boolean-ноды (если есть),
+   fallback на first child только если нет (`document-store.ts`)
+
+4. **MIRROR-10** — `.catch(() => { })` на sync удалён: ошибки
+   синхронизации теперь пробрасываются в общий `try/catch`, логируются
+   и сбрасывают `busy` (`document-store.ts`)
+
+**Файлы:** `history-tree.ts`, `document-store.ts`
+
 ### Fixed — Mirror: 3 HIGH-бага (MIRROR-3, MIRROR-5, MIRROR-8) (2026-07-30)
 
 1. **MIRROR-3** — Baked nodes с вращением: rotation и scale теперь инвертируются

@@ -549,19 +549,28 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     set({ busy: true })
     try {
       const t0 = performance.now()
+      // FIX (MIRROR-1): Compute BBox center of all selected objects for mirror pivot
+      const bboxes = ids.map(id => {
+        const obj = objects[id]
+        return obj.aabb ?? computeAABB(obj.vertices)
+      })
+      const centerX = bboxes.reduce((s, b) => s + (b.min.x + b.max.x) / 2, 0) / bboxes.length
+      const centerY = bboxes.reduce((s, b) => s + (b.min.y + b.max.y) / 2, 0) / bboxes.length
+      const centerZ = bboxes.reduce((s, b) => s + (b.min.z + b.max.z) / 2, 0) / bboxes.length
+      const mirrorCenter = { x: centerX, y: centerY, z: centerZ }
+
       // Sync worker cache before mirror — fixes stale cache after undo/redo
       // FIX (CRIT-CSG-3): For CSG results and imported meshes, use workerSyncMesh.
-      // Keep full transform (including rotation) — mirror will flip geometry relative to origin,
-      // then pivot applies the mirrored rotation to the mirrored geometry.
       const syncOps = ids.map(async id => {
         const obj = objects[id]
         if (obj.shapeType === 'cube' && !obj.params.width || obj.shapeType === 'import_mesh') {
-          // Sync with full transform — mirror will handle geometry + rotation
-          await workerSyncMesh(id, obj.vertices, obj.indices, { x: obj.transform.x, y: obj.transform.y, z: obj.transform.z, rotX: obj.transform.rotX, rotY: obj.transform.rotY, rotZ: obj.transform.rotZ, scaleX: obj.transform.scaleX, scaleY: obj.transform.scaleY, scaleZ: obj.transform.scaleZ }).catch(() => { })
+          await workerSyncMesh(id, obj.vertices, obj.indices, { x: obj.transform.x, y: obj.transform.y, z: obj.transform.z, rotX: obj.transform.rotX, rotY: obj.transform.rotY, rotZ: obj.transform.rotZ, scaleX: obj.transform.scaleX, scaleY: obj.transform.scaleY, scaleZ: obj.transform.scaleZ })
         } else {
           return { objId: id, shapeType: obj.shapeType, params: obj.params, transform: { x: obj.transform.x, y: obj.transform.y, z: obj.transform.z, rotX: obj.transform.rotX, rotY: obj.transform.rotY, rotZ: obj.transform.rotZ, scaleX: obj.transform.scaleX, scaleY: obj.transform.scaleY, scaleZ: obj.transform.scaleZ } as const }
         }
       })
+      // FIX (MIRROR-10): Removed .catch(() => { }) — sync errors now propagate
+      // to the outer try/catch, which logs the error and resets busy state.
       await Promise.all(syncOps)
       // Sync regular primitives via workerSyncObjects
       const regularEntries = ids.filter(id => objects[id] && objects[id].shapeType !== 'cube' || (objects[id] && objects[id].shapeType === 'cube' && objects[id].params.width))
@@ -582,31 +591,35 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const newIds: string[] = []
       const originalIds: string[] = []
 
+      // FIX (MIRROR-6): Track fallback nodes created for cleanup
+      const createdFallbackIds: string[] = []
+
       for (const id of ids) {
         originalIds.push(id)
         const obj = objects[id]
 
-        // ВСЕ объекты должны быть зарегистрированы в дереве при создании
+        // Все объекты должны быть зарегистрированы в дереве при создании
         // Если объект не в дереве (из-за rebuildFromHistory или старых данных) — создаём fallback ноду
         const treeExists = getNode(id) !== undefined
 
         if (!treeExists) {
-          // Для простых объектов создаём primitive ноду
           if (obj.shapeType && obj.params) {
             createPrimitiveNode(id, obj.shapeType, obj.params, obj.transform)
           } else {
-            // Для CSG/baked создаём baked ноду
             createBakedNode(id, obj.vertices || new Float32Array(), obj.indices || new Uint32Array(), obj.normals || null, obj.transform)
           }
+          // FIX (MIRROR-6): Track this ID for cleanup after mirror
+          createdFallbackIds.push(id)
         }
 
-        // СИНХРОНИЗИРУЕМ ТРАНСФОРМАЦИИ ИЗ STORE ПЕРЕД ОПЕРАЦИЕЙ
+        // Синхронизируем трансформации из store перед операцией
         syncNodeTransform(id, obj.transform)
 
         // Клонируем поддерево и зеркалим
         const treeId = `mirror_${nextId()}`
         cloneSubtree(id, treeId)
-        mirrorTreeNode(treeId, plane)
+        // FIX (MIRROR-1): Pass selection BBox center as mirror pivot
+        mirrorTreeNode(treeId, plane, mirrorCenter)
 
         // Извлекаем зеркальный меш из дерева
         const mesh = await rebuildNode(treeId)
@@ -620,11 +633,18 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
             finalTransform = { ...clonedNode.localTransform }
           } else if (clonedNode.type === 'baked' && clonedNode.localTransform) {
             finalTransform = { ...clonedNode.localTransform }
-          } else if (clonedNode.type === 'boolean' && clonedNode.children) {
-            // Для boolean нод извлекаем трансформацию из первого дочернего элемента
-            const firstChild = getNode(clonedNode.children[0])
-            if (firstChild && firstChild.localTransform) {
-              finalTransform = { ...firstChild.localTransform }
+          } else if (clonedNode.type === 'boolean') {
+            // FIX (MIRROR-7): Use boolean node's own localTransform if available.
+            // After mirrorTreeNode + rebuildNode, the boolean result is centered at origin
+            // and localTransform carries the full TRS. Fall back to first child only
+            // if the boolean node has no localTransform.
+            if (clonedNode.localTransform) {
+              finalTransform = { ...clonedNode.localTransform }
+            } else if (clonedNode.children) {
+              const firstChild = getNode(clonedNode.children[0])
+              if (firstChild && firstChild.localTransform) {
+                finalTransform = { ...firstChild.localTransform }
+              }
             }
           }
         }
@@ -655,6 +675,12 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
 
         // Удаляем временную зеркальную ноду из дерева
         deleteNode(treeId)
+      }
+
+      // FIX (MIRROR-6): Clean up fallback nodes that were created for objects
+      // not in the tree. These were only needed for the mirror operation.
+      for (const fallbackId of createdFallbackIds) {
+        deleteNode(fallbackId)
       }
 
       const op: MirrorOperation = { type: 'mirror', originalIds, ids: newIds, plane }
