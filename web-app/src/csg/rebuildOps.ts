@@ -56,14 +56,17 @@ export function applyMoveDelta(
  * plane does NOT change. Axes IN the plane change sign.
  *
  * YZ plane (perpendicular axis = X):
- *   pos.x negated, rotX unchanged, scaleX unchanged
- *   rotY/rotZ negated, scaleY/scaleZ negated
+ *   pos.x negated, rotX unchanged, scaleX = abs()
+ *   rotY/rotZ negated, scaleY/scaleZ = abs()
  * XZ plane (perpendicular axis = Y):
- *   pos.y negated, rotY unchanged, scaleY unchanged
- *   rotX/rotZ negated, scaleX/scaleZ negated
+ *   pos.y negated, rotY unchanged, scaleY = abs()
+ *   rotX/rotZ negated, scaleX/scaleZ = abs()
  * XY plane (perpendicular axis = Z):
- *   pos.z negated, rotZ unchanged, scaleZ unchanged
- *   rotX/rotY negated, scaleX/scaleY negated
+ *   pos.z negated, rotZ unchanged, scaleZ = abs()
+ *   rotX/rotY negated, scaleX/scaleY = abs()
+ *
+ * FIX (MIRROR-SCALE): Scale is always positive (abs). Mirror geometry
+ * is done via matrix transform, NOT via negative scale.
  */
 export function applyMirrorToTransform(
   t: RebuildTransform,
@@ -74,29 +77,29 @@ export function applyMirrorToTransform(
   if (plane === 'YZ') {
     nt.x = -nt.x
     // X is perpendicular to YZ → rotX and scaleX UNCHANGED
-    // Y and Z are in the plane → negate
+    // Y and Z are in the plane → negate rot, abs scale
     nt.rotY = -nt.rotY
     nt.rotZ = -nt.rotZ
-    nt.scaleY = -nt.scaleY
-    nt.scaleZ = -nt.scaleZ
+    nt.scaleY = Math.abs(nt.scaleY)
+    nt.scaleZ = Math.abs(nt.scaleZ)
   }
   if (plane === 'XZ') {
     nt.y = -nt.y
     // Y is perpendicular to XZ → rotY and scaleY UNCHANGED
-    // X and Z are in the plane → negate
+    // X and Z are in the plane → negate rot, abs scale
     nt.rotX = -nt.rotX
     nt.rotZ = -nt.rotZ
-    nt.scaleX = -nt.scaleX
-    nt.scaleZ = -nt.scaleZ
+    nt.scaleX = Math.abs(nt.scaleX)
+    nt.scaleZ = Math.abs(nt.scaleZ)
   }
   if (plane === 'XY') {
     nt.z = -nt.z
     // Z is perpendicular to XY → rotZ and scaleZ UNCHANGED
-    // X and Y are in the plane → negate
+    // X and Y are in the plane → negate rot, abs scale
     nt.rotX = -nt.rotX
     nt.rotY = -nt.rotY
-    nt.scaleX = -nt.scaleX
-    nt.scaleY = -nt.scaleY
+    nt.scaleX = Math.abs(nt.scaleX)
+    nt.scaleY = Math.abs(nt.scaleY)
   }
   console.log(`[MIRROR:applyMirrorToTransform] plane=${plane} AFTER={x:${nt.x}, y:${nt.y}, z:${nt.z}, rotX:${nt.rotX}, rotY:${nt.rotY}, rotZ:${nt.rotZ}, scaleX:${nt.scaleX}, scaleY:${nt.scaleY}, scaleZ:${nt.scaleZ}}`)
   return nt

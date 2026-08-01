@@ -127,41 +127,41 @@ describe('applyMirrorToTransform', () => {
 
   it('mirrors rotation and scale: axes IN the plane change sign (MIRROR-6)', () => {
     // YZ plane: X is perpendicular → rotX/scaleX UNCHANGED
-    //           Y/Z are in plane → rotY/rotZ/scaleY/scaleZ negated
+    //           Y/Z are in plane → rotY/rotZ negated, scaleY/scaleZ = abs()
     const t: RebuildTransform = { ...ID, rotX: 45, rotY: 30, rotZ: 15, scaleX: 2, scaleY: 3, scaleZ: 4, x: 5 }
     const result = applyMirrorToTransform(t, 'YZ')
     expect(result.rotX).toBe(45)   // YZ plane → rotX UNCHANGED (perpendicular axis)
     expect(result.rotY).toBe(-30)  // Y in plane → negated
     expect(result.rotZ).toBe(-15)  // Z in plane → negated
-    expect(result.scaleX).toBe(2)  // X in plane → UNCHANGED (perpendicular axis)
-    expect(result.scaleY).toBe(-3) // Y in plane → negated
-    expect(result.scaleZ).toBe(-4) // Z in plane → negated
+    expect(result.scaleX).toBe(2)  // X perpendicular → UNCHANGED
+    expect(result.scaleY).toBe(3)  // Y in plane → abs() (always positive)
+    expect(result.scaleZ).toBe(4)  // Z in plane → abs() (always positive)
   })
 
   it('mirrors rotation for XZ plane: Y is perpendicular', () => {
     // XZ plane: Y is perpendicular → rotY/scaleY UNCHANGED
-    //           X/Z are in plane → negated
+    //           X/Z are in plane → negated rot, abs scale
     const t: RebuildTransform = { ...ID, rotX: 45, rotY: 30, rotZ: 15, scaleX: 2, scaleY: 3, scaleZ: 4 }
     const result = applyMirrorToTransform(t, 'XZ')
     expect(result.rotX).toBe(-45)  // X in plane → negated
     expect(result.rotY).toBe(30)   // Y perpendicular → UNCHANGED
     expect(result.rotZ).toBe(-15)  // Z in plane → negated
-    expect(result.scaleX).toBe(-2)
-    expect(result.scaleY).toBe(3)
-    expect(result.scaleZ).toBe(-4)
+    expect(result.scaleX).toBe(2)  // X in plane → abs()
+    expect(result.scaleY).toBe(3)  // Y perpendicular → UNCHANGED
+    expect(result.scaleZ).toBe(4)  // Z in plane → abs()
   })
 
   it('mirrors rotation for XY plane: Z is perpendicular', () => {
     // XY plane: Z is perpendicular → rotZ/scaleZ UNCHANGED
-    //           X/Y are in plane → negated
+    //           X/Y are in plane → negated rot, abs scale
     const t: RebuildTransform = { ...ID, rotX: 45, rotY: 30, rotZ: 15, scaleX: 2, scaleY: 3, scaleZ: 4 }
     const result = applyMirrorToTransform(t, 'XY')
     expect(result.rotX).toBe(-45)  // X in plane → negated
     expect(result.rotY).toBe(-30)  // Y in plane → negated
     expect(result.rotZ).toBe(15)   // Z perpendicular → UNCHANGED
-    expect(result.scaleX).toBe(-2)
-    expect(result.scaleY).toBe(-3)
-    expect(result.scaleZ).toBe(4)
+    expect(result.scaleX).toBe(2)  // X in plane → abs()
+    expect(result.scaleY).toBe(3)  // Y in plane → abs()
+    expect(result.scaleZ).toBe(4)  // Z perpendicular → UNCHANGED
   })
 
   it('does not mutate input', () => {

@@ -676,20 +676,23 @@ function mirrorNodeRecursive(
     // Оси В ПЛОСКОСТИ меняют знак.
     //
     // YZ plane (perpendicular axis = X):
-    //   pos.x → -x, rotX unchanged, scaleX unchanged
-    //   pos.y/z → mirrored, rotY/rotZ negated, scaleY/scaleZ negated
+    //   pos.x → -x, rotX unchanged, scaleX = abs()
+    //   pos.y/z → mirrored, rotY/rotZ negated, scaleY/scaleZ = abs()
     // XZ plane (perpendicular axis = Y):
-    //   pos.y → -y, rotY unchanged, scaleY unchanged
-    //   pos.x/z → mirrored, rotX/rotZ negated, scaleX/scaleZ negated
+    //   pos.y → -y, rotY unchanged, scaleY = abs()
+    //   pos.x/z → mirrored, rotX/rotZ negated, scaleX/scaleZ = abs()
     // XY plane (perpendicular axis = Z):
-    //   pos.z → -z, rotZ unchanged, scaleZ unchanged
-    //   pos.x/y → mirrored, rotX/rotY negated, scaleX/scaleY negated
+    //   pos.z → -z, rotZ unchanged, scaleZ = abs()
+    //   pos.x/y → mirrored, rotX/rotY negated, scaleX/scaleY = abs()
+    //
+    // FIX (MIRROR-SCALE): Scale is always positive (abs). Mirror geometry
+    // is done via matrix transform, NOT via negative scale.
     const newRotX = plane === 'YZ' ? t.rotX : -t.rotX
     const newRotY = plane === 'XZ' ? t.rotY : -t.rotY
     const newRotZ = plane === 'XY' ? t.rotZ : -t.rotZ
-    const newScaleX = plane === 'YZ' ? t.scaleX : -t.scaleX
-    const newScaleY = plane === 'XZ' ? t.scaleY : -t.scaleY
-    const newScaleZ = plane === 'XY' ? t.scaleZ : -t.scaleZ
+    const newScaleX = Math.abs(t.scaleX)
+    const newScaleY = Math.abs(t.scaleY)
+    const newScaleZ = Math.abs(t.scaleZ)
 
     node.localTransform = {
       ...t,
@@ -709,15 +712,16 @@ function mirrorNodeRecursive(
 
   if (node.type === 'baked' && node.localTransform) {
     // FIX (MIRROR-6): Same correct mirror logic for baked nodes.
+    // Scale always positive (abs). Mirror geometry via matrix, not negative scale.
     const t = node.localTransform
     const mirroredPos = mirrorPoint({ x: t.x, y: t.y, z: t.z }, plane, center)
 
     const newRotX = plane === 'YZ' ? t.rotX : -t.rotX
     const newRotY = plane === 'XZ' ? t.rotY : -t.rotY
     const newRotZ = plane === 'XY' ? t.rotZ : -t.rotZ
-    const newScaleX = plane === 'YZ' ? t.scaleX : -t.scaleX
-    const newScaleY = plane === 'XZ' ? t.scaleY : -t.scaleY
-    const newScaleZ = plane === 'XY' ? t.scaleZ : -t.scaleZ
+    const newScaleX = Math.abs(t.scaleX)
+    const newScaleY = Math.abs(t.scaleY)
+    const newScaleZ = Math.abs(t.scaleZ)
 
     node.localTransform = {
       ...t,

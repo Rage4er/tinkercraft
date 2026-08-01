@@ -1218,118 +1218,81 @@ export async function handleMirrorObject(msg: MirrorObjectMessage): Promise<void
 
   let mesh: MeshResult
 
-  // Для примитивов (shapeType и params присутствуют) — mirror делается через build tree.
-  // Если handleMirrorObject всё же вызван для примитива, строим свежий примитив,
-  // применяем mirror matrix (translate→mirror→translate back) и отражённые rot/scale.
-  // НЕ применяем newPos отдельно — mirror matrix уже включает translate-to-center.
+  // Для примитивов (shapeType и params присутствуют):
+  // 1. Строим примитив (origin)
+  // 2. Зеркалим геометрию относительно origin через mirror matrix
+  // 3. Применяем transform (отражённая позиция, отражённый rot, abs scale)
+  //
+  // FIX (MIRROR-GEOMETRY): Scale always positive (abs). Mirror geometry
+  // is done via matrix transform, NOT via negative scale. Negative scale
+  // = 180° flip, not a mirror reflection.
   if (msg.shapeType && msg.params) {
     const fresh = buildPrimitive(msg.shapeType, msg.params)
-    // 1. Translate to mirror center
-    const toCenter = buildTransformMatrix(
-      { x: mc.x, y: mc.y, z: mc.z },
-      { rotX: 0, rotY: 0, rotZ: 0 },
-      { scaleX: 1, scaleY: 1, scaleZ: 1 }
-    )
-    const atCenter = fresh.transform(toCenter)
-    safeDelete(fresh)
-    // 2. Mirror
-    const mirror = getMirrorMatrix(msg.plane)
-    const mirrored = atCenter.transform(mirror)
-    safeDelete(atCenter)
-    // 3. Translate back from center
-    const fromCenter = buildTransformMatrix(
-      { x: -mc.x, y: -mc.y, z: -mc.z },
-      { rotX: 0, rotY: 0, rotZ: 0 },
-      { scaleX: 1, scaleY: 1, scaleZ: 1 }
-    )
-    const fromCenterM = mirrored.transform(fromCenter)
-    safeDelete(mirrored)
 
-    // 4. Применяем отражённые rotation/scale (позиция НЕ применяется —
-    //    она уже baked в геометрию шагами 1-3)
+    // 1. Mirror geometry относительно origin
+    const mirrorMatrix = getMirrorMatrix(msg.plane)
+    const mirrored = fresh.transform(mirrorMatrix)
+    safeDelete(fresh)
+
+    // 2. Apply transform (отражённая позиция, отражённый rot, abs scale)
     if (msg.transform) {
       const t = msg.transform
-      const reflectedRot = {
-        rotX: msg.plane === 'YZ' ? -t.rotX : t.rotX,
-        rotY: msg.plane === 'XZ' ? -t.rotY : t.rotY,
-        rotZ: msg.plane === 'XY' ? -t.rotZ : t.rotZ,
-      }
-      const reflectedScale = {
-        scaleX: msg.plane === 'YZ' ? -t.scaleX : t.scaleX,
-        scaleY: msg.plane === 'XZ' ? -t.scaleY : t.scaleY,
-        scaleZ: msg.plane === 'XY' ? -t.scaleZ : t.scaleZ,
-      }
       const transformMatrix = buildTransformMatrix(
-        { x: 0, y: 0, z: 0 }, // позиция уже в геометрии
-        { rotX: reflectedRot.rotX, rotY: reflectedRot.rotY, rotZ: reflectedRot.rotZ },
-        { scaleX: reflectedScale.scaleX, scaleY: reflectedScale.scaleY, scaleZ: reflectedScale.scaleZ }
+        { x: t.x, y: t.y, z: t.z },
+        { rotX: t.rotX, rotY: t.rotY, rotZ: t.rotZ },
+        {
+          scaleX: Math.abs(t.scaleX),
+          scaleY: Math.abs(t.scaleY),
+          scaleZ: Math.abs(t.scaleZ),
+        }
       )
-      const fullyTransformed = fromCenterM.transform(transformMatrix)
-      safeDelete(fromCenterM)
-      setCached(msg.objId, fullyTransformed)
-      mesh = extractMesh(fullyTransformed)
+      const transformed = mirrored.transform(transformMatrix)
+      safeDelete(mirrored)
+      setCached(msg.objId, transformed)
+      mesh = extractMesh(transformed)
     } else {
-      setCached(msg.objId, fromCenterM)
-      mesh = extractMesh(fromCenterM)
+      setCached(msg.objId, mirrored)
+      mesh = extractMesh(mirrored)
     }
   }
-  // Для CSG / импорта (shapeType/params отсутствуют) — сдвигаем к origin, зеркалим
+  // Для CSG / импорта (shapeType/params отсутствуют):
+  // 1. Translate к origin
+  // 2. Mirror геометрии
+  // 3. Geometry возвращается в origin (центрирована)
+  // 4. Transform = mirrored позиция
+  //
+  // FIX (MIRROR-GEOMETRY): Scale always positive (abs). Mirror geometry
+  // is done via matrix transform relative to origin.
   else {
     if (!msg.transform) throw new Error(`Transform is required for CSG/import objects`)
 
     const t = msg.transform
 
-    // Вычисляем новую позицию после mirror относительно mirrorCenter:
-    // newPos = 2 * mirrorCenter - originalPos
-    const newPos = {
-      x: 2 * mc.x - t.x,
-      y: 2 * mc.y - t.y,
-      z: 2 * mc.z - t.z,
-    }
-
-    // Отражённые rotation и scale (MIRROR-6: axes IN the plane change sign)
-    // YZ plane: X perpendicular → rotX/scaleX UNCHANGED, Y/Z negated
-    // XZ plane: Y perpendicular → rotY/scaleY UNCHANGED, X/Z negated
-    // XY plane: Z perpendicular → rotZ/scaleZ UNCHANGED, X/Y negated
-    const reflectedRot = {
-      rotX: msg.plane === 'YZ' ? t.rotX : -t.rotX,
-      rotY: msg.plane === 'XZ' ? t.rotY : -t.rotY,
-      rotZ: msg.plane === 'XY' ? t.rotZ : -t.rotZ,
-    }
-    const reflectedScale = {
-      scaleX: msg.plane === 'YZ' ? t.scaleX : -t.scaleX,
-      scaleY: msg.plane === 'XZ' ? t.scaleY : -t.scaleY,
-      scaleZ: msg.plane === 'XY' ? t.scaleZ : -t.scaleZ,
-    }
-
-    // 1. Translate to mirror center
-    const toCenter = buildTransformMatrix(
-      { x: mc.x, y: mc.y, z: mc.z },
-      { rotX: 0, rotY: 0, rotZ: 0 },
-      { scaleX: 1, scaleY: 1, scaleZ: 1 }
-    )
-    const atCenter = src.transform(toCenter)
-    // 2. Mirror
-    const mirror = getMirrorMatrix(msg.plane)
-    const mirrored = atCenter.transform(mirror)
-    safeDelete(atCenter)
-    // 3. Translate back from center
-    const fromCenter = buildTransformMatrix(
+    // 1. Translate to origin
+    const toOrigin = buildTransformMatrix(
       { x: -mc.x, y: -mc.y, z: -mc.z },
       { rotX: 0, rotY: 0, rotZ: 0 },
       { scaleX: 1, scaleY: 1, scaleZ: 1 }
     )
-    const fromCenterM = mirrored.transform(fromCenter)
-    safeDelete(mirrored)
+    const atOrigin = src.transform(toOrigin)
+    safeDelete(src)
+    // 2. Mirror (относительно origin)
+    const mirrorMatrix = getMirrorMatrix(msg.plane)
+    const mirrored = atOrigin.transform(mirrorMatrix)
+    safeDelete(atOrigin)
 
-    // 4. Применяем трансформацию с НОВОЙ позицией (отражённые rotation/scale)
+    // 3. Применяем rotation/scale (position=0, geometry в origin)
     const transformMatrix = buildTransformMatrix(
-      { x: newPos.x, y: newPos.y, z: newPos.z },
-      { rotX: reflectedRot.rotX, rotY: reflectedRot.rotY, rotZ: reflectedRot.rotZ },
-      { scaleX: reflectedScale.scaleX, scaleY: reflectedScale.scaleY, scaleZ: reflectedScale.scaleZ }
+      { x: 0, y: 0, z: 0 },
+      { rotX: t.rotX, rotY: t.rotY, rotZ: t.rotZ },
+      {
+        scaleX: Math.abs(t.scaleX),
+        scaleY: Math.abs(t.scaleY),
+        scaleZ: Math.abs(t.scaleZ),
+      }
     )
-    const fullyTransformed = fromCenterM.transform(transformMatrix)
-    safeDelete(fromCenterM)
+    const fullyTransformed = mirrored.transform(transformMatrix)
+    safeDelete(mirrored)
 
     setCached(msg.objId, fullyTransformed)
     mesh = extractMesh(fullyTransformed)

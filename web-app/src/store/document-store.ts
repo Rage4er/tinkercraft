@@ -23,6 +23,7 @@ import {
   workerMirrorObject, workerRebuildScene,
   workerDeleteObjects, workerClearAll, workerSyncObjects, workerSyncMesh,
 } from '../csg/worker-client'
+import type { MeshResult } from '../csg/worker-handlers'
 import { parseDoodle, serializeDoodle, openDoodleFilePicker, downloadBlob } from '../io/doodle-io'
 import { notify } from './notifications'
 import { saveProject as pmSave, updateProject as pmUpdate, loadProject as pmLoad } from '../io/project-manager'
@@ -616,19 +617,52 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       // Compute mirror for first selected object only (preview)
       const id = ids[0]
       const obj = objects[id]
-      const treeExists = getNode(id) !== undefined
-      if (!treeExists) {
-        if (obj.shapeType && obj.params) {
-          createPrimitiveNode(id, obj.shapeType, obj.params, obj.transform)
-        } else {
-          createBakedNode(id, obj.vertices || new Float32Array(), obj.indices || new Uint32Array(), obj.normals || null, obj.transform)
+
+      let mesh: MeshResult
+
+      // For primitives and CSG results: use workerMirrorObject (mirror geometry via matrix)
+      const isCsgResult = obj.shapeType === 'cube' && obj.params && !obj.params.width
+      if ((obj.shapeType && obj.params) || isCsgResult) {
+        const mirroredTransform = isCsgResult
+          ? {
+            x: 0, y: 0, z: 0,  // geometry already positioned by worker
+            rotX: 0, rotY: 0, rotZ: 0,  // rotation already baked in geometry
+            scaleX: 1, scaleY: 1, scaleZ: 1,  // scale already baked in geometry
+          }
+          : {
+            x: 2 * mirrorCenter.x - obj.transform.x,
+            y: 2 * mirrorCenter.y - obj.transform.y,
+            z: 2 * mirrorCenter.z - obj.transform.z,
+            rotX: plane === 'YZ' ? obj.transform.rotX : -obj.transform.rotX,
+            rotY: plane === 'XZ' ? obj.transform.rotY : -obj.transform.rotY,
+            rotZ: plane === 'XY' ? obj.transform.rotZ : -obj.transform.rotZ,
+            scaleX: Math.abs(obj.transform.scaleX),
+            scaleY: Math.abs(obj.transform.scaleY),
+            scaleZ: Math.abs(obj.transform.scaleZ),
+          }
+        mesh = await workerMirrorObject(
+          id, plane,
+          isCsgResult ? undefined : obj.shapeType,
+          isCsgResult ? undefined : (obj.params as unknown as Record<string, number>),
+          mirroredTransform, mirrorCenter,
+        )
+      } else {
+        // For import_mesh: use build tree
+        const treeExists = getNode(id) !== undefined
+        if (!treeExists) {
+          if (obj.shapeType && obj.params) {
+            createPrimitiveNode(id, obj.shapeType, obj.params, obj.transform)
+          } else {
+            createBakedNode(id, obj.vertices || new Float32Array(), obj.indices || new Uint32Array(), obj.normals || null, obj.transform)
+          }
         }
+        syncNodeTransform(id, obj.transform)
+        const treeId = `mirror_preview_${nextId()}`
+        cloneSubtree(id, treeId)
+        mirrorTreeNode(treeId, plane, mirrorCenter)
+        const rebuilt = await rebuildNode(treeId)
+        mesh = rebuilt as unknown as MeshResult
       }
-      syncNodeTransform(id, obj.transform)
-      const treeId = `mirror_preview_${nextId()}`
-      cloneSubtree(id, treeId)
-      mirrorTreeNode(treeId, plane, mirrorCenter)
-      const mesh = await rebuildNode(treeId)
       // Store preview mesh in ui-store
       setMirrorPreviewMesh({
         vertices: mesh.vertices,
@@ -681,22 +715,71 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         originalIds.push(id)
         const obj = objects[id]
 
-        // Non-manifold geometry (imported STL, 3D text) cannot be mirrored
-        // through build tree — use workerMirrorObject directly
-        if (obj.shapeType === 'import_mesh') {
-          // Mirror via workerMirrorObject (operates on mesh level, bypasses build tree)
-          const mesh = await workerMirrorObject(id, plane, undefined, undefined, {
-            x: obj.transform.x, y: obj.transform.y, z: obj.transform.z,
-            rotX: obj.transform.rotX, rotY: obj.transform.rotY, rotZ: obj.transform.rotZ,
-            scaleX: obj.transform.scaleX, scaleY: obj.transform.scaleY, scaleZ: obj.transform.scaleZ,
-          }, mirrorCenter)
-          // Center the mirrored mesh and compute transform from centroid
-          const { cx, cy, cz, aabb } = extractAndCenterGetAABB(mesh.vertices)
-          const resultTransform: TransformNR = {
-            x: cx, y: cy, z: cz,
-            rotX: 0, rotY: 0, rotZ: 0,
-            scaleX: 1, scaleY: 1, scaleZ: 1,
-          }
+        // Mirror via workerMirrorObject for:
+        // 1. import_mesh (non-manifold geometry)
+        // 2. Parametric primitives (shapeType + params)
+        // 3. CSG results (shapeType='cube' but params empty — baked geometry, need matrix mirror)
+        const isCsgResult = obj.shapeType === 'cube' && obj.params && !obj.params.width
+        if (obj.shapeType === 'import_mesh' || (obj.shapeType && obj.params) || isCsgResult) {
+          // Mirror via workerMirrorObject (mirror geometry via matrix transform).
+          // For import_mesh: geometry mirrored relative to mirrorCenter.
+          // For primitives: geometry mirrored relative to origin, transform applied with mirrored params.
+          // For CSG results: geometry mirrored relative to mirrorCenter, transform passed through.
+          const mirroredTransform = obj.shapeType === 'import_mesh' || isCsgResult
+            ? {
+              x: 0, y: 0, z: 0,  // position already baked in geometry, worker handles positioning
+              rotX: 0, rotY: 0, rotZ: 0,  // rotation already baked in geometry
+              scaleX: 1, scaleY: 1, scaleZ: 1,  // scale already baked in geometry
+            }
+            : {
+              // Parametric: mirrored position, reflected rotation, absolute scale
+              x: 2 * mirrorCenter.x - obj.transform.x,
+              y: 2 * mirrorCenter.y - obj.transform.y,
+              z: 2 * mirrorCenter.z - obj.transform.z,
+              rotX: plane === 'YZ' ? obj.transform.rotX : -obj.transform.rotX,
+              rotY: plane === 'XZ' ? obj.transform.rotY : -obj.transform.rotY,
+              rotZ: plane === 'XY' ? obj.transform.rotZ : -obj.transform.rotZ,
+              scaleX: Math.abs(obj.transform.scaleX),
+              scaleY: Math.abs(obj.transform.scaleY),
+              scaleZ: Math.abs(obj.transform.scaleZ),
+            }
+
+          const mesh = await workerMirrorObject(
+            id, plane,
+            obj.shapeType === 'import_mesh' || isCsgResult ? undefined : obj.shapeType,
+            obj.shapeType === 'import_mesh' || isCsgResult ? undefined : (obj.params as unknown as Record<string, number>),
+            mirroredTransform,
+            mirrorCenter,
+          )
+          // For CSG/import: geometry is already mirrored and centered in worker.
+          // Transform = mirrored position (geometry centered at origin, positioned by transform).
+          // Correct mirror math: perpendicular axis negated, axes IN plane unchanged.
+          const mirroredPos = obj.shapeType === 'import_mesh' || isCsgResult
+            ? (() => {
+              const t = obj.transform
+              if (plane === 'YZ') {
+                // YZ plane: X perpendicular → negated, Y/Z unchanged
+                return { x: -t.x, y: t.y, z: t.z, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
+              }
+              if (plane === 'XZ') {
+                // XZ plane: Y perpendicular → negated, X/Z unchanged
+                return { x: t.x, y: -t.y, z: t.z, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
+              }
+              // XY plane: Z perpendicular → negated, X/Y unchanged
+              return { x: t.x, y: t.y, z: -t.z, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
+            })()
+            : {
+              x: Math.round(mirroredTransform.x * 1e6) / 1e6,
+              y: Math.round(mirroredTransform.y * 1e6) / 1e6,
+              z: Math.round(mirroredTransform.z * 1e6) / 1e6,
+              rotX: mirroredTransform.rotX,
+              rotY: mirroredTransform.rotY,
+              rotZ: mirroredTransform.rotZ,
+              scaleX: mirroredTransform.scaleX,
+              scaleY: mirroredTransform.scaleY,
+              scaleZ: mirroredTransform.scaleZ,
+            }
+          const resultTransform: TransformNR = mirroredPos
           const newId = nextId()
           const newObj = makeObject({
             ...obj,
