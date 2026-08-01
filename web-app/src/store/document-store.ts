@@ -182,6 +182,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const newObjects = { ...objects, [id]: obj }
       // Register in build tree BEFORE caching snapshot
       createPrimitiveNode(id, shapeType, finalParams, transform)
+      console.log(`[MIRROR:addShape] id=${id} shapeType=${shapeType} params=${JSON.stringify(finalParams)} transform={x:${transform.x}, y:${transform.y}, z:${transform.z}, rotX:${transform.rotX}, rotY:${transform.rotY}, rotZ:${transform.rotZ}, scaleX:${transform.scaleX}, scaleY:${transform.scaleY}, scaleZ:${transform.scaleZ}}`)
       set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true, busy: false, lastCsgMs: ms })
       cacheSnapshotWithTree(newOps.length, newObjects)
     } catch (e) { set({ busy: false }); console.error('addShape:', e); notify('Ошибка создания фигуры', 'error') }
@@ -509,6 +510,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     }
     // Sync the new transform to the tree node (for future CSG/mirror/align ops)
     syncNodeTransform(id, newTransform)
+    console.log(`[MIRROR:moveObject] id=${id} newTransform={x:${newTransform.x}, y:${newTransform.y}, z:${newTransform.z}, rotX:${newTransform.rotX}, rotY:${newTransform.rotY}, rotZ:${newTransform.rotZ}, scaleX:${newTransform.scaleX}, scaleY:${newTransform.scaleY}, scaleZ:${newTransform.scaleZ}}`)
 
     // Update SceneObject — vertices unchanged, only transform changes
     const newObj: SceneObject = { ...obj, transform: newTransform }
@@ -581,21 +583,23 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   /**
    * Preview mirror result without saving to history (MIRROR-2).
    * Computes the mirrored mesh and stores it in ui-store for semi-transparent preview.
+   *
+   * FIX (CRIT-MIRROR-1): Do NOT set busy=true. This is a non-destructive preview
+   * operation that should NOT block mirrorSelected or other user actions.
+   * Setting busy=true caused previewMirror to block mirrorSelected when the
+   * user clicked the mirror button while preview was still computing.
    */
   previewMirror: async (plane: 'XY' | 'XZ' | 'YZ') => {
-    // FIX (CRIT-PERF-2): Set busy=true immediately to prevent parallel calls
-    // from mirrorSelected or csgBoolean while preview is computing.
-    if (get().busy) return
-    set({ busy: true })
+    // NO busy check — preview is non-blocking
+    const { selectedIds, objects } = get()
+    const ids = selectedIds.filter(id => objects[id])
+    if (ids.length === 0) return
+    // Dynamically import ui-store to avoid circular dependency
+    const { useUiStore } = await import('./ui-store')
+    const setMirrorPreviewMesh = useUiStore.getState().setMirrorPreviewMesh
+    // Clear preview on any plane — will be re-set below
+    setMirrorPreviewMesh(null)
     try {
-      const { selectedIds, objects } = get()
-      const ids = selectedIds.filter(id => objects[id])
-      if (ids.length === 0) return
-      // Dynamically import ui-store to avoid circular dependency
-      const { useUiStore } = await import('./ui-store')
-      const setMirrorPreviewMesh = useUiStore.getState().setMirrorPreviewMesh
-      // Clear preview on any plane — will be re-set below
-      setMirrorPreviewMesh(null)
       const bboxes = ids.map(id => {
         const obj = objects[id]
         return obj.aabb ?? computeAABB(obj.vertices)
@@ -604,6 +608,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const centerY = bboxes.reduce((s, b) => s + (b.min.y + b.max.y) / 2, 0) / bboxes.length
       const centerZ = bboxes.reduce((s, b) => s + (b.min.z + b.max.z) / 2, 0) / bboxes.length
       const mirrorCenter = { x: centerX, y: centerY, z: centerZ }
+      console.log(`[MIRROR:previewMirror] plane=${plane} ids=[${ids.join(',')}] mirrorCenter={x:${mirrorCenter.x}, y:${mirrorCenter.y}, z:${mirrorCenter.z}}`)
 
       // Sync worker cache before mirror preview
       await syncObjectsForOperation(ids, objects)
@@ -624,19 +629,14 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       cloneSubtree(id, treeId)
       mirrorTreeNode(treeId, plane, mirrorCenter)
       const mesh = await rebuildNode(treeId)
-      // Center the mirrored mesh and compute centroid for positioning
-      const { cx, cy, cz } = extractAndCenterGetAABB(mesh.vertices)
-      // Store preview mesh in ui-store with center for correct positioning
+      // Store preview mesh in ui-store
       setMirrorPreviewMesh({
         vertices: mesh.vertices,
         indices: mesh.indices,
         normals: mesh.normals ?? null,
-        center: { x: cx, y: cy, z: cz },
       })
     } catch (e) {
-      set({ busy: false })
       console.error('previewMirror:', e)
-      notify('Ошибка предпросмотра зеркала', 'error')
       // Try to clear preview
       try {
         const { useUiStore } = await import('./ui-store')
@@ -662,6 +662,11 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const centerY = bboxes.reduce((s, b) => s + (b.min.y + b.max.y) / 2, 0) / bboxes.length
       const centerZ = bboxes.reduce((s, b) => s + (b.min.z + b.max.z) / 2, 0) / bboxes.length
       const mirrorCenter = { x: centerX, y: centerY, z: centerZ }
+      console.log(`[MIRROR:mirrorSelected] plane=${plane} mirrorCenter={x:${mirrorCenter.x}, y:${mirrorCenter.y}, z:${mirrorCenter.z}}`)
+      for (const id of ids) {
+        const obj = objects[id]
+        console.log(`[MIRROR:mirrorSelected] BEFORE id=${id} shapeType=${obj.shapeType} transform={x:${obj.transform.x}, y:${obj.transform.y}, z:${obj.transform.z}, rotX:${obj.transform.rotX}, rotY:${obj.transform.rotY}, rotZ:${obj.transform.rotZ}, scaleX:${obj.transform.scaleX}, scaleY:${obj.transform.scaleY}, scaleZ:${obj.transform.scaleZ}}`)
+      }
 
       // Sync worker cache before mirror — fixes stale cache after undo/redo
       await syncObjectsForOperation(ids, objects)
@@ -776,6 +781,12 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
 
         // Удаляем временную зеркальную ноду из дерева
         deleteNode(treeId)
+      }
+
+      // Log AFTER mirror: each new copy's transform
+      for (const newId of newIds) {
+        const newObj = newObjects[newId]
+        console.log(`[MIRROR:mirrorSelected] AFTER id=${newId} shapeType=${newObj.shapeType} transform={x:${newObj.transform.x}, y:${newObj.transform.y}, z:${newObj.transform.z}, rotX:${newObj.transform.rotX}, rotY:${newObj.transform.rotY}, rotZ:${newObj.transform.rotZ}, scaleX:${newObj.transform.scaleX}, scaleY:${newObj.transform.scaleY}, scaleZ:${newObj.transform.scaleZ}}`)
       }
 
       // Clean up fallback nodes that were created for objects
@@ -1010,6 +1021,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         const newObjects = { ...objects, [id]: newObj }
 
         set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true, busy: false, lastCsgMs: ms })
+        console.log(`[MIRROR:resizeObject] id=${id} newParams=${JSON.stringify(mergedParams)}`)
         cacheSnapshotWithTree(newOps.length, newObjects)
       } catch (e) { set({ busy: false }); console.error('resizeObject:', e); notify('Ошибка изменения размера', 'error') }
     }
@@ -1058,6 +1070,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         const newObjects = { ...objects, [id]: newObj }
 
         set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true, busy: false })
+        console.log(`[MIRROR:resizeObject] id=${id} newTransform={x:${newTransform.x}, y:${newTransform.y}, z:${newTransform.z}, rotX:${newTransform.rotX}, rotY:${newTransform.rotY}, rotZ:${newTransform.rotZ}, scaleX:${newTransform.scaleX}, scaleY:${newTransform.scaleY}, scaleZ:${newTransform.scaleZ}}`)
         cacheSnapshotWithTree(newOps.length, newObjects)
       } catch (e) { set({ busy: false }); console.error('resizeObject (CSG):', e); notify('Ошибка изменения размера CSG-объекта', 'error') }
     }

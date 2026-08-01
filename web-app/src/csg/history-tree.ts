@@ -684,6 +684,7 @@ function mirrorNodeRecursive(
       scaleY: plane === 'XZ' ? -t.scaleY : t.scaleY,
       scaleZ: plane === 'XY' ? -t.scaleZ : t.scaleZ,
     }
+    console.log(`[MIRROR:mirrorNodeRecursive] nodeId=${node.id} type=primitive plane=${plane} center={x:${center.x}, y:${center.y}, z:${center.z}} localTransform={x:${node.localTransform.x}, y:${node.localTransform.y}, z:${node.localTransform.z}, rotX:${node.localTransform.rotX}, rotY:${node.localTransform.rotY}, rotZ:${node.localTransform.rotZ}, scaleX:${node.localTransform.scaleX}, scaleY:${node.localTransform.scaleY}, scaleZ:${node.localTransform.scaleZ}}`)
     return
   }
 
@@ -705,6 +706,7 @@ function mirrorNodeRecursive(
       scaleY: plane === 'XZ' ? -t.scaleY : t.scaleY,
       scaleZ: plane === 'XY' ? -t.scaleZ : t.scaleZ,
     }
+    console.log(`[MIRROR:mirrorNodeRecursive] nodeId=${node.id} type=baked plane=${plane} center={x:${center.x}, y:${center.y}, z:${center.z}} localTransform={x:${node.localTransform.x}, y:${node.localTransform.y}, z:${node.localTransform.z}, rotX:${node.localTransform.rotX}, rotY:${node.localTransform.rotY}, rotZ:${node.localTransform.rotZ}, scaleX:${node.localTransform.scaleX}, scaleY:${node.localTransform.scaleY}, scaleZ:${node.localTransform.scaleZ}}`)
     return
   }
 

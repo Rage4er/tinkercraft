@@ -11,9 +11,7 @@
 
 ### Fixed
 
-- **MIRROR-PREVIEW-CENTER**: `previewMirror` — меш превью теперь центрируется через `extractAndCenterGetAABB`, центроид (`cx,cy,cz`) передаётся в `setMirrorPreviewMesh` как `center`. В `useMirrorPreview` центр используется для `pivot.position.set()`, а не через `centerGeometry()` (который центрировал уже центрированные вершины → (0,0,0)). Обновлён интерфейс `MirrorPreviewMesh` с опциональным полем `center` (`viewport-hooks.ts`, `document-store.ts`, `ui-store.ts`)
-- **MIRROR-BOOLEAN-RESET**: `mirrorSelected` — удалён вызов `resetSubtreeTransform` для boolean-нод после `cloneSubtree`. `mirrorTreeNode` уже изменил `localTransform` у примитивов в поддереве (отразил позицию/ротацию/scale). `resetSubtreeTransform` затирал эти изменения → boolean-нода теряла отражение (`document-store.ts`)
-- **MIRROR-DOUBLE-POS**: `handleMirrorObject` — для примитивов (if-ветка) убрано двойное применение позиции: шаги 1-3 (translate→mirror→translate back) уже учитывают mirrorCenter, шаг 4 применяет только отражённые rot/scale (позиция = 0). Для import_mesh (else-ветка) логика сохранена: translate→mirror→translate back + transform с `newPos = 2*mirrorCenter - originalPos` и отражёнными rot/scale (`worker-handlers.ts`)
+- **MIRROR-1**: `previewMirror` больше НЕ устанавливает `busy=true` — это non-blocking preview operation, который не должен блокировать `mirrorSelected`. Ранее hover на кнопку mirror устанавливал busy, и клик по mirror возвращался из-за `if (get().busy) return`
 - **CRIT-CSG-1**: `handleCsgBooleanSync` — теперь **всегда** sync-ит operands из shapeType/params, независимо от состояния кэша. Ранее пропускал sync если operand уже был в кэше, что приводило к использованию stale-позиций и удалению operand из кэша после boolean → "Objects not found" при следующей операции
 - **CRIT-CSG-2**: CSG-результаты теперь регистрируются как **baked-ноды** вместо boolean-нод. Геометрия уже вычислена и центрирована, не нужно пересчитывать через дерево с children
 - **CRIT-CSG-3**: `csgBoolean` — больше **не отправляет** shapeType/params для CSG-результатов (`shapeType='cube', params={}`). Ранее это приводило к созданию default cube 20x20x20 вместо actual CSG-геометрии
@@ -24,6 +22,7 @@
 ### Added
 
 - **DIAG-CSG**: Диагностические логи в `handleCsgBooleanSync` и `handleSyncMesh` для отладки CSG operations
+- **DIAG-MIRROR**: Подробные диагностические логи `[MIRROR:*]` для отслеживания жизненного цикла mirror: `addShape`, `moveObject`, `resizeObject`, `previewMirror`, `mirrorSelected` (BEFORE/AFTER), `mirrorNodeRecursive`, `applyMirrorToTransform`
 - **PERF-MIRROR**: `previewMirror` теперь устанавливает `busy=true` в начале функции, предотвращая параллельные вызовы с `mirrorSelected`/`csgBoolean`
 
 ### Changed
