@@ -752,33 +752,35 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
             mirrorCenter,
           )
           // For CSG/import: geometry is already mirrored and centered in worker.
-          // Transform = mirrored position (geometry centered at origin, positioned by transform).
+          // Transform = mirrored position + reflected rotation + abs scale.
           // Correct mirror math: perpendicular axis negated, axes IN plane unchanged.
-          const mirroredPos = obj.shapeType === 'import_mesh' || isCsgResult
-            ? (() => {
+          const mirroredPos = obj.shapeType === 'import_mesh'
+            ? { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
+            : (() => {
               const t = obj.transform
               if (plane === 'YZ') {
                 // YZ plane: X perpendicular → negated, Y/Z unchanged
-                return { x: -t.x, y: t.y, z: t.z, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
+                return {
+                  x: -t.x, y: t.y, z: t.z,
+                  rotX: t.rotX, rotY: -t.rotY, rotZ: -t.rotZ,
+                  scaleX: Math.abs(t.scaleX), scaleY: Math.abs(t.scaleY), scaleZ: Math.abs(t.scaleZ),
+                }
               }
               if (plane === 'XZ') {
                 // XZ plane: Y perpendicular → negated, X/Z unchanged
-                return { x: t.x, y: -t.y, z: t.z, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
+                return {
+                  x: t.x, y: -t.y, z: t.z,
+                  rotX: -t.rotX, rotY: t.rotY, rotZ: -t.rotZ,
+                  scaleX: Math.abs(t.scaleX), scaleY: Math.abs(t.scaleY), scaleZ: Math.abs(t.scaleZ),
+                }
               }
               // XY plane: Z perpendicular → negated, X/Y unchanged
-              return { x: t.x, y: t.y, z: -t.z, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
+              return {
+                x: t.x, y: t.y, z: -t.z,
+                rotX: -t.rotX, rotY: -t.rotY, rotZ: t.rotZ,
+                scaleX: Math.abs(t.scaleX), scaleY: Math.abs(t.scaleY), scaleZ: Math.abs(t.scaleZ),
+              }
             })()
-            : {
-              x: Math.round(mirroredTransform.x * 1e6) / 1e6,
-              y: Math.round(mirroredTransform.y * 1e6) / 1e6,
-              z: Math.round(mirroredTransform.z * 1e6) / 1e6,
-              rotX: mirroredTransform.rotX,
-              rotY: mirroredTransform.rotY,
-              rotZ: mirroredTransform.rotZ,
-              scaleX: mirroredTransform.scaleX,
-              scaleY: mirroredTransform.scaleY,
-              scaleZ: mirroredTransform.scaleZ,
-            }
           const resultTransform: TransformNR = mirroredPos
           const newId = nextId()
           const newObj = makeObject({
