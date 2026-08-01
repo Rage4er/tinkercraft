@@ -113,24 +113,26 @@ describe('buildRebuildMeta: add_shape → move (scale)', () => {
 })
 
 describe('buildRebuildMeta: mirror (negate position)', () => {
-  it('mirrors across YZ plane negates X and scaleX', () => {
+  it('mirrors across YZ plane: X perpendicular → scaleX unchanged, scaleY/scaleZ negated', () => {
     const ops: TinkerCraftOperation[] = [
       makeAddShape('a', 'cube', { width: 20, height: 20, depth: 20 }),
-      makeMoveWithScale(['a'], { x: 10, y: 20, z: 30 }, { x: 1, y: 1, z: 1 }), // scale 2
+      makeMoveWithScale(['a'], { x: 10, y: 20, z: 30 }, { x: 1, y: 1, z: 1 }), // scale: 2, 2, 2
       makeMirror(['a'], ['b'], 'YZ'),
     ]
     const { meta } = buildRebuildMeta(ops)
     // Original 'a' is unchanged
     expect(meta['a'].transform.x).toBe(10)
     expect(meta['a'].transform.scaleX).toBe(2)
-    // New object 'b' has mirrored position and negated scale along mirrored axis
+    // YZ mirror: X perpendicular → scaleX UNCHANGED, scaleY/scaleZ negated
     expect(meta['b'].transform.x).toBe(-10)
     expect(meta['b'].transform.y).toBe(20)
     expect(meta['b'].transform.z).toBe(30)
-    expect(meta['b'].transform.scaleX).toBe(-2)
+    expect(meta['b'].transform.scaleX).toBe(2)   // unchanged (perpendicular)
+    expect(meta['b'].transform.scaleY).toBe(-2)  // negated (in plane)
+    expect(meta['b'].transform.scaleZ).toBe(-2)  // negated (in plane)
   })
 
-  it('mirrors across XZ plane negates Y and scaleY', () => {
+  it('mirrors across XZ plane: Y perpendicular → scaleY unchanged, scaleX/scaleZ negated', () => {
     const ops: TinkerCraftOperation[] = [
       makeAddShape('a', 'cube', { width: 20, height: 20, depth: 20 }),
       makeMoveWithScale(['a'], { x: 10, y: 20, z: 30 }, { x: 0.5, y: 1, z: 1 }), // scale: 1.5, 2, 2
@@ -140,10 +142,12 @@ describe('buildRebuildMeta: mirror (negate position)', () => {
     expect(meta['b'].transform.x).toBe(10)
     expect(meta['b'].transform.y).toBe(-20)
     expect(meta['b'].transform.z).toBe(30)
-    expect(meta['b'].transform.scaleY).toBe(-2)
+    expect(meta['b'].transform.scaleX).toBe(-1.5)  // negated (in plane)
+    expect(meta['b'].transform.scaleY).toBe(2)     // unchanged (perpendicular)
+    expect(meta['b'].transform.scaleZ).toBe(-2)    // negated (in plane)
   })
 
-  it('mirrors across XY plane negates Z and scaleZ', () => {
+  it('mirrors across XY plane: Z perpendicular → scaleZ unchanged, scaleX/scaleY negated', () => {
     const ops: TinkerCraftOperation[] = [
       makeAddShape('a', 'cube', { width: 20, height: 20, depth: 20 }),
       makeMoveWithScale(['a'], { x: 10, y: 20, z: 30 }, { x: 1, y: 1, z: 2 }), // scale: 2, 2, 3
@@ -153,7 +157,9 @@ describe('buildRebuildMeta: mirror (negate position)', () => {
     expect(meta['b'].transform.x).toBe(10)
     expect(meta['b'].transform.y).toBe(20)
     expect(meta['b'].transform.z).toBe(-30)
-    expect(meta['b'].transform.scaleZ).toBe(-3)
+    expect(meta['b'].transform.scaleX).toBe(-2)   // negated (in plane)
+    expect(meta['b'].transform.scaleY).toBe(-2)   // negated (in plane)
+    expect(meta['b'].transform.scaleZ).toBe(3)    // unchanged (perpendicular)
   })
 
   it('preserves shapeType and params through mirror', () => {
@@ -176,12 +182,17 @@ describe('buildRebuildMeta: mirror (negate position)', () => {
       makeMirror(['a', 'c'], ['b', 'd'], 'YZ'),
     ]
     const { meta } = buildRebuildMeta(ops)
-    // a → b: X mirrored, scale negated along X axis
+    // YZ mirror: X is perpendicular → scaleX UNCHANGED, scaleY/scaleZ negated
+    // a → b: pos.x mirrored, rotY/rotZ negated, scaleY/scaleZ negated
     expect(meta['b'].transform.x).toBe(-10)
-    expect(meta['b'].transform.scaleX).toBe(-2)
-    // c → d: X mirrored, scale negated along X axis
+    expect(meta['b'].transform.scaleX).toBe(2)   // unchanged (perpendicular axis)
+    expect(meta['b'].transform.scaleY).toBe(-2)  // negated (in plane)
+    expect(meta['b'].transform.scaleZ).toBe(-2)  // negated (in plane)
+    // c → d: pos.x mirrored, rotY/rotZ negated, scaleY/scaleZ negated
     expect(meta['d'].transform.x).toBe(10)
-    expect(meta['d'].transform.scaleX).toBe(-3)
+    expect(meta['d'].transform.scaleX).toBe(3)   // unchanged (perpendicular axis)
+    expect(meta['d'].transform.scaleY).toBe(-3)  // negated (in plane)
+    expect(meta['d'].transform.scaleZ).toBe(-3)  // negated (in plane)
   })
 })
 

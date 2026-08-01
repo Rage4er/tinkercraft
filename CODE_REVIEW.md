@@ -11,43 +11,244 @@
 
 ## 📋 Активные проблемы
 
-### 🔴 Раунд 17 + SourceCraft — Код-ревью (15 проблем, верифицированы)
+### 🔴 Раунд 18 — Полное код-ревью (138 проблем)
 
-**Дата ревью:** 2025-07-31
-**Ревьюеры:** Koda AI, SourceCraft Code Assistant
-**Точность:** ~83% (12.5/15 подтверждено, 1 ошибка, 2 переоценки)
+**Дата ревью:** 2026-08-01
+**Ревьюер:** SourceCraft Code Assistant (Orchestrator + Ask режимы)
+**Объём:** 4 слоя (Store, CSG Worker, UI Components, IO) — 30+ файлов, ~5000 строк кода
 
-#### 🔴 Критические (2)
+#### Сводка по слоям
 
-| # | Проблема | Файл | Severity | Описание | Решение |
-|---|----------|------|----------|----------|---------|
-| | **CRIT-17-1** | [`history-tree.ts:275-282`](web-app/src/csg/history-tree.ts:275) | **CRITICAL** | `computeNodeHash` для boolean-узлов **не включает** `localTransform`. При изменении позиции/вращения/масштаба CSG-результата кэш не инвалидируется → stale данные. | Добавить `localTransform` в строку хеша boolean-узла: `return \`${node.operation}\|${tStr}\|${childHashes.join('|')}\`` |
-| | **CRIT-17-2** | [`document-store.ts:983-1026`](web-app/src/store/document-store.ts:983) | **CRITICAL** | В `resizeObject` (else-ветка для CSG-результатов) отсутствует `try/catch` вокруг `await rebuildNode(id)`. При ошибке — молчаливая неудача, объект не обновляется, пользователь не видит ошибки. | Обернуть блок в `try/catch` и вызвать `notify` при ошибке. |
+| Слой | Файлов | Critical | High | Medium | Low | Всего |
+|------|--------|----------|------|--------|-----|-------|
+| **Store** (document-store, ui-store, helpers, types, rebuild, snapshots, notifications) | 7 | 1 | 5 | 10 | 12 | **28** |
+| **CSG Worker** (worker, worker-client, worker-handlers, types, history-tree, tree-store, rebuildOps, worker-matrix, тесты) | 10 | 2 | 10 | 17 | 10 | **39** |
+| **UI Components** (Viewport3D, viewport-hooks, ViewCube, snap-utils, Toolbar, PropertiesPanel, Timeline, App, и др.) | 23 | 1 | 5 | 14 | 20 | **40** |
+| **IO** (stl-import, stl-export, doodle-io, autosave, project-manager, тесты) | 8 | 1 | 7 | 13 | 7 | **28** |
+| **Общие** | — | — | — | 2 | 1 | **3** |
+| **Итого** | **48** | **5** | **27** | **56** | **50** | **138** |
 
-#### 🟡 Среднее и высокое (5)
+---
 
-| # | Проблема | Файл | Severity | Описание | Решение |
-|---|----------|------|----------|----------|---------|
-| | **HIGH-1** | [`document-store.ts:341-680`](web-app/src/store/document-store.ts:341) | **HIGH** | Дублирование логики синхронизации Worker cache в 3+ местах (`csgBoolean`, `previewMirror`, `mirrorSelected`). ~100 строк почти идентичного кода. | Вынести в функцию `syncObjectsForOperation(ids, objects)` |
-| | **HIGH-2** | [`document-store.ts:820`](web-app/src/store/document-store.ts:820) | **HIGH** | `alignSelected` перестраивает меши примитивов через `workerBuildShape` вместо `workerSyncObjects`. Лишняя нагрузка на WASM (~5-10ms на объект). | Использовать `workerSyncObjects` для обновления только трансформации. |
-| | **HIGH-3** | [`history-tree.ts:214-238`](web-app/src/csg/history-tree.ts:214) | **MEDIUM** | `computeBakedBBox` применяет только translation (`+ transform.x/y/z`), игнорируя `rot` и `scale`. BBox вращённых/масштабированных STL мешей неверен → ломает Box Selection. | Использовать `buildTransformMatrix` для проекции вершин при вычислении BBox. |
-| | **HIGH-4** | [`document-store.ts:238-267`](web-app/src/store/document-store.ts:238) | **MEDIUM** | `pasteClipboard` не регистрирует вставленные объекты в Build Tree. Fallback-логика в `csgBoolean`/`mirrorSelected` создаёт `baked` ноду вместо `primitive` — потеря параметричности. | Добавить `createPrimitiveNode`/`createBakedNode` в `pasteClipboard`. |
-| | **HIGH-5** | [`document-store.ts:844-845`](web-app/src/store/document-store.ts:844) | **HIGH** | `rebuildBuildTree` существует, но **нигде не вызывается**. После `openDoodle`/`restoreAutosave` дерево сборки пусто → CSG/Mirror работают через медленные fallback. | Вызвать `rebuildBuildTree(ops)` после `rebuildFromHistory` в `undo`, `redo`, `openDoodle`, `restoreAutosave`. |
+### 🔴 Критические (5)
 
-#### 🟢 Низкое (8)
+| # | Проблема | Файл | Слой | Описание |
+|---|----------|------|------|----------|
+| | **CRIT-18-1** | [`document-store.ts:1148`](web-app/src/store/document-store.ts:1148) | Store | `extrudeSelected`: мутация `newObjects` (удаление `id`) до успешного завершения `workerCsgBoolean`. При ошибке — объект потерян из состояния. |
+| | **CRIT-18-2** | [`worker-handlers.ts:190-257`](web-app/src/csg/worker-handlers.ts:190) | CSG | `buildPrimitive` не проверяет отрицательные размеры (`width=-10`). Может привести к падению WASM. |
+| | **CRIT-18-3** | [`worker-sync.test.ts:1-38`](web-app/src/csg/worker-sync.test.ts:1) | CSG | Тесты синхронизации не проверяют логику — только типы. Дают ложное чувство безопасности. |
+| | **CRIT-18-4** | [`viewport-hooks.ts:446-468`](web-app/src/components/viewport-hooks.ts:446) | UI | Утечка памяти: старые `BufferAttribute` не диспоузятся при обновлении геометрии mesh. |
+| | **CRIT-18-5** | [`doodle-io.ts`](web-app/src/io/doodle-io.ts) | IO | Нет тестов для `doodle-io.ts` — основной формат сохранения проектов без покрытия. |
 
-| # | Проблема | Файл | Severity | Описание | Решение |
-|---|----------|------|----------|----------|---------|
-| | **LOW-1** | [`Viewport3D.tsx:704`](web-app/src/components/Viewport3D.tsx:704) | **MEDIUM** | `findNearestSnap` вызывается без `shapeTypeForMesh` → `circleCenter` всегда `null`. Circle-snap (центр объекта) недоступен. | Собрать маппинг `id → shapeType` из `meshMapRef` и передать в `findNearestSnap`. |
-| | **LOW-2** | [`Viewport3D.tsx:660-681`](web-app/src/components/Viewport3D.tsx:660) | **LOW** | `getWorldPointFromPointer` — мёртвый код (нигде не вызывается). Проецирует на Y=0, rulerMode на Z=0. | Удалить функцию. Рефакторить дублирование в ruler-коде. |
-| | **LOW-3** | [`document-store.ts`](web-app/src/store/document-store.ts) | **LOW** | `console.error` вместо `notify` в `applyFillet`, `mirrorSelected`, `csgBoolean`, `resizeObject`. Нет обратной связи для пользователя. | Заменить `console.error` на `notify(message, 'error')`. |
-| | **LOW-4** | [`document-store.ts:1068`](web-app/src/store/document-store.ts:1068) | **LOW** | `slabId` (временный куб для extrude) не удаляется из кэша воркера после CSG. Засорение кэша при многократной экструзии. | Вызвать `workerDeleteObjects([slabId])` после получения результата. |
-| | **LOW-5** | [`snapshots.ts`](web-app/src/store/snapshots.ts) | **LOW** | `Map<number, SceneObject>` растёт бесконечно. `SceneObject` содержит `Float32Array`. При长线-сессии (200+ операций) — 50-100MB. | Добавить LRU-стратегию (удаление старых snapshot'ов при превышении лимита). |
-| | **LOW-6** | [`document-store.ts:361-362`](web-app/src/store/document-store.ts:361) | **LOW** | `await syncOperand(idA)` / `await syncOperand(idB)` выполняются последовательно. | Заменить на `Promise.all([syncOperand(idA), syncOperand(idB)])`. |
-| | **LOW-7** | [`history-tree.ts:312`](web-app/src/csg/history-tree.ts:312) | **LOW** | `invalidateCache` рекурсивна без защиты. При повреждённом дереве — `RangeError: Maximum call stack size exceeded`. | Добавить счётчик глубины (guard clause, `MAX_DEPTH = 100`). |
-| | **LOW-8** | [`constants.ts:31-43`](web-app/src/constants.ts:31) | **LOW** | `OP_FILTER_LABELS` — смесь языков: "Добавить" (рус), "Move" (англ), "Resize" (англ). | Стандартизировать все метки на русский язык. |
+---
 
-### ❌ Отозванные проблемы (False Positives)
+### 🟡 Высокий приоритет (27)
+
+#### Store (5)
+
+| # | Проблема | Файл | Описание |
+|---|----------|------|----------|
+| | **HIGH-18-1** | [`document-store.ts:1029,1082`](web-app/src/store/document-store.ts:1029) | Мутация build tree через `Object.assign(node, ...)` и прямую запись `node.localTransform`. Нарушение иммутабельности Zustand. |
+| | **HIGH-18-2** | [`document-store.ts:113,414`](web-app/src/store/document-store.ts:113) | Эвристическое определение CSG-результата (`shapeType==='cube' && !params.width`). Хрупкое и ненадёжное. |
+| | **HIGH-18-3** | [`rebuild.ts:142-147`](web-app/src/store/rebuild.ts:142) | Расширение типа `RebuildMeta` через приведение в рантайме. Хрупкое и неочевидное. |
+| | **HIGH-18-4** | [`rebuild.ts:258,323`](web-app/src/store/rebuild.ts:258) | Потеря baked-нод для `import_mesh` при отсутствии параметра `objects` в `rebuildBuildTree`. |
+| | **HIGH-18-5** | [`rebuild.ts:70,85,98`](web-app/src/store/rebuild.ts:70) | Приведение типов через `as unknown as` для `TransformNR` → `RebuildTransform`. Обход системы типов. |
+
+#### CSG Worker (10)
+
+| # | Проблема | Файл | Описание |
+|---|----------|------|----------|
+| | **HIGH-18-6** | [`worker.ts:59-68`](web-app/src/csg/worker.ts:59) | `as unknown as` для всех сообщений воркера — полное отключение проверки типов. |
+| | **HIGH-18-7** | [`worker-client.ts:72`](web-app/src/csg/worker-client.ts:72) | Утечка обработчика `error` при `worker.terminate()` (HMR). Двойной reject при пересоздании воркера. |
+| | **HIGH-18-8** | [`worker-client.ts:230-235`](web-app/src/csg/worker-client.ts:230) | `transform?: any` — нарушение strict mode. |
+| | **HIGH-18-9** | [`worker-handlers.ts:204,206-212`](web-app/src/csg/worker-handlers.ts:204) | `sphere` с `radius <= 0` и `cylinder` с `height <= 0` — падение WASM. |
+| | **HIGH-18-10** | [`worker-handlers.ts:849,861`](web-app/src/csg/worker-handlers.ts:849) | `cache.get(id).transform()` без проверки на `null`. Падение при mirror/move non-manifold объектов. |
+| | **HIGH-18-11** | [`worker-handlers.ts:1143-1165`](web-app/src/csg/worker-handlers.ts:1143) | Утечка WASM-объектов в `handleCsgBooleanSync` — 2 manifold-объекта на каждую CSG операцию. |
+| | **HIGH-18-12** | [`history-tree.ts:450-452,507`](web-app/src/csg/history-tree.ts:450) | `Array.from(node.vertices)` — полное копирование TypedArray в `number[]` для больших мешей. |
+| | **HIGH-18-13** | [`tree-store.ts:11-73`](web-app/src/csg/tree-store.ts:11) | `TreeStore` — простой класс без реактивности. React-компоненты не узнают об изменениях. |
+| | **HIGH-18-14** | [`rebuildOps.ts:60-83`](web-app/src/csg/rebuildOps.ts:60) | Неверная инверсия `rotX` для mirror YZ. Неправильное поведение для повёрнутых объектов. |
+
+#### UI Components (5)
+
+| # | Проблема | Файл | Описание |
+|---|----------|------|----------|
+| | **HIGH-18-15** | [`viewport-hooks.ts:261`](web-app/src/components/viewport-hooks.ts:261) | `TransformControls` не диспоузится при размонтировании — утечка слушателей и WebGL-ресурсов. |
+| | **HIGH-18-16** | [`viewport-hooks.ts:767-836`](web-app/src/components/viewport-hooks.ts:767) | Потенциальная утечка в `useMirrorPreview` при переключении plane/mesh. |
+| | **HIGH-18-17** | [`ViewCube.tsx:142-145`](web-app/src/components/ViewCube.tsx:142) | Геометрии и материалы ViewCube не диспоузятся при размонтировании. |
+| | **HIGH-18-18** | [`App.tsx:229-264`](web-app/src/App.tsx:229) | `Ctrl+S` конфликтует с scale-гизмо; нет `return` после `e.preventDefault()`. |
+| | **HIGH-18-19** | [`stl-export.ts:88`](web-app/src/io/stl-export.ts:88) | Нет защиты от переполнения памяти при большом количестве треугольников в экспорте. |
+
+#### IO (7)
+
+| # | Проблема | Файл | Описание |
+|---|----------|------|----------|
+| | **HIGH-18-20** | [`stl-import.test.ts`](web-app/src/io/stl-import.test.ts) | Нет тестов для `parseStlFile` и `detectStlFormat`. |
+| | **HIGH-18-21** | [`doodle-io.ts:47-53`](web-app/src/io/doodle-io.ts:47) | Нет защиты от ZIP bomb (decompression ratio). |
+| | **HIGH-18-22** | [`doodle-io.ts:23-37`](web-app/src/io/doodle-io.ts:23) | Рекурсия `validateObjectKeys` без защиты от stack overflow (глубина > 10K). |
+| | **HIGH-18-23** | [`autosave.ts:20-36`](web-app/src/io/autosave.ts:20) | Утечка соединений с IndexedDB — нет `db.close()`. |
+| | **HIGH-18-24** | [`autosave.ts`](web-app/src/io/autosave.ts) | Нет тестов для `autosave.ts`. |
+| | **HIGH-18-25** | [`project-manager.test.ts:12-35`](web-app/src/io/project-manager.test.ts:12) | Тесты мокают весь модуль, а не только IndexedDB — не проверяют реальную реализацию. |
+
+---
+
+### 🟠 Средний приоритет (56)
+
+#### Store (10)
+
+| # | Проблема | Файл | Описание |
+|---|----------|------|----------|
+| | **MED-18-1** | [`document-store.ts:891-953`](web-app/src/store/document-store.ts:891) | Дублирование паттерна undo/redo/jumpToHistory (~90 строк, повторённых трижды). |
+| | **MED-18-2** | [`document-store.ts:834`](web-app/src/store/document-store.ts:834) | Избыточная синхронизация с воркером в `alignSelected` — выравнивание меняет только позицию. |
+| | **MED-18-3** | [`document-store.ts:66`](web-app/src/store/document-store.ts:66) | Non-null assertion для опциональных полей baked-нод в `restoreTreeFromSnapshot`. |
+| | **MED-18-4** | [`document-store.ts:468`](web-app/src/store/document-store.ts:468) | `rebuildNode` после `set()` без rollback при ошибке. |
+| | **MED-18-5** | [`ui-store.ts:63`](web-app/src/store/ui-store.ts:63) | `mirrorPreviewMesh` хранит полные mesh-данные без Transferable. |
+| | **MED-18-6** | [`helpers.ts:37`](web-app/src/store/helpers.ts:37) | `extractAndCenterInPlace` мутирует входной массив — неочевидно для вызывающего кода. |
+| | **MED-18-7** | [`types.ts:11`](web-app/src/store/types.ts:11) | Отсутствие `isCsgResult` в `SceneObject` — вынуждает эвристику. |
+| | **MED-18-8** | [`rebuild.ts:313`](web-app/src/store/rebuild.ts:313) | `try/catch` без уведомления пользователя при ошибке создания boolean-ноды. |
+| | **MED-18-9** | [`snapshots.ts:74-76`](web-app/src/store/snapshots.ts:74) | Копирование TypedArray → Array при сериализации дерева (дорого для больших мешей). |
+| | **MED-18-10** | [`notifications.ts:28`](web-app/src/store/notifications.ts:28) | `setTimeout` не очищается при `dismiss()` — лишняя операция при быстром закрытии. |
+
+#### CSG Worker (17)
+
+| # | Проблема | Файл | Описание |
+|---|----------|------|----------|
+| | **MED-18-11** | [`worker.ts:70`](web-app/src/csg/worker.ts:70) | Нет валидации `ids` в `deleteObjects` — `for (const id of msg.ids)` упадёт с TypeError. |
+| | **MED-18-12** | [`worker-client.ts:118`](web-app/src/csg/worker-client.ts:118) | Таймаут 30s по умолчанию — для sync-операций слишком много. |
+| | **MED-18-13** | [`worker-client.ts:143`](web-app/src/csg/worker-client.ts:143) | Нет Transferable объектов при отправке — лишнее копирование для больших массивов. |
+| | **MED-18-14** | [`worker-client.ts:76-80`](web-app/src/csg/worker-client.ts:76) | При ошибке воркера reject всех pending — может скрыть реальную проблему. |
+| | **MED-18-15** | [`worker-handlers.ts:791-989`](web-app/src/csg/worker-handlers.ts:791) | `handleRebuildScene` — гигантский switch на 200 строк. Нарушение SRP. |
+| | **MED-18-16** | [`worker-handlers.ts:921-922`](web-app/src/csg/worker-handlers.ts:921) | Нет валидации `resultVertices`/`resultIndices` — повреждённые данные могут создать гигантский массив. |
+| | **MED-18-17** | [`worker-handlers.ts:1030-1031`](web-app/src/csg/worker-handlers.ts:1030) | Stale cache в `handleCsgBoolean` — caller должен помнить о `workerSyncObjects`. |
+| | **MED-18-18** | [`types.ts:129-137`](web-app/src/csg/types.ts:129) | `ShapeParams` — index signature `[key: string]: number \| undefined` делает тип нестрогим. |
+| | **MED-18-19** | [`types.ts:193-230`](web-app/src/csg/types.ts:193) | `TreeNode` — не discriminated union, много опциональных полей. |
+| | **MED-18-20** | [`history-tree.ts:366-406`](web-app/src/csg/history-tree.ts:366) | Дуальная логика WASM vs worker в `rebuildNode` — усложняет тестирование. |
+| | **MED-18-21** | [`history-tree.ts:564,566-569`](web-app/src/csg/history-tree.ts:564) | Non-null assertion для `shapeType` и `localTransform` — падение с cryptic error. |
+| | **MED-18-22** | [`history-tree.ts:594-598`](web-app/src/csg/history-tree.ts:594) | Конструктор `Manifold` без try/catch для baked-мешей. |
+| | **MED-18-23** | [`history-tree.ts:639-653`](web-app/src/csg/history-tree.ts:639) | Мутация node напрямую в `mirrorTreeNode` — проблемы с React re-render. |
+| | **MED-18-24** | [`tree-store.ts:76`](web-app/src/csg/tree-store.ts:76) | Singleton усложняет тестирование (нельзя изолировать тесты). |
+| | **MED-18-25** | [`tree-store.ts:60-62`](web-app/src/csg/tree-store.ts:60) | `getAllNodesMap()` возвращает ссылку на внутренний Map — caller может мутировать store. |
+| | **MED-18-26** | [`rebuildOps.ts:33-50`](web-app/src/csg/rebuildOps.ts:33) | Аддитивное применение scale — дрейф при последовательных move операциях. |
+| | **MED-18-27** | [`worker-matrix.ts:15-39`](web-app/src/csg/worker-matrix.ts:15) | Фиксированный порядок Euler XYZ — несовместимость при другом порядке в других частях кода. |
+
+#### UI Components (14)
+
+| # | Проблема | Файл | Описание |
+|---|----------|------|----------|
+| | **MED-18-28** | [`Viewport3D.tsx:260`](web-app/src/components/Viewport3D.tsx:260) | Избыточный `computeBoundingSphere` в drag-select — bounding sphere уже актуален. |
+| | **MED-18-29** | [`ViewCube.tsx:29-55`](web-app/src/components/ViewCube.tsx:29) | Stale closure в `animateTo` при быстрых кликах на грани куба. |
+| | **MED-18-30** | [`snap-utils.ts:106-108`](web-app/src/components/snap-utils.ts:106) | Избыточное создание `Vector3` для каждой вершины — нагрузка на GC. |
+| | **MED-18-31** | [`snap-utils.ts:142-153`](web-app/src/components/snap-utils.ts:142) | Избыточное создание `Vector3` для каждого ребра — десятки тысяч аллокаций. |
+| | **MED-18-32** | [`snap-utils.test.ts`](web-app/src/components/snap-utils.test.ts) | Нет тестов для `findNearestSnap` — основной функции snap-to-geometry. |
+| | **MED-18-33** | [`Toolbar.tsx:6-84`](web-app/src/components/Toolbar.tsx:6) | 45 пропсов — компонент делает слишком много. |
+| | **MED-18-34** | [`PropertiesPanel.tsx:238-391`](web-app/src/components/PropertiesPanel.tsx:238) | Дублирование кода для разных `shapeType` — if/else на 150 строк. |
+| | **MED-18-35** | [`Timeline.tsx:119`](web-app/src/components/Timeline.tsx:119) | `key={i}` вместо уникального id операции — проблемы с фокусом и анимациями. |
+| | **MED-18-36** | [`NumInput.tsx:18`](web-app/src/components/NumInput.tsx:18) | Нет валидации `max` — пользователь может ввести сколь угодно большое число. |
+| | **MED-18-37** | [`App.tsx:26-66`](web-app/src/App.tsx:26) | Гигантский `useShallow` селектор (32 поля) — ререндер всего App при любом изменении. |
+| | **MED-18-38** | [`App.tsx:79-122`](web-app/src/App.tsx:79) | Гигантский docStore селектор (42 поля) — аналогично. |
+| | **MED-18-39** | [`App.tsx:211`](web-app/src/App.tsx:211) | Шорткаты не проверяют наличие модальных окон — Escape закроет модалку и вызовет `clearSelection`. |
+| | **MED-18-40** | [`ErrorBoundary.tsx:9-10`](web-app/src/components/ErrorBoundary.tsx:9) | Ошибки не логируются — разработчик не узнает о произошедшей ошибке. |
+
+#### IO (13)
+
+| # | Проблема | Файл | Описание |
+|---|----------|------|----------|
+| | **MED-18-41** | [`stl-import.ts:34-56`](web-app/src/io/stl-import.ts:34) | `mergeCoincidentVertices` возвращает `number[]` вместо `Float32Array` — двойное выделение памяти. |
+| | **MED-18-42** | [`stl-import.ts:75-93`](web-app/src/io/stl-import.ts:75) | `detectStlFormat` может ошибочно детектить ASCII STL при совпадении "solid" в бинарном файле. |
+| | **MED-18-43** | [`stl-export.ts:120-140`](web-app/src/io/stl-export.ts:120) | Нормали не трансформируются при повороте — неверные нормали для повёрнутых CSG-объектов. |
+| | **MED-18-44** | [`stl-export.test.ts`](web-app/src/io/stl-export.test.ts) | Нет тестов для `applyTransformToVertices` с поворотом. |
+| | **MED-18-45** | [`doodle-io.ts:23-37`](web-app/src/io/doodle-io.ts:23) | `validateObjectKeys` не удаляет небезопасные ключи (`__proto__`), только проверяет. |
+| | **MED-18-46** | [`doodle-io.ts:157-167`](web-app/src/io/doodle-io.ts:157) | `revokeObjectURL` без задержки — может прервать скачивание в Safari/мобильных браузерах. |
+| | **MED-18-47** | [`autosave.ts:52-54`](web-app/src/io/autosave.ts:52) | Нет обработки `QuotaExceededError` — пользователь не получит уведомления. |
+| | **MED-18-48** | [`autosave.ts:46-51`](web-app/src/io/autosave.ts:46) | Нет обработки `tx.onabort` — Promise может зависнуть навсегда. |
+| | **MED-18-49** | [`project-manager.ts:24-36`](web-app/src/io/project-manager.ts:24) | Избыточное открытие соединений с IndexedDB — каждая операция открывает новое соединение. |
+| | **MED-18-50** | [`project-manager.ts:65-72`](web-app/src/io/project-manager.ts:65) | `getAll()` загружает полные данные проектов для списка метаданных. |
+| | **MED-18-51** | [`project-manager.ts:105-119`](web-app/src/io/project-manager.ts:105) | `updateProject` создаёт новый проект при несуществующем `id` (IndexedDB `put`). |
+| | **MED-18-52** | общая | Нет единого подхода к обработке ошибок в IO слое (return, throw, console.warn). |
+| | **MED-18-53** | общая | Нет типизированных ошибок IO — невозможно различить типы ошибок на уровне типов. |
+
+#### Общие (2)
+
+| # | Проблема | Описание |
+|---|----------|----------|
+| | **MED-18-54** | Нет единого подхода к обработке ошибок между слоями (return Result, throw, console.warn). |
+| | **MED-18-55** | Нет типизированных ошибок — невозможно различить типы ошибок на уровне типов. |
+
+---
+
+### 🟢 Низкий приоритет (50)
+
+#### Store (12)
+
+| # | Проблема | Файл | Описание |
+|---|----------|------|----------|
+| | **LOW-18-1** | [`document-store.ts:598`](web-app/src/store/document-store.ts:598) | Динамический импорт ui-store в `previewMirror` — лишняя асинхронная задержка. |
+| | **LOW-18-2** | [`document-store.ts:1100`](web-app/src/store/document-store.ts:1100) | Потеря `lastCsgMs` в CSG-ветке `resizeObject`. |
+| | **LOW-18-3** | [`document-store.ts:285-286`](web-app/src/store/document-store.ts:285) | Потенциальная утечка TypedArray в clipboard при копировании больших мешей. |
+| | **LOW-18-4** | [`ui-store.ts:76-131`](web-app/src/store/ui-store.ts:76) | Избыточность индивидуальных сеттеров (16 сеттеров для 16 полей). |
+| | **LOW-18-5** | [`ui-store.ts:84`](web-app/src/store/ui-store.ts:84) | Отсутствие рантайм-валидации в `setGizmoMode`. |
+| | **LOW-18-6** | [`helpers.ts:86`](web-app/src/store/helpers.ts:86) | Избыточный `computeAABB` в `makeObject` при известном AABB. |
+| | **LOW-18-7** | [`helpers.ts:91`](web-app/src/store/helpers.ts:91) | `nextId` не потокобезопасен (проблема только при Web Workers). |
+| | **LOW-18-8** | [`types.ts:20`](web-app/src/store/types.ts:20) | `lastCsgMs` в document-store вместо ui-store. |
+| | **LOW-18-9** | [`rebuild.ts:167,215`](web-app/src/store/rebuild.ts:167) | Двойной проход с мутацией `result.results` — неочевидно. |
+| | **LOW-18-10** | [`snapshots.ts:123-129`](web-app/src/store/snapshots.ts:123) | Touch-on-access с удалением/вставкой в Map. |
+| | **LOW-18-11** | [`snapshots.ts:52`](web-app/src/store/snapshots.ts:52) | `enforceCacheLimit` удаляет по 1 элементу за вызов. |
+| | **LOW-18-12** | [`notifications.ts:22`](web-app/src/store/notifications.ts:22) | Отсутствие лимита на количество уведомлений. |
+
+#### CSG Worker (10)
+
+| # | Проблема | Файл | Описание |
+|---|----------|------|----------|
+| | **LOW-18-13** | [`worker.ts:46`](web-app/src/csg/worker.ts:46) | `await initPromise` на каждое сообщение — микротаск даже после инициализации. |
+| | **LOW-18-14** | [`worker-handlers.ts:507-510`](web-app/src/csg/worker-handlers.ts:507) | Двойное копирование mesh в `handleBuildShape`. |
+| | **LOW-18-15** | [`worker-handlers.ts:1084-1103`](web-app/src/csg/worker-handlers.ts:1084) | Нет dispose при ошибке `buildPrimitive` в `handleSyncObjects`. |
+| | **LOW-18-16** | [`types.ts:89-101`](web-app/src/csg/types.ts:89) | `GroupOperation` — много опциональных полей для разных сценариев. |
+| | **LOW-18-17** | [`history-tree.ts:24`](web-app/src/csg/history-tree.ts:24) | Импорт `ManifoldObject` без `type`. |
+| | **LOW-18-18** | [`worker-matrix.ts:56-57`](web-app/src/csg/worker-matrix.ts:56) | Двойной вызов `computeRSMatrix` при mirror. |
+| | **LOW-18-19** | [`worker-sanitize.test.ts:10-49`](web-app/src/csg/worker-sanitize.test.ts:10) | Нет теста `clamp` с `min > max`. |
+| | **LOW-18-20** | [`worker-sanitize.test.ts:52-128`](web-app/src/csg/worker-sanitize.test.ts:52) | Нет теста с Symbol ключами. |
+| | **LOW-18-21** | [`worker-sanitize.test.ts:52-128`](web-app/src/csg/worker-sanitize.test.ts:52) | Нет теста для пустого результата `sanitizeParams`. |
+| | **LOW-18-22** | [`worker-sync.test.ts:29-37`](web-app/src/csg/worker-sync.test.ts:29) | `as const` на transform не нужен. |
+
+#### UI Components (20)
+
+| # | Проблема | Файл | Описание |
+|---|----------|------|----------|
+| | **LOW-18-23** | [`viewport-hooks.ts:264-271`](web-app/src/components/viewport-hooks.ts:264) | ResizeObserver — штатно, но стоит проверить pixelRatio. |
+| | **LOW-18-24** | [`Viewport3D.tsx:211`](web-app/src/components/Viewport3D.tsx:211) | Избыточный `computeBoundingBox` в fitView. |
+| | **LOW-18-25** | [`ViewCube.tsx:160-162`](web-app/src/components/ViewCube.tsx:160) | Raycaster создаётся при каждом движении мыши. |
+| | **LOW-18-26** | [`ViewCube.tsx:284-309`](web-app/src/components/ViewCube.tsx:284) | Инлайн-стили вместо CSS классов. |
+| | **LOW-18-27** | [`snap-utils.ts:314-318`](web-app/src/components/snap-utils.ts:314) | Избыточный второй Raycaster в `findNearestSnap`. |
+| | **LOW-18-28** | [`snap-utils.test.ts`](web-app/src/components/snap-utils.test.ts) | Нет тестов для `getSceneMeshes`/`getScenePivots`. |
+| | **LOW-18-29** | [`ComponentTree.tsx:91`](web-app/src/components/ComponentTree.tsx:91) | Нет визуальной подсказки для переименования. |
+| | **LOW-18-30** | [`ComponentTree.tsx:48`](web-app/src/components/ComponentTree.tsx:48) | Магическое число 30ms в setTimeout. |
+| | **LOW-18-31** | [`LeftPanel.tsx:49-57`](web-app/src/components/LeftPanel.tsx:49) | Избыточный `useMemo` для 8 элементов. |
+| | **LOW-18-32** | [`NumInput.tsx:21`](web-app/src/components/NumInput.tsx:21) | Избыточное вычисление decimals. |
+| | **LOW-18-33** | [`TextModal.tsx:43-46`](web-app/src/components/TextModal.tsx:43) | Нет ограничения длины текста. |
+| | **LOW-18-34** | [`TextModal.tsx:61,73`](web-app/src/components/TextModal.tsx:61) | Нет проверки `isNaN` для `Number()`. |
+| | **LOW-18-35** | [`App.tsx:186-195`](web-app/src/App.tsx:186) | Autosave эффект запускается даже при пустых операциях. |
+| | **LOW-18-36** | [`PropertiesPanel.tsx:92`](web-app/src/components/PropertiesPanel.tsx:92) | Статические инлайн-стили. |
+| | **LOW-18-37** | [`App.css:461-467`](web-app/src/App.css:461) | `ruler-display` не адаптирован под светлую тему. |
+| | **LOW-18-38** | [`ErrorBoundary.tsx:6-27`](web-app/src/ErrorBoundary.tsx:6) | Нет кнопки "Retry". |
+| | **LOW-18-39** | [`Section.tsx:18-29`](web-app/src/components/Section.tsx:18) | Нет `aria-controls`. |
+| | **LOW-18-40** | [`ToastContainer.tsx:20-36`](web-app/src/components/ToastContainer.tsx:20) | Нет анимации исчезновения. |
+| | **LOW-18-41** | [`WebGLFallback.tsx:7`](web-app/src/components/WebGLFallback.tsx:7) | Хардкод "Replit". |
+| | **LOW-18-42** | [`StatusBar.tsx:77`](web-app/src/components/StatusBar.tsx:77) | Отладочная информация в production. |
+
+#### IO (7)
+
+| # | Проблема | Файл | Описание |
+|---|----------|------|----------|
+| | **LOW-18-43** | [`stl-import.ts:85`](web-app/src/io/stl-import.ts:85) | Нет проверки endianness в `detectStlFormat`. |
+| | **LOW-18-44** | [`stl-import.ts:105-109`](web-app/src/io/stl-import.ts:105) | Нет явной проверки на 0 треугольников. |
+| | **LOW-18-45** | [`stl-import.ts:58-67`](web-app/src/io/stl-import.ts:58) | Утечка DOM-элементов при многократном вызове `openStlFilePicker`. |
+| | **LOW-18-46** | [`stl-export.ts:22`](web-app/src/io/stl-export.ts:22) | Identity-трансформация возвращает ссылку на оригинальный массив. |
+| | **LOW-18-47** | [`doodle-io.ts:122-123`](web-app/src/io/doodle-io.ts:122) | Лишнее base64 кодирование/декодирование thumbnail. |
+| | **LOW-18-48** | [`project-manager.ts:88-103`](web-app/src/io/project-manager.ts:88) | Нет проверки уникальности имени проекта. |
+| | **LOW-18-49** | общая | Нет потоковой обработки больших файлов. |
+
+---
+
+### ❌ Отозванные проблемы (False Positives) — Раунд 17
 
 | # | Проблема | Причина отзыва |
 |---|----------|----------------|
@@ -55,53 +256,6 @@
 | | HIGH-NEW-3: `extrudeSelected` slab в дереве | Slab — временный объект, undo/redo использует `resultVertices` из `GroupOperation` |
 | | God Component (разделение файлов) | Zustand `create<DocumentStore>()` не поддерживает разделение без middleware |
 | | `busy` не сбрасывается в `resizeObject` | `busy` не устанавливается в true для else-ветки — проблема в отсутствии `try/catch`, а не busy |
-
----
-
-### ⚠️ Раунд 16 — Код-ревью (18 проблем, верифицированы)
-
-#### 🔴 Критические (4)
-
-| # | Проблема | Файл | Вердикт верификации | Скорректированный приоритет |
-|---|----------|------|---------------------|---------------------------|
-| | CRIT-R16-1 | `handleRebuildScene` без `try/finally` — утечка WASM-памяти при ошибках | [`worker-handlers.ts:756`](web-app/src/csg/worker-handlers.ts:756) | ⚠️ Частично верно — утечка временная, до следующего rebuild | ✅ Исправлено |
-| | CRIT-R16-2 | Мутация `vertices` в `extractAndCenter` — неожиданный побочный эффект | [`helpers.ts:29`](web-app/src/store/helpers.ts:29) | ⚠️ Верно, но преувеличено — JSDoc уже документирует поведение | ✅ Исправлено |
-| | CRIT-R16-3 | `any` в `collectSubtreeForWorker` и `applyCSGMeshes` | [`history-tree.ts:366`](web-app/src/csg/history-tree.ts:366) | ✅ Верно — нарушение strict: true | ✅ Исправлено |
-| | CRIT-R16-4 | `JSON.stringify` в `computeNodeHash` — проблема производительности | [`history-tree.ts:254`](web-app/src/csg/history-tree.ts:254) | ✅ Верно, но severity спорный — вызывается только при rebuild | ✅ Исправлено |
-
-#### ⚡ Производительность (4)
-
-| # | Проблема | Файл | Вердикт | Статус |
-|---|----------|------|---------|--------|
-| | PERF-R16-1 | Двойной проход по вершинам в `extractAndCenterGetAABB` | [`helpers.ts:44`](web-app/src/store/helpers.ts:44) | ❌ Неверно — функция не вызывает `computeAABB`, два прохода неизбежны | ❌ Закрыто |
-| | PERF-R16-2 | `Array.from()` в hot path | [`history-tree.ts:446`](web-app/src/csg/history-tree.ts:446) | ⚠️ Частично неверно — только в одной из двух указанных функций | ✅ Исправлено |
-| | PERF-R16-3 | Избыточные ререндеры через Zustand | — | ⚠️ Вводит в заблуждение — 32/33 уже с селекторами | ✅ Исправлено |
-| | PERF-R16-4 | `computeVertsHash` — возможны коллизии | [`Viewport3D.tsx:68`](web-app/src/components/Viewport3D.tsx:68) | ✅ Верно — сумма произведений для симметричных мешей | ✅ Исправлено |
-
-#### 📝 Читаемость (4)
-
-| # | Проблема | Файл | Вердикт | Статус |
-|---|----------|------|---------|--------|
-| | CODE-R16-1 | Дублирование матричной математики | [`rebuild.ts:154`](web-app/src/store/rebuild.ts:154), [`worker-matrix.ts:15`](web-app/src/csg/worker-matrix.ts:15) | ✅ Верно | ✅ Исправлено |
-| | CODE-R16-2 | Магические числа в Viewport3D | [`Viewport3D.tsx:97`](web-app/src/components/Viewport3D.tsx:97) | ✅ Верно | ✅ Исправлено |
-| | CODE-R16-3 | Смешение русского и английского в комментариях |多处 | ✅ Верно | ✅ Исправлено |
-| | CODE-R16-4 | `GizmoMode` с `null` как значение | [`ui-store.ts:11`](web-app/src/store/ui-store.ts:11) | ✅ Верно | ✅ Исправлено |
-
-#### 🔒 Безопасность (3)
-
-| # | Проблема | Файл | Вердикт | Статус |
-|---|----------|------|---------|--------|
-| | SEC-R16-1 | Отсутствие валидации входящих данных в worker | [`worker.ts`](web-app/src/csg/worker.ts) | ✅ Верно — `as unknown as` касты без валидации | ✅ Исправлено |
-| | SEC-R16-2 | `try/catch` с пустым `catch` | [`worker-handlers.ts:104,930`](web-app/src/csg/worker-handlers.ts:104) | ⚠️ Частично неверно — только в worker-handlers.ts, не в document-store.ts | ✅ Исправлено |
-| | SEC-R16-3 | `setCached` без проверки на disposed объекты | [`worker-handlers.ts:108`](web-app/src/csg/worker-handlers.ts:108) | ✅ Верно, но низкая ценность — вызывается с только что созданными объектами | ✅ Исправлено |
-
-#### 🧪 Тестирование (3)
-
-| # | Проблема | Файл | Вердикт | Статус |
-|---|----------|------|---------|--------|
-| | TEST-R16-1 | Нет тестов для критических функций | — | ⚠️ Частично неверно — `buildRebuildMeta` тестируется | ⚠️ Открыто |
-| | TEST-R16-2 | Тесты используют `as any` для обхода типов | — | ⚠️ Преувеличено/устарело — всего 1 `as any` в history-tree.test.ts | ✅ Исправлено |
-| | TEST-R16-3 | Нет тестов для `snap-utils.ts` | [`snap-utils.ts`](web-app/src/components/snap-utils.ts) | ✅ Верно — 468 строк без тестов | ✅ Исправлено |
 
 ---
 
@@ -137,10 +291,34 @@
 
 ## 🎯 План действий (приоритет)
 
-На данный момент все 55 проблем (15 из Раунда 17 + 38 из SourceCraft + 2 mirror) исправлены.
-Активных задач нет.
+### Фаза 1 — Критические (немедленно)
+1. **CRIT-18-1**: Исправить мутацию `newObjects` до успешного завершения асинхронных операций в `extrudeSelected`
+2. **CRIT-18-2**: Добавить проверку отрицательных размеров в `buildPrimitive` (`Math.max(0.001, ...)`)
+3. **CRIT-18-4**: Добавить `dispose()` для старых `BufferAttribute` при обновлении геометрии mesh
+4. **CRIT-18-3, CRIT-18-5**: Добавить тесты для `worker-sync` и `doodle-io`
 
-Следующие раунды код-ревью будут направлены на выявление новых проблем.
+### Фаза 2 — Высокий приоритет (27 проблем)
+- Исправить мутацию build tree (HIGH-18-1)
+- Добавить явное поле `isCsgResult` (HIGH-18-2)
+- Исправить утечки WASM-объектов (HIGH-18-11)
+- Исправить утечки Three.js (HIGH-18-15, HIGH-18-16, HIGH-18-17)
+- Исправить конфликт шортката Ctrl+S (HIGH-18-18)
+- Добавить защиту от ZIP bomb и stack overflow (HIGH-18-21, HIGH-18-22)
+- Исправить утечку соединений IndexedDB (HIGH-18-23)
+- Добавить тесты для STL, autosave, project-manager (HIGH-18-20, HIGH-18-24, HIGH-18-25)
+
+### Фаза 3 — Средний приоритет (56 проблем)
+- Рефакторинг дублирования undo/redo (MED-18-1)
+- Transferable объекты для больших массивов (MED-18-13)
+- Разделение `handleRebuildScene` на отдельные функции (MED-18-15)
+- Discriminated union для `TreeNode` (MED-18-19)
+- Реактивность `TreeStore` (MED-18-24)
+- Оптимизация Vector3 в snap-utils (MED-18-30, MED-18-31)
+- Разделение гигантских селекторов в App.tsx (MED-18-37, MED-18-38)
+- Единая система ошибок IO (MED-18-54, MED-18-55)
+
+### Фаза 4 — Низкий приоритет (50 проблем)
+- Косметические улучшения, CSS, документация, тесты
 
 ---
 
@@ -148,11 +326,30 @@
 
 | Метрика | Значение |
 |---------|----------|
-| Всего выявлено проблем | ~110+ (за всё время) |
+| Всего выявлено проблем | ~250+ (за всё время) |
 | Исправлено | ~110+ |
-| Активных | 0 |
+| Активных (Раунд 18) | **138** |
 | Точность ревью (Раунд 16) | ~50% (8/18 полностью верных) |
 | Точность ревью (Раунд 17 + SourceCraft) | ~83% (12.5/15 подтверждено) |
+| Точность ревью (Раунд 18) | Ожидает верификации |
+
+### Распределение по типам
+
+| Тип | Количество |
+|-----|-----------|
+| Баг | ~35 |
+| Производительность | ~25 |
+| Архитектура | ~45 |
+| Безопасность | ~15 |
+| Тестирование | ~18 |
+
+### Ключевые выводы
+
+1. **Утечки памяти** — главная проблема проекта: Three.js (BufferAttribute, TransformControls, ViewCube), WASM (manifold-объекты в handleCsgBooleanSync), IndexedDB (соединения).
+2. **Типобезопасность** — множественные `as unknown as`, `any`, index signature ослабляют strict mode TypeScript.
+3. **Тестирование** — критические модули (doodle-io, autosave, worker-sync) не имеют тестов. Тесты project-manager мокают весь модуль, а не только зависимости.
+4. **Архитектура IO** — отсутствие единой системы типов ошибок и унифицированного подхода к обработке ошибок.
+5. **Производительность snap-utils** — избыточное создание объектов Vector3 в горячем цикле raycasting.
 
 ---
 

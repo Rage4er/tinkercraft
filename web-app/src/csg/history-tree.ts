@@ -670,41 +670,66 @@ function mirrorNodeRecursive(
   if (node.type === 'primitive' && node.localTransform) {
     const t = node.localTransform
     const mirroredPos = mirrorPoint({ x: t.x, y: t.y, z: t.z }, plane, center)
+
+    // FIX (MIRROR-6): Правильная математика зеркального отражения.
+    // Правило: ось ПЕРПЕНДИКУЛЯРНАЯ зеркальной плоскости НЕ меняется.
+    // Оси В ПЛОСКОСТИ меняют знак.
+    //
+    // YZ plane (perpendicular axis = X):
+    //   pos.x → -x, rotX unchanged, scaleX unchanged
+    //   pos.y/z → mirrored, rotY/rotZ negated, scaleY/scaleZ negated
+    // XZ plane (perpendicular axis = Y):
+    //   pos.y → -y, rotY unchanged, scaleY unchanged
+    //   pos.x/z → mirrored, rotX/rotZ negated, scaleX/scaleZ negated
+    // XY plane (perpendicular axis = Z):
+    //   pos.z → -z, rotZ unchanged, scaleZ unchanged
+    //   pos.x/y → mirrored, rotX/rotY negated, scaleX/scaleY negated
+    const newRotX = plane === 'YZ' ? t.rotX : -t.rotX
+    const newRotY = plane === 'XZ' ? t.rotY : -t.rotY
+    const newRotZ = plane === 'XY' ? t.rotZ : -t.rotZ
+    const newScaleX = plane === 'YZ' ? t.scaleX : -t.scaleX
+    const newScaleY = plane === 'XZ' ? t.scaleY : -t.scaleY
+    const newScaleZ = plane === 'XY' ? t.scaleZ : -t.scaleZ
+
     node.localTransform = {
       ...t,
       x: mirroredPos.x,
       y: mirroredPos.y,
       z: mirroredPos.z,
-      // Invert rotation around the axis perpendicular to mirror plane
-      rotX: plane === 'YZ' ? -t.rotX : t.rotX,
-      rotY: plane === 'XZ' ? -t.rotY : t.rotY,
-      rotZ: plane === 'XY' ? -t.rotZ : t.rotZ,
-      // Negate scale along the mirrored axis
-      scaleX: plane === 'YZ' ? -t.scaleX : t.scaleX,
-      scaleY: plane === 'XZ' ? -t.scaleY : t.scaleY,
-      scaleZ: plane === 'XY' ? -t.scaleZ : t.scaleZ,
+      rotX: newRotX,
+      rotY: newRotY,
+      rotZ: newRotZ,
+      scaleX: newScaleX,
+      scaleY: newScaleY,
+      scaleZ: newScaleZ,
     }
     console.log(`[MIRROR:mirrorNodeRecursive] nodeId=${node.id} type=primitive plane=${plane} center={x:${center.x}, y:${center.y}, z:${center.z}} localTransform={x:${node.localTransform.x}, y:${node.localTransform.y}, z:${node.localTransform.z}, rotX:${node.localTransform.rotX}, rotY:${node.localTransform.rotY}, rotZ:${node.localTransform.rotZ}, scaleX:${node.localTransform.scaleX}, scaleY:${node.localTransform.scaleY}, scaleZ:${node.localTransform.scaleZ}}`)
     return
   }
 
   if (node.type === 'baked' && node.localTransform) {
-    // Invert rotation AND scale for baked nodes too.
-    // Baked nodes are pre-computed geometry (from CSG or import), but their
-    // localTransform still carries rotation/scale that must be mirrored.
+    // FIX (MIRROR-6): Same correct mirror logic for baked nodes.
     const t = node.localTransform
     const mirroredPos = mirrorPoint({ x: t.x, y: t.y, z: t.z }, plane, center)
+
+    const newRotX = plane === 'YZ' ? t.rotX : -t.rotX
+    const newRotY = plane === 'XZ' ? t.rotY : -t.rotY
+    const newRotZ = plane === 'XY' ? t.rotZ : -t.rotZ
+    const newScaleX = plane === 'YZ' ? t.scaleX : -t.scaleX
+    const newScaleY = plane === 'XZ' ? t.scaleY : -t.scaleY
+    const newScaleZ = plane === 'XY' ? t.scaleZ : -t.scaleZ
+
     node.localTransform = {
       ...t,
       x: mirroredPos.x,
       y: mirroredPos.y,
       z: mirroredPos.z,
-      rotX: plane === 'YZ' ? -t.rotX : t.rotX,
-      rotY: plane === 'XZ' ? -t.rotY : t.rotY,
-      rotZ: plane === 'XY' ? -t.rotZ : t.rotZ,
-      scaleX: plane === 'YZ' ? -t.scaleX : t.scaleX,
-      scaleY: plane === 'XZ' ? -t.scaleY : t.scaleY,
-      scaleZ: plane === 'XY' ? -t.scaleZ : t.scaleZ,
+      rotX: newRotX,
+      rotY: newRotY,
+      rotZ: newRotZ,
+      scaleX: newScaleX,
+      scaleY: newScaleY,
+      scaleZ: newScaleZ,
     }
     console.log(`[MIRROR:mirrorNodeRecursive] nodeId=${node.id} type=baked plane=${plane} center={x:${center.x}, y:${center.y}, z:${center.z}} localTransform={x:${node.localTransform.x}, y:${node.localTransform.y}, z:${node.localTransform.z}, rotX:${node.localTransform.rotX}, rotY:${node.localTransform.rotY}, rotZ:${node.localTransform.rotZ}, scaleX:${node.localTransform.scaleX}, scaleY:${node.localTransform.scaleY}, scaleZ:${node.localTransform.scaleZ}}`)
     return

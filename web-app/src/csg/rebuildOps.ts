@@ -50,12 +50,20 @@ export function applyMoveDelta(
 }
 
 /**
- * Apply mirror to a transform (position + rotation + scale).
- * Geometry is mirrored separately via manifold matrix.
+ * Mirror a transform across a plane.
  *
- * FIX (MIRROR-8): Also negate scale along the mirrored axis.
- * Mirror flips the coordinate system handedness, so scale must be
- * negated on the axis perpendicular to the mirror plane.
+ * FIX (MIRROR-6): Correct mirror math. The axis PERPENDICULAR to the mirror
+ * plane does NOT change. Axes IN the plane change sign.
+ *
+ * YZ plane (perpendicular axis = X):
+ *   pos.x negated, rotX unchanged, scaleX unchanged
+ *   rotY/rotZ negated, scaleY/scaleZ negated
+ * XZ plane (perpendicular axis = Y):
+ *   pos.y negated, rotY unchanged, scaleY unchanged
+ *   rotX/rotZ negated, scaleX/scaleZ negated
+ * XY plane (perpendicular axis = Z):
+ *   pos.z negated, rotZ unchanged, scaleZ unchanged
+ *   rotX/rotY negated, scaleX/scaleY negated
  */
 export function applyMirrorToTransform(
   t: RebuildTransform,
@@ -65,18 +73,30 @@ export function applyMirrorToTransform(
   console.log(`[MIRROR:applyMirrorToTransform] plane=${plane} BEFORE={x:${t.x}, y:${t.y}, z:${t.z}, rotX:${t.rotX}, rotY:${t.rotY}, rotZ:${t.rotZ}, scaleX:${t.scaleX}, scaleY:${t.scaleY}, scaleZ:${t.scaleZ}}`)
   if (plane === 'YZ') {
     nt.x = -nt.x
-    nt.rotX = -nt.rotX
-    nt.scaleX = -nt.scaleX
+    // X is perpendicular to YZ → rotX and scaleX UNCHANGED
+    // Y and Z are in the plane → negate
+    nt.rotY = -nt.rotY
+    nt.rotZ = -nt.rotZ
+    nt.scaleY = -nt.scaleY
+    nt.scaleZ = -nt.scaleZ
   }
   if (plane === 'XZ') {
     nt.y = -nt.y
-    nt.rotY = -nt.rotY
-    nt.scaleY = -nt.scaleY
+    // Y is perpendicular to XZ → rotY and scaleY UNCHANGED
+    // X and Z are in the plane → negate
+    nt.rotX = -nt.rotX
+    nt.rotZ = -nt.rotZ
+    nt.scaleX = -nt.scaleX
+    nt.scaleZ = -nt.scaleZ
   }
   if (plane === 'XY') {
     nt.z = -nt.z
-    nt.rotZ = -nt.rotZ
-    nt.scaleZ = -nt.scaleZ
+    // Z is perpendicular to XY → rotZ and scaleZ UNCHANGED
+    // X and Y are in the plane → negate
+    nt.rotX = -nt.rotX
+    nt.rotY = -nt.rotY
+    nt.scaleX = -nt.scaleX
+    nt.scaleY = -nt.scaleY
   }
   console.log(`[MIRROR:applyMirrorToTransform] plane=${plane} AFTER={x:${nt.x}, y:${nt.y}, z:${nt.z}, rotX:${nt.rotX}, rotY:${nt.rotY}, rotZ:${nt.rotZ}, scaleX:${nt.scaleX}, scaleY:${nt.scaleY}, scaleZ:${nt.scaleZ}}`)
   return nt

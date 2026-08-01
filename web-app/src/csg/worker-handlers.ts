@@ -1287,16 +1287,19 @@ export async function handleMirrorObject(msg: MirrorObjectMessage): Promise<void
       z: 2 * mc.z - t.z,
     }
 
-    // Отражённые rotation и scale (аналогично mirrorNodeRecursive)
+    // Отражённые rotation и scale (MIRROR-6: axes IN the plane change sign)
+    // YZ plane: X perpendicular → rotX/scaleX UNCHANGED, Y/Z negated
+    // XZ plane: Y perpendicular → rotY/scaleY UNCHANGED, X/Z negated
+    // XY plane: Z perpendicular → rotZ/scaleZ UNCHANGED, X/Y negated
     const reflectedRot = {
-      rotX: msg.plane === 'YZ' ? -t.rotX : t.rotX,
-      rotY: msg.plane === 'XZ' ? -t.rotY : t.rotY,
-      rotZ: msg.plane === 'XY' ? -t.rotZ : t.rotZ,
+      rotX: msg.plane === 'YZ' ? t.rotX : -t.rotX,
+      rotY: msg.plane === 'XZ' ? t.rotY : -t.rotY,
+      rotZ: msg.plane === 'XY' ? t.rotZ : -t.rotZ,
     }
     const reflectedScale = {
-      scaleX: msg.plane === 'YZ' ? -t.scaleX : t.scaleX,
-      scaleY: msg.plane === 'XZ' ? -t.scaleY : t.scaleY,
-      scaleZ: msg.plane === 'XY' ? -t.scaleZ : t.scaleZ,
+      scaleX: msg.plane === 'YZ' ? t.scaleX : -t.scaleX,
+      scaleY: msg.plane === 'XZ' ? t.scaleY : -t.scaleY,
+      scaleZ: msg.plane === 'XY' ? t.scaleZ : -t.scaleZ,
     }
 
     // 1. Translate to mirror center

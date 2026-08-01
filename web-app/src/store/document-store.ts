@@ -736,27 +736,81 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         // Pass selection BBox center as mirror pivot
         mirrorTreeNode(treeId, plane, mirrorCenter)
 
-        // Извлекаем зеркальный меш из дерева
-        const mesh = await rebuildNode(treeId)
-
-        // rebuildNode возвращает меш с transform, уже применённым к геометрии
-        // (buildPrimitive + buildTransformMatrix в rebuildPrimitive, или
-        // applyCSGMeshes для boolean). Чтобы избежать двойного применения
-        // transform (в меше + в SceneObject.transform), центрируем меш
-        // и используем centroid как позицию. Аналогично csgBoolean.
-        const { cx, cy, cz, aabb } = extractAndCenterGetAABB(mesh.vertices)
-        const finalTransform: TransformNR = {
-          x: cx, y: cy, z: cz,
-          rotX: 0, rotY: 0, rotZ: 0,
-          scaleX: 1, scaleY: 1, scaleZ: 1,
+        // FIX (MIRROR-7): Mirror должен применяться ОДИН РАЗ.
+        //
+        // Проблема: mirrorTreeNode отражает localTransform в дереве.
+        // rebuildNode применяет mirrored localTransform к geometry.
+        // Если мы используем mirroredTransform как finalTransform — pivot
+        // применяет его ЕЩЁ РАЗ → двойное зеркало (scale 0.25, углы удвоены).
+        //
+        // Решение:
+        // 1. Сохраняем mirrored localTransform
+        // 2. Сбрасываем mirrored localTransform в identity → rebuildNode
+        //    возвращает mesh БЕЗ transform (mesh в origin)
+        // 3. Mesh в origin + pivot с mirroredTransform = зеркало ОДИН РАЗ
+        const mirroredNode = getNode(treeId)
+        let mirroredTransform: TransformNR | undefined
+        if (mirroredNode && (mirroredNode.type === 'primitive' || mirroredNode.type === 'baked')) {
+          mirroredTransform = {
+            x: mirroredNode.localTransform?.x ?? 0,
+            y: mirroredNode.localTransform?.y ?? 0,
+            z: mirroredNode.localTransform?.z ?? 0,
+            rotX: mirroredNode.localTransform?.rotX ?? 0,
+            rotY: mirroredNode.localTransform?.rotY ?? 0,
+            rotZ: mirroredNode.localTransform?.rotZ ?? 0,
+            scaleX: mirroredNode.localTransform?.scaleX ?? 1,
+            scaleY: mirroredNode.localTransform?.scaleY ?? 1,
+            scaleZ: mirroredNode.localTransform?.scaleZ ?? 1,
+          }
         }
 
-        // СОЗДАЕМ НОВЫЙ ОБЪЕКТ с уникальным ID
+        // Сбросить mirrored localTransform в identity
+        if (mirroredNode && mirroredNode.type === 'primitive') {
+          mirroredNode.localTransform = {
+            x: 0, y: 0, z: 0,
+            rotX: 0, rotY: 0, rotZ: 0,
+            scaleX: 1, scaleY: 1, scaleZ: 1,
+          }
+        }
+
+        // Mesh в origin, без transform
+        const mesh = await rebuildNode(treeId)
+
+        // Вычисляем centroid для AABB
+        const { cx, cy, cz, aabb } = extractAndCenterGetAABB(mesh.vertices)
+
+        // finalTransform = mirrored transform (применяется pivot ОДИН РАЗ)
+        // Для parametric объектов: сохраняем shapeType/params, mirrored transform
+        // scale НЕ нормализуем — mirrored scale корректно отражает геометрию
+        const finalTransform: TransformNR = mirroredTransform
+          ? {
+            x: Math.round(mirroredTransform.x * 1e6) / 1e6,
+            y: Math.round(mirroredTransform.y * 1e6) / 1e6,
+            z: Math.round(mirroredTransform.z * 1e6) / 1e6,
+            rotX: mirroredTransform.rotX,
+            rotY: mirroredTransform.rotY,
+            rotZ: mirroredTransform.rotZ,
+            scaleX: mirroredTransform.scaleX,
+            scaleY: mirroredTransform.scaleY,
+            scaleZ: mirroredTransform.scaleZ,
+          }
+          : {
+            x: cx, y: cy, z: cz,
+            rotX: 0, rotY: 0, rotZ: 0,
+            scaleX: 1, scaleY: 1, scaleZ: 1,
+          }
+
+        // СОЗДАЕМ НОВЫЙ ОБЪЕКТ — parametric (сохраняем shapeType/params)
         const newId = nextId()
+        const newTransform = finalTransform
         const newObj = makeObject({
           ...obj,
           id: newId,
-          transform: finalTransform,
+          transform: newTransform,
+          // Сохраняем shapeType/params для parametric editing
+          shapeType: obj.shapeType,
+          params: obj.params,
+          // vertices/indices нужны для рендера (baked из tree)
           vertices: mesh.vertices,
           indices: mesh.indices,
           normals: mesh.normals
@@ -764,19 +818,16 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         newObjects[newId] = newObj
         newIds.push(newId)
 
-        // РЕГИСТРИРУЕМ в дереве — зеркальная копия как полноценная нода
-        const mirroredNodeType = getNode(treeId)?.type
-        if (mirroredNodeType === 'primitive' && obj.shapeType && obj.params) {
-          createPrimitiveNode(newId, obj.shapeType, obj.params, finalTransform)
-        } else if (mirroredNodeType === 'boolean') {
-          // Clone the mirrored boolean subtree to keep it parametric
-          cloneSubtree(treeId, newId)
-          // NOTE: resetSubtreeTransform НЕ вызывается — mirrorTreeNode уже
-          // изменил localTransform у примитивов в поддереве (отразил позицию/
-          // ротацию/scale). applyCSGMeshes использует эти трансформы для
-          // правильного позиционирования результата boolean-операции.
+        // РЕГИСТРИРУЕМ в дереве как parametric node
+        if (obj.shapeType && obj.params) {
+          createPrimitiveNode(newId, obj.shapeType, obj.params, newTransform)
         } else {
-          createBakedNode(newId, mesh.vertices || new Float32Array(), mesh.indices || new Uint32Array(), mesh.normals || null, finalTransform)
+          const mirroredNodeType = getNode(treeId)?.type
+          if (mirroredNodeType === 'boolean') {
+            cloneSubtree(treeId, newId)
+          } else {
+            createBakedNode(newId, mesh.vertices || new Float32Array(), mesh.indices || new Uint32Array(), mesh.normals || null, newTransform)
+          }
         }
 
         // Удаляем временную зеркальную ноду из дерева
