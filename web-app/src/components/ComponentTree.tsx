@@ -3,16 +3,16 @@
 // Analog of SceneTreePanel.java from the original TinkerCraft
 // ============================================================
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import type { SceneObject } from '../csg/types'
 
 interface Props {
   objects: SceneObject[]
   selectedIds: Set<string>
-  onSelect:     (id: string, add: boolean) => void
-  onRename:     (id: string, name: string) => void
-  onToggleVis:  (id: string) => void
-  onDelete:     (id: string) => void
+  onSelect: (id: string, add: boolean) => void
+  onRename: (id: string, name: string) => void
+  onToggleVis: (id: string) => void
+  onDelete: (id: string) => void
 }
 
 const SHAPE_ICON: Record<string, string> = {
@@ -27,14 +27,25 @@ function displayName(obj: SceneObject): string {
 }
 
 export default function ComponentTree({ objects, selectedIds, onSelect, onRename, onToggleVis, onDelete }: Props) {
-  const [editingId, setEditingId]   = useState<string | null>(null)
-  const [editValue, setEditValue]   = useState('')
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editValue, setEditValue] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
+  const selectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (selectTimerRef.current !== null) {
+        clearTimeout(selectTimerRef.current)
+      }
+    }
+  }, [])
 
   function startEdit(obj: SceneObject) {
     setEditingId(obj.id)
     setEditValue(obj.name ?? displayName(obj))
-    setTimeout(() => inputRef.current?.select(), 30)
+    if (selectTimerRef.current !== null) clearTimeout(selectTimerRef.current)
+    selectTimerRef.current = setTimeout(() => inputRef.current?.select(), 30)
   }
 
   function commitEdit(id: string) {
@@ -51,7 +62,7 @@ export default function ComponentTree({ objects, selectedIds, onSelect, onRename
     <div className="ct-list">
       {objects.map(obj => {
         const isSel = selectedIds.has(obj.id)
-        const isEd  = editingId === obj.id
+        const isEd = editingId === obj.id
         return (
           <div key={obj.id}
             className={`ct-item${isSel ? ' ct-selected' : ''}${!obj.visible ? ' ct-hidden' : ''}`}

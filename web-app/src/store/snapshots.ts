@@ -16,6 +16,13 @@
 import type { SceneObject } from '../csg/types'
 import type { TreeNode } from '../csg/types'
 
+/**
+ * Maximum number of snapshots to keep in cache.
+ * Beyond this limit, the oldest entries are evicted (LRU).
+ * 50 snapshots × ~50KB each ≈ 2.5MB worst case — well within budget.
+ */
+const MAX_CACHE_SIZE = 50
+
 const cache = new Map<number, Record<string, SceneObject>>()
 
 /** Tree node data stored alongside snapshot for tree restoration */
@@ -37,6 +44,19 @@ interface SnapshotTree {
 
 /** Tree data stored per snapshot index */
 const treeCache = new Map<number, SnapshotTree>()
+
+/**
+ * Enforce LRU eviction: if cache exceeds MAX_CACHE_SIZE, remove oldest entries.
+ * Uses Map iteration order (insertion order = LRU order for our access pattern).
+ */
+function enforceCacheLimit(map: Map<number, unknown>): void {
+  while (map.size > MAX_CACHE_SIZE) {
+    const oldestKey = map.keys().next().value
+    if (oldestKey !== undefined) {
+      map.delete(oldestKey)
+    }
+  }
+}
 
 /**
  * Serialize tree nodes to plain objects for snapshot storage.
@@ -76,6 +96,7 @@ export function cacheSnapshot(
   for (const key of cache.keys()) {
     if (key > index) cache.delete(key)
   }
+  enforceCacheLimit(cache)
 }
 
 /**
@@ -89,6 +110,7 @@ export function cacheTreeSnapshot(
   for (const key of treeCache.keys()) {
     if (key > index) treeCache.delete(key)
   }
+  enforceCacheLimit(treeCache)
 }
 
 /**
@@ -98,6 +120,12 @@ export function cacheTreeSnapshot(
 export function getCachedSnapshot(
   index: number,
 ): Record<string, SceneObject> | undefined {
+  // Touch-on-access: re-insert to update LRU order in Map
+  if (cache.has(index)) {
+    const val = cache.get(index)!
+    cache.delete(index)
+    cache.set(index, val)
+  }
   return cache.get(index)
 }
 
@@ -107,6 +135,12 @@ export function getCachedSnapshot(
 export function getCachedTreeSnapshot(
   index: number,
 ): SnapshotTree | undefined {
+  // Touch-on-access: re-insert to update LRU order in Map
+  if (treeCache.has(index)) {
+    const val = treeCache.get(index)!
+    treeCache.delete(index)
+    treeCache.set(index, val)
+  }
   return treeCache.get(index)
 }
 

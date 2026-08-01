@@ -84,9 +84,6 @@ export interface AlignOperation {
 export interface GroupOperation {
   type: 'group'
   ids: string[]
-  isHull: boolean
-  isIntersect: boolean
-  subtractOp?: boolean
   resultId?: string
   /** Vertices of the CSG result — used for rebuild from history (replaces shapeType-based reconstruction) */
   resultVertices?: Float32Array | number[]
@@ -104,10 +101,10 @@ export interface GroupOperation {
 }
 
 export interface ResizeDimsOperation { type: 'resize_dims'; id: string; params: ShapeParams }
-export interface RenameOperation     { type: 'rename';      id: string; name: string }
-export interface DeleteOperation     { type: 'delete';      ids: string[] }
-export interface HideShowOperation   { type: 'visibility';  ids: string[]; visible: boolean }
-export interface ColorOperation      { type: 'color';       ids: string[]; color: string }
+export interface RenameOperation { type: 'rename'; id: string; name: string }
+export interface DeleteOperation { type: 'delete'; ids: string[] }
+export interface HideShowOperation { type: 'visibility'; ids: string[]; visible: boolean }
+export interface ColorOperation { type: 'color'; ids: string[]; color: string }
 
 // ---- Вспомогательные типы ----
 
@@ -130,11 +127,11 @@ export type ShapeType =
   | 'torus' | 'prism' | 'pyramid' | 'import_mesh'
 
 export interface ShapeParams {
-  width?:       number
-  height?:      number
-  depth?:       number
-  radius?:      number
-  segments?:    number
+  width?: number
+  height?: number
+  depth?: number
+  radius?: number
+  segments?: number
   filletRadius?: number
   [key: string]: number | undefined
 }

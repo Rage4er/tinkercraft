@@ -22,42 +22,48 @@ import type {
 // ---- App ----
 export default function App() {
   // UI state — moved to ui-store (Q-R6-1)
-  const fps = useUiStore(s => s.fps);
-  const setFps = useUiStore(s => s.setFps);
-  const workerOk = useUiStore(s => s.workerOk);
-  const setWorkerOk = useUiStore(s => s.setWorkerOk);
-  const gizmoMode = useUiStore(s => s.gizmoMode);
-  const setGizmoMode = useUiStore(s => s.setGizmoMode);
-  const snapValue = useUiStore(s => s.snapValue);
-  const setSnapValue = useUiStore(s => s.setSnapValue);
-  const theme = useUiStore(s => s.theme);
-  const setTheme = useUiStore(s => s.setTheme);
-  const tlFilters = useUiStore(s => s.tlFilters);
-  const setTlFilter = useUiStore(s => s.setTlFilter);
-  const filletRadius = useUiStore(s => s.filletRadius);
-  const setFilletRadius = useUiStore(s => s.setFilletRadius);
-  const shapeSearch = useUiStore(s => s.shapeSearch);
-  const setShapeSearch = useUiStore(s => s.setShapeSearch);
-  const rulerActive = useUiStore(s => s.rulerActive);
-  const setRulerActive = useUiStore(s => s.setRulerActive);
-  const rulerDist = useUiStore(s => s.rulerDist);
-  const setRulerDist = useUiStore(s => s.setRulerDist);
-  const showPM = useUiStore(s => s.showPM);
-  const setShowPM = useUiStore(s => s.setShowPM);
-  const extrudeAxis = useUiStore(s => s.extrudeAxis);
-  const setExtrudeAxis = useUiStore(s => s.setExtrudeAxis);
-  const extrudeDepth = useUiStore(s => s.extrudeDepth);
-  const setExtrudeDepth = useUiStore(s => s.setExtrudeDepth);
-  const activeTab = useUiStore(s => s.activeTab);
-  const setActiveTab = useUiStore(s => s.setActiveTab);
-  const cameraMode = useUiStore(s => s.cameraMode);
-  const setCameraMode = useUiStore(s => s.setCameraMode);
-  const showTextModal = useUiStore(s => s.showTextModal);
-  const setShowTextModal = useUiStore(s => s.setShowTextModal);
-  const mirrorPreviewMesh = useUiStore(s => s.mirrorPreviewMesh);
-  const setMirrorPreviewMesh = useUiStore(s => s.setMirrorPreviewMesh);
-  const mirrorPreviewPlane = useUiStore(s => s.mirrorPreviewPlane);
-  const setMirrorPreviewPlane = useUiStore(s => s.setMirrorPreviewPlane);
+  // FIX (MED-UI-4): Single useShallow selector to reduce re-renders
+  const {
+    fps, setFps,
+    workerOk, setWorkerOk,
+    gizmoMode, setGizmoMode,
+    snapValue, setSnapValue,
+    theme, setTheme,
+    tlFilters, setTlFilter,
+    filletRadius, setFilletRadius,
+    shapeSearch, setShapeSearch,
+    rulerActive, setRulerActive,
+    rulerDist, setRulerDist,
+    showPM, setShowPM,
+    extrudeAxis, setExtrudeAxis,
+    extrudeDepth, setExtrudeDepth,
+    activeTab, setActiveTab,
+    cameraMode, setCameraMode,
+    showTextModal, setShowTextModal,
+    mirrorPreviewMesh, setMirrorPreviewMesh,
+    mirrorPreviewPlane, setMirrorPreviewPlane,
+  } = useUiStore(
+    useShallow(s => ({
+      fps: s.fps, setFps: s.setFps,
+      workerOk: s.workerOk, setWorkerOk: s.setWorkerOk,
+      gizmoMode: s.gizmoMode, setGizmoMode: s.setGizmoMode,
+      snapValue: s.snapValue, setSnapValue: s.setSnapValue,
+      theme: s.theme, setTheme: s.setTheme,
+      tlFilters: s.tlFilters, setTlFilter: s.setTlFilter,
+      filletRadius: s.filletRadius, setFilletRadius: s.setFilletRadius,
+      shapeSearch: s.shapeSearch, setShapeSearch: s.setShapeSearch,
+      rulerActive: s.rulerActive, setRulerActive: s.setRulerActive,
+      rulerDist: s.rulerDist, setRulerDist: s.setRulerDist,
+      showPM: s.showPM, setShowPM: s.setShowPM,
+      extrudeAxis: s.extrudeAxis, setExtrudeAxis: s.setExtrudeAxis,
+      extrudeDepth: s.extrudeDepth, setExtrudeDepth: s.setExtrudeDepth,
+      activeTab: s.activeTab, setActiveTab: s.setActiveTab,
+      cameraMode: s.cameraMode, setCameraMode: s.setCameraMode,
+      showTextModal: s.showTextModal, setShowTextModal: s.setShowTextModal,
+      mirrorPreviewMesh: s.mirrorPreviewMesh, setMirrorPreviewMesh: s.setMirrorPreviewMesh,
+      mirrorPreviewPlane: s.mirrorPreviewPlane, setMirrorPreviewPlane: s.setMirrorPreviewPlane,
+    })),
+  );
 
   // Text modal form state — stays local (form-only, not shared)
   const [textInput, setTextInput] = useState("Text");
@@ -332,7 +338,9 @@ export default function App() {
   );
   const canUndo = historyIndex > 0;
   const canRedo = historyIndex < operations.length;
-  const canCsg = selectedIds.length === 2 && !busy;
+  // CSG недоступен, если среди выбранных объектов есть non-manifold (import_mesh)
+  const hasNonManifoldSelected = selectedIds.some(id => objects[id]?.shapeType === 'import_mesh');
+  const canCsg = selectedIds.length === 2 && !busy && !hasNonManifoldSelected;
   const canMirror = selectedIds.length > 0 && !busy;
   const canAlign = selectedIds.length >= 2 && !busy;
   const canFillet =
@@ -464,6 +472,7 @@ export default function App() {
         canMirror={canMirror}
         canAlign={canAlign}
         canCsg={canCsg}
+        nonManifoldSelected={hasNonManifoldSelected}
         theme={theme}
         onOpen={openDoodle}
         onSave={saveDoodle}
@@ -559,7 +568,6 @@ export default function App() {
               snapValue={snapValue}
               rulerMode={rulerActive}
               onRulerMeasure={handleRulerMeasure}
-              busy={busy}
               workerOk={workerOk}
               cameraMode={cameraMode}
               mirrorPreviewMesh={mirrorPreviewMesh}
@@ -602,6 +610,7 @@ export default function App() {
             canFillet={canFillet}
             canCsg={canCsg}
             canAlign={canAlign}
+            nonManifoldSelected={hasNonManifoldSelected}
             filletRadius={filletRadius}
             objectList={objectList}
             operationsLength={operations.length}

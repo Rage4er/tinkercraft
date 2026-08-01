@@ -8,7 +8,7 @@ import { create } from 'zustand/react'
 export type NotificationType = 'error' | 'warning' | 'info'
 
 export interface Notification {
-  id: number
+  id: string
   message: string
   type: NotificationType
 }
@@ -16,15 +16,13 @@ export interface Notification {
 interface NotificationStore {
   notifications: Notification[]
   show: (message: string, type?: NotificationType) => void
-  dismiss: (id: number) => void
+  dismiss: (id: string) => void
 }
-
-let _id = 0
 
 export const useNotifications = create<NotificationStore>((set) => ({
   notifications: [],
   show: (message, type = 'info') => {
-    const id = ++_id
+    const id = crypto.randomUUID()
     set((s) => ({ notifications: [...s.notifications, { id, message, type }] }))
     // Auto-dismiss after 5 seconds
     setTimeout(() => {

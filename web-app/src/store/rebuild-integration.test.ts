@@ -39,7 +39,7 @@ function makeColor(ids: string[], color: string): ColorOperation {
 }
 
 function makeGroup(ids: string[], resultId: string, kind: 'union' | 'subtract' | 'intersect' = 'union'): GroupOperation {
-  return { type: 'group', ids, isHull: false, isIntersect: kind === 'intersect', subtractOp: kind === 'subtract', resultId }
+  return { type: 'group', ids, resultId, treeOperation: kind }
 }
 
 function makeFillet(id: string, radius: number): FilletOperation {

@@ -5,6 +5,7 @@
 import type {
   SceneObject, ShapeType, ShapeParams, TransformNR, Vec3,
 } from '../csg/types'
+import { OBJECT_COLORS } from '../constants'
 
 // ---- AABB ----
 export function computeAABB(vertices: Float32Array): { min: Vec3; max: Vec3 } {
@@ -93,11 +94,7 @@ export function nextId(prefix = 'obj'): string { return `${prefix}_${++_idCounte
 export function resetIdCounter(): void { _idCounter = 0 }
 
 // ---- Colors ----
-export const PALETTE = [
-  '#89b4fa', '#a6e3a1', '#f9e2af', '#cba6f7',
-  '#f38ba8', '#94e2d5', '#fab387', '#74c7ec',
-]
-export function colorForIndex(n: number): string { return PALETTE[n % PALETTE.length] }
+export function colorForIndex(n: number): string { return OBJECT_COLORS[n % OBJECT_COLORS.length] }
 
 // ---- Clipboard entry ----
 export interface ClipEntry {

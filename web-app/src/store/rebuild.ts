@@ -206,7 +206,7 @@ export async function rebuildFromHistory(
         }
         continue
       }
-      const { cx, cy, cz } = extractAndCenterInPlace(m.vertices)
+      const { cx, cy, cz } = extractAndCenterInPlace(new Float32Array(m.vertices))
       meta[id] = { ...meta[id], transform: { ...meta[id].transform, x: cx, y: cy, z: cz } }
     }
   }
@@ -244,7 +244,10 @@ export async function rebuildFromHistory(
  * Called after rebuildFromHistory to keep the tree in sync with the scene.
  * This is essential for undo/redo to work correctly with tree operations.
  */
-export function rebuildBuildTree(ops: TinkerCraftOperation[]): void {
+export function rebuildBuildTree(
+  ops: TinkerCraftOperation[],
+  objects?: Record<string, SceneObject>,
+): void {
   const transforms: Record<string, TransformNR> = {}
 
   for (const op of ops) {
@@ -303,11 +306,7 @@ export function rebuildBuildTree(ops: TinkerCraftOperation[]): void {
           : makeDefaultTransform() as TransformNR
         transforms[op.resultId] = startT
         // Register boolean node in tree
-        const isSubtract = (op as { subtractOp?: boolean }).subtractOp
-        const isIntersect = (op as { isIntersect?: boolean }).isIntersect
-        // Use treeOperation from GroupOperation if available, fallback to subtractOp/isIntersect
-        const treeOp = (op as { treeOperation?: 'union' | 'subtract' | 'intersect' }).treeOperation
-          ?? (isSubtract ? 'subtract' : isIntersect ? 'intersect' : 'union')
+        const treeOp = op.treeOperation ?? 'union'
         try {
           // Pass the transform to the boolean node creation
           createBooleanNode(op.resultId, treeOp, op.ids[0], op.ids[1], startT)
@@ -317,6 +316,11 @@ export function rebuildBuildTree(ops: TinkerCraftOperation[]): void {
         }
       }
     }
+  }
+
+  // Register baked nodes for import_mesh operations that have mesh data
+  if (objects) {
+    registerBakedNodes(objects, ops)
   }
 }
 

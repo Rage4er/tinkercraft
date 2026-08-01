@@ -9,15 +9,15 @@ import type {
 } from './types'
 
 const DEFAULT_TRANSFORM: TransformNR = { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
-const DEFAULT_PARAMS: ShapeParams     = { width: 20, height: 20, depth: 20 }
+const DEFAULT_PARAMS: ShapeParams = { width: 20, height: 20, depth: 20 }
 
 function makeSceneObject(overrides: Partial<SceneObject> = {}): SceneObject {
   return {
     id: 'obj_1', shapeType: 'cube', params: DEFAULT_PARAMS,
     color: '#89b4fa', transform: DEFAULT_TRANSFORM,
     visible: true, locked: false,
-    vertices: new Float32Array([0,0,0, 1,0,0, 1,1,0]),
-    indices:  new Uint32Array([0,1,2]),
+    vertices: new Float32Array([0, 0, 0, 1, 0, 0, 1, 1, 0]),
+    indices: new Uint32Array([0, 1, 2]),
     ...overrides,
   }
 }
@@ -42,19 +42,19 @@ describe('TinkerCraftOperation type narrowing', () => {
   })
 
   it('group union', () => {
-    const op: GroupOperation = { type: 'group', ids: ['a','b'], isHull: false, isIntersect: false, resultId: 'ab' }
+    const op: GroupOperation = { type: 'group', ids: ['a', 'b'], resultId: 'ab', treeOperation: 'union' }
     expect(op.ids).toHaveLength(2)
-    expect(op.isIntersect).toBe(false)
+    expect(op.treeOperation).toBe('union')
   })
 
   it('group intersect', () => {
-    const op: GroupOperation = { type: 'group', ids: ['a','b'], isHull: false, isIntersect: true }
-    expect(op.isIntersect).toBe(true)
+    const op: GroupOperation = { type: 'group', ids: ['a', 'b'], treeOperation: 'intersect' }
+    expect(op.treeOperation).toBe('intersect')
   })
 
   it('operation discriminator works', () => {
     const ops: TinkerCraftOperation[] = [
-      { type: 'add_shape', id: '1', shapeType: 'sphere', params: {radius:10}, color:'#f00', transform: DEFAULT_TRANSFORM },
+      { type: 'add_shape', id: '1', shapeType: 'sphere', params: { radius: 10 }, color: '#f00', transform: DEFAULT_TRANSFORM },
       { type: 'delete', ids: ['1'] },
       { type: 'rename', id: '1', name: 'Sphere 1' },
     ]
@@ -86,7 +86,7 @@ describe('SceneObject', () => {
   })
 
   it('triangle count from indices', () => {
-    const obj = makeSceneObject({ indices: new Uint32Array(Array.from({length: 36}, (_, i) => i % 8)) })
+    const obj = makeSceneObject({ indices: new Uint32Array(Array.from({ length: 36 }, (_, i) => i % 8)) })
     expect(obj.indices.length / 3).toBe(12)
   })
 })

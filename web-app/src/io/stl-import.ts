@@ -19,6 +19,10 @@ export interface ImportedMesh {
   name: string
 }
 
+export type StlParseResult =
+  | { success: true; vertices: number[]; indices: number[]; transform: TransformNR; name: string }
+  | { success: false; error: string }
+
 /**
  * Слить совпадающие вершины (STL хранит каждый треугольник отдельно).
  * Без слияния manifold-3d не создаст валидный solid.
@@ -88,18 +92,20 @@ export function detectStlFormat(buffer: ArrayBuffer): 'binary' | 'ascii' | 'unkn
   return 'binary'
 }
 
-export async function parseStlFile(file: File): Promise<ImportedMesh | null> {
+export async function parseStlFile(file: File): Promise<StlParseResult> {
   // FIX (WARN-R3-6): Validate file size before processing
   if (file.size > MAX_STL_FILE_SIZE) {
-    console.error(`[STL Import] File too large: ${Math.round(file.size / 1024 / 1024)}MB (max ${MAX_STL_FILE_SIZE / 1024 / 1024}MB)`)
-    return null
+    const msg = `[STL Import] File too large: ${Math.round(file.size / 1024 / 1024)}MB (max ${MAX_STL_FILE_SIZE / 1024 / 1024}MB)`
+    console.error(msg)
+    return { success: false, error: msg }
   }
 
   // Quick check: binary STL has 80-byte header + 4-byte triangle count
   // If it's too small to be valid, reject early
   if (file.size < 84) {
-    console.error('[STL Import] File too small to be valid STL')
-    return null
+    const msg = '[STL Import] File too small to be valid STL'
+    console.error(msg)
+    return { success: false, error: msg }
   }
 
   try {
@@ -122,8 +128,9 @@ export async function parseStlFile(file: File): Promise<ImportedMesh | null> {
 
     const triangleCount = indices.length / 3
     if (triangleCount > MAX_STL_TRIANGLES) {
-      console.error(`[STL Import] Too many triangles: ${triangleCount.toLocaleString()} (max ${MAX_STL_TRIANGLES.toLocaleString()})`)
-      return null
+      const msg = `[STL Import] Too many triangles: ${triangleCount.toLocaleString()} (max ${MAX_STL_TRIANGLES.toLocaleString()})`
+      console.error(msg)
+      return { success: false, error: msg }
     }
 
     if (vertices.length < 9 || indices.length < 3) {
@@ -132,9 +139,10 @@ export async function parseStlFile(file: File): Promise<ImportedMesh | null> {
 
     const defaultTransform: TransformNR = { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
 
-    return { vertices, indices, transform: defaultTransform, name: file.name }
+    return { success: true, vertices, indices, transform: defaultTransform, name: file.name }
   } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
     console.error('[STL Import]', e)
-    return null
+    return { success: false, error: msg }
   }
 }

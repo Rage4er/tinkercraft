@@ -60,8 +60,8 @@ export interface UiStore {
   setExtrudeDepth: (v: number) => void
 
   // Mirror preview (MIRROR-2)
-  mirrorPreviewMesh: { vertices: Float32Array; indices: Uint32Array; normals: Float32Array | null } | null
-  setMirrorPreviewMesh: (mesh: { vertices: Float32Array; indices: Uint32Array; normals: Float32Array | null } | null) => void
+  mirrorPreviewMesh: { vertices: Float32Array; indices: Uint32Array; normals: Float32Array | null; center?: { x: number; y: number; z: number } } | null
+  setMirrorPreviewMesh: (mesh: { vertices: Float32Array; indices: Uint32Array; normals: Float32Array | null; center?: { x: number; y: number; z: number } } | null) => void
   // Mirror plane visualizer (MIRROR-4): which plane to show as 3D indicator
   mirrorPreviewPlane: 'XY' | 'XZ' | 'YZ' | null
   setMirrorPreviewPlane: (plane: 'XY' | 'XZ' | 'YZ' | null) => void

@@ -5,20 +5,26 @@
 
 type CsgOp = "union" | "subtract" | "intersect";
 
+const CSG_DISABLED_TITLE = "CSG операции с данным объектом невозможны (non-manifold геометрия)";
+
 export default function CsgButtons({
   disabled,
   onCsg,
   variant = "compact",
+  nonManifoldSelected = false,
 }: {
   disabled: boolean;
   onCsg: (op: CsgOp) => void;
   variant?: "compact" | "full";
+  nonManifoldSelected?: boolean;
 }) {
   const ops: { op: CsgOp; icon: string; label: string }[] = [
     { op: "union", icon: "∪", label: "Объединение" },
     { op: "subtract", icon: "−", label: "Вычитание" },
     { op: "intersect", icon: "∩", label: "Пересечение" },
   ];
+
+  const title = disabled && nonManifoldSelected ? CSG_DISABLED_TITLE : undefined;
 
   if (variant === "full") {
     return (
@@ -29,6 +35,7 @@ export default function CsgButtons({
             key={op}
             className="btn primary"
             disabled={disabled}
+            title={title}
             onClick={() => onCsg(op)}
           >
             {icon} {label}
@@ -45,6 +52,7 @@ export default function CsgButtons({
           key={op}
           className="btn primary"
           disabled={disabled}
+          title={title}
           onClick={() => onCsg(op)}
         >
           {icon}

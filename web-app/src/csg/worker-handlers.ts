@@ -470,6 +470,8 @@ export interface MirrorObjectMessage {
     scaleY: number
     scaleZ: number
   }
+  /** Center point for mirror pivot (default: origin) */
+  mirrorCenter?: { x: number; y: number; z: number }
 }
 
 export interface RebuildSceneMessage {
@@ -566,12 +568,14 @@ export async function handleBuildImportedMesh(msg: BuildImportedMeshMessage): Pr
   const t0 = performance.now()
   const verts = new Float32Array(msg.vertices)
   const tris = new Uint32Array(msg.indices)
+  console.log(`[DIAG:handleBuildImportedMesh] objId=${msg.objId} verts=${verts.length} tris=${tris.length}`)
   try {
     const m = new wasm.Manifold({
       numProp: 3,
       vertProperties: verts,
       triVerts: tris,
     })
+    console.log(`[DIAG:handleBuildImportedMesh] Manifold created successfully for ${msg.objId}`)
     setCached(msg.objId, m)
     const mesh = extractMesh(m)
     safePostMessage(
@@ -589,6 +593,7 @@ export async function handleBuildImportedMesh(msg: BuildImportedMeshMessage): Pr
     )
   } catch (me) {
     // Non-manifold STL — return raw mesh without CSG support
+    console.warn(`[DIAG:handleBuildImportedMesh] Non-manifold for ${msg.objId}:`, me)
     const mesh = { vertices: verts, indices: tris, normals: null, tris: tris.length / 3 }
     setCached(msg.objId, null)
     safePostMessage(
@@ -965,10 +970,9 @@ export async function handleRebuildScene(msg: RebuildSceneMessage): Promise<void
             if (tA && hasSR(tA)) a = applySRAroundCenter(a, tA)
             if (tB && hasSR(tB)) b = applySRAroundCenter(b, tB)
             let result: ManifoldObject
-            const isIntersect = op.isIntersect as boolean
-            const subtractOp = op.subtractOp as boolean | undefined
-            if (isIntersect) result = a.intersect(b)
-            else if (subtractOp) result = a.subtract(b)
+            const treeOp = op.treeOperation ?? 'union'
+            if (treeOp === 'intersect') result = a.intersect(b)
+            else if (treeOp === 'subtract') result = a.subtract(b)
             else result = a.add(b)
             disposeCached(ids[0])
             disposeCached(ids[1])
@@ -995,10 +999,17 @@ export async function handleRebuildScene(msg: RebuildSceneMessage): Promise<void
     const transfers: ArrayBuffer[] = []
     for (const [objId, m] of cache) {
       if (!m) continue
-      const { vertices, indices, normals, tris } = extractMesh(m)
-      results.push({ objId, vertices, indices, normals, tris })
-      transfers.push(vertices.buffer as ArrayBuffer, indices.buffer as ArrayBuffer)
-      if (normals) transfers.push(normals.buffer as ArrayBuffer)
+      try {
+        const { vertices, indices, normals, tris } = extractMesh(m)
+        results.push({ objId, vertices, indices, normals, tris })
+        transfers.push(vertices.buffer as ArrayBuffer, indices.buffer as ArrayBuffer)
+        if (normals) transfers.push(normals.buffer as ArrayBuffer)
+      } catch (extractErr) {
+        // CRIT-9: Если extractMesh упал для одного объекта, не прерываем весь цикл.
+        // Пропускаем проблемный объект, чтобы не потерять Transferable буферы других объектов.
+        console.warn(`[Worker] extractMesh failed for ${objId}:`, extractErr)
+        continue
+      }
     }
 
     safePostMessage(
@@ -1111,20 +1122,25 @@ export interface CsgBooleanSyncMessage {
 
 /**
  * Combined sync + CSG boolean in one handler (PERF-R6-2).
- * Rebuilds both operands in cache with fresh TRS, then performs the boolean.
+ * Always rebuilds both operands in cache with fresh TRS, then performs the boolean.
  * Uses buildTransformMatrix (TRS around origin) for primitives centered at (0,0,0).
  *
- * FIX (CRIT-CSG-2): If an operand is already in cache (e.g., synced via workerSyncMesh
- * for CSG results or imported meshes), skip rebuilding it from shapeType/params to avoid
- * overwriting the actual mesh with a default cube or losing imported geometry.
+ * FIX (CRIT-CSG-3): Always sync operands regardless of cache state.
+ * Previous logic skipped sync when operand was already in cache, causing:
+ * 1. CSG operations to use stale positions (operand moved after last sync)
+ * 2. Operand disposal after boolean → "Objects not found" on next operation
+ * Now: sync always applies fresh TRS, then disposes operands after boolean.
+ * For CSG results / imported meshes (shapeType=undefined), skip rebuild
+ * since they can't be rebuilt from shapeType+params — rely on previous sync.
  */
 export async function handleCsgBooleanSync(msg: CsgBooleanSyncMessage): Promise<void> {
   const t0 = performance.now()
 
   // Sync operand A — build primitive at origin, apply TRS
-  // FIX (CRIT-CSG-2): Skip sync if operand already in cache (from workerSyncMesh).
-  // This preserves CSG results and imported meshes that can't be rebuilt from shapeType/params.
-  if (msg.shapeA && !cache.has(msg.idA)) {
+  // FIX (CRIT-CSG-3): Always rebuild from shapeType/params when available,
+  // regardless of cache state. This ensures the operand has the correct
+  // position/rotation/scale for the boolean operation.
+  if (msg.shapeA) {
     const params = sanitizeParams(msg.shapeA.params)
     const m = buildPrimitive(msg.shapeA.shapeType, params)
     const fullMatrix = buildTransformMatrix(
@@ -1134,8 +1150,11 @@ export async function handleCsgBooleanSync(msg: CsgBooleanSyncMessage): Promise<
     )
     setCached(msg.idA, m.transform(fullMatrix))
   }
-  // Sync operand B — build primitive at origin, apply TRS
-  if (msg.shapeB && !cache.has(msg.idB)) {
+  // If shapeA is undefined (CSG result or imported mesh), skip rebuild —
+  // rely on previous syncObjectsForOperation that called workerSyncMesh.
+
+  // Sync operand B — same logic
+  if (msg.shapeB) {
     const params = sanitizeParams(msg.shapeB.params)
     const m = buildPrimitive(msg.shapeB.shapeType, params)
     const fullMatrix = buildTransformMatrix(
@@ -1178,50 +1197,136 @@ export async function handleCsgBooleanSync(msg: CsgBooleanSyncMessage): Promise<
   )
 }
 
-/** Handle mirrorObject message. */
+/** Handle mirrorObject message.
+ *
+ * Используется ТОЛЬКО для import_mesh (не-примитивов).
+ * Для примитивов mirror делается через build tree (mirrorNodeRecursive + rebuildNode).
+ *
+ * Логика для import_mesh:
+ * 1. Геометрия src уже содержит baked transform (позицию/ротацию/scale).
+ * 2. translate к mirrorCenter → mirror → translate обратно (отражаем геометрию).
+ * 3. Применяем transform с новой позицией (newPos = 2*mirrorCenter - originalPos)
+ *    и отражёнными rot/scale.
+ */
 export async function handleMirrorObject(msg: MirrorObjectMessage): Promise<void> {
   const t0 = performance.now()
   const src = cache.get(msg.objId)
   if (!src) throw new Error(`Object not found: ${msg.objId}`)
 
+  // Mirror center: translate geometry to center, mirror, translate back
+  const mc = msg.mirrorCenter ?? { x: 0, y: 0, z: 0 }
+
   let mesh: MeshResult
 
-  // Для примитивов (shapeType и params присутствуют) - строим свежий примитив
+  // Для примитивов (shapeType и params присутствуют) — mirror делается через build tree.
+  // Если handleMirrorObject всё же вызван для примитива, строим свежий примитив,
+  // применяем mirror matrix (translate→mirror→translate back) и отражённые rot/scale.
+  // НЕ применяем newPos отдельно — mirror matrix уже включает translate-to-center.
   if (msg.shapeType && msg.params) {
     const fresh = buildPrimitive(msg.shapeType, msg.params)
+    // 1. Translate to mirror center
+    const toCenter = buildTransformMatrix(
+      { x: mc.x, y: mc.y, z: mc.z },
+      { rotX: 0, rotY: 0, rotZ: 0 },
+      { scaleX: 1, scaleY: 1, scaleZ: 1 }
+    )
+    const atCenter = fresh.transform(toCenter)
+    safeDelete(fresh)
+    // 2. Mirror
     const mirror = getMirrorMatrix(msg.plane)
-    const mirrored = fresh.transform(mirror)
+    const mirrored = atCenter.transform(mirror)
+    safeDelete(atCenter)
+    // 3. Translate back from center
+    const fromCenter = buildTransformMatrix(
+      { x: -mc.x, y: -mc.y, z: -mc.z },
+      { rotX: 0, rotY: 0, rotZ: 0 },
+      { scaleX: 1, scaleY: 1, scaleZ: 1 }
+    )
+    const fromCenterM = mirrored.transform(fromCenter)
+    safeDelete(mirrored)
 
-    // Применяем полную трансформацию (position, rotation, scale) к зеркальному мешу
+    // 4. Применяем отражённые rotation/scale (позиция НЕ применяется —
+    //    она уже baked в геометрию шагами 1-3)
     if (msg.transform) {
+      const t = msg.transform
+      const reflectedRot = {
+        rotX: msg.plane === 'YZ' ? -t.rotX : t.rotX,
+        rotY: msg.plane === 'XZ' ? -t.rotY : t.rotY,
+        rotZ: msg.plane === 'XY' ? -t.rotZ : t.rotZ,
+      }
+      const reflectedScale = {
+        scaleX: msg.plane === 'YZ' ? -t.scaleX : t.scaleX,
+        scaleY: msg.plane === 'XZ' ? -t.scaleY : t.scaleY,
+        scaleZ: msg.plane === 'XY' ? -t.scaleZ : t.scaleZ,
+      }
       const transformMatrix = buildTransformMatrix(
-        { x: msg.transform.x, y: msg.transform.y, z: msg.transform.z },
-        { rotX: msg.transform.rotX, rotY: msg.transform.rotY, rotZ: msg.transform.rotZ },
-        { scaleX: msg.transform.scaleX, scaleY: msg.transform.scaleY, scaleZ: msg.transform.scaleZ }
+        { x: 0, y: 0, z: 0 }, // позиция уже в геометрии
+        { rotX: reflectedRot.rotX, rotY: reflectedRot.rotY, rotZ: reflectedRot.rotZ },
+        { scaleX: reflectedScale.scaleX, scaleY: reflectedScale.scaleY, scaleZ: reflectedScale.scaleZ }
       )
-      const fullyTransformed = mirrored.transform(transformMatrix)
+      const fullyTransformed = fromCenterM.transform(transformMatrix)
+      safeDelete(fromCenterM)
       setCached(msg.objId, fullyTransformed)
       mesh = extractMesh(fullyTransformed)
     } else {
-      setCached(msg.objId, mirrored)
-      mesh = extractMesh(mirrored)
+      setCached(msg.objId, fromCenterM)
+      mesh = extractMesh(fromCenterM)
     }
   }
-  // Для CSG / импорта (shapeType/params отсутствуют) - сдвигаем к origin, зеркалим
+  // Для CSG / импорта (shapeType/params отсутствуют) — сдвигаем к origin, зеркалим
   else {
     if (!msg.transform) throw new Error(`Transform is required for CSG/import objects`)
 
-    // 1. Зеркалим геометрию (только mirror matrix, без position/scale/rotation)
-    const mirror = getMirrorMatrix(msg.plane)
-    const mirrored = src.transform(mirror)
+    const t = msg.transform
 
-    // 2. Применяем полную трансформацию (position, rotation, scale) к зеркальному мешу
-    const transformMatrix = buildTransformMatrix(
-      { x: msg.transform.x, y: msg.transform.y, z: msg.transform.z },
-      { rotX: msg.transform.rotX, rotY: msg.transform.rotY, rotZ: msg.transform.rotZ },
-      { scaleX: msg.transform.scaleX, scaleY: msg.transform.scaleY, scaleZ: msg.transform.scaleZ }
+    // Вычисляем новую позицию после mirror относительно mirrorCenter:
+    // newPos = 2 * mirrorCenter - originalPos
+    const newPos = {
+      x: 2 * mc.x - t.x,
+      y: 2 * mc.y - t.y,
+      z: 2 * mc.z - t.z,
+    }
+
+    // Отражённые rotation и scale (аналогично mirrorNodeRecursive)
+    const reflectedRot = {
+      rotX: msg.plane === 'YZ' ? -t.rotX : t.rotX,
+      rotY: msg.plane === 'XZ' ? -t.rotY : t.rotY,
+      rotZ: msg.plane === 'XY' ? -t.rotZ : t.rotZ,
+    }
+    const reflectedScale = {
+      scaleX: msg.plane === 'YZ' ? -t.scaleX : t.scaleX,
+      scaleY: msg.plane === 'XZ' ? -t.scaleY : t.scaleY,
+      scaleZ: msg.plane === 'XY' ? -t.scaleZ : t.scaleZ,
+    }
+
+    // 1. Translate to mirror center
+    const toCenter = buildTransformMatrix(
+      { x: mc.x, y: mc.y, z: mc.z },
+      { rotX: 0, rotY: 0, rotZ: 0 },
+      { scaleX: 1, scaleY: 1, scaleZ: 1 }
     )
-    const fullyTransformed = mirrored.transform(transformMatrix)
+    const atCenter = src.transform(toCenter)
+    // 2. Mirror
+    const mirror = getMirrorMatrix(msg.plane)
+    const mirrored = atCenter.transform(mirror)
+    safeDelete(atCenter)
+    // 3. Translate back from center
+    const fromCenter = buildTransformMatrix(
+      { x: -mc.x, y: -mc.y, z: -mc.z },
+      { rotX: 0, rotY: 0, rotZ: 0 },
+      { scaleX: 1, scaleY: 1, scaleZ: 1 }
+    )
+    const fromCenterM = mirrored.transform(fromCenter)
+    safeDelete(mirrored)
+
+    // 4. Применяем трансформацию с НОВОЙ позицией (отражённые rotation/scale)
+    const transformMatrix = buildTransformMatrix(
+      { x: newPos.x, y: newPos.y, z: newPos.z },
+      { rotX: reflectedRot.rotX, rotY: reflectedRot.rotY, rotZ: reflectedRot.rotZ },
+      { scaleX: reflectedScale.scaleX, scaleY: reflectedScale.scaleY, scaleZ: reflectedScale.scaleZ }
+    )
+    const fullyTransformed = fromCenterM.transform(transformMatrix)
+    safeDelete(fromCenterM)
 
     setCached(msg.objId, fullyTransformed)
     mesh = extractMesh(fullyTransformed)
@@ -1256,30 +1361,38 @@ export interface SyncMeshMessage {
 /**
  * Sync a mesh into worker cache from raw vertices/indices.
  * Used for CSG results and imported meshes that cannot be rebuilt from shapeType+params.
- * Applies full SRT around center (same as handleRebuildScene for primitives).
+ *
+ * FIX (CRIT-CSG-5): For CSG results, apply only translation — geometry is already
+ * centered and has rotation/scale baked in. For imported meshes (shapeType=import_mesh),
+ * apply full SRT around center (same as handleRebuildScene for primitives).
+ *
+ * The caller (syncObjectsForOperation) passes obj.transform which for CSG results
+ * contains only translation (rotX/Y/Z=0, scaleX/Y/Z=1). For imported meshes,
+ * transform may contain rotation/scale that need to be applied.
  */
 export async function handleSyncMesh(msg: SyncMeshMessage): Promise<void> {
   const wasm = getWasm()
   const verts = new Float32Array(msg.vertices)
   const tris = new Uint32Array(msg.indices)
+  console.log(`[DIAG:handleSyncMesh] objId=${msg.objId} verts=${verts.length} tris=${tris.length} transform=(${msg.transform.x}, ${msg.transform.y}, ${msg.transform.z})`)
   try {
     let m = new wasm.Manifold({
       numProp: 3,
       vertProperties: verts,
       triVerts: tris,
     })
-    // Apply transform (position, rotation, scale) around center
-    if (hasSR(msg.transform)) {
-      m = applySRAroundCenter(m, msg.transform)
-    } else {
-      // Only translation — use simple translate matrix
-      const tm = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, msg.transform.x, msg.transform.y, msg.transform.z, 1]
-      m = m.transform(tm)
-    }
+    console.log(`[DIAG:handleSyncMesh] Manifold created successfully for ${msg.objId}`)
+    // FIX (CRIT-CSG-5): Only apply translation for CSG results.
+    // CSG result meshes are already centered at origin with rotation/scale baked in.
+    // The transform.x/y/z is the centroid position from extractAndCenterGetAABB.
+    const tm = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, msg.transform.x, msg.transform.y, msg.transform.z, 1]
+    m = m.transform(tm)
     setCached(msg.objId, m)
+    console.log(`[DIAG:handleSyncMesh] Cached ${msg.objId} as ManifoldObject`)
     safePostMessage({ reqId: msg.reqId, type: 'ok' })
   } catch (me) {
     // Non-manifold — cache as null (CSG not supported for this object)
+    console.warn(`[DIAG:handleSyncMesh] Non-manifold for ${msg.objId}:`, me)
     setCached(msg.objId, null)
     safePostMessage({ reqId: msg.reqId, type: 'ok' })
   }

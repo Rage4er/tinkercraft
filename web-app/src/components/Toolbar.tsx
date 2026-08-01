@@ -18,6 +18,7 @@ export default function Toolbar({
   canMirror,
   canAlign,
   canCsg,
+  nonManifoldSelected,
   theme,
   onOpen,
   onSave,
@@ -56,6 +57,7 @@ export default function Toolbar({
   canMirror: boolean;
   canAlign: boolean;
   canCsg: boolean;
+  nonManifoldSelected?: boolean;
   theme: "dark" | "light";
   onOpen: () => void;
   onSave: () => void;
@@ -194,7 +196,7 @@ export default function Toolbar({
 
       <AlignButtons disabled={!canAlign} onAlign={onAlign} />
 
-      <CsgButtons disabled={!canCsg} onCsg={onCsg} />
+      <CsgButtons disabled={!canCsg} onCsg={onCsg} nonManifoldSelected={nonManifoldSelected} />
 
       <div className="toolbar-group">
         <button className="btn" onClick={onToggleTheme} title="Сменить тему">

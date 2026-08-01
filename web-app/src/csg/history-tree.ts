@@ -24,44 +24,44 @@ import {
 } from './worker-handlers'
 import { buildTransformMatrix } from './worker-matrix'
 import { workerRebuildNode } from './worker-client'
+import { treeStore } from './tree-store'
 
 // ---------------------------------------------------------------------------
-// Storage
+// Re-export treeStore for tests and external access
 // ---------------------------------------------------------------------------
 
-/** Global build tree storage */
-const treeNodes = new Map<string, TreeNode>()
+export { treeStore }
 
+// ---------------------------------------------------------------------------
+// Storage API — delegates to treeStore
+// ---------------------------------------------------------------------------
+
+/** Get a node by ID */
 export function getNode(id: string): TreeNode | undefined {
-  return treeNodes.get(id)
+  return treeStore.getNode(id)
 }
 
+/** Set a node */
 export function setNode(id: string, node: TreeNode): void {
-  treeNodes.set(id, node)
+  treeStore.setNode(id, node)
 }
 
-export function deleteNode(id: string): void {
-  const node = treeNodes.get(id)
-  if (node) {
-    // Reset parentId on children so they lose the parent link
-    if (node.children) {
-      for (const childId of node.children) {
-        const child = treeNodes.get(childId)
-        if (child) child.parentId = undefined
-      }
-    }
-    // Reset own parentId
-    if (node.parentId) node.parentId = undefined
-  }
-  treeNodes.delete(id)
+/**
+ * Delete a node.
+ * @param recursive — if true, recursively deletes all children
+ */
+export function deleteNode(id: string, recursive = false): void {
+  treeStore.deleteNode(id, recursive)
 }
 
+/** Clear all nodes from the tree */
 export function clearTree(): void {
-  treeNodes.clear()
+  treeStore.clear()
 }
 
+/** Get all nodes as an array */
 export function getAllNodes(): TreeNode[] {
-  return [...treeNodes.values()]
+  return treeStore.getAllNodes()
 }
 
 // ---------------------------------------------------------------------------
@@ -82,7 +82,7 @@ export function createPrimitiveNode(
     params: { ...params },
     localTransform: { ...transform },
   }
-  treeNodes.set(id, node)
+  treeStore.setNode(id, node)
   return node
 }
 
@@ -117,11 +117,11 @@ export function createBooleanNode(
     children: [childA, childB],
     localTransform: transform ? { ...transform } : undefined,
   }
-  treeNodes.set(id, node)
+  treeStore.setNode(id, node)
 
   // Set parentId on children for O(depth) cascade invalidation
-  const childANode = treeNodes.get(childA)
-  const childBNode = treeNodes.get(childB)
+  const childANode = treeStore.getNode(childA)
+  const childBNode = treeStore.getNode(childB)
   if (childANode) childANode.parentId = id
   if (childBNode) childBNode.parentId = id
 
@@ -144,7 +144,7 @@ export function createBakedNode(
     normals,
     localTransform: { ...transform },
   }
-  treeNodes.set(id, node)
+  treeStore.setNode(id, node)
   return node
 }
 
@@ -154,7 +154,7 @@ export function createBakedNode(
 
 /** Compute bounding box for a node (recursively, with caching) */
 export function computeNodeBBox(nodeId: string): BoundingBox {
-  const node = treeNodes.get(nodeId)
+  const node = treeStore.getNode(nodeId)
   if (!node) return { min: { x: 0, y: 0, z: 0 }, max: { x: 0, y: 0, z: 0 } }
 
   // Check cache: if bbox is cached and hash matches, return it
@@ -210,31 +210,56 @@ export function computeNodeBBox(nodeId: string): BoundingBox {
   return bbox
 }
 
-/** Compute bbox from vertices with position transform */
+/** Compute bbox from vertices with full transform (position + rotation + scale).
+ *
+ * FIX (R17-5): Uses buildTransformMatrix for correct AABB when the baked node
+ * has non-trivial rotation or scale. Previously only applied translation,
+ * producing incorrect bounding boxes for rotated/scaled imported meshes.
+ */
 function computeBakedBBox(
   vertices: Float32Array | number[],
   transform: TransformNR,
 ): BoundingBox {
+  // Check if there's non-trivial rotation or scale
+  const hasRS = Math.abs(transform.rotX) > 1e-6 || Math.abs(transform.rotY) > 1e-6 || Math.abs(transform.rotZ) > 1e-6 ||
+    Math.abs(transform.scaleX - 1) > 1e-6 || Math.abs(transform.scaleY - 1) > 1e-6 || Math.abs(transform.scaleZ - 1) > 1e-6
+
+  if (!hasRS) {
+    // Fast path: only translation — O(n), no matrix allocation
+    let minX = Infinity, minY = Infinity, minZ = Infinity
+    let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity
+    for (let i = 0; i < vertices.length; i += 3) {
+      const x = (vertices[i] as number) + transform.x
+      const y = (vertices[i + 1] as number) + transform.y
+      const z = (vertices[i + 2] as number) + transform.z
+      if (x < minX) minX = x; if (x > maxX) maxX = x
+      if (y < minY) minY = y; if (y > maxY) maxY = y
+      if (z < minZ) minZ = z; if (z > maxZ) maxZ = z
+    }
+    return { min: { x: minX, y: minY, z: minZ }, max: { x: maxX, y: maxY, z: maxZ } }
+  }
+
+  // Full path: apply RS matrix then translate
+  const matrix = buildTransformMatrix(
+    { x: transform.x, y: transform.y, z: transform.z },
+    { rotX: transform.rotX, rotY: transform.rotY, rotZ: transform.rotZ },
+    { scaleX: transform.scaleX, scaleY: transform.scaleY, scaleZ: transform.scaleZ },
+  )
+
   let minX = Infinity, minY = Infinity, minZ = Infinity
   let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity
-
   for (let i = 0; i < vertices.length; i += 3) {
-    const x = (vertices[i] as number) + transform.x
-    const y = (vertices[i + 1] as number) + transform.y
-    const z = (vertices[i + 2] as number) + transform.z
-
-    if (x < minX) minX = x
-    if (y < minY) minY = y
-    if (z < minZ) minZ = z
-    if (x > maxX) maxX = x
-    if (y > maxY) maxY = y
-    if (z > maxZ) maxZ = z
+    const vx = vertices[i] as number, vy = vertices[i + 1] as number, vz = vertices[i + 2] as number
+    // Column-major: v' = M × v
+    const x = matrix[0] * vx + matrix[4] * vy + matrix[8] * vz + matrix[12]
+    const y = matrix[1] * vx + matrix[5] * vy + matrix[9] * vz + matrix[13]
+    const z = matrix[2] * vx + matrix[6] * vy + matrix[10] * vz + matrix[14]
+    if (x < minX) minX = x; if (x > maxX) maxX = x
+    if (y < minY) minY = y; if (y > maxY) maxY = y
+    if (z < minZ) minZ = z; if (z > maxZ) maxZ = z
   }
 
-  return {
-    min: { x: minX, y: minY, z: minZ },
-    max: { x: maxX, y: maxY, z: maxZ },
-  }
+  return { min: { x: minX, y: minY, z: minZ }, max: { x: maxX, y: maxY, z: maxZ } }
 }
 
 /** Center of a bounding box */
@@ -273,12 +298,16 @@ function computeNodeHash(node: TreeNode): string {
     return `b:${node.vertices.length},${node.indices.length}|${t.x},${t.y},${t.z},${t.rotX},${t.rotY},${t.rotZ},${t.scaleX},${t.scaleY},${t.scaleZ}`
   }
   if (node.type === 'boolean' && node.children) {
+    const t = node.localTransform
+    const tStr = t
+      ? `${t.x},${t.y},${t.z},${t.rotX},${t.rotY},${t.rotZ},${t.scaleX},${t.scaleY},${t.scaleZ}`
+      : 'none'
     const childHashes = node.children
       .map(id => {
-        const child = treeNodes.get(id)
+        const child = treeStore.getNode(id)
         return child ? computeNodeHash(child) : '?'
       })
-    return `${node.operation}|${childHashes.join('|')}`
+    return `${node.operation}|${tStr}|${childHashes.join('|')}`
   }
   return ''
 }
@@ -289,10 +318,10 @@ function computeNodeHash(node: TreeNode): string {
  * Used to prevent cycles when creating boolean nodes.
  */
 export function isAncestor(nodeId: string, ancestorId: string): boolean {
-  let current = treeNodes.get(nodeId)
+  let current = treeStore.getNode(nodeId)
   while (current?.parentId) {
     if (current.parentId === ancestorId) return true
-    current = treeNodes.get(current.parentId)
+    current = treeStore.getNode(current.parentId)
   }
   return false
 }
@@ -301,8 +330,20 @@ export function isAncestor(nodeId: string, ancestorId: string): boolean {
  * Cascade cache invalidation — O(depth), not O(n).
  * Walks up the parentId chain, not linear scan over all nodes.
  */
-function invalidateCache(nodeId: string): void {
-  const node = treeNodes.get(nodeId)
+/**
+ * Cascade cache invalidation — O(depth), not O(n).
+ * Walks up the parentId chain, not linear scan over all nodes.
+ *
+ * FIX (R17-14): Added depth guard to prevent stack overflow in case of
+ * corrupted tree (e.g., cycles from bugs). Max depth of 100 is far beyond
+ * any realistic build tree depth (~5-10 levels).
+ */
+function invalidateCache(nodeId: string, depth = 0): void {
+  if (depth > 100) {
+    console.warn(`[history-tree] Cache invalidation exceeded max depth (100) for node ${nodeId}`)
+    return
+  }
+  const node = treeStore.getNode(nodeId)
   if (!node) return
   // Invalidate current node
   node.cachedMesh = undefined
@@ -310,7 +351,7 @@ function invalidateCache(nodeId: string): void {
   node.cachedBBox = undefined
   // Recurse up the parentId chain — O(depth), not O(n)
   if (node.parentId) {
-    invalidateCache(node.parentId)
+    invalidateCache(node.parentId, depth + 1)
   }
 }
 
@@ -323,7 +364,7 @@ function invalidateCache(nodeId: string): void {
  * Uses cache — if hash matches, returns cached result.
  */
 export async function rebuildNode(nodeId: string): Promise<ExtractedMesh> {
-  const node = treeNodes.get(nodeId)
+  const node = treeStore.getNode(nodeId)
   if (!node) throw new Error(`Node ${nodeId} not found in tree`)
 
   const hash = computeNodeHash(node)
@@ -392,7 +433,7 @@ function collectSubtreeForWorker(rootId: string): WorkerNode[] {
   function collect(id: string): void {
     if (visited.has(id)) return
 
-    const node = treeNodes.get(id)
+    const node = treeStore.getNode(id)
     if (!node) return
 
     visited.add(id)
@@ -440,9 +481,9 @@ async function applyCSGMeshes(node: TreeNode): Promise<ExtractedMesh> {
   }
 
   // Collect all nodes in the subtree INCLUDING the target node
-  const nodes: typeof treeNodes = new Map()
+  const nodes: Map<string, TreeNode> = new Map()
   function collectSubtree(id: string): void {
-    const n = treeNodes.get(id)
+    const n = treeStore.getNode(id)
     if (!n || nodes.has(id)) return
     nodes.set(id, n)
     if (n.children) {
@@ -521,16 +562,22 @@ async function applyCSGMeshes(node: TreeNode): Promise<ExtractedMesh> {
 function rebuildPrimitive(node: TreeNode): ExtractedMesh {
   const wasm = getWasm()
   const m = buildPrimitive(node.shapeType!, sanitizeParams(node.params!))
-  const matrix = buildTransformMatrix(
-    { x: node.localTransform!.x, y: node.localTransform!.y, z: node.localTransform!.z },
-    { rotX: node.localTransform!.rotX, rotY: node.localTransform!.rotY, rotZ: node.localTransform!.rotZ },
-    { scaleX: node.localTransform!.scaleX, scaleY: node.localTransform!.scaleY, scaleZ: node.localTransform!.scaleZ },
-  )
-  const transformed = m.transform(matrix)
-  m.delete()
-  const mesh = extractMesh(transformed)
-  transformed.delete()
-  return mesh
+  try {
+    const matrix = buildTransformMatrix(
+      { x: node.localTransform!.x, y: node.localTransform!.y, z: node.localTransform!.z },
+      { rotX: node.localTransform!.rotX, rotY: node.localTransform!.rotY, rotZ: node.localTransform!.rotZ },
+      { scaleX: node.localTransform!.scaleX, scaleY: node.localTransform!.scaleY, scaleZ: node.localTransform!.scaleZ },
+    )
+    const transformed = m.transform(matrix)
+    m.delete()
+    const mesh = extractMesh(transformed)
+    transformed.delete()
+    return mesh
+  } catch (e) {
+    // Ensure WASM memory is freed even if transform fails
+    m.delete()
+    throw e
+  }
 }
 
 /** Transform a baked mesh (STL, non-manifold) with its localTransform */
@@ -550,7 +597,12 @@ function transformBakedMesh(node: TreeNode): ExtractedMesh {
       triVerts: new Uint32Array(node.indices),
     })
 
-    // Apply position transform (scale=1, rot=0 for baked)
+    // FIX (CRIT-CSG-7): Apply only translation for baked nodes.
+    // Baked nodes (CSG results, imported meshes) have geometry already centered
+    // at origin. The localTransform carries position (x/y/z) which must be applied.
+    // Rotation/scale are NOT applied here — they are baked into the geometry itself
+    // (for CSG results) or handled by the caller (for imported meshes in Viewport3D).
+    // This prevents double-application of rotation/scale when the mesh is rendered.
     const matrix = buildTransformMatrix(
       { x: t.x, y: t.y, z: t.z },
       { rotX: 0, rotY: 0, rotZ: 0 },
@@ -589,11 +641,13 @@ export function mirrorTreeNode(
   plane: 'XY' | 'XZ' | 'YZ',
   center?: Point3D,
 ): void {
-  const node = treeNodes.get(nodeId)
+  const node = treeStore.getNode(nodeId)
   if (!node) return
 
+  const effectiveCenter = center ?? { x: 0, y: 0, z: 0 }
+
   // Recursively mirror — each node mirrored relative to center (or origin)
-  mirrorNodeRecursive(node, plane, center ?? { x: 0, y: 0, z: 0 })
+  mirrorNodeRecursive(node, plane, effectiveCenter)
 
   // Invalidate cache
   invalidateCache(nodeId)
@@ -621,11 +675,11 @@ function mirrorNodeRecursive(
       x: mirroredPos.x,
       y: mirroredPos.y,
       z: mirroredPos.z,
-      // FIX (MIRROR-3): Invert rotation around the axis perpendicular to mirror plane
+      // Invert rotation around the axis perpendicular to mirror plane
       rotX: plane === 'YZ' ? -t.rotX : t.rotX,
       rotY: plane === 'XZ' ? -t.rotY : t.rotY,
       rotZ: plane === 'XY' ? -t.rotZ : t.rotZ,
-      // FIX (MIRROR-8): Negate scale along the mirrored axis
+      // Negate scale along the mirrored axis
       scaleX: plane === 'YZ' ? -t.scaleX : t.scaleX,
       scaleY: plane === 'XZ' ? -t.scaleY : t.scaleY,
       scaleZ: plane === 'XY' ? -t.scaleZ : t.scaleZ,
@@ -634,7 +688,7 @@ function mirrorNodeRecursive(
   }
 
   if (node.type === 'baked' && node.localTransform) {
-    // FIX (MIRROR-3): Invert rotation AND scale for baked nodes too.
+    // Invert rotation AND scale for baked nodes too.
     // Baked nodes are pre-computed geometry (from CSG or import), but their
     // localTransform still carries rotation/scale that must be mirrored.
     const t = node.localTransform
@@ -656,8 +710,47 @@ function mirrorNodeRecursive(
 
   if (node.type === 'boolean' && node.children) {
     node.children.forEach(childId => {
-      const child = treeNodes.get(childId)
+      const child = treeStore.getNode(childId)
       if (child) mirrorNodeRecursive(child, plane, center)
+    })
+  }
+}
+
+/**
+ * Reset localTransform of all primitives in a subtree to identity (pos=0, rot=0, scale=1).
+ * Used after mirror + cloneSubtree for boolean nodes, where the geometry already
+ * has the mirrored transform baked in by rebuildNode. Without this reset,
+ * rebuildNode would apply the mirrored transform a second time.
+ */
+export function resetSubtreeTransform(nodeId: string): void {
+  const node = treeStore.getNode(nodeId)
+  if (!node) return
+  resetTransformRecursive(node)
+}
+
+function resetTransformRecursive(node: TreeNode): void {
+  if (node.type === 'primitive' && node.localTransform) {
+    node.localTransform = {
+      x: 0, y: 0, z: 0,
+      rotX: 0, rotY: 0, rotZ: 0,
+      scaleX: 1, scaleY: 1, scaleZ: 1,
+    }
+    return
+  }
+
+  if (node.type === 'baked' && node.localTransform) {
+    node.localTransform = {
+      x: 0, y: 0, z: 0,
+      rotX: 0, rotY: 0, rotZ: 0,
+      scaleX: 1, scaleY: 1, scaleZ: 1,
+    }
+    return
+  }
+
+  if (node.type === 'boolean' && node.children) {
+    node.children.forEach(childId => {
+      const child = treeStore.getNode(childId)
+      if (child) resetTransformRecursive(child)
     })
   }
 }
@@ -668,7 +761,7 @@ function mirrorNodeRecursive(
 
 /** Move a node (and its entire subtree) by delta */
 export function moveTreeNode(nodeId: string, delta: Point3D): void {
-  const node = treeNodes.get(nodeId)
+  const node = treeStore.getNode(nodeId)
   if (!node) return
   applyTransformToPrimitives(node, t => ({
     x: t.x + delta.x,
@@ -693,7 +786,7 @@ function applyTransformToPrimitives(
   }
   if (node.type === 'boolean' && node.children) {
     node.children.forEach(childId => {
-      const child = treeNodes.get(childId)
+      const child = treeStore.getNode(childId)
       if (child) applyTransformToPrimitives(child, fn)
     })
   }
@@ -708,7 +801,7 @@ export function rotateTreeNode(
   nodeId: string,
   rotation: { x?: number; y?: number; z?: number },
 ): void {
-  const node = treeNodes.get(nodeId)
+  const node = treeStore.getNode(nodeId)
   if (!node) return
 
   const bbox = computeNodeBBox(nodeId)
@@ -771,7 +864,7 @@ export function rotateTreeNode(
  * nodes created without a transform in older code paths).
  */
 export function syncNodeTransform(id: string, transform: TransformNR): void {
-  const node = treeNodes.get(id)
+  const node = treeStore.getNode(id)
   if (node) {
     node.localTransform = { ...transform }
   }
@@ -794,7 +887,7 @@ export function syncNodeTransform(id: string, transform: TransformNR): void {
  * localTransform, producing vertices at the wrong position.
  */
 export function applyNodeTransform(id: string, transform: TransformNR): void {
-  const node = treeNodes.get(id)
+  const node = treeStore.getNode(id)
   if (!node) return
   node.localTransform = { ...transform }
   invalidateCache(id)
@@ -814,7 +907,7 @@ export function cloneSubtree(
   newRootId: string,
   newIdMap: Map<string, string> = new Map(),
 ): TreeNode {
-  const source = treeNodes.get(sourceId)
+  const source = treeStore.getNode(sourceId)
   if (!source) throw new Error(`Source node ${sourceId} not found`)
 
   const visited = new Set<string>()
@@ -827,7 +920,7 @@ function cloneRecursive(
   newIdMap: Map<string, string>,
   visited: Set<string>,
 ): TreeNode {
-  const source = treeNodes.get(sourceId)
+  const source = treeStore.getNode(sourceId)
   if (!source) throw new Error(`Source node ${sourceId} not found`)
 
   // Cycle protection
@@ -841,6 +934,11 @@ function cloneRecursive(
   const clone: TreeNode = {
     id: newId,
     type: source.type,
+  }
+
+  // Preserve parentId for tree integrity (navigation, cascade cache invalidation)
+  if (source.parentId) {
+    clone.parentId = source.parentId
   }
 
   if (source.type === 'primitive') {
@@ -868,7 +966,7 @@ function cloneRecursive(
     })
   }
 
-  treeNodes.set(newId, clone)
+  treeStore.setNode(newId, clone)
   return clone
 }
 
@@ -883,7 +981,7 @@ function nextIdForTree(): string {
 
 /** Debug tree output */
 export function printTree(nodeId: string, indent = ''): void {
-  const node = treeNodes.get(nodeId)
+  const node = treeStore.getNode(nodeId)
   if (!node) {
     console.log(`${indent}❌ Node ${nodeId} not found`)
     return

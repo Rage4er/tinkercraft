@@ -33,7 +33,7 @@ export interface DocumentStore {
   resizeObject: (id: string, params: ShapeParams) => Promise<void>
   extrudeSelected: (axis: 'X' | 'Y' | 'Z', depth: number) => Promise<void>
   renameObject: (id: string, name: string) => void
-  setColor: (id: string, color: string) => void
+  setColor: (id: string, color: string, skipHistory?: boolean) => void
   toggleVisible: (id: string) => void
   mirrorSelected: (plane: 'XY' | 'XZ' | 'YZ') => Promise<void>
   previewMirror: (plane: 'XY' | 'XZ' | 'YZ') => Promise<void>

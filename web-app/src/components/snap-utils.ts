@@ -122,6 +122,9 @@ function collectWorldEdges(
   const idx = mesh.geometry.index;
   if (!pos || !idx) return edges;
 
+  // Deduplicate edges using a Set with canonical key "i1,i2" (i1 < i2)
+  const edgeSet = new Set<string>();
+
   for (let i = 0; i < idx.count; i += 3) {
     const indices = [idx.getX(i), idx.getX(i + 1), idx.getX(i + 2)];
     const triEdges = [
@@ -130,15 +133,21 @@ function collectWorldEdges(
       [2, 0],
     ];
     for (const [a, b] of triEdges) {
+      const i1 = indices[a];
+      const i2 = indices[b];
+      const key = i1 < i2 ? `${i1},${i2}` : `${i2},${i1}`;
+      if (edgeSet.has(key)) continue;
+      edgeSet.add(key);
+
       const from = new THREE.Vector3(
-        pos.getX(indices[a]),
-        pos.getY(indices[a]),
-        pos.getZ(indices[a]),
+        pos.getX(i1),
+        pos.getY(i1),
+        pos.getZ(i1),
       );
       const to = new THREE.Vector3(
-        pos.getX(indices[b]),
-        pos.getY(indices[b]),
-        pos.getZ(indices[b]),
+        pos.getX(i2),
+        pos.getY(i2),
+        pos.getZ(i2),
       );
       from.applyMatrix4(mesh.matrixWorld);
       to.applyMatrix4(mesh.matrixWorld);

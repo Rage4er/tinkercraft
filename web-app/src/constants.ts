@@ -31,9 +31,9 @@ export const SNAP_VALUES: { label: string; value: number }[] = [
 export const OP_FILTER_LABELS: Record<string, string> = {
   add_shape: "Добавить",
   import_mesh: "Импорт",
-  move: "Move",
-  resize_dims: "Resize",
-  fillet: "Fillet",
+  move: "Переместить",
+  resize_dims: "Размер",
+  fillet: "Скругление",
   mirror: "Зеркало",
   align: "Выровнять",
   group: "CSG",
@@ -71,3 +71,10 @@ export const FILLET_MIN_RADIUS = 0.01;
 // ---- Vertex merge precision (STL import) ----
 /** Rounding precision for merging coincident vertices during STL import. */
 export const VERTEX_MERGE_PRECISION = 1e5;
+
+// ---- Object colors ----
+/** Default palette for object colors, cycled via colorForIndex(). */
+export const OBJECT_COLORS = [
+  '#89b4fa', '#a6e3a1', '#f9e2af', '#cba6f7',
+  '#f38ba8', '#94e2d5', '#fab387', '#74c7ec',
+];

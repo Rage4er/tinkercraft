@@ -62,6 +62,7 @@ export function applyMirrorToTransform(
   plane: 'XY' | 'XZ' | 'YZ',
 ): RebuildTransform {
   const nt = { ...t }
+  console.log(`[MIRROR:applyMirrorToTransform] plane=${plane} BEFORE={x:${t.x}, y:${t.y}, z:${t.z}, rotX:${t.rotX}, rotY:${t.rotY}, rotZ:${t.rotZ}, scaleX:${t.scaleX}, scaleY:${t.scaleY}, scaleZ:${t.scaleZ}}`)
   if (plane === 'YZ') {
     nt.x = -nt.x
     nt.rotX = -nt.rotX
@@ -77,6 +78,7 @@ export function applyMirrorToTransform(
     nt.rotZ = -nt.rotZ
     nt.scaleZ = -nt.scaleZ
   }
+  console.log(`[MIRROR:applyMirrorToTransform] plane=${plane} AFTER={x:${nt.x}, y:${nt.y}, z:${nt.z}, rotX:${nt.rotX}, rotY:${nt.rotY}, rotZ:${nt.rotZ}, scaleX:${nt.scaleX}, scaleY:${nt.scaleY}, scaleZ:${nt.scaleZ}}`)
   return nt
 }
 

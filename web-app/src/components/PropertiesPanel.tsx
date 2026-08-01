@@ -12,6 +12,7 @@ export default function PropertiesPanel({
   canFillet,
   canCsg,
   canAlign,
+  nonManifoldSelected,
   filletRadius,
   objectList,
   operationsLength,
@@ -36,6 +37,7 @@ export default function PropertiesPanel({
   canFillet: boolean;
   canCsg: boolean;
   canAlign: boolean;
+  nonManifoldSelected?: boolean;
   filletRadius: number;
   objectList: SceneObject[];
   operationsLength: number;
@@ -305,31 +307,31 @@ export default function PropertiesPanel({
           )}
           {(firstSelected.shapeType === "cylinder" ||
             firstSelected.shapeType === "cone") && (
-            <>
-              <NumInput
-                label="Радиус"
-                min={0.1}
-                value={firstSelected.params.radius ?? 10}
-                disabled={busy}
-                onChange={(v) =>
-                  onResizeObject(firstSelected.id, {
-                    radius: Math.max(0.1, v),
-                  })
-                }
-              />
-              <NumInput
-                label="Высота"
-                min={0.1}
-                value={firstSelected.params.height ?? 30}
-                disabled={busy}
-                onChange={(v) =>
-                  onResizeObject(firstSelected.id, {
-                    height: Math.max(0.1, v),
-                  })
-                }
-              />
-            </>
-          )}
+              <>
+                <NumInput
+                  label="Радиус"
+                  min={0.1}
+                  value={firstSelected.params.radius ?? 10}
+                  disabled={busy}
+                  onChange={(v) =>
+                    onResizeObject(firstSelected.id, {
+                      radius: Math.max(0.1, v),
+                    })
+                  }
+                />
+                <NumInput
+                  label="Высота"
+                  min={0.1}
+                  value={firstSelected.params.height ?? 30}
+                  disabled={busy}
+                  onChange={(v) =>
+                    onResizeObject(firstSelected.id, {
+                      height: Math.max(0.1, v),
+                    })
+                  }
+                />
+              </>
+            )}
           {firstSelected.shapeType === "torus" && (
             <>
               <NumInput
@@ -354,37 +356,37 @@ export default function PropertiesPanel({
           )}
           {(firstSelected.shapeType === "prism" ||
             firstSelected.shapeType === "pyramid") && (
-            <>
-              <NumInput
-                label="Радиус"
-                min={0.5}
-                value={firstSelected.params.radius ?? 12}
-                disabled={busy}
-                onChange={(v) =>
-                  onResizeObject(firstSelected.id, { radius: Math.max(0.5, v) })
-                }
-              />
-              <NumInput
-                label="Высота"
-                min={0.1}
-                value={firstSelected.params.height ?? 20}
-                disabled={busy}
-                onChange={(v) =>
-                  onResizeObject(firstSelected.id, { height: Math.max(0.1, v) })
-                }
-              />
-              <NumInput
-                label="Граней"
-                unit=""
-                min={3}
-                value={firstSelected.params.sides ?? (firstSelected.shapeType === "prism" ? 6 : 4)}
-                disabled={busy}
-                onChange={(v) =>
-                  onResizeObject(firstSelected.id, { sides: Math.max(3, Math.round(v)) })
-                }
-              />
-            </>
-          )}
+              <>
+                <NumInput
+                  label="Радиус"
+                  min={0.5}
+                  value={firstSelected.params.radius ?? 12}
+                  disabled={busy}
+                  onChange={(v) =>
+                    onResizeObject(firstSelected.id, { radius: Math.max(0.5, v) })
+                  }
+                />
+                <NumInput
+                  label="Высота"
+                  min={0.1}
+                  value={firstSelected.params.height ?? 20}
+                  disabled={busy}
+                  onChange={(v) =>
+                    onResizeObject(firstSelected.id, { height: Math.max(0.1, v) })
+                  }
+                />
+                <NumInput
+                  label="Граней"
+                  unit=""
+                  min={3}
+                  value={firstSelected.params.sides ?? (firstSelected.shapeType === "prism" ? 6 : 4)}
+                  disabled={busy}
+                  onChange={(v) =>
+                    onResizeObject(firstSelected.id, { sides: Math.max(3, Math.round(v)) })
+                  }
+                />
+              </>
+            )}
         </div>
       )}
 
@@ -415,7 +417,7 @@ export default function PropertiesPanel({
       {/* CSG + Align */}
       {selectedIds.length === 2 && (
         <>
-          <CsgButtons disabled={!canCsg} onCsg={onCsg} variant="full" />
+          <CsgButtons disabled={!canCsg} onCsg={onCsg} variant="full" nonManifoldSelected={nonManifoldSelected} />
           <AlignButtons disabled={!canAlign} onAlign={onAlign} variant="full" />
         </>
       )}

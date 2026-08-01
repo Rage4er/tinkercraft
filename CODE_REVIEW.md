@@ -129,46 +129,18 @@
 | **Mirror HIGH** (2026-07-30) | MIRROR-3, MIRROR-5, MIRROR-8 | ✅ Исправлено |
 | **Mirror MEDIUM** (2026-07-30) | MIRROR-1, MIRROR-6, MIRROR-7, MIRROR-10 | ✅ Исправлено |
 | **Mirror LOW** (2026-07-31) | MIRROR-2 (live preview), MIRROR-4 (3D plane), MIRROR-9 (double sync) | ✅ Исправлено |
-| **Раунд 17 + SourceCraft** (2025-07-31) | CRIT-17-1 (boolean hash), CRIT-17-2 (resizeObject try/catch), HIGH-1..5, LOW-1..8 | 🔄 Активные (15 проблем) |
+| **Раунд 17 + SourceCraft** (2025-07-31) | CRIT-17-1 (boolean hash), CRIT-17-2 (resizeObject try/catch), HIGH-1..5, LOW-1..8 | ✅ Все исправлены |
+| **SourceCraft — 38 проблем** (2026-07-31) | CRIT-1..12 (treeNodes, busy, drag-select, WASM leak, etc.), MED Store/CSG/UI/IO (12), LOW (12) | ✅ Все исправлены |
+| **Mirror boolean/non-manifold** (2026-08-01) | MIRROR-BOOLEAN (finalTransform из centroid), MIRROR-NONMANIFOLD (workerMirrorObject для import_mesh) | ✅ Исправлено |
 
 ---
 
 ## 🎯 План действий (приоритет)
 
-### 🔴 CRITICAL — исправить немедленно
+На данный момент все 55 проблем (15 из Раунда 17 + 38 из SourceCraft + 2 mirror) исправлены.
+Активных задач нет.
 
-| # | Задача | Сложность | Файл | Описание |
-|---|--------|-----------|------|----------|
-| | **CRIT-17-1** | Очень низкая | [`history-tree.ts:275`](web-app/src/csg/history-tree.ts:275) | Добавить `localTransform` в хеш boolean-узла (`computeNodeHash`) |
-| | **CRIT-17-2** | Низкая | [`document-store.ts:983`](web-app/src/store/document-store.ts:983) | Добавить `try/catch` + `notify` в `resizeObject` (else-ветка) |
-
-### 🟡 HIGH — следующий приоритет
-
-| # | Задача | Сложность | Файл | Описание |
-|---|--------|-----------|------|----------|
-| | **HIGH-1** | Средняя | [`document-store.ts:341`](web-app/src/store/document-store.ts:341) | Рефакторинг дублирующегося sync-кода (3 блока → 1 функция) |
-| | **HIGH-2** | Низкая | [`document-store.ts:820`](web-app/src/store/document-store.ts:820) | Заменить `workerBuildShape` на `workerSyncObjects` в `alignSelected` |
-| | **HIGH-5** | Низкая | [`document-store.ts:844`](web-app/src/store/document-store.ts:844) | Вызвать `rebuildBuildTree` после `rebuildFromHistory` (undo, redo, openDoodle, restoreAutosave) |
-
-### 🟡 MEDIUM — плановые улучшения
-
-| # | Задача | Сложность | Файл | Описание |
-|---|--------|-----------|------|----------|
-| | **HIGH-3** | Средняя | [`history-tree.ts:214`](web-app/src/csg/history-tree.ts:214) | Исправить `computeBakedBBox` — добавить R/S матрицу |
-| | **HIGH-4** | Низкая | [`document-store.ts:238`](web-app/src/store/document-store.ts:238) | Регистрация Build Tree нод в `pasteClipboard` |
-| | **LOW-1** | Средняя | [`Viewport3D.tsx:704`](web-app/src/components/Viewport3D.tsx:704) | Починить circle-snap (передать `shapeTypeForMesh`) |
-
-### 🟢 LOW — косметика / техдолг
-
-| # | Задача | Сложность | Файл | Описание |
-|---|--------|-----------|------|----------|
-| | **LOW-2** | Низкая | [`Viewport3D.tsx:660`](web-app/src/components/Viewport3D.tsx:660) | Удалить мёртвый код `getWorldPointFromPointer` |
-| | **LOW-3** | Низкая | [`document-store.ts`](web-app/src/store/document-store.ts) | Заменить `console.error` на `notify` |
-| | **LOW-4** | Очень низкая | [`document-store.ts:1068`](web-app/src/store/document-store.ts:1068) | Удалять `slabId` из worker кэша после extrude |
-| | **LOW-5** | Низкая | [`snapshots.ts`](web-app/src/store/snapshots.ts) | Добавить LRU-стратегию для snapshot cache |
-| | **LOW-6** | Очень низкая | [`document-store.ts:361`](web-app/src/store/document-store.ts:361) | Заменить sequential `await` на `Promise.all` |
-| | **LOW-7** | Очень низкая | [`history-tree.ts:312`](web-app/src/csg/history-tree.ts:312) | Добавить guard clause в `invalidateCache` |
-| | **LOW-8** | Очень низкая | [`constants.ts:31`](web-app/src/constants.ts:31) | Стандартизировать метки фильтров (русский язык) |
+Следующие раунды код-ревью будут направлены на выявление новых проблем.
 
 ---
 
@@ -176,10 +148,9 @@
 
 | Метрика | Значение |
 |---------|----------|
-| Всего выявлено проблем | ~95+ (за всё время) |
-| Исправлено | ~80+ |
-| Активных | 15 (Раунд 17 + SourceCraft) |
-| HIGH активных | 3 (CRIT-17-1, CRIT-17-2, HIGH-1, HIGH-2, HIGH-5) |
+| Всего выявлено проблем | ~110+ (за всё время) |
+| Исправлено | ~110+ |
+| Активных | 0 |
 | Точность ревью (Раунд 16) | ~50% (8/18 полностью верных) |
 | Точность ревью (Раунд 17 + SourceCraft) | ~83% (12.5/15 подтверждено) |
 

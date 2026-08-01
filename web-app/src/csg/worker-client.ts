@@ -82,19 +82,56 @@ function getWorker(): Worker {
   return _worker
 }
 
+/**
+ * Validate basic structure of a worker response message.
+ * Checks for required fields (reqId, type) and absence of error.
+ * Returns true if the response passes basic validation.
+ *
+ * Note: Worker handlers use different response type conventions:
+ * - Mesh-producing handlers (buildShape, csgBoolean, mirrorObject, etc.)
+ *   respond with type 'mesh' regardless of request type
+ * - rebuildScene responds with type 'sceneBuilt'
+ * - Void handlers (deleteObjects, clearAll, syncObjects) respond with type 'ok'
+ * - Error responses use type 'error' and are handled separately
+ *
+ * We accept 'mesh', 'sceneBuilt' and 'ok' as valid response types for any
+ * request, since the reqId-based dispatch already ensures we match the
+ * right pending promise.
+ */
+const VALID_RESPONSE_TYPES = new Set(['mesh', 'sceneBuilt', 'ok'])
+
+function validateResponse(type: string, data: unknown): boolean {
+  if (!data || typeof data !== 'object') return false
+  const msg = data as Record<string, unknown>
+  // Must have reqId and type
+  if (typeof msg.reqId !== 'string') return false
+  if (typeof msg.type !== 'string') return false
+  // If type is 'error', validation fails (error responses are handled separately)
+  if (msg.type === 'error') return false
+  // Accept known generic response types (mesh-producing, scene, void handlers)
+  if (VALID_RESPONSE_TYPES.has(msg.type)) return true
+  // Otherwise, response type should match the request type
+  if (msg.type !== type) return false
+  return true
+}
+
 function send<T>(type: string, data: Record<string, unknown>, timeoutMs = 30000): Promise<T> {
   return new Promise((resolve, reject) => {
     const reqId = nextReqId()
-    
+
     // PERF-R8-2: Таймаут для предотвращения бесконечного ожидания
     const timer = setTimeout(() => {
       _pending.delete(reqId)
       reject(new Error(`Worker timeout: ${type} (>${timeoutMs}ms)`))
     }, timeoutMs)
-    
+
     _pending.set(reqId, [
       (v: unknown) => {
         clearTimeout(timer)
+        if (!validateResponse(type, v)) {
+          reject(new Error(`Invalid worker response for ${type}: missing or mismatched fields`))
+          return
+        }
         resolve(v as T)
       },
       (r: unknown) => {
@@ -102,7 +139,7 @@ function send<T>(type: string, data: Record<string, unknown>, timeoutMs = 30000)
         reject(r)
       }
     ])
-    
+
     getWorker().postMessage({ reqId, type, ...data })
   })
 }
@@ -191,9 +228,10 @@ export async function workerCsgBooleanWithSync(
 
 export async function workerMirrorObject(
   objId: string, plane: 'XY' | 'XZ' | 'YZ', shapeType?: string, params?: Record<string, number>, transform?: any,
+  mirrorCenter?: { x: number; y: number; z: number },
 ): Promise<MeshResult> {
   await waitReady()
-  return send<MeshResult>('mirrorObject', { objId, plane, shapeType, params, transform })
+  return send<MeshResult>('mirrorObject', { objId, plane, shapeType, params, transform, mirrorCenter })
 }
 
 export async function workerRebuildScene(

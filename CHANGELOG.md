@@ -9,6 +9,105 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **MIRROR-PREVIEW-CENTER**: `previewMirror` — меш превью теперь центрируется через `extractAndCenterGetAABB`, центроид (`cx,cy,cz`) передаётся в `setMirrorPreviewMesh` как `center`. В `useMirrorPreview` центр используется для `pivot.position.set()`, а не через `centerGeometry()` (который центрировал уже центрированные вершины → (0,0,0)). Обновлён интерфейс `MirrorPreviewMesh` с опциональным полем `center` (`viewport-hooks.ts`, `document-store.ts`, `ui-store.ts`)
+- **MIRROR-BOOLEAN-RESET**: `mirrorSelected` — удалён вызов `resetSubtreeTransform` для boolean-нод после `cloneSubtree`. `mirrorTreeNode` уже изменил `localTransform` у примитивов в поддереве (отразил позицию/ротацию/scale). `resetSubtreeTransform` затирал эти изменения → boolean-нода теряла отражение (`document-store.ts`)
+- **MIRROR-DOUBLE-POS**: `handleMirrorObject` — для примитивов (if-ветка) убрано двойное применение позиции: шаги 1-3 (translate→mirror→translate back) уже учитывают mirrorCenter, шаг 4 применяет только отражённые rot/scale (позиция = 0). Для import_mesh (else-ветка) логика сохранена: translate→mirror→translate back + transform с `newPos = 2*mirrorCenter - originalPos` и отражёнными rot/scale (`worker-handlers.ts`)
+- **CRIT-CSG-1**: `handleCsgBooleanSync` — теперь **всегда** sync-ит operands из shapeType/params, независимо от состояния кэша. Ранее пропускал sync если operand уже был в кэше, что приводило к использованию stale-позиций и удалению operand из кэша после boolean → "Objects not found" при следующей операции
+- **CRIT-CSG-2**: CSG-результаты теперь регистрируются как **baked-ноды** вместо boolean-нод. Геометрия уже вычислена и центрирована, не нужно пересчитывать через дерево с children
+- **CRIT-CSG-3**: `csgBoolean` — больше **не отправляет** shapeType/params для CSG-результатов (`shapeType='cube', params={}`). Ранее это приводило к созданию default cube 20x20x20 вместо actual CSG-геометрии
+- **CRIT-CSG-4**: `handleSyncMesh` — для CSG-результатов применяется **только translation**. Rotation/scale уже baked in в geometry CSG-результата, их применение приводило к смещению
+- **CRIT-CSG-5**: `transformBakedMesh` — применяется **только translation** для baked-нод. Prevents double-application of rotation/scale when mesh is rendered
+- **MIRROR-BAKED**: `mirrorTreeNode` корректно обрабатывает baked-ноды (CSG-результаты) — зеркалит position в localTransform, geometry не меняется. `mirrorSelected` центрирует результат через `extractAndCenterGetAABB` (аналогично CSG)
+
+### Added
+
+- **DIAG-CSG**: Диагностические логи в `handleCsgBooleanSync` и `handleSyncMesh` для отладки CSG operations
+- **PERF-MIRROR**: `previewMirror` теперь устанавливает `busy=true` в начале функции, предотвращая параллельные вызовы с `mirrorSelected`/`csgBoolean`
+
+### Changed
+
+- **ARCH-CSG-1**: CSG-результаты (`csg_*`) теперь имеют `shapeType='cube', params={}` и регистрируются как baked-ноды в build tree. Это обеспечивает корректную маршрутизацию в `syncObjectsForOperation` → `workerSyncMesh`
+- **ARCH-CSG-2**: `workerCsgBooleanWithSync` теперь принимает `undefined` для shapeType/params CSG-результатов, сигнализируя worker'у пропустить rebuild из примитивов
+- **LOW-12**: `extrudeSelected` — добавлена проверка пустого `selectedIds` с `notify('No objects selected', 'warning')` (`document-store.ts`)
+
+### Added
+
+- **DOC-1**: Создан файл `NODEJS_SETUP.md` в `web-app/` — документация по настройке Node.js, pnpm, проверке typecheck и тестов (`web-app/NODEJS_SETUP.md`)
+- **MED-UI-3**: Создан файл `viewport-hooks.ts` с четырьмя вынесенными хуками из `Viewport3D.tsx`: `useThreeInit` (инициализация Three.js), `useMeshSync` (синхронизация mesh), `useRulerMode` (логика линейки), `useMirrorPreview` (превью mirror). `Viewport3D.tsx` сокращён с 1103 до ~390 строк (`viewport-hooks.ts`, `Viewport3D.tsx`)
+
+### Changed
+
+- **MED-UI-4**: 45 отдельных селекторов `useUiStore` в `App.tsx` объединены в один `useShallow` селектор, что уменьшает количество ре-рендеров и упрощает код (`App.tsx`)
+
+### Fixed
+
+- **MED-UI-1**: Добавлен `clearTimeout`/cleanup в `useEffect` для mirror preview в `Viewport3D.tsx` — предотвращает утечку ресурсов при размонтировании компонента (`Viewport3D.tsx`)
+- **MED-UI-2**: Добавлена дедупликация рёбер в `collectWorldEdges` через `Set<string>` с ключом `"i1,i2"` (где i1 < i2) — предотвращает дублирование рёбер, разделяемых двумя треугольниками (`snap-utils.ts`)
+- **MED-IO-1**: Все функции `project-manager.ts` (`listProjects`, `saveProject`, `updateProject`, `loadProject`, `deleteProject`) обёрнуты в try/finally — гарантированное закрытие IndexedDB-соединения даже при ошибке (`project-manager.ts`)
+- **MED-IO-2**: `parseStlFile` в `stl-import.ts` возвращает discriminated union `StlParseResult` вместо `null` — сообщает причину ошибки через поле `error`; обновлена обработка результата в `document-store.ts` (`stl-import.ts`, `document-store.ts`)
+
+### Added
+
+- **CRIT-1**: Инкапсуляция глобального состояния `treeNodes` — создан класс `TreeStore` с контролируемым API (`getNode`, `setNode`, `deleteNode`, `clear`, `getAllNodes`, `getAllNodesMap`, `hasNode`, `nodeCount`); глобальный `Map` заменён на singleton `treeStore`; добавлены unit-тесты для `TreeStore` (12 тестов) (`tree-store.ts`, `history-tree.ts`, `history-tree.test.ts`)
+
+### Fixed
+
+- **CRIT-11**: Удалён дублирующийся busy-индикатор из `Viewport3D.tsx` — оставлен только глобальный индикатор в `App.tsx`; удалены проп `busy` из интерфейса `Props` и соответствующий JSX-блок (`Viewport3D.tsx`, `App.tsx`)
+- **CRIT-8**: `deleteNode` не удалял детей рекурсивно — добавлен опциональный параметр `recursive = false`; при `recursive === true` рекурсивно удаляются все дочерние узлы; обновлён вызов в `deleteSelected` (`history-tree.ts`, `document-store.ts`)
+- **CRIT-12**: Drag-select не работал — `performDragSelect` был определён, но никогда не вызывался в `handlePointerUp`. Добавлен вызов с вычислением `DragRect` из `pointerDownPos` и текущей позиции мыши (`Viewport3D.tsx`)
+- **CRIT-4**: `registerBakedNodes` не вызывался в `rebuildBuildTree` — добавлен опциональный параметр `objects` в `rebuildBuildTree` и вызов `registerBakedNodes` в конце функции; обновлены все 6 мест вызова в `document-store.ts` (`rebuild.ts`, `document-store.ts`)
+
+### Fixed — Код-ревью раунд 17: 15 проблем (2026-07-31)
+
+Полный цикл исправлений по результатам код-ревью Раунда 17 + SourceCraft.
+Все 15 проблем исправлены, точность ревью ~83% (15/18).
+
+#### 🔴 CRITICAL (2/2)
+
+1. **R17-1** — `computeNodeHash` не включал `localTransform` для boolean-узлов:
+   добавлена сериализация `localTransform` в хеш (`history-tree.ts`)
+2. **R17-2** — `resizeObject` не имел `try/catch` для CSG-ветки:
+   добавлен `set({ busy: true })`, `try/catch`, `notify()` (`document-store.ts`)
+
+#### 🟡 MEDIUM/HIGH (5/5)
+
+3. **R17-3** — Дублирование sync-логики в 3 местах: вынесена общая функция
+   `syncObjectsForOperation()` в `document-store.ts`, заменены блоки в
+   `csgBoolean`, `previewMirror`, `mirrorSelected`
+4. **R17-4** — `alignSelected` использовал `workerBuildShape` для примитивов:
+   заменён на `workerSyncObjects` (`document-store.ts`)
+5. **R17-5** — `computeBakedBBox` не учитывал rotation/scale: добавлен fast path
+   (только translation) и full path с `buildTransformMatrix` (`history-tree.ts`)
+6. **R17-6** — `pasteClipboard` не регистрировал объекты в build tree:
+   добавлены `createPrimitiveNode`/`createBakedNode` (`document-store.ts`)
+7. **R17-7** — `rebuildBuildTree` не вызывался после `rebuildFromHistory`:
+   добавлены вызовы в `undo`, `redo`, `jumpToHistory`, `openDoodle`,
+   `restoreAutosave`, `loadFromProject` (`document-store.ts`)
+
+#### 🟢 LOW (8/8)
+
+8. **R17-8** — Circle Snap не работал: добавлен `shapeTypeMapRef` в
+   `Viewport3D.tsx`, маппинг `objectId → shapeType` передаётся в
+   `findNearestSnap` (`Viewport3D.tsx`, `snap-utils.ts`)
+9. **R17-9** — Мёртвый код `getWorldPointFromPointer`: удалён (`Viewport3D.tsx`)
+10. **R17-10** — `console.error` без `notify` в catch-блоках: добавлен `notify()`
+    в 10 catch-блоков (`document-store.ts`)
+11. **R17-11** — Утечка `slabId` в worker после экструзии: добавлен
+    `workerDeleteObjects([slabId])` (`document-store.ts`)
+12. **R17-12** — Неограниченный рост кэша Snapshot: добавлена LRU-стратегия
+    с `MAX_CACHE_SIZE=50` (`snapshots.ts`)
+13. **R17-13** — Последовательные `await` в `csgBoolean`: заменены на
+    `Promise.all` (`document-store.ts`)
+14. **R17-14** — Переполнение стека в `invalidateCache`: добавлен параметр
+    `depth` с guard clause (max 100) (`history-tree.ts`)
+15. **R17-15** — Английские метки в `OP_FILTER_LABELS`: заменены на русские
+    (`constants.ts`)
+
+**Файлы:** `document-store.ts`, `history-tree.ts`, `Viewport3D.tsx`,
+`snapshots.ts`, `constants.ts`, `snap-utils.ts`
+
 ### Added — Mirror: live preview и 3D визуализация плоскости (MIRROR-2, MIRROR-4) (2026-07-31)
 - Live preview результата mirror при наведении на кнопку плоскости (`previewMirror` в document-store, `MirrorPreviewMesh` в Viewport3D)
 - 3D полупрозрачная плоскость-индикатор выбранной плоскости mirror в сцене (`mirrorPreviewPlane` в ui-store, `mirrorPlaneRef` в Viewport3D)
