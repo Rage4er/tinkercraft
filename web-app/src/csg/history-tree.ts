@@ -4,6 +4,7 @@
 // Pure logic module — no React/DOM dependencies.
 // All operations work on the tree structure; meshes are rebuilt lazily.
 
+import { Quaternion, Matrix4, Euler } from 'three'
 import type {
   TreeNode,
   TreeNodeType,
@@ -662,6 +663,37 @@ function mirrorPoint(p: Point3D, plane: 'XY' | 'XZ' | 'YZ', center: Point3D = { 
   }
 }
 
+/**
+ * Mirror rotation for Euler angles — SIMPLE SIGN FLIP.
+ *
+ * IMPORTANT: Quaternion-based mirror DOES NOT WORK for reflection!
+ * Quaternion represents rotations (SO(3), det = +1), but mirror is reflection (O(3), det = -1).
+ * Trying to mirror via quaternion gives APPROXIMATE results, NOT correct reflection.
+ *
+ * The CORRECT way to mirror Euler angles is simple sign flip:
+ * - Axes IN the mirror plane change sign
+ * - Perpendicular axis stays unchanged
+ *
+ * This works for ANY Euler angles, not just 0/90/180 degrees.
+ * Professional CAD systems (Fusion 360, SolidWorks) use this approach.
+ */
+function mirrorEuler(
+  rot: { x: number; y: number; z: number },
+  plane: 'XY' | 'XZ' | 'YZ',
+): { x: number; y: number; z: number } {
+  // SIMPLE SIGN FLIP — mathematically CORRECT for Euler angles
+  if (plane === 'YZ') {
+    // Mirror across YZ: X is perpendicular → rotX unchanged, rotY/rotZ negated
+    return { x: rot.x, y: -rot.y, z: -rot.z }
+  } else if (plane === 'XZ') {
+    // Mirror across XZ: Y is perpendicular → rotY unchanged, rotX/rotZ negated
+    return { x: -rot.x, y: rot.y, z: -rot.z }
+  } else {
+    // Mirror across XY: Z is perpendicular → rotZ unchanged, rotX/rotY negated
+    return { x: -rot.x, y: -rot.y, z: rot.z }
+  }
+}
+
 function mirrorNodeRecursive(
   node: TreeNode,
   plane: 'XY' | 'XZ' | 'YZ',
@@ -671,25 +703,24 @@ function mirrorNodeRecursive(
     const t = node.localTransform
     const mirroredPos = mirrorPoint({ x: t.x, y: t.y, z: t.z }, plane, center)
 
-    // FIX (MIRROR-6): Правильная математика зеркального отражения.
-    // Правило: ось ПЕРПЕНДИКУЛЯРНАЯ зеркальной плоскости НЕ меняется.
-    // Оси В ПЛОСКОСТИ меняют знак.
+    // FIX (MIRROR-9): Euler rotation mirroring via SIMPLE SIGN FLIP.
     //
-    // YZ plane (perpendicular axis = X):
-    //   pos.x → -x, rotX unchanged, scaleX = abs()
-    //   pos.y/z → mirrored, rotY/rotZ negated, scaleY/scaleZ = abs()
-    // XZ plane (perpendicular axis = Y):
-    //   pos.y → -y, rotY unchanged, scaleY = abs()
-    //   pos.x/z → mirrored, rotX/rotZ negated, scaleX/scaleZ = abs()
-    // XY plane (perpendicular axis = Z):
-    //   pos.z → -z, rotZ unchanged, scaleZ = abs()
-    //   pos.x/y → mirrored, rotX/rotY negated, scaleX/scaleY = abs()
+    // quaternion-based mirror DOES NOT WORK! Quaternion represents rotations
+    // (SO(3), det = +1), but mirror is reflection (O(3), det = -1).
+    // Trying to mirror via quaternion gives APPROXIMATE results, NOT correct.
     //
+    // The CORRECT way to mirror Euler angles is simple sign flip:
+    // - Axes IN the mirror plane change sign
+    // - Perpendicular axis stays unchanged
+    //
+    // This works for ANY Euler angles. Used by Fusion 360, SolidWorks, etc.
+    const mirroredRot = mirrorEuler(
+      { x: t.rotX, y: t.rotY, z: t.rotZ },
+      plane,
+    )
+
     // FIX (MIRROR-SCALE): Scale is always positive (abs). Mirror geometry
     // is done via matrix transform, NOT via negative scale.
-    const newRotX = plane === 'YZ' ? t.rotX : -t.rotX
-    const newRotY = plane === 'XZ' ? t.rotY : -t.rotY
-    const newRotZ = plane === 'XY' ? t.rotZ : -t.rotZ
     const newScaleX = Math.abs(t.scaleX)
     const newScaleY = Math.abs(t.scaleY)
     const newScaleZ = Math.abs(t.scaleZ)
@@ -699,9 +730,9 @@ function mirrorNodeRecursive(
       x: mirroredPos.x,
       y: mirroredPos.y,
       z: mirroredPos.z,
-      rotX: newRotX,
-      rotY: newRotY,
-      rotZ: newRotZ,
+      rotX: mirroredRot.x,
+      rotY: mirroredRot.y,
+      rotZ: mirroredRot.z,
       scaleX: newScaleX,
       scaleY: newScaleY,
       scaleZ: newScaleZ,
@@ -711,14 +742,14 @@ function mirrorNodeRecursive(
   }
 
   if (node.type === 'baked' && node.localTransform) {
-    // FIX (MIRROR-6): Same correct mirror logic for baked nodes.
-    // Scale always positive (abs). Mirror geometry via matrix, not negative scale.
+    // FIX (MIRROR-9): Euler rotation mirroring via simple sign flip.
+    // Same logic as primitive nodes. quaternion-based mirror DOES NOT WORK.
     const t = node.localTransform
     const mirroredPos = mirrorPoint({ x: t.x, y: t.y, z: t.z }, plane, center)
-
-    const newRotX = plane === 'YZ' ? t.rotX : -t.rotX
-    const newRotY = plane === 'XZ' ? t.rotY : -t.rotY
-    const newRotZ = plane === 'XY' ? t.rotZ : -t.rotZ
+    const mirroredRot = mirrorEuler(
+      { x: t.rotX, y: t.rotY, z: t.rotZ },
+      plane,
+    )
     const newScaleX = Math.abs(t.scaleX)
     const newScaleY = Math.abs(t.scaleY)
     const newScaleZ = Math.abs(t.scaleZ)
@@ -728,9 +759,9 @@ function mirrorNodeRecursive(
       x: mirroredPos.x,
       y: mirroredPos.y,
       z: mirroredPos.z,
-      rotX: newRotX,
-      rotY: newRotY,
-      rotZ: newRotZ,
+      rotX: mirroredRot.x,
+      rotY: mirroredRot.y,
+      rotZ: mirroredRot.z,
       scaleX: newScaleX,
       scaleY: newScaleY,
       scaleZ: newScaleZ,

@@ -582,23 +582,20 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   // ── Mirror ──
 
   /**
-   * Preview mirror result without saving to history (MIRROR-2).
-   * Computes the mirrored mesh and stores it in ui-store for semi-transparent preview.
-   *
-   * FIX (CRIT-MIRROR-1): Do NOT set busy=true. This is a non-destructive preview
-   * operation that should NOT block mirrorSelected or other user actions.
-   * Setting busy=true caused previewMirror to block mirrorSelected when the
-   * user clicked the mirror button while preview was still computing.
-   */
+    * Preview mirror result without saving to history (MIRROR-2).
+    * Computes the mirrored mesh and stores it in ui-store for semi-transparent preview.
+    *
+    * FIX (CRIT-MIRROR-1): Do NOT set busy=true. This is a non-destructive preview
+    * operation that should NOT block mirrorSelected or other user actions.
+    * Setting busy=true caused previewMirror to block mirrorSelected when the
+    * user clicked the mirror button while preview was still computing.
+    */
   previewMirror: async (plane: 'XY' | 'XZ' | 'YZ') => {
-    // NO busy check — preview is non-blocking
     const { selectedIds, objects } = get()
     const ids = selectedIds.filter(id => objects[id])
     if (ids.length === 0) return
-    // Dynamically import ui-store to avoid circular dependency
     const { useUiStore } = await import('./ui-store')
     const setMirrorPreviewMesh = useUiStore.getState().setMirrorPreviewMesh
-    // Clear preview on any plane — will be re-set below
     setMirrorPreviewMesh(null)
     try {
       const bboxes = ids.map(id => {
@@ -609,25 +606,112 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const centerY = bboxes.reduce((s, b) => s + (b.min.y + b.max.y) / 2, 0) / bboxes.length
       const centerZ = bboxes.reduce((s, b) => s + (b.min.z + b.max.z) / 2, 0) / bboxes.length
       const mirrorCenter = { x: centerX, y: centerY, z: centerZ }
-      console.log(`[MIRROR:previewMirror] plane=${plane} ids=[${ids.join(',')}] mirrorCenter={x:${mirrorCenter.x}, y:${mirrorCenter.y}, z:${mirrorCenter.z}}`)
 
-      // Sync worker cache before mirror preview
       await syncObjectsForOperation(ids, objects)
 
-      // Compute mirror for first selected object only (preview)
       const id = ids[0]
       const obj = objects[id]
 
-      let mesh: MeshResult
+      // Unified preview: clone subtree → mirror → rebuild
+      const treeExists = getNode(id) !== undefined
+      if (!treeExists) {
+        if (obj.shapeType && obj.params) {
+          createPrimitiveNode(id, obj.shapeType, obj.params, obj.transform)
+        } else {
+          createBakedNode(id, obj.vertices || new Float32Array(), obj.indices || new Uint32Array(), obj.normals || null, obj.transform)
+        }
+      }
+      syncNodeTransform(id, obj.transform)
+      const treeId = `mirror_preview_${nextId()}`
+      cloneSubtree(id, treeId)
+      mirrorTreeNode(treeId, plane, mirrorCenter)
 
-      // For primitives and CSG results: use workerMirrorObject (mirror geometry via matrix)
-      const isCsgResult = obj.shapeType === 'cube' && obj.params && !obj.params.width
-      if ((obj.shapeType && obj.params) || isCsgResult) {
-        const mirroredTransform = isCsgResult
+      // Сохраняем mirrored localTransform для применения в preview
+      const mirroredNode = getNode(treeId)
+      const mirroredTransform = mirroredNode?.localTransform
+      console.log(`[MIRROR:previewMirror] saved transform = {x:${mirroredTransform?.x}, y:${mirroredTransform?.y}, z:${mirroredTransform?.z}, rotX:${mirroredTransform?.rotX}, rotY:${mirroredTransform?.rotY}, rotZ:${mirroredTransform?.rotZ}, scaleX:${mirroredTransform?.scaleX}, scaleY:${mirroredTransform?.scaleY}, scaleZ:${mirroredTransform?.scaleZ}}`)
+
+      const rebuilt = await rebuildNode(treeId)
+      setMirrorPreviewMesh({
+        vertices: rebuilt.vertices,
+        indices: rebuilt.indices,
+        normals: rebuilt.normals ?? null,
+        transform: mirroredTransform,
+      })
+    } catch (e) {
+      console.error('previewMirror:', e)
+      try {
+        const { useUiStore } = await import('./ui-store')
+        useUiStore.getState().setMirrorPreviewMesh(null)
+      } catch { /* ignore */ }
+    }
+  },
+
+  mirrorSelected: async (plane: 'XY' | 'XZ' | 'YZ') => {
+    if (get().busy) return
+    const { selectedIds, objects, operations, historyIndex } = get()
+    const ids = selectedIds.filter(id => objects[id])
+    if (ids.length === 0) return
+    set({ busy: true })
+    try {
+      const t0 = performance.now()
+      const bboxes = ids.map(id => {
+        const obj = objects[id]
+        return obj.aabb ?? computeAABB(obj.vertices)
+      })
+      const centerX = bboxes.reduce((s, b) => s + (b.min.x + b.max.x) / 2, 0) / bboxes.length
+      const centerY = bboxes.reduce((s, b) => s + (b.min.y + b.max.y) / 2, 0) / bboxes.length
+      const centerZ = bboxes.reduce((s, b) => s + (b.min.z + b.max.z) / 2, 0) / bboxes.length
+      const mirrorCenter = { x: centerX, y: centerY, z: centerZ }
+
+      await syncObjectsForOperation(ids, objects)
+      const newObjects = { ...objects }
+      const newIds: string[] = []
+      const originalIds: string[] = []
+
+      // ЕДИНЫЙ МЕТОД для ВСЕХ типов: mirrorTreeNode → rebuildNode
+      // Как в preview, так и в confirm используется один и тот же подход
+      for (const id of ids) {
+        originalIds.push(id)
+        const obj = objects[id]
+
+        // Создаём новый ID
+        const newId = nextId()
+
+        // ЕДИНЫЙ МЕТОД: cloneSubtree + mirrorTreeNode + rebuildNode
+        // mirrorTreeNode использует mirrorEuler (кватернион) — правильно для ЛЮБЫХ углов
+        const treeExists = getNode(id) !== undefined
+        if (!treeExists) {
+          if (obj.shapeType && obj.params) {
+            createPrimitiveNode(id, obj.shapeType, obj.params, obj.transform)
+          } else {
+            createBakedNode(id, obj.vertices || new Float32Array(), obj.indices || new Uint32Array(), obj.normals || null, obj.transform)
+          }
+        }
+        cloneSubtree(id, newId)
+        mirrorTreeNode(newId, plane, mirrorCenter)
+
+        // Получаем mirrored transform из tree node (quaternion-based, правильный)
+        // и используем его в store — чтобы store и tree были консистентны
+        const mirroredNode = getNode(newId)
+        const treeTransform = mirroredNode?.localTransform
+
+        // Rebuild geometry from mirrored params/structure
+        await rebuildNode(newId)
+
+        // Сохраняем transform из tree (quaternion-based mirror) в store
+        // Это гарантирует консистентность: store == tree
+        const finalTransform: TransformNR = treeTransform
           ? {
-            x: 0, y: 0, z: 0,  // geometry already positioned by worker
-            rotX: 0, rotY: 0, rotZ: 0,  // rotation already baked in geometry
-            scaleX: 1, scaleY: 1, scaleZ: 1,  // scale already baked in geometry
+            x: Math.round(treeTransform.x * 1e6) / 1e6,
+            y: Math.round(treeTransform.y * 1e6) / 1e6,
+            z: Math.round(treeTransform.z * 1e6) / 1e6,
+            rotX: treeTransform.rotX,
+            rotY: treeTransform.rotY,
+            rotZ: treeTransform.rotZ,
+            scaleX: treeTransform.scaleX,
+            scaleY: treeTransform.scaleY,
+            scaleZ: treeTransform.scaleZ,
           }
           : {
             x: 2 * mirrorCenter.x - obj.transform.x,
@@ -640,295 +724,16 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
             scaleY: Math.abs(obj.transform.scaleY),
             scaleZ: Math.abs(obj.transform.scaleZ),
           }
-        mesh = await workerMirrorObject(
-          id, plane,
-          isCsgResult ? undefined : obj.shapeType,
-          isCsgResult ? undefined : (obj.params as unknown as Record<string, number>),
-          mirroredTransform, mirrorCenter,
-        )
-      } else {
-        // For import_mesh: use build tree
-        const treeExists = getNode(id) !== undefined
-        if (!treeExists) {
-          if (obj.shapeType && obj.params) {
-            createPrimitiveNode(id, obj.shapeType, obj.params, obj.transform)
-          } else {
-            createBakedNode(id, obj.vertices || new Float32Array(), obj.indices || new Uint32Array(), obj.normals || null, obj.transform)
-          }
-        }
-        syncNodeTransform(id, obj.transform)
-        const treeId = `mirror_preview_${nextId()}`
-        cloneSubtree(id, treeId)
-        mirrorTreeNode(treeId, plane, mirrorCenter)
-        const rebuilt = await rebuildNode(treeId)
-        mesh = rebuilt as unknown as MeshResult
-      }
-      // Store preview mesh in ui-store
-      setMirrorPreviewMesh({
-        vertices: mesh.vertices,
-        indices: mesh.indices,
-        normals: mesh.normals ?? null,
-      })
-    } catch (e) {
-      console.error('previewMirror:', e)
-      // Try to clear preview
-      try {
-        const { useUiStore } = await import('./ui-store')
-        useUiStore.getState().setMirrorPreviewMesh(null)
-      } catch { /* ignore */ }
-    }
-  },
 
-  mirrorSelected: async (plane) => {
-    if (get().busy) return
-    const { selectedIds, objects, operations, historyIndex } = get()
-    const ids = selectedIds.filter(id => objects[id])
-    if (ids.length === 0) return
-    set({ busy: true })
-    try {
-      const t0 = performance.now()
-      // Compute BBox center of all selected objects for mirror pivot
-      const bboxes = ids.map(id => {
-        const obj = objects[id]
-        return obj.aabb ?? computeAABB(obj.vertices)
-      })
-      const centerX = bboxes.reduce((s, b) => s + (b.min.x + b.max.x) / 2, 0) / bboxes.length
-      const centerY = bboxes.reduce((s, b) => s + (b.min.y + b.max.y) / 2, 0) / bboxes.length
-      const centerZ = bboxes.reduce((s, b) => s + (b.min.z + b.max.z) / 2, 0) / bboxes.length
-      const mirrorCenter = { x: centerX, y: centerY, z: centerZ }
-      console.log(`[MIRROR:mirrorSelected] plane=${plane} mirrorCenter={x:${mirrorCenter.x}, y:${mirrorCenter.y}, z:${mirrorCenter.z}}`)
-      for (const id of ids) {
-        const obj = objects[id]
-        console.log(`[MIRROR:mirrorSelected] BEFORE id=${id} shapeType=${obj.shapeType} transform={x:${obj.transform.x}, y:${obj.transform.y}, z:${obj.transform.z}, rotX:${obj.transform.rotX}, rotY:${obj.transform.rotY}, rotZ:${obj.transform.rotZ}, scaleX:${obj.transform.scaleX}, scaleY:${obj.transform.scaleY}, scaleZ:${obj.transform.scaleZ}}`)
-      }
-
-      // Sync worker cache before mirror — fixes stale cache after undo/redo
-      await syncObjectsForOperation(ids, objects)
-      const newObjects = { ...objects }
-      const newIds: string[] = []
-      const originalIds: string[] = []
-
-      // Track fallback nodes created for cleanup
-      const createdFallbackIds: string[] = []
-
-      for (const id of ids) {
-        originalIds.push(id)
-        const obj = objects[id]
-
-        // Mirror via workerMirrorObject for:
-        // 1. import_mesh (non-manifold geometry)
-        // 2. Parametric primitives (shapeType + params)
-        // 3. CSG results (shapeType='cube' but params empty — baked geometry, need matrix mirror)
-        const isCsgResult = obj.shapeType === 'cube' && obj.params && !obj.params.width
-        if (obj.shapeType === 'import_mesh' || (obj.shapeType && obj.params) || isCsgResult) {
-          // Mirror via workerMirrorObject (mirror geometry via matrix transform).
-          // For import_mesh: geometry mirrored relative to mirrorCenter.
-          // For primitives: geometry mirrored relative to origin, transform applied with mirrored params.
-          // For CSG results: geometry mirrored relative to mirrorCenter, transform passed through.
-          const mirroredTransform = obj.shapeType === 'import_mesh' || isCsgResult
-            ? {
-              x: 0, y: 0, z: 0,  // position already baked in geometry, worker handles positioning
-              rotX: 0, rotY: 0, rotZ: 0,  // rotation already baked in geometry
-              scaleX: 1, scaleY: 1, scaleZ: 1,  // scale already baked in geometry
-            }
-            : {
-              // Parametric: mirrored position, reflected rotation, absolute scale
-              x: 2 * mirrorCenter.x - obj.transform.x,
-              y: 2 * mirrorCenter.y - obj.transform.y,
-              z: 2 * mirrorCenter.z - obj.transform.z,
-              rotX: plane === 'YZ' ? obj.transform.rotX : -obj.transform.rotX,
-              rotY: plane === 'XZ' ? obj.transform.rotY : -obj.transform.rotY,
-              rotZ: plane === 'XY' ? obj.transform.rotZ : -obj.transform.rotZ,
-              scaleX: Math.abs(obj.transform.scaleX),
-              scaleY: Math.abs(obj.transform.scaleY),
-              scaleZ: Math.abs(obj.transform.scaleZ),
-            }
-
-          const mesh = await workerMirrorObject(
-            id, plane,
-            obj.shapeType === 'import_mesh' || isCsgResult ? undefined : obj.shapeType,
-            obj.shapeType === 'import_mesh' || isCsgResult ? undefined : (obj.params as unknown as Record<string, number>),
-            mirroredTransform,
-            mirrorCenter,
-          )
-          // For CSG/import: geometry is already mirrored and centered in worker.
-          // Transform = mirrored position + reflected rotation + abs scale.
-          // Correct mirror math: perpendicular axis negated, axes IN plane unchanged.
-          const mirroredPos = obj.shapeType === 'import_mesh'
-            ? { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
-            : (() => {
-              const t = obj.transform
-              if (plane === 'YZ') {
-                // YZ plane: X perpendicular → negated, Y/Z unchanged
-                return {
-                  x: -t.x, y: t.y, z: t.z,
-                  rotX: t.rotX, rotY: -t.rotY, rotZ: -t.rotZ,
-                  scaleX: Math.abs(t.scaleX), scaleY: Math.abs(t.scaleY), scaleZ: Math.abs(t.scaleZ),
-                }
-              }
-              if (plane === 'XZ') {
-                // XZ plane: Y perpendicular → negated, X/Z unchanged
-                return {
-                  x: t.x, y: -t.y, z: t.z,
-                  rotX: -t.rotX, rotY: t.rotY, rotZ: -t.rotZ,
-                  scaleX: Math.abs(t.scaleX), scaleY: Math.abs(t.scaleY), scaleZ: Math.abs(t.scaleZ),
-                }
-              }
-              // XY plane: Z perpendicular → negated, X/Y unchanged
-              return {
-                x: t.x, y: t.y, z: -t.z,
-                rotX: -t.rotX, rotY: -t.rotY, rotZ: t.rotZ,
-                scaleX: Math.abs(t.scaleX), scaleY: Math.abs(t.scaleY), scaleZ: Math.abs(t.scaleZ),
-              }
-            })()
-          const resultTransform: TransformNR = mirroredPos
-          const newId = nextId()
-          const newObj = makeObject({
-            ...obj,
-            id: newId,
-            transform: resultTransform,
-            vertices: mesh.vertices,
-            indices: mesh.indices,
-            normals: mesh.normals,
-          })
-          newObjects[newId] = newObj
-          newIds.push(newId)
-          // Register as baked node in build tree
-          createBakedNode(newId, mesh.vertices, mesh.indices, mesh.normals ?? null, resultTransform)
-          continue
-        }
-
-        // Все объекты должны быть зарегистрированы в дереве при создании
-        // Если объект не в дереве (из-за rebuildFromHistory или старых данных) — создаём fallback ноду
-        const treeExists = getNode(id) !== undefined
-
-        if (!treeExists) {
-          if (obj.shapeType && obj.params) {
-            createPrimitiveNode(id, obj.shapeType, obj.params, obj.transform)
-          } else {
-            createBakedNode(id, obj.vertices || new Float32Array(), obj.indices || new Uint32Array(), obj.normals || null, obj.transform)
-          }
-          // Track this ID for cleanup after mirror
-          createdFallbackIds.push(id)
-        }
-
-        // Синхронизируем трансформации из store перед операцией
-        syncNodeTransform(id, obj.transform)
-
-        // Клонируем поддерево и зеркалим
-        const treeId = `mirror_${nextId()}`
-        cloneSubtree(id, treeId)
-        // Pass selection BBox center as mirror pivot
-        mirrorTreeNode(treeId, plane, mirrorCenter)
-
-        // FIX (MIRROR-7): Mirror должен применяться ОДИН РАЗ.
-        //
-        // Проблема: mirrorTreeNode отражает localTransform в дереве.
-        // rebuildNode применяет mirrored localTransform к geometry.
-        // Если мы используем mirroredTransform как finalTransform — pivot
-        // применяет его ЕЩЁ РАЗ → двойное зеркало (scale 0.25, углы удвоены).
-        //
-        // Решение:
-        // 1. Сохраняем mirrored localTransform
-        // 2. Сбрасываем mirrored localTransform в identity → rebuildNode
-        //    возвращает mesh БЕЗ transform (mesh в origin)
-        // 3. Mesh в origin + pivot с mirroredTransform = зеркало ОДИН РАЗ
-        const mirroredNode = getNode(treeId)
-        let mirroredTransform: TransformNR | undefined
-        if (mirroredNode && (mirroredNode.type === 'primitive' || mirroredNode.type === 'baked')) {
-          mirroredTransform = {
-            x: mirroredNode.localTransform?.x ?? 0,
-            y: mirroredNode.localTransform?.y ?? 0,
-            z: mirroredNode.localTransform?.z ?? 0,
-            rotX: mirroredNode.localTransform?.rotX ?? 0,
-            rotY: mirroredNode.localTransform?.rotY ?? 0,
-            rotZ: mirroredNode.localTransform?.rotZ ?? 0,
-            scaleX: mirroredNode.localTransform?.scaleX ?? 1,
-            scaleY: mirroredNode.localTransform?.scaleY ?? 1,
-            scaleZ: mirroredNode.localTransform?.scaleZ ?? 1,
-          }
-        }
-
-        // Сбросить mirrored localTransform в identity
-        if (mirroredNode && mirroredNode.type === 'primitive') {
-          mirroredNode.localTransform = {
-            x: 0, y: 0, z: 0,
-            rotX: 0, rotY: 0, rotZ: 0,
-            scaleX: 1, scaleY: 1, scaleZ: 1,
-          }
-        }
-
-        // Mesh в origin, без transform
-        const mesh = await rebuildNode(treeId)
-
-        // Вычисляем centroid для AABB
-        const { cx, cy, cz, aabb } = extractAndCenterGetAABB(mesh.vertices)
-
-        // finalTransform = mirrored transform (применяется pivot ОДИН РАЗ)
-        // Для parametric объектов: сохраняем shapeType/params, mirrored transform
-        // scale НЕ нормализуем — mirrored scale корректно отражает геометрию
-        const finalTransform: TransformNR = mirroredTransform
-          ? {
-            x: Math.round(mirroredTransform.x * 1e6) / 1e6,
-            y: Math.round(mirroredTransform.y * 1e6) / 1e6,
-            z: Math.round(mirroredTransform.z * 1e6) / 1e6,
-            rotX: mirroredTransform.rotX,
-            rotY: mirroredTransform.rotY,
-            rotZ: mirroredTransform.rotZ,
-            scaleX: mirroredTransform.scaleX,
-            scaleY: mirroredTransform.scaleY,
-            scaleZ: mirroredTransform.scaleZ,
-          }
-          : {
-            x: cx, y: cy, z: cz,
-            rotX: 0, rotY: 0, rotZ: 0,
-            scaleX: 1, scaleY: 1, scaleZ: 1,
-          }
-
-        // СОЗДАЕМ НОВЫЙ ОБЪЕКТ — parametric (сохраняем shapeType/params)
-        const newId = nextId()
-        const newTransform = finalTransform
         const newObj = makeObject({
           ...obj,
           id: newId,
-          transform: newTransform,
-          // Сохраняем shapeType/params для parametric editing
+          transform: finalTransform,
           shapeType: obj.shapeType,
           params: obj.params,
-          // vertices/indices нужны для рендера (baked из tree)
-          vertices: mesh.vertices,
-          indices: mesh.indices,
-          normals: mesh.normals
         })
         newObjects[newId] = newObj
         newIds.push(newId)
-
-        // РЕГИСТРИРУЕМ в дереве как parametric node
-        if (obj.shapeType && obj.params) {
-          createPrimitiveNode(newId, obj.shapeType, obj.params, newTransform)
-        } else {
-          const mirroredNodeType = getNode(treeId)?.type
-          if (mirroredNodeType === 'boolean') {
-            cloneSubtree(treeId, newId)
-          } else {
-            createBakedNode(newId, mesh.vertices || new Float32Array(), mesh.indices || new Uint32Array(), mesh.normals || null, newTransform)
-          }
-        }
-
-        // Удаляем временную зеркальную ноду из дерева
-        deleteNode(treeId)
-      }
-
-      // Log AFTER mirror: each new copy's transform
-      for (const newId of newIds) {
-        const newObj = newObjects[newId]
-        console.log(`[MIRROR:mirrorSelected] AFTER id=${newId} shapeType=${newObj.shapeType} transform={x:${newObj.transform.x}, y:${newObj.transform.y}, z:${newObj.transform.z}, rotX:${newObj.transform.rotX}, rotY:${newObj.transform.rotY}, rotZ:${newObj.transform.rotZ}, scaleX:${newObj.transform.scaleX}, scaleY:${newObj.transform.scaleY}, scaleZ:${newObj.transform.scaleZ}}`)
-      }
-
-      // Clean up fallback nodes that were created for objects
-      // not in the tree. These were only needed for the mirror operation.
-      for (const fallbackId of createdFallbackIds) {
-        deleteNode(fallbackId)
       }
 
       const op: MirrorOperation = { type: 'mirror', originalIds, ids: newIds, plane }
@@ -937,8 +742,6 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       cacheSnapshotWithTree(newOps.length, newObjects)
     } catch (e) { set({ busy: false }); console.error('mirrorSelected:', e); notify('Ошибка зеркального отражения', 'error') }
   },
-
-  // ── Align ──
   alignSelected: async (axis, anchor) => {
     if (get().busy) return
     const { selectedIds, objects, operations, historyIndex } = get()

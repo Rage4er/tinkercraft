@@ -103,6 +103,7 @@ export interface MirrorPreviewMesh {
     indices: Uint32Array;
     normals: Float32Array | null;
     center?: { x: number; y: number; z: number };
+    transform?: { x: number; y: number; z: number; rotX: number; rotY: number; rotZ: number; scaleX: number; scaleY: number; scaleZ: number };
 }
 
 export interface ThreeInitResult {
@@ -787,6 +788,21 @@ export function useMirrorPreview(
         geometry.setIndex(new THREE.BufferAttribute(mirrorPreviewMesh.indices, 1));
         geometry.computeVertexNormals();
 
+        let geometryCentered = false;
+
+        // ПРИМЕНЯЕМ TRANSFORM к геометрии (как в профессиональных CAD)
+        if (mirrorPreviewMesh.transform) {
+            const t = mirrorPreviewMesh.transform;
+            const matrix = new THREE.Matrix4();
+            matrix.compose(
+                new THREE.Vector3(t.x, t.y, t.z),
+                new THREE.Quaternion().setFromEuler(new THREE.Euler(t.rotX, t.rotY, t.rotZ)),
+                new THREE.Vector3(t.scaleX, t.scaleY, t.scaleZ),
+            );
+            geometry.applyMatrix4(matrix);
+            geometryCentered = true;
+        }
+
         const material = new THREE.MeshStandardMaterial({
             color: 0x4488ff,
             transparent: true,
@@ -801,22 +817,17 @@ export function useMirrorPreview(
         const pivot = new THREE.Object3D();
         pivot.userData.objectId = '__mirror_preview__';
         pivot.add(mesh);
-        // Use center from preview mesh if available, otherwise center geometry
-        if (mirrorPreviewMesh.center) {
-            pivot.position.set(
-                mirrorPreviewMesh.center.x,
-                mirrorPreviewMesh.center.y,
-                mirrorPreviewMesh.center.z,
-            );
-        } else {
+
+        // Если transform уже применён через applyMatrix4 — геометрия уже в правильной позиции
+        // Ничего дополнительного центрировать не нужно
+        if (!geometryCentered) {
             // Fallback: center geometry at origin (legacy behavior)
-            const geo = mesh.geometry as THREE.BufferGeometry;
-            const pos = geo.attributes.position;
+            const pos = mesh.geometry.attributes.position;
             if (pos) {
                 const vertices = pos.array as Float32Array;
                 const { min, max } = computeAABB(vertices);
                 const cx = (min.x + max.x) / 2, cy = (min.y + max.y) / 2, cz = (min.z + max.z) / 2;
-                geo.translate(-cx, -cy, -cz);
+                mesh.geometry.translate(-cx, -cy, -cz);
             }
         }
         scene.add(pivot);
