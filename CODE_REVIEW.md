@@ -48,9 +48,9 @@
 
 | # | Проблема | Файл | Severity | Описание |
 |---|----------|------|----------|----------|
-| | **CSG-PARAM-1** | [`document-store.ts:464`](web-app/src/store/document-store.ts:464) | **HIGH** | `createBakedNode(resultId, mesh.vertices, mesh.indices, mesh.normals ?? null, resultTransform)` — CSG-результат регистрируется как baked-нода вместо boolean. После замены на `createBooleanNode(resultId, op, idA, idB, resultTransform)` дерево будет знать об операндах и сможет перестраивать CSG-результат параметрически. |
-| | **CSG-PARAM-2** | [`document-store.ts:80`](web-app/src/store/document-store.ts:80) | **MEDIUM** | `createBooleanNode(nd.id, nd.operation, nd.children[0], nd.children[1])` — при восстановлении из снапшота (undo/redo) не передаётся `nd.localTransform`. После undo/redo boolean-нода теряет позицию. Нужно: `createBooleanNode(nd.id, nd.operation, nd.children[0], nd.children[1], nd.localTransform)`. |
-| | **CSG-PARAM-3** | [`rebuild.ts:254-256`](web-app/src/store/rebuild.ts:254) | **LOW** | `createPrimitiveNode(op.id, op.shapeType, op.params, { ...op.transform })` вызывается без проверки существования узла. При undo/redo → `restoreTreeFromSnapshot` уже восстановил дерево → `rebuildBuildTree` создаёт дубликаты. Нужно: `if (!getNode(op.id)) { createPrimitiveNode(...) }`. |
+| ✅ **CSG-PARAM-1** | [`document-store.ts:464`](web-app/src/store/document-store.ts:464) | **HIGH** | Заменён `createBakedNode` на `createBooleanNode(resultId, op, idA, idB, resultTransform)` для сохранения связи с операндами и типа операции. Теперь CSG-результаты хранятся в build tree как boolean ноды, что позволяет перестраивать цепочку при изменении операндов. |
+| ✅ **CSG-PARAM-2** | [`document-store.ts:80`](web-app/src/store/document-store.ts:80) | **MEDIUM** | Добавлен параметр `nd.localTransform` в `createBooleanNode(nd.id, nd.operation, nd.children[0], nd.children[1], nd.localTransform!)` для сохранения позиции после undo/redo. Теперь boolean ноды правильно восстанавливают свою трансформацию при восстановлении из снапшота. |
+| ✅ **CSG-PARAM-3** | [`rebuild.ts:254-256`](web-app/src/store/rebuild.ts:254) | **LOW** | Добавлена проверка `if (!getNode(op.id))` перед `createPrimitiveNode` для предотвращения создания дубликатов при undo/redo. Теперь rebuildBuildTree безопасно создает примитивные ноды только если они еще не существуют в дереве. |
 
 #### Детали проверки
 
@@ -413,11 +413,11 @@
 |---------|----------|
 | Всего выявлено проблем | ~260+ (за всё время) |
 | Исправлено | ~110+ |
-| Активных (Раунд 18 + Раунд 19 + Раунд 20) | **153** (138 + 12 mirror + 3 CSG-PARAM) |
+| Активных (Раунд 18 + Раунд 19) | **150** (138 + 12 mirror) |
 | Точность ревью (Раунд 16) | ~50% (8/18 полностью верных) |
 | Точность ревью (Раунд 17 + SourceCraft) | ~83% (12.5/15 подтверждено) |
 | Точность ревью (Раунд 18) | Ожидает верификации |
-| Точность ревью (Раунд 20 — CSG-PARAM) | **100%** (3/3 подтверждено после 2 раундов верификации) |
+| Точность ревью (Раунд 20 — CSG-PARAM) | ✅ **ИСПРАВЛЕНО** (все 3 проблемы решены в коммите acb7847) |
 
 ### Распределение по типам
 
