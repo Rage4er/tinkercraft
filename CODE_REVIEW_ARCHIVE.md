@@ -4741,3 +4741,26 @@ else {
 - Обновлён комментарий в `csgBoolean` — теперь объясняет параметрический подход (4 пункта)
 - `syncObjectsForOperation` не требует изменений — `applyCSGMeshes` уже работает с деревом через `collectSubtree`
 - Операнды по-прежнему удаляются из `objects` (строка 439) — это правильное поведение (CSG поглощает операнды)
+
+---
+
+## 📋 Статус исправлений (Раунд 19 — Глубокий аудит Mirror — 2026-08-02)
+
+| ID | Проблема | Статус | Описание исправления |
+|---|---|---|---|
+| MIRROR-19-1 | `mirrorCenter` из локальных координат вместо мировых | ✅ ИСПРАВЛЕНО | `mirror-store.ts`: используется `resetSubtreeTransform` + `mirrorPoint` с `obj.transform` (мировые координаты). Геометрия строится с identity-трансформацией, затем отражается. |
+| MIRROR-19-2 | Preview только для первого объекта (multi-select) | ✅ ИСПРАВЛЕНО | `mirror-store.ts:previewMirror`: итерация по всем `ids`, объединение геометрии всех объектов в один mesh. Для одного объекта — старое поведение. |
+| MIRROR-19-3 | Утечка preview-узлов в build tree | ✅ ИСПРАВЛЕНО | `mirror-store.ts:mirrorObject`: временные узлы создаются через `cloneSubtree` и удаляются через `deleteNode(newId, true)` в конце функции. |
+| MIRROR-19-4 | Race condition в preview (нет debounce) | ✅ ИСПРАВЛЕНО | `App.tsx:357-365`: добавлен debounce 150ms через `setTimeout` с `clearTimeout` при новом наведении. |
+| MIRROR-19-5 | Preview-узлы не очищаются после confirm | ✅ ИСПРАВЛЕНО | `mirror-store.ts:mirrorObject`: `deleteNode(newId, true)` вызывается в конце функции для всех временных узлов. |
+| MIRROR-19-6 | Хрупкая эвристика детекции CSG-результата | ✅ ИСПРАВЛЕНО | `document-store.ts:113-118`, `mirror-store.ts:66`: замена `shapeType==='cube' && !params.width` на `!obj.params \|\| Object.keys(obj.params).length === 0`. |
+| MIRROR-19-7 | `baked` без `localTransform` молча пропускается | 🔄 Активна | Требуется добавить fallback на identity transform в `mirrorNodeRecursive`. |
+| MIRROR-19-8 | `boolean` без `children` молча пропускается | 🔄 Активна | Требуется добавить логирование ошибки в `mirrorNodeRecursive`. |
+| MIRROR-19-9 | `treeTransform` устаревает после `rebuildNode` | 🔄 Активна | Требуется получать `treeTransform` ПОСЛЕ `rebuildNode`. |
+| MIRROR-19-10 | Fallback-логика не совпадает с `mirrorTreeNode` | 🔄 Активна | Требуется унифицировать логику fallback с `mirrorEuler`. |
+| MIRROR-19-11 | `as unknown as` в rebuild.ts для mirror | 🔄 Активна | Требуется добавить type-safe приведение типов. |
+| MIRROR-19-12 | `Matrix4.compose` с отражёнными углами Euler | 🔄 Активна | Требуется проверить корректность матрицы для отражённых углов. |
+
+**Контекст:** Полный аудит реализации mirror в новом `mirror-store.ts`. 6 из 12 проблем были исправлены в процессе рефакторинга. Оставшиеся 6 проблем требуют дополнительной работы.
+
+**Файлы:** `mirror-store.ts`, `document-store.ts`, `App.tsx`
