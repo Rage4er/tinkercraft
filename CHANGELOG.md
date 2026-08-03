@@ -9,6 +9,85 @@
 
 ## [Unreleased]
 
+### Added
+
+- **PHASE-8 — Параметрическая история операций (Plan)**: Добавлена Фаза 8 в `DEVELOPMENT_PLAN.md` — параметрическое редактирование операций в истории. Каждая операция в Timeline становится редактируемым параметрическим объектом: изменение параметров на любом шаге перестраивает всю цепочку после него. Подзадачи: Timeline edit (8.1), edit modal для примитивов (8.2), edit modal для CSG (8.3), rebuild on edit (8.4), edit modal для fillet/extrude/mirror (8.5), undo для edit (8.6), visual feedback (8.7). Зависит от существующих: история операций, build tree, rebuildFromHistory. Базовая инфраструктура уже готова — нужно только UI для редактирования и вызов rebuildFromHistory после изменений (`DEVELOPMENT_PLAN.md`)
+
+### Fixed
+
+- **MIRROR-DOUBLE-TRANSFORM (CRITICAL)**: Исправлено двойное применение transform при зеркале. Проблема: `mirrorObject` применял `applyMirrorToTransform`, который отражал rotation/scale (sign flip rotation, abs scale). Но геометрия уже была отражена через `mirrorVerticesInPlace`. В результате Viewport3D применял отражённые rotation/scale через pivot к уже отражённой геометрии — двойное отражение. Это приводило к: 1) preview не отображался для плоскости XY (rotation/scale "ломали" геометрию), 2) rotation/scale сбрасывались в 0/1 (из-за двойного применения). Решение: `mirrorObject` теперь использует `mirrorPoint` только для позиции, rotation/scale остаются оригинальными. Геометрия уже отражена в вершинах, rotation/scale применяются через pivot в Viewport3D однократно. Убран импорт `applyMirrorToTransform` из `mirror-store.ts`. Исправлено: `mirror-store.ts` (mirrorObject)
+
+### Changed
+
+- **MIRROR-STORE-REFACTOR**: Вся логика зеркала вынесена из `document-store.ts` в отдельный файл `mirror-store.ts`. Это очищает `document-store.ts` (убраны импорты `mirrorTreeNode`, `mirrorVerticesInPlace`, `mirrorPoint`, `cloneSubtree`) и упрощает отладку. `document-store.ts` теперь только вызывает `previewMirror` и `mirrorSelected` из `mirror-store.ts`. Новый подход: `rebuildNode` → `mirrorVerticesInPlace` → `mirrorPoint`. Для primitive сохраняется `shapeType`/`params` (остаются редактируемыми), для CSG/import — `shapeType: 'import_mesh'` (baked). Transform = `mirrorPoint` для позиции, `rot=0, scale=1`. Исправлено: `mirror-store.ts` (новый файл), `document-store.ts` (рефакторинг)
+- **MIRROR-UNIFIED-PREVIEW-CONFIRM**: Preview и confirm зеркала теперь используют **единый метод** `mirrorObject` в `mirror-store.ts`. Preview — тот же объект, что и confirm, но с флагом `isMirrorPreview: true` (прозрачность 0.35). Это устраняет дублирование кода и гарантирует идентичность preview и финального объекта. `mirrorPreviewMesh` в `ui-store.ts` заменён на `previewObject: (SceneObject & { isMirrorPreview: boolean }) | null`. `useMirrorPreview` в `viewport-hooks.ts` переписан — создаёт mesh как обычный SceneObject (центрирование + pivot с position/rotation/scale), но с прозрачным материалом. Исправлено: `mirror-store.ts` (mirrorObject), `ui-store.ts` (previewObject), `viewport-hooks.ts` (useMirrorPreview), `Viewport3D.tsx` (previewObject prop), `App.tsx` (previewObject вместо mirrorPreviewMesh), `document-store.ts` (setPreviewObject вместо setMirrorPreviewMesh)
+
+### Fixed
+
+- **MIRROR-BAKED-GEOMETRY (CRITICAL)**: Зеркало для baked-нод (CSG результаты, импортированные STL) теперь действительно отражает геометрию. Две проблемы:
+  1. **`mirrorNodeRecursive`** не отражал вершины baked-нод — менял только `localTransform`. Исправление: добавлен вызов `mirrorVerticesInPlace(node.vertices, node.normals, plane)` — negate перпендикулярной оси для каждой вершины и нормали. Rotation/scale обрабатываются как для primitive — через `mirrorEuler` и `Math.abs()`. Viewport3D применяет отражённые rotation/scale при рендеринге. Исправлено: `history-tree.ts` (mirrorNodeRecursive для baked, добавлена mirrorVerticesInPlace)
+  2. **`mirrorSelected`** не сохранял результат `rebuildNode` — `makeObject({...obj, ...})` копировал `obj.vertices` из оригинального (неотражённого) объекта. Исправление: результат `rebuildNode` сохраняется в `rebuiltMesh` и передаётся в `makeObject` как `vertices`/`indices`/`normals`. Исправлено: `document-store.ts` (mirrorSelected)
+- **MIRROR-CENTER-ORIGIN (CRITICAL)**: Центр зеркала изменён на `(0,0,0)` — точка origin сцены. Ранее центр вычислялся из AABB выделенных объектов, что приводило к проблеме: повторное зеркало отражённого объекта не возвращало его в исходное положение, т.к. AABB уже был смещён. Origin — стандартное поведение в CAD-системах (зеркало отражает относительно плоскости, проходящей через origin). Исправлено: `document-store.ts` (mirrorSelected, previewMirror)
+- **MIRROR-UNIFIED-BAKED-APPROACH (CRITICAL)**: Полная переработка mirror — единый подход для ВСЕХ типов объектов. Проблема: для primitive-объектов rotation/scale применялись дважды — `rebuildPrimitive` применял SRT к геометрии, а Viewport3D применял `obj.transform` снова при рендеринге. Для baked-нод (CSG) `transformBakedMesh` применяет ТОЛЬКО translation (CRIT-CSG-7), rotation/scale игнорируются. Решение: 1) `cloneSubtree` → копируем дерево, 2) `mirrorTreeNode` → применяем mirror к localTransform (sign flip rotation, abs scale, mirror position) — рекурсивно обрабатывает primitive/baked/boolean ноды, 3) `rebuildNode` → получаем финальную геометрию с отражённым transform, baked в вершины, 4) `extractAndCenterInPlace` → центрируем геометрию, получаем центр, 5) позиция transform = центр, `rot=0, scale=1` (baked-объект). `mirrorTreeNode` необходим для baked-нод, т.к. `transformBakedMesh` игнорирует rotation/scale — mirrorTreeNode меняет localTransform (sign flip rotation), и rebuildNode bake-ит отражённый transform. Все mirrored объекты становятся baked (`shapeType: 'import_mesh'`). Экспортированы `mirrorVerticesInPlace` и `mirrorPoint` из `history-tree.ts`. Исправлено: `document-store.ts` (mirrorSelected, previewMirror), `history-tree.ts` (экспорт mirrorVerticesInPlace, mirrorPoint)
+
+### Added — Код-ревью раунд 19: Глубокий аудит Mirror (12 проблем) (2026-08-02)
+
+Полный цикл аудита реализации mirror. Выявлено 12 новых проблем, из них 2 CRITICAL и 4 HIGH.
+Подробности: [`CODE_REVIEW.md`](CODE_REVIEW.md) — секция «Раунд 19 — Глубокий аудит Mirror».
+
+#### 🔴 CRITICAL (2/12)
+
+1. **MIRROR-19-1** — `mirrorCenter` вычисляется из `computeAABB(obj.vertices)` (локальные координаты) вместо `obj.transform` (мировые). Для объекта с `transform.x=20` AABB даёт `x=100`, в результате `x' = 2*100 - 20 = 180` вместо правильного `x' = 2*20 - 20 = 20` (`document-store.ts:601-608`)
+2. **MIRROR-19-2** — Preview работает только для ПЕРВОГО выделенного объекта (`const id = ids[0]`). Multi-select полностью игнорируется (`document-store.ts:612`)
+
+#### 🟡 HIGH (4/12)
+
+3. **MIRROR-19-3** — Утечка preview-узлов в build tree: каждый вызов `previewMirror` создаёт `mirror_preview_${nextId()}`, но НИКОГДА не удаляет предыдущие (14 узлов в логах) (`document-store.ts:625-634`)
+4. **MIRROR-19-4** — Race condition в preview: нет debounce/throttle, нет отмены предыдущего запроса (`document-store.ts:593-648`)
+5. **MIRROR-19-5** — Preview-узлы не очищаются после confirm mirror (`document-store.ts:593-648`)
+6. **MIRROR-19-6** — Хрупкая эвристика детекции CSG-результата: `shapeType === 'cube' && !params.width` (`document-store.ts:114`)
+
+#### 🟠 MEDIUM (5/12)
+
+7. **MIRROR-19-7** — `baked` без `localTransform` молча пропускается в `mirrorNodeRecursive` (`history-tree.ts:744`)
+8. **MIRROR-19-8** — `boolean` без `children` молча пропускается в `mirrorNodeRecursive` (`history-tree.ts:773`)
+9. **MIRROR-19-9** — `treeTransform` может устареть после `rebuildNode` (`document-store.ts:692-700`)
+10. **MIRROR-19-10** — Fallback при `treeTransform === null` даёт другую логику, чем `mirrorTreeNode` (`document-store.ts:704-726`)
+11. **MIRROR-19-11** — `as unknown as` в `rebuild.ts` для mirror-операций (`rebuild.ts:76-85,279-299`)
+
+#### 🟢 LOW (1/12)
+
+12. **MIRROR-19-12** — `Matrix4.compose` с `Quaternion.setFromEuler` может дать неверную матрицу для отражённых углов Euler (`viewport-hooks.ts:794-804`)
+
+**Файлы:** `document-store.ts`, `history-tree.ts`, `rebuild.ts`, `viewport-hooks.ts`
+
+### ✅ ИСПРАВЛЕНО — Код-ревью раунд 20: Аудит утверждения о параметрических CSG (3 изменения) (2026-08-03)
+
+Утверждение «Достаточно заменить createBakedNode на createBooleanNode, чтобы CSG-результаты стали параметрическими» было опровергнуто — нужно минимум 3 изменения, а не одно. Все три проблемы успешно исправлены:
+
+#### ✅ CSG-PARAM-1 (HIGH)
+Заменён `createBakedNode` на `createBooleanNode(resultId, op, idA, idB, resultTransform)` для сохранения связи с операндами и типа операции (`document-store.ts:464`)
+
+#### ✅ CSG-PARAM-2 (MEDIUM)
+Добавлен параметр `nd.localTransform` в `createBooleanNode(nd.id, nd.operation, nd.children[0], nd.children[1], nd.localTransform!)` для сохранения позиции после undo/redo (`document-store.ts:80`)
+
+#### ✅ CSG-PARAM-3 (LOW)
+Добавлена проверка `if (!getNode(op.id))` перед `createPrimitiveNode` для предотвращения дубликатов при undo/redo (`rebuild.ts:254-256`)
+
+#### 🔴 HIGH (1/3)
+
+1. **CSG-PARAM-1** — `createBakedNode(resultId, ...)` → `createBooleanNode(resultId, op, idA, idB, resultTransform)`. CSG-результат регистрируется как baked-нода вместо boolean. После замены дерево будет знать об операндах (`document-store.ts:464`)
+
+#### 🟠 MEDIUM (1/3)
+
+2. **CSG-PARAM-2** — `createBooleanNode(nd.id, nd.operation, nd.children[0], nd.children[1])` не передаёт `nd.localTransform`. После undo/redo boolean-нода теряет позицию (`document-store.ts:80`)
+
+#### 🟢 LOW (1/3)
+
+3. **CSG-PARAM-3** — `createPrimitiveNode` вызывается без проверки `getNode(op.id)`. При undo/redo создаёт дубликаты (`rebuild.ts:254-256`)
+
+**Файлы:** `document-store.ts`, `rebuild.ts`
+
 ### Fixed
 
 - **MIRROR-ROTATION-SIMPLE-SIGN (CRITICAL)**: Отказ от quaternion-based mirror — он НЕ РАБОТАЕТ! Quaternion представляет повороты (SO(3), det = +1), но mirror — это отражение (O(3), det = -1). Quaternion не может корректно представить отражение, поэтому `mirror_quaternion.multiply(q)` давал APPROXIMATE результат (rotX: 7.35° вместо 10°). Исправление: возвращён простой sign flip — axes IN mirror plane change sign, perpendicular axis unchanged. Это МATHЕМАТИЧЕСКИ КОРРЕКТНО для Euler углов и используется в Fusion 360, SolidWorks. Исправлено: `history-tree.ts` (mirrorEuler — теперь simple sign flip, не quaternion)

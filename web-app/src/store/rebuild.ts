@@ -252,7 +252,9 @@ export function rebuildBuildTree(
 
   for (const op of ops) {
     if (op.type === 'add_shape') {
-      createPrimitiveNode(op.id, op.shapeType, op.params, { ...op.transform })
+      if (!getNode(op.id)) {
+        createPrimitiveNode(op.id, op.shapeType, op.params, { ...op.transform })
+      }
       transforms[op.id] = { ...op.transform }
 
     } else if (op.type === 'import_mesh') {

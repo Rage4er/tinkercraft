@@ -42,9 +42,7 @@ import {
   createPrimitiveNode,
   createBooleanNode,
   createBakedNode,
-  mirrorTreeNode,
   syncNodeTransform,
-  cloneSubtree,
   rebuildNode,
   computeNodeBBox,
   bboxCenter,
@@ -54,6 +52,7 @@ import {
   resetSubtreeTransform,
 } from '../csg/history-tree'
 import { getAllNodes } from '../csg/history-tree'
+import { previewMirror as mirrorPreviewFn, mirrorSelected as mirrorConfirmFn } from './mirror-store'
 
 // ── Type guard ──
 
@@ -78,7 +77,7 @@ function restoreTreeFromSnapshot(index: number): void {
       const nrm = nd.normals ? new Float32Array(nd.normals) : null
       createBakedNode(nd.id, verts!, idxs!, nrm, nd.localTransform!)
     } else if (nd.type === 'boolean' && nd.operation && nd.children) {
-      createBooleanNode(nd.id, nd.operation, nd.children[0], nd.children[1])
+      createBooleanNode(nd.id, nd.operation, nd.children[0], nd.children[1], nd.localTransform!)
     }
   }
 }
@@ -457,12 +456,12 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       }
       ensureInTree(idA)
       ensureInTree(idB)
-      // Register CSG result as a baked node (not boolean) — geometry is already
-      // computed and centered. Using a baked node ensures:
+      // Register CSG result as a boolean node (parametric CSG) - allows future parametric editing
       // 1. rebuildNode returns the pre-computed mesh directly (no re-extraction)
       // 2. syncObjectsForOperation routes to workerSyncMesh (correct for CSG results)
-      // 3. mirror/align operations work correctly with the baked geometry
-      createBakedNode(resultId, mesh.vertices, mesh.indices, mesh.normals ?? null, resultTransform)
+      // 3. mirror/align operations work correctly with the geometry
+      // 4. Enables parametric editing in future (edit operands, operation type)
+      createBooleanNode(resultId, op as 'union' | 'subtract' | 'intersect', idA, idB, resultTransform)
       set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, selectedIds: [resultId], modified: true, busy: false, lastCsgMs: ms })
       cacheSnapshotWithTree(newOps.length, newObjects)
       // Rebuild tree node to cache the mesh in history-tree
@@ -595,54 +594,21 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const ids = selectedIds.filter(id => objects[id])
     if (ids.length === 0) return
     const { useUiStore } = await import('./ui-store')
-    const setMirrorPreviewMesh = useUiStore.getState().setMirrorPreviewMesh
-    setMirrorPreviewMesh(null)
+    const setPreviewObject = useUiStore.getState().setPreviewObject
+    setPreviewObject(null)
     try {
-      const bboxes = ids.map(id => {
-        const obj = objects[id]
-        return obj.aabb ?? computeAABB(obj.vertices)
-      })
-      const centerX = bboxes.reduce((s, b) => s + (b.min.x + b.max.x) / 2, 0) / bboxes.length
-      const centerY = bboxes.reduce((s, b) => s + (b.min.y + b.max.y) / 2, 0) / bboxes.length
-      const centerZ = bboxes.reduce((s, b) => s + (b.min.z + b.max.z) / 2, 0) / bboxes.length
-      const mirrorCenter = { x: centerX, y: centerY, z: centerZ }
-
-      await syncObjectsForOperation(ids, objects)
-
-      const id = ids[0]
-      const obj = objects[id]
-
-      // Unified preview: clone subtree → mirror → rebuild
-      const treeExists = getNode(id) !== undefined
-      if (!treeExists) {
-        if (obj.shapeType && obj.params) {
-          createPrimitiveNode(id, obj.shapeType, obj.params, obj.transform)
-        } else {
-          createBakedNode(id, obj.vertices || new Float32Array(), obj.indices || new Uint32Array(), obj.normals || null, obj.transform)
-        }
+      const result = await mirrorPreviewFn(plane, ids, objects)
+      if (result) {
+        setPreviewObject({
+          ...result,
+          isMirrorPreview: true,
+        })
       }
-      syncNodeTransform(id, obj.transform)
-      const treeId = `mirror_preview_${nextId()}`
-      cloneSubtree(id, treeId)
-      mirrorTreeNode(treeId, plane, mirrorCenter)
-
-      // Сохраняем mirrored localTransform для применения в preview
-      const mirroredNode = getNode(treeId)
-      const mirroredTransform = mirroredNode?.localTransform
-      console.log(`[MIRROR:previewMirror] saved transform = {x:${mirroredTransform?.x}, y:${mirroredTransform?.y}, z:${mirroredTransform?.z}, rotX:${mirroredTransform?.rotX}, rotY:${mirroredTransform?.rotY}, rotZ:${mirroredTransform?.rotZ}, scaleX:${mirroredTransform?.scaleX}, scaleY:${mirroredTransform?.scaleY}, scaleZ:${mirroredTransform?.scaleZ}}`)
-
-      const rebuilt = await rebuildNode(treeId)
-      setMirrorPreviewMesh({
-        vertices: rebuilt.vertices,
-        indices: rebuilt.indices,
-        normals: rebuilt.normals ?? null,
-        transform: mirroredTransform,
-      })
     } catch (e) {
       console.error('previewMirror:', e)
       try {
         const { useUiStore } = await import('./ui-store')
-        useUiStore.getState().setMirrorPreviewMesh(null)
+        useUiStore.getState().setPreviewObject(null)
       } catch { /* ignore */ }
     }
   },
@@ -655,91 +621,20 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     set({ busy: true })
     try {
       const t0 = performance.now()
-      const bboxes = ids.map(id => {
-        const obj = objects[id]
-        return obj.aabb ?? computeAABB(obj.vertices)
+      const result = await mirrorConfirmFn(plane, ids, objects)
+      if (!result) { set({ busy: false }); return }
+      const { newObjects, newIds, operation } = result
+      const newOps = [...operations.slice(0, historyIndex), operation]
+      set({
+        operations: newOps,
+        historyIndex: newOps.length,
+        objects: { ...objects, ...newObjects },
+        selectedIds: ids,
+        modified: true,
+        busy: false,
+        lastCsgMs: performance.now() - t0,
       })
-      const centerX = bboxes.reduce((s, b) => s + (b.min.x + b.max.x) / 2, 0) / bboxes.length
-      const centerY = bboxes.reduce((s, b) => s + (b.min.y + b.max.y) / 2, 0) / bboxes.length
-      const centerZ = bboxes.reduce((s, b) => s + (b.min.z + b.max.z) / 2, 0) / bboxes.length
-      const mirrorCenter = { x: centerX, y: centerY, z: centerZ }
-
-      await syncObjectsForOperation(ids, objects)
-      const newObjects = { ...objects }
-      const newIds: string[] = []
-      const originalIds: string[] = []
-
-      // ЕДИНЫЙ МЕТОД для ВСЕХ типов: mirrorTreeNode → rebuildNode
-      // Как в preview, так и в confirm используется один и тот же подход
-      for (const id of ids) {
-        originalIds.push(id)
-        const obj = objects[id]
-
-        // Создаём новый ID
-        const newId = nextId()
-
-        // ЕДИНЫЙ МЕТОД: cloneSubtree + mirrorTreeNode + rebuildNode
-        // mirrorTreeNode использует mirrorEuler (кватернион) — правильно для ЛЮБЫХ углов
-        const treeExists = getNode(id) !== undefined
-        if (!treeExists) {
-          if (obj.shapeType && obj.params) {
-            createPrimitiveNode(id, obj.shapeType, obj.params, obj.transform)
-          } else {
-            createBakedNode(id, obj.vertices || new Float32Array(), obj.indices || new Uint32Array(), obj.normals || null, obj.transform)
-          }
-        }
-        cloneSubtree(id, newId)
-        mirrorTreeNode(newId, plane, mirrorCenter)
-
-        // Получаем mirrored transform из tree node (quaternion-based, правильный)
-        // и используем его в store — чтобы store и tree были консистентны
-        const mirroredNode = getNode(newId)
-        const treeTransform = mirroredNode?.localTransform
-
-        // Rebuild geometry from mirrored params/structure
-        await rebuildNode(newId)
-
-        // Сохраняем transform из tree (quaternion-based mirror) в store
-        // Это гарантирует консистентность: store == tree
-        const finalTransform: TransformNR = treeTransform
-          ? {
-            x: Math.round(treeTransform.x * 1e6) / 1e6,
-            y: Math.round(treeTransform.y * 1e6) / 1e6,
-            z: Math.round(treeTransform.z * 1e6) / 1e6,
-            rotX: treeTransform.rotX,
-            rotY: treeTransform.rotY,
-            rotZ: treeTransform.rotZ,
-            scaleX: treeTransform.scaleX,
-            scaleY: treeTransform.scaleY,
-            scaleZ: treeTransform.scaleZ,
-          }
-          : {
-            x: 2 * mirrorCenter.x - obj.transform.x,
-            y: 2 * mirrorCenter.y - obj.transform.y,
-            z: 2 * mirrorCenter.z - obj.transform.z,
-            rotX: plane === 'YZ' ? obj.transform.rotX : -obj.transform.rotX,
-            rotY: plane === 'XZ' ? obj.transform.rotY : -obj.transform.rotY,
-            rotZ: plane === 'XY' ? obj.transform.rotZ : -obj.transform.rotZ,
-            scaleX: Math.abs(obj.transform.scaleX),
-            scaleY: Math.abs(obj.transform.scaleY),
-            scaleZ: Math.abs(obj.transform.scaleZ),
-          }
-
-        const newObj = makeObject({
-          ...obj,
-          id: newId,
-          transform: finalTransform,
-          shapeType: obj.shapeType,
-          params: obj.params,
-        })
-        newObjects[newId] = newObj
-        newIds.push(newId)
-      }
-
-      const op: MirrorOperation = { type: 'mirror', originalIds, ids: newIds, plane }
-      const newOps = [...operations.slice(0, historyIndex), op]
-      set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true, busy: false, lastCsgMs: performance.now() - t0 })
-      cacheSnapshotWithTree(newOps.length, newObjects)
+      cacheSnapshotWithTree(newOps.length, { ...objects, ...newObjects })
     } catch (e) { set({ busy: false }); console.error('mirrorSelected:', e); notify('Ошибка зеркального отражения', 'error') }
   },
   alignSelected: async (axis, anchor) => {
