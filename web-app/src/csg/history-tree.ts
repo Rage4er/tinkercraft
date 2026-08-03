@@ -654,7 +654,7 @@ export function mirrorTreeNode(
   invalidateCache(nodeId)
 }
 
-function mirrorPoint(p: Point3D, plane: 'XY' | 'XZ' | 'YZ', center: Point3D = { x: 0, y: 0, z: 0 }): Point3D {
+export function mirrorPoint(p: Point3D, plane: 'XY' | 'XZ' | 'YZ', center: Point3D = { x: 0, y: 0, z: 0 }): Point3D {
   // Mirror relative to center: p' = 2*center - p (on mirrored axis only)
   switch (plane) {
     case 'YZ': return { x: 2 * center.x - p.x, y: p.y, z: p.z }
@@ -677,7 +677,7 @@ function mirrorPoint(p: Point3D, plane: 'XY' | 'XZ' | 'YZ', center: Point3D = { 
  * This works for ANY Euler angles, not just 0/90/180 degrees.
  * Professional CAD systems (Fusion 360, SolidWorks) use this approach.
  */
-function mirrorEuler(
+export function mirrorEuler(
   rot: { x: number; y: number; z: number },
   plane: 'XY' | 'XZ' | 'YZ',
 ): { x: number; y: number; z: number } {
@@ -691,6 +691,33 @@ function mirrorEuler(
   } else {
     // Mirror across XY: Z is perpendicular → rotZ unchanged, rotX/rotY negated
     return { x: -rot.x, y: -rot.y, z: rot.z }
+  }
+}
+
+/**
+ * Mirror vertex positions in-place across a plane.
+ * For normals, we also need to flip the perpendicular component.
+ */
+export function mirrorVerticesInPlace(
+  vertices: Float32Array,
+  normals: Float32Array | null | undefined,
+  plane: 'XY' | 'XZ' | 'YZ',
+): void {
+  let axis: number // 0=x, 1=y, 2=z
+  if (plane === 'YZ') axis = 0
+  else if (plane === 'XZ') axis = 1
+  else axis = 2
+
+  // Mirror vertices: negate the perpendicular axis
+  for (let i = axis; i < vertices.length; i += 3) {
+    vertices[i] = -vertices[i]
+  }
+
+  // Mirror normals: negate the perpendicular axis
+  if (normals) {
+    for (let i = axis; i < normals.length; i += 3) {
+      normals[i] = -normals[i]
+    }
   }
 }
 
@@ -742,14 +769,45 @@ function mirrorNodeRecursive(
   }
 
   if (node.type === 'baked' && node.localTransform) {
-    // FIX (MIRROR-9): Euler rotation mirroring via simple sign flip.
-    // Same logic as primitive nodes. quaternion-based mirror DOES NOT WORK.
+    // FIX (MIRROR-BAKED-2): For baked nodes (CSG results, imports), rotation/scale
+    // are applied by Viewport3D at render time (Three.js pivot transform), NOT by
+    // transformBakedMesh (which applies only translation).
+    //
+    // To mirror a baked node correctly:
+    // 1. Mirror vertex positions across the plane (negate perpendicular axis)
+    // 2. Mirror rotation via mirrorEuler (same as primitive)
+    // 3. Mirror position via mirrorPoint (same as primitive)
+    // 4. Apply abs() to scale (same as primitive)
+    //
+    // Viewport3D will apply the mirrored rotation/scale at render time.
+    // transformBakedMesh applies only translation — which is correct because
+    // the geometry is centered at origin and rotation/scale are render-time.
     const t = node.localTransform
-    const mirroredPos = mirrorPoint({ x: t.x, y: t.y, z: t.z }, plane, center)
+
+    // Step 1: Mirror vertex positions across the plane + исправляем winding order.
+    // FIX (MIRROR-WINDING): инвертирование одной оси переворачивает CCW→CW.
+    // После зеркала меняем v1↔v2 в каждом треугольнике, иначе булевы операции не работают.
+    if (node.vertices) {
+      mirrorVerticesInPlace(node.vertices, node.normals, plane)
+      if (node.indices) {
+        for (let i = 0; i < node.indices.length; i += 3) {
+          const tmp = node.indices[i + 1]
+          node.indices[i + 1] = node.indices[i + 2]
+          node.indices[i + 2] = tmp
+        }
+      }
+    }
+
+    // Step 2: Mirror rotation (same as primitive)
     const mirroredRot = mirrorEuler(
       { x: t.rotX, y: t.rotY, z: t.rotZ },
       plane,
     )
+
+    // Step 3: Mirror position (same as primitive)
+    const mirroredPos = mirrorPoint({ x: t.x, y: t.y, z: t.z }, plane, center)
+
+    // Step 4: Abs scale (same as primitive)
     const newScaleX = Math.abs(t.scaleX)
     const newScaleY = Math.abs(t.scaleY)
     const newScaleZ = Math.abs(t.scaleZ)

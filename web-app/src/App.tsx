@@ -40,7 +40,7 @@ export default function App() {
     activeTab, setActiveTab,
     cameraMode, setCameraMode,
     showTextModal, setShowTextModal,
-    mirrorPreviewMesh, setMirrorPreviewMesh,
+    previewObject, setPreviewObject,
     mirrorPreviewPlane, setMirrorPreviewPlane,
   } = useUiStore(
     useShallow(s => ({
@@ -60,7 +60,7 @@ export default function App() {
       activeTab: s.activeTab, setActiveTab: s.setActiveTab,
       cameraMode: s.cameraMode, setCameraMode: s.setCameraMode,
       showTextModal: s.showTextModal, setShowTextModal: s.setShowTextModal,
-      mirrorPreviewMesh: s.mirrorPreviewMesh, setMirrorPreviewMesh: s.setMirrorPreviewMesh,
+      previewObject: s.previewObject, setPreviewObject: s.setPreviewObject,
       mirrorPreviewPlane: s.mirrorPreviewPlane, setMirrorPreviewPlane: s.setMirrorPreviewPlane,
     })),
   );
@@ -366,9 +366,9 @@ export default function App() {
   );
   const handlePreviewMirrorEnd = useCallback(() => {
     if (previewTimerRef.current) clearTimeout(previewTimerRef.current);
-    setMirrorPreviewMesh(null);
+    setPreviewObject(null);
     setMirrorPreviewPlane(null);
-  }, [setMirrorPreviewPlane]);
+  }, [setPreviewObject, setMirrorPreviewPlane]);
 
   const handleMoveAxis = useCallback(
     (axis: "x" | "y" | "z", val: number) => {
@@ -570,7 +570,7 @@ export default function App() {
               onRulerMeasure={handleRulerMeasure}
               workerOk={workerOk}
               cameraMode={cameraMode}
-              mirrorPreviewMesh={mirrorPreviewMesh}
+              previewObject={previewObject}
               mirrorPreviewPlane={mirrorPreviewPlane}
             />
           </ErrorBoundary>

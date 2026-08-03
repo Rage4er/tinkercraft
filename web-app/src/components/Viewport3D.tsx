@@ -13,10 +13,9 @@ import {
   useRulerMode,
   useMirrorPreview,
   type GizmoMode,
-  type MirrorPreviewMesh,
 } from "./viewport-hooks";
 
-export type { GizmoMode, MirrorPreviewMesh } from "./viewport-hooks";
+export type { GizmoMode } from "./viewport-hooks";
 
 // Interaction thresholds
 const DRAG_THRESHOLD_PX = 4;
@@ -43,7 +42,7 @@ interface Props {
   rulerMode?: boolean;
   onRulerMeasure?: (dist: number) => void;
   cameraMode?: 'perspective' | 'orthographic';
-  mirrorPreviewMesh?: MirrorPreviewMesh | null;
+  previewObject?: (SceneObject & { isMirrorPreview: boolean }) | null;
   mirrorPreviewPlane?: 'XY' | 'XZ' | 'YZ' | null;
   busy?: boolean;
 }
@@ -72,7 +71,7 @@ export default function Viewport3D({
   onRulerMeasure,
   workerOk,
   cameraMode = 'perspective',
-  mirrorPreviewMesh = null,
+  previewObject = null,
   mirrorPreviewPlane = null,
 }: Props) {
   const [webglOk] = useState<boolean>(() => checkWebGL());
@@ -133,7 +132,7 @@ export default function Viewport3D({
   }, [objects, shapeTypeMapRef]);
 
   // ---- Хук 4: Mirror preview ----
-  useMirrorPreview(mirrorPreviewMesh, mirrorPreviewPlane, sceneRef);
+  useMirrorPreview(previewObject, mirrorPreviewPlane, sceneRef);
 
   // ---- Gizmo mode ----
   useEffect(() => {

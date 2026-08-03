@@ -6,6 +6,7 @@
 
 import { create } from 'zustand/react'
 import type { GizmoMode } from '../components/Viewport3D'
+import type { SceneObject } from '../csg/types'
 import { DEFAULT_FILTERS } from '../constants'
 
 export interface UiStore {
@@ -59,9 +60,9 @@ export interface UiStore {
   extrudeDepth: number
   setExtrudeDepth: (v: number) => void
 
-  // Mirror preview (MIRROR-2)
-  mirrorPreviewMesh: { vertices: Float32Array; indices: Uint32Array; normals: Float32Array | null; center?: { x: number; y: number; z: number }; transform?: { x: number; y: number; z: number; rotX: number; rotY: number; rotZ: number; scaleX: number; scaleY: number; scaleZ: number } } | null
-  setMirrorPreviewMesh: (mesh: { vertices: Float32Array; indices: Uint32Array; normals: Float32Array | null; center?: { x: number; y: number; z: number }; transform?: { x: number; y: number; z: number; rotX: number; rotY: number; rotZ: number; scaleX: number; scaleY: number; scaleZ: number } } | null) => void
+  // Mirror preview (MIRROR-2) — единый preview-объект
+  previewObject: (SceneObject & { isMirrorPreview: boolean }) | null
+  setPreviewObject: (obj: (SceneObject & { isMirrorPreview: boolean }) | null) => void
   // Mirror plane visualizer (MIRROR-4): which plane to show as 3D indicator
   mirrorPreviewPlane: 'XY' | 'XZ' | 'YZ' | null
   setMirrorPreviewPlane: (plane: 'XY' | 'XZ' | 'YZ' | null) => void
@@ -122,9 +123,9 @@ export const useUiStore = create<UiStore>((set) => ({
   setCameraMode: (v) =>
     set((s) => ({ cameraMode: typeof v === 'function' ? v(s.cameraMode) : v })),
 
-  // Mirror preview (MIRROR-2)
-  mirrorPreviewMesh: null,
-  setMirrorPreviewMesh: (mesh) => set({ mirrorPreviewMesh: mesh }),
+  // Mirror preview (MIRROR-2) — единый preview-объект
+  previewObject: null,
+  setPreviewObject: (obj) => set({ previewObject: obj }),
   // Mirror plane visualizer (MIRROR-4)
   mirrorPreviewPlane: null,
   setMirrorPreviewPlane: (plane) => set({ mirrorPreviewPlane: plane }),

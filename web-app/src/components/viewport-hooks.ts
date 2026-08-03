@@ -98,13 +98,6 @@ interface FitTarget {
     target: THREE.Vector3;
 }
 
-export interface MirrorPreviewMesh {
-    vertices: Float32Array;
-    indices: Uint32Array;
-    normals: Float32Array | null;
-    center?: { x: number; y: number; z: number };
-    transform?: { x: number; y: number; z: number; rotX: number; rotY: number; rotZ: number; scaleX: number; scaleY: number; scaleZ: number };
-}
 
 export interface ThreeInitResult {
     sceneReady: boolean;
@@ -754,7 +747,7 @@ export function useRulerMode(
 // ============================================================
 
 export function useMirrorPreview(
-    mirrorPreviewMesh: MirrorPreviewMesh | null,
+    previewObject: (SceneObject & { isMirrorPreview: boolean }) | null,
     mirrorPreviewPlane: 'XY' | 'XZ' | 'YZ' | null,
     sceneRef: React.MutableRefObject<THREE.Scene | null>,
 ) {
@@ -764,7 +757,7 @@ export function useMirrorPreview(
     } | null>(null);
     const mirrorPlaneRef = useRef<THREE.Mesh | null>(null);
 
-    // Mirror preview mesh (MIRROR-2)
+    // Mirror preview mesh — единый метод для preview и confirm
     useEffect(() => {
         const scene = sceneRef.current;
         if (!scene) return;
@@ -777,30 +770,28 @@ export function useMirrorPreview(
             mirrorPreviewRef.current = null;
         }
 
-        if (!mirrorPreviewMesh) return;
+        if (!previewObject) return;
 
-        // Create semi-transparent preview mesh
+        // Создаём mesh как обычный SceneObject, но с прозрачностью
         const geometry = new THREE.BufferGeometry();
         geometry.setAttribute(
             "position",
-            new THREE.Float32BufferAttribute(mirrorPreviewMesh.vertices, 3),
+            new THREE.Float32BufferAttribute(previewObject.vertices, 3),
         );
-        geometry.setIndex(new THREE.BufferAttribute(mirrorPreviewMesh.indices, 1));
+        geometry.setIndex(new THREE.BufferAttribute(previewObject.indices, 1));
         geometry.computeVertexNormals();
 
-        let geometryCentered = false;
-
-        // ПРИМЕНЯЕМ TRANSFORM к геометрии (как в профессиональных CAD)
-        if (mirrorPreviewMesh.transform) {
-            const t = mirrorPreviewMesh.transform;
-            const matrix = new THREE.Matrix4();
-            matrix.compose(
-                new THREE.Vector3(t.x, t.y, t.z),
-                new THREE.Quaternion().setFromEuler(new THREE.Euler(t.rotX, t.rotY, t.rotZ)),
-                new THREE.Vector3(t.scaleX, t.scaleY, t.scaleZ),
-            );
-            geometry.applyMatrix4(matrix);
-            geometryCentered = true;
+        // Центрируем геометрию (как в useMeshSync для обычных объектов).
+        // FIX (MIRROR-PREVIEW-CENTER): computeBoundingBox() нужно вызвать явно —
+        // geometry.boundingBox равен null по умолчанию и заполняется только после вызова этого метода.
+        geometry.computeBoundingBox();
+        const box = geometry.boundingBox;
+        if (box) {
+            const center = new THREE.Vector3();
+            box.getCenter(center);
+            geometry.translate(-center.x, -center.y, -center.z);
+            geometry.computeBoundingBox();
+            geometry.computeBoundingSphere();
         }
 
         const material = new THREE.MeshStandardMaterial({
@@ -811,25 +802,27 @@ export function useMirrorPreview(
             metalness: 0.0,
             side: THREE.DoubleSide,
             depthWrite: false,
+            // FIX (MIRROR-PREVIEW-XY): depthTest: false гарантирует видимость превью
+            // через полупрозрачную плоскость зеркала (особенно критично для XY-плоскости,
+            // где меш оказывается за непрозрачным полом/сеткой сцены).
+            depthTest: false,
         });
         const mesh = new THREE.Mesh(geometry, material);
         mesh.renderOrder = 999;
+        mesh.userData.objectId = '__mirror_preview__';
+
+        // Применяем transform через pivot (как в useMeshSync)
         const pivot = new THREE.Object3D();
         pivot.userData.objectId = '__mirror_preview__';
+        const t = previewObject.transform;
+        pivot.position.set(t.x, t.y, t.z);
+        pivot.rotation.set(
+            THREE.MathUtils.degToRad(t.rotX),
+            THREE.MathUtils.degToRad(t.rotY),
+            THREE.MathUtils.degToRad(t.rotZ),
+        );
+        pivot.scale.set(t.scaleX, t.scaleY, t.scaleZ);
         pivot.add(mesh);
-
-        // Если transform уже применён через applyMatrix4 — геометрия уже в правильной позиции
-        // Ничего дополнительного центрировать не нужно
-        if (!geometryCentered) {
-            // Fallback: center geometry at origin (legacy behavior)
-            const pos = mesh.geometry.attributes.position;
-            if (pos) {
-                const vertices = pos.array as Float32Array;
-                const { min, max } = computeAABB(vertices);
-                const cx = (min.x + max.x) / 2, cy = (min.y + max.y) / 2, cz = (min.z + max.z) / 2;
-                mesh.geometry.translate(-cx, -cy, -cz);
-            }
-        }
         scene.add(pivot);
         mirrorPreviewRef.current = { mesh, pivot };
 
@@ -844,7 +837,7 @@ export function useMirrorPreview(
                 mirrorPreviewRef.current = null;
             }
         };
-    }, [mirrorPreviewMesh, sceneRef]);
+    }, [previewObject, sceneRef]);
 
     // Mirror plane visualizer (MIRROR-4)
     useEffect(() => {
