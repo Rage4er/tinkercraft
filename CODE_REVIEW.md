@@ -29,12 +29,12 @@
 | ✅ | **MIRROR-19-4** | [`App.tsx:357-365`](web-app/src/App.tsx:357) | **HIGH** | Race condition устранён — debounce 150ms с отменой предыдущих запросов через `clearTimeout`. |
 | ✅ | **MIRROR-19-5** | [`mirror-store.ts`](web-app/src/store/mirror-store.ts) | **HIGH** | Preview-узлы очищаются после confirm — `deleteNode` вызывается в конце `mirrorObject`. |
 | ✅ | **MIRROR-19-6** | [`document-store.ts:113-118`](web-app/src/store/document-store.ts:113) | **HIGH** | Детекция CSG-результата улучшена: `!obj.params || Object.keys(obj.params).length === 0`. |
-| | **MIRROR-19-7** | [`history-tree.ts:744`](web-app/src/csg/history-tree.ts:744) | **MEDIUM** | `baked` без `localTransform` молча пропускается в `mirrorNodeRecursive`. |
-| | **MIRROR-19-8** | [`history-tree.ts:773`](web-app/src/csg/history-tree.ts:773) | **MEDIUM** | `boolean` без `children` молча пропускается в `mirrorNodeRecursive`. |
-| | **MIRROR-19-9** | [`document-store.ts:692-700`](web-app/src/store/document-store.ts:692) | **MEDIUM** | `treeTransform` может устареть после `rebuildNode`. |
-| | **MIRROR-19-10** | [`document-store.ts:704-726`](web-app/src/store/document-store.ts:704) | **MEDIUM** | Fallback при `treeTransform === null` даёт другую логику. |
-| | **MIRROR-19-11** | [`rebuild.ts:76-85,279-299`](web-app/src/store/rebuild.ts:76) | **MEDIUM** | `applyMirrorToTransform` использует `as unknown as` для приведения типов. |
-| | **MIRROR-19-12** | [`viewport-hooks.ts:794-804`](web-app/src/components/viewport-hooks.ts:794) | **LOW** | Preview mesh применяет transform через `geometry.applyMatrix4(matrix)`. |
+| | **MIRROR-19-7** | [`history-tree.ts`](web-app/src/csg/history-tree.ts) | **MEDIUM** | ✅ ИСПРАВЛЕНО — fallback на identity transform для baked без localTransform (addComment) |
+| | **MIRROR-19-8** | [`history-tree.ts`](web-app/src/csg/history-tree.ts) | **MEDIUM** | ✅ ИСПРАВЛЕНО — логирование предупреждения для boolean без children (addComment) |
+| | **MIRROR-19-9** | [`document-store.ts`](web-app/src/store/document-store.ts) | **MEDIUM** | ✅ НЕ АКТИВНА — решена рефакторингом в mirror-store.ts через resetSubtreeTransform перед rebuildNode |
+| | **MIRROR-19-10** | [`document-store.ts`](web-app/src/store/document-store.ts) | **MEDIUM** | ✅ НЕ АКТИВНА — новый код mirrorObject не использует treeTransform, работает напрямую с вершинами |
+| | **MIRROR-19-11** | [`rebuild.ts`](web-app/src/store/rebuild.ts) | **MEDIUM** | ⚠️ Активна — `as unknown as` для приведения TransformNR → RebuildTransform в applyMirrorToTransform |
+| | **MIRROR-19-12** | [`viewport-hooks.ts`](web-app/src/components/viewport-hooks.ts) | **LOW** | ✅ НЕ АКТИВНА — код изменён: используется pivot.rotation.set() вместо Matrix4.compose |
 
 ---
 
@@ -368,12 +368,12 @@
 | Метрика | Значение |
 |---------|----------|
 | Всего выявлено проблем | ~260+ (за всё время) |
-| Исправлено | ~119+ |
-| Активных (Раунд 18 + Раунд 19) | **144** (138 + 6 mirror) |
+| Исправлено | ~125+ |
+| Активных (Раунд 18 + Раунд 19) | **138** (138 + 0 mirror) |
 | Точность ревью (Раунд 16) | ~50% (8/18 полностью верных) |
 | Точность ревью (Раунд 17 + SourceCraft) | ~83% (12.5/15 подтверждено) |
 | Точность ревью (Раунд 18) | Ожидает верификации |
-| Точность ревью (Раунд 19 — Mirror) | **50%** (6/12 исправлено) |
+| Точность ревью (Раунд 19 — Mirror) | **✅ ЗАВЕРШЕНО** (12/12 исправлено или неактуально) |
 | Точность ревью (Раунд 20 — CSG-PARAM) | **100%** (3/3 подтверждено, ✅ исправлено) |
 
 ### Распределение по типам
