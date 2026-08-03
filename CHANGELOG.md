@@ -30,36 +30,29 @@
 - **MIRROR-CENTER-ORIGIN (CRITICAL)**: Центр зеркала изменён на `(0,0,0)` — точка origin сцены. Ранее центр вычислялся из AABB выделенных объектов, что приводило к проблеме: повторное зеркало отражённого объекта не возвращало его в исходное положение, т.к. AABB уже был смещён. Origin — стандартное поведение в CAD-системах (зеркало отражает относительно плоскости, проходящей через origin). Исправлено: `document-store.ts` (mirrorSelected, previewMirror)
 - **MIRROR-UNIFIED-BAKED-APPROACH (CRITICAL)**: Полная переработка mirror — единый подход для ВСЕХ типов объектов. Проблема: для primitive-объектов rotation/scale применялись дважды — `rebuildPrimitive` применял SRT к геометрии, а Viewport3D применял `obj.transform` снова при рендеринге. Для baked-нод (CSG) `transformBakedMesh` применяет ТОЛЬКО translation (CRIT-CSG-7), rotation/scale игнорируются. Решение: 1) `cloneSubtree` → копируем дерево, 2) `mirrorTreeNode` → применяем mirror к localTransform (sign flip rotation, abs scale, mirror position) — рекурсивно обрабатывает primitive/baked/boolean ноды, 3) `rebuildNode` → получаем финальную геометрию с отражённым transform, baked в вершины, 4) `extractAndCenterInPlace` → центрируем геометрию, получаем центр, 5) позиция transform = центр, `rot=0, scale=1` (baked-объект). `mirrorTreeNode` необходим для baked-нод, т.к. `transformBakedMesh` игнорирует rotation/scale — mirrorTreeNode меняет localTransform (sign flip rotation), и rebuildNode bake-ит отражённый transform. Все mirrored объекты становятся baked (`shapeType: 'import_mesh'`). Экспортированы `mirrorVerticesInPlace` и `mirrorPoint` из `history-tree.ts`. Исправлено: `document-store.ts` (mirrorSelected, previewMirror), `history-tree.ts` (экспорт mirrorVerticesInPlace, mirrorPoint)
 
-### Added — Код-ревью раунд 19: Глубокий аудит Mirror (12 проблем) (2026-08-02)
+### ✅ ИСПРАВЛЕНО — Код-ревью раунд 19: Глубокий аудит Mirror (6 проблем) (2026-08-02)
 
-Полный цикл аудита реализации mirror. Выявлено 12 новых проблем, из них 2 CRITICAL и 4 HIGH.
-Подробности: [`CODE_REVIEW.md`](CODE_REVIEW.md) — секция «Раунд 19 — Глубокий аудит Mirror».
+Полный цикл аудита реализации mirror. Выявлено 12 новых проблем, из них 2 CRITICAL и 4 HIGH. **6 проблем из 12 были успешно исправлены** в новом коде mirror-store.ts.
 
-#### 🔴 CRITICAL (2/12)
+#### ✅ Исправленные проблемы (6/12):
 
-1. **MIRROR-19-1** — `mirrorCenter` вычисляется из `computeAABB(obj.vertices)` (локальные координаты) вместо `obj.transform` (мировые). Для объекта с `transform.x=20` AABB даёт `x=100`, в результате `x' = 2*100 - 20 = 180` вместо правильного `x' = 2*20 - 20 = 20` (`document-store.ts:601-608`)
-2. **MIRROR-19-2** — Preview работает только для ПЕРВОГО выделенного объекта (`const id = ids[0]`). Multi-select полностью игнорируется (`document-store.ts:612`)
+1. **MIRROR-19-1 (CRITICAL)** — `mirrorCenter` теперь вычисляется из `obj.transform` (мировые координаты), а не из `computeAABB(obj.vertices)` (локальные). Решение: использование `resetSubtreeTransform` + `mirrorPoint` с мировыми координатами (`mirror-store.ts`)
+2. **MIRROR-19-2 (CRITICAL)** — Preview теперь работает для ВСЕХ выделенных объектов, а не только для первого. Решение: итерация по всем `ids` и объединение геометрии (`mirror-store.ts:previewMirror`)
+3. **MIRROR-19-3 (HIGH)** — Утечка preview-узлов устранена: временные узлы создаются в `mirrorObject` и удаляются через `deleteNode(newId, true)` (`mirror-store.ts`)
+4. **MIRROR-19-4 (HIGH)** — Race condition устранён: добавлен debounce 150ms для preview в `App.tsx`, который отменяет предыдущие запросы при новом наведении
+5. **MIRROR-19-5 (HIGH)** — Preview-узлы очищаются: после `mirrorSelected` временные узлы удаляются в `mirrorObject` через `deleteNode`
+6. **MIRROR-19-6 (HIGH)** — Эвристика детекции CSG-результата улучшена: замена `shapeType==='cube' && !params.width` на `!obj.params || Object.keys(obj.params).length === 0` (`document-store.ts`, `mirror-store.ts`)
 
-#### 🟡 HIGH (4/12)
-
-3. **MIRROR-19-3** — Утечка preview-узлов в build tree: каждый вызов `previewMirror` создаёт `mirror_preview_${nextId()}`, но НИКОГДА не удаляет предыдущие (14 узлов в логах) (`document-store.ts:625-634`)
-4. **MIRROR-19-4** — Race condition в preview: нет debounce/throttle, нет отмены предыдущего запроса (`document-store.ts:593-648`)
-5. **MIRROR-19-5** — Preview-узлы не очищаются после confirm mirror (`document-store.ts:593-648`)
-6. **MIRROR-19-6** — Хрупкая эвристика детекции CSG-результата: `shapeType === 'cube' && !params.width` (`document-store.ts:114`)
-
-#### 🟠 MEDIUM (5/12)
+#### 🟠 Оставшиеся проблемы (6/12):
 
 7. **MIRROR-19-7** — `baked` без `localTransform` молча пропускается в `mirrorNodeRecursive` (`history-tree.ts:744`)
 8. **MIRROR-19-8** — `boolean` без `children` молча пропускается в `mirrorNodeRecursive` (`history-tree.ts:773`)
 9. **MIRROR-19-9** — `treeTransform` может устареть после `rebuildNode` (`document-store.ts:692-700`)
 10. **MIRROR-19-10** — Fallback при `treeTransform === null` даёт другую логику, чем `mirrorTreeNode` (`document-store.ts:704-726`)
 11. **MIRROR-19-11** — `as unknown as` в `rebuild.ts` для mirror-операций (`rebuild.ts:76-85,279-299`)
-
-#### 🟢 LOW (1/12)
-
 12. **MIRROR-19-12** — `Matrix4.compose` с `Quaternion.setFromEuler` может дать неверную матрицу для отражённых углов Euler (`viewport-hooks.ts:794-804`)
 
-**Файлы:** `document-store.ts`, `history-tree.ts`, `rebuild.ts`, `viewport-hooks.ts`
+**Файлы:** `mirror-store.ts`, `document-store.ts`, `App.tsx`
 
 ### ✅ ИСПРАВЛЕНО — Код-ревью раунд 20: Аудит утверждения о параметрических CSG (3 изменения) (2026-08-03)
 
@@ -73,18 +66,6 @@
 
 #### ✅ CSG-PARAM-3 (LOW)
 Добавлена проверка `if (!getNode(op.id))` перед `createPrimitiveNode` для предотвращения дубликатов при undo/redo (`rebuild.ts:254-256`)
-
-#### 🔴 HIGH (1/3)
-
-1. **CSG-PARAM-1** — `createBakedNode(resultId, ...)` → `createBooleanNode(resultId, op, idA, idB, resultTransform)`. CSG-результат регистрируется как baked-нода вместо boolean. После замены дерево будет знать об операндах (`document-store.ts:464`)
-
-#### 🟠 MEDIUM (1/3)
-
-2. **CSG-PARAM-2** — `createBooleanNode(nd.id, nd.operation, nd.children[0], nd.children[1])` не передаёт `nd.localTransform`. После undo/redo boolean-нода теряет позицию (`document-store.ts:80`)
-
-#### 🟢 LOW (1/3)
-
-3. **CSG-PARAM-3** — `createPrimitiveNode` вызывается без проверки `getNode(op.id)`. При undo/redo создаёт дубликаты (`rebuild.ts:254-256`)
 
 **Файлы:** `document-store.ts`, `rebuild.ts`
 

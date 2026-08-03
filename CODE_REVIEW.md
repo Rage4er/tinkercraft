@@ -23,58 +23,18 @@
 
 | # | Проблема | Файл | Severity | Описание |
 |---|----------|------|----------|----------|
-| | **MIRROR-19-1** | [`document-store.ts:601-608`](web-app/src/store/document-store.ts:601) | **CRITICAL** | `mirrorCenter` вычисляется из `computeAABB(obj.vertices)` (локальные координаты) вместо `obj.transform` (мировые). Для объекта с `transform.x=20` AABB даёт `x=100` (начальная позиция создания), в результате `x' = 2*100 - 20 = 180` вместо правильного `x' = 2*20 - 20 = 20`. |
-| | **MIRROR-19-2** | [`document-store.ts:612`](web-app/src/store/document-store.ts:612) | **CRITICAL** | `const id = ids[0]` — preview работает только для ПЕРВОГО выделенного объекта. Multi-select полностью игнорируется. |
-| | **MIRROR-19-3** | [`document-store.ts:625-634`](web-app/src/store/document-store.ts:625) | **HIGH** | Утечка preview-узлов в build tree. Каждый вызов `previewMirror` создаёт `mirror_preview_${nextId()}`, но НИКОГДА не удаляет предыдущие. В логах обнаружено 14 preview-узлов. |
-| | **MIRROR-19-4** | [`document-store.ts:593-648`](web-app/src/store/document-store.ts:593) | **HIGH** | Race condition в preview: нет debounce/throttle, нет отмены предыдущего запроса. Быстрое наведение на разные кнопки плоскости вызывает каскад параллельных rebuild. |
-| | **MIRROR-19-5** | [`document-store.ts:593-648`](web-app/src/store/document-store.ts:593) | **HIGH** | Preview-узлы не очищаются после confirm mirror. После `mirrorSelected` в дереве остаются `mirror_preview_*` узлы, которые никогда не удаляются. |
-| | **MIRROR-19-6** | [`document-store.ts:114`](web-app/src/store/document-store.ts:114) | **HIGH** | Детекция CSG-результата — хрупкий хак: `shapeType === 'cube' && !params.width`. Любой куб с параметром `width=0` (или undefined) будет ошибочно определён как CSG-результат. |
-| | **MIRROR-19-7** | [`history-tree.ts:744`](web-app/src/csg/history-tree.ts:744) | **MEDIUM** | `baked` без `localTransform` молча пропускается в `mirrorNodeRecursive`. Если у baked-ноды нет `localTransform`, она не получает зеркального transform. |
-| | **MIRROR-19-8** | [`history-tree.ts:773`](web-app/src/csg/history-tree.ts:773) | **MEDIUM** | `boolean` без `children` молча пропускается в `mirrorNodeRecursive`. Пустая boolean-нода не обрабатывается, не логируется ошибка. |
-| | **MIRROR-19-9** | [`document-store.ts:692-700`](web-app/src/store/document-store.ts:692) | **MEDIUM** | `treeTransform` может устареть после `rebuildNode`. `rebuildNode` может изменить `localTransform` ноды (например, для baked-нод), но store использует значение, полученное ДО rebuild. |
-| | **MIRROR-19-10** | [`document-store.ts:704-726`](web-app/src/store/document-store.ts:704) | **MEDIUM** | Fallback при `treeTransform === null` даёт другую логику, чем `mirrorTreeNode`. Если `mirrorTreeNode` не установил `localTransform`, fallback использует простую инверсию знака, которая может не совпадать с логикой `mirrorEuler`. |
-| | **MIRROR-19-11** | [`rebuild.ts:76-85,279-299`](web-app/src/store/rebuild.ts:76) | **MEDIUM** | `applyMirrorToTransform` в `rebuildBuildTree` и `buildRebuildMeta` использует `as unknown as` для приведения типов. При ошибке приведения mirror-трансформ будет неверным. |
-| | **MIRROR-19-12** | [`viewport-hooks.ts:794-804`](web-app/src/components/viewport-hooks.ts:794) | **LOW** | Preview mesh применяет transform через `geometry.applyMatrix4(matrix)` с `Euler` из `mirrorPreviewMesh.transform`. Если transform содержит отражённые углы (Euler sign flip), `Matrix4.compose` с `Quaternion.setFromEuler` может дать неверную матрицу для отражённых углов. |
-
-### 🔴 Раунд 20 — Аудит утверждения о параметрических CSG (3 изменения)
-
-**Дата ревью:** 2026-08-03
-**Ревьюер:** SourceCraft Code Assistant (Ask режим)
-**Объём:** 3 файла (document-store.ts, history-tree.ts, rebuild.ts)
-
-> **Контекст:** Проверялось утверждение «Достаточно заменить createBakedNode на createBooleanNode, чтобы CSG-результаты стали параметрическими». После двух раундов верификации по коду установлено, что утверждение **неверно** — нужно минимум 3 изменения, а не одно.
-
-#### Сводка
-
-| # | Проблема | Файл | Severity | Описание |
-|---|----------|------|----------|----------|
-| ✅ **CSG-PARAM-1** | [`document-store.ts:464`](web-app/src/store/document-store.ts:464) | **HIGH** | Заменён `createBakedNode` на `createBooleanNode(resultId, op, idA, idB, resultTransform)` для сохранения связи с операндами и типа операции. Теперь CSG-результаты хранятся в build tree как boolean ноды, что позволяет перестраивать цепочку при изменении операндов. |
-| ✅ **CSG-PARAM-2** | [`document-store.ts:80`](web-app/src/store/document-store.ts:80) | **MEDIUM** | Добавлен параметр `nd.localTransform` в `createBooleanNode(nd.id, nd.operation, nd.children[0], nd.children[1], nd.localTransform!)` для сохранения позиции после undo/redo. Теперь boolean ноды правильно восстанавливают свою трансформацию при восстановлении из снапшота. |
-| ✅ **CSG-PARAM-3** | [`rebuild.ts:254-256`](web-app/src/store/rebuild.ts:254) | **LOW** | Добавлена проверка `if (!getNode(op.id))` перед `createPrimitiveNode` для предотвращения создания дубликатов при undo/redo. Теперь rebuildBuildTree безопасно создает примитивные ноды только если они еще не существуют в дереве. |
-
-#### Детали проверки
-
-**Исходное утверждение:** «Достаточно заменить createBakedNode на createBooleanNode»
-
-**Вердикт после 2 раундов верификации по коду:** ❌ **НЕВЕРНО**
-
-**Что подтвердилось:**
-- `createBooleanNode` существует и корректен ([`history-tree.ts:98-130`](web-app/src/csg/history-tree.ts:98))
-- `rebuildNode` для boolean вызывает `applyCSGMeshes` ([`history-tree.ts:385-386`](web-app/src/csg/history-tree.ts:385))
-- `mirrorTreeNode` для boolean рекурсивно обрабатывает детей ([`history-tree.ts:831-836`](web-app/src/csg/history-tree.ts:831))
-- `syncObjectsForOperation` корректно определяет CSG-результаты через `isCsgResult` ([`document-store.ts:113-119`](web-app/src/store/document-store.ts:113))
-- `rebuildBuildTree` уже создаёт `createBooleanNode` ([`rebuild.ts:309-312`](web-app/src/store/rebuild.ts:309))
-- `applyCSGMeshes` работает с деревом через `collectSubtree`, не требует `objects` ([`history-tree.ts:486-496`](web-app/src/csg/history-tree.ts:486))
-
-**Что опровергнуто:**
-- Утверждение «нужно сохранять CSG-результат в objects» — **неверно**, `resultId` и так сохраняется на строке 439
-- Утверждение «нужно обновить syncObjectsForOperation для boolean-нод» — **неверно**, текущая эвристика `isCsgResult` работает корректно
-- Утверждение «не удалять transforms операндов в rebuildBuildTree» — **неверно**, `delete transforms[id]` на строке 302 нужен (CSG поглощает операнды)
-
-**Подтверждённые 3 изменения:**
-1. [`document-store.ts:464`](web-app/src/store/document-store.ts:464) — `createBakedNode` → `createBooleanNode(resultId, op, idA, idB, resultTransform)`
-2. [`document-store.ts:80`](web-app/src/store/document-store.ts:80) — передать `nd.localTransform` в `createBooleanNode`
-3. [`rebuild.ts:254-256`](web-app/src/store/rebuild.ts:254) — добавить `if (!getNode(op.id))` перед `createPrimitiveNode`
+| ✅ | **MIRROR-19-1** | [`mirror-store.ts`](web-app/src/store/mirror-store.ts) | **CRITICAL** | `mirrorCenter` теперь вычисляется из `obj.transform` (мировые координаты) через `resetSubtreeTransform` + `mirrorPoint`. |
+| ✅ | **MIRROR-19-2** | [`mirror-store.ts:217-286`](web-app/src/store/mirror-store.ts:217) | **CRITICAL** | Preview работает для ВСЕХ выделенных объектов — итерация по всем `ids` с объединением геометрии. |
+| ✅ | **MIRROR-19-3** | [`mirror-store.ts`](web-app/src/store/mirror-store.ts) | **HIGH** | Утечка preview-узлов устранена — временные узлы удаляются через `deleteNode(newId, true)`. |
+| ✅ | **MIRROR-19-4** | [`App.tsx:357-365`](web-app/src/App.tsx:357) | **HIGH** | Race condition устранён — debounce 150ms с отменой предыдущих запросов через `clearTimeout`. |
+| ✅ | **MIRROR-19-5** | [`mirror-store.ts`](web-app/src/store/mirror-store.ts) | **HIGH** | Preview-узлы очищаются после confirm — `deleteNode` вызывается в конце `mirrorObject`. |
+| ✅ | **MIRROR-19-6** | [`document-store.ts:113-118`](web-app/src/store/document-store.ts:113) | **HIGH** | Детекция CSG-результата улучшена: `!obj.params || Object.keys(obj.params).length === 0`. |
+| | **MIRROR-19-7** | [`history-tree.ts:744`](web-app/src/csg/history-tree.ts:744) | **MEDIUM** | `baked` без `localTransform` молча пропускается в `mirrorNodeRecursive`. |
+| | **MIRROR-19-8** | [`history-tree.ts:773`](web-app/src/csg/history-tree.ts:773) | **MEDIUM** | `boolean` без `children` молча пропускается в `mirrorNodeRecursive`. |
+| | **MIRROR-19-9** | [`document-store.ts:692-700`](web-app/src/store/document-store.ts:692) | **MEDIUM** | `treeTransform` может устареть после `rebuildNode`. |
+| | **MIRROR-19-10** | [`document-store.ts:704-726`](web-app/src/store/document-store.ts:704) | **MEDIUM** | Fallback при `treeTransform === null` даёт другую логику. |
+| | **MIRROR-19-11** | [`rebuild.ts:76-85,279-299`](web-app/src/store/rebuild.ts:76) | **MEDIUM** | `applyMirrorToTransform` использует `as unknown as` для приведения типов. |
+| | **MIRROR-19-12** | [`viewport-hooks.ts:794-804`](web-app/src/components/viewport-hooks.ts:794) | **LOW** | Preview mesh применяет transform через `geometry.applyMatrix4(matrix)`. |
 
 ---
 
@@ -350,6 +310,7 @@
 | **Раунд 17 + SourceCraft** (2025-07-31) | CRIT-17-1 (boolean hash), CRIT-17-2 (resizeObject try/catch), HIGH-1..5, LOW-1..8 | ✅ Все исправлены |
 | **SourceCraft — 38 проблем** (2026-07-31) | CRIT-1..12 (treeNodes, busy, drag-select, WASM leak, etc.), MED Store/CSG/UI/IO (12), LOW (12) | ✅ Все исправлены |
 | **Mirror boolean/non-manifold** (2026-08-01) | MIRROR-BOOLEAN (finalTransform из centroid), MIRROR-NONMANIFOLD (workerMirrorObject для import_mesh) | ✅ Исправлено |
+| **Раунд 20 — CSG-PARAM** (2026-08-03) | CSG-PARAM-1/2/3 (createBakedNode→createBooleanNode, localTransform, дубликаты createPrimitiveNode) | ✅ **Все исправлены** |
 
 > **⚠️ ВАЖНО:** Проблемы MIRROR-1..10 из предыдущих раундов (Раунды 11–15, 17) были помечены как исправленные, однако глубокий аудит Раунда 19 показал, что **фундаментальные проблемы остались**. См. секцию «Раунд 19 — Глубокий аудит Mirror» выше для актуального списка проблем.
 
@@ -370,11 +331,6 @@
 10. **MIRROR-19-10 (MEDIUM)**: Устранить расхождение между `mirrorTreeNode` и fallback-логикой при `treeTransform === null`
 11. **MIRROR-19-11 (MEDIUM)**: Убрать `as unknown as` в `rebuild.ts` для mirror-операций, добавить type-safe приведение
 12. **MIRROR-19-12 (LOW)**: Проверить корректность `Matrix4.compose` с `Quaternion.setFromEuler` для отражённых углов в preview
-
-### Фаза 0.5 — Параметрические CSG (3 изменения)
-1. **CSG-PARAM-1 (HIGH)**: [`document-store.ts:464`](web-app/src/store/document-store.ts:464) — заменить `createBakedNode` на `createBooleanNode(resultId, op, idA, idB, resultTransform)`
-2. **CSG-PARAM-2 (MEDIUM)**: [`document-store.ts:80`](web-app/src/store/document-store.ts:80) — передать `nd.localTransform` в `createBooleanNode` при восстановлении из снапшота
-3. **CSG-PARAM-3 (LOW)**: [`rebuild.ts:254-256`](web-app/src/store/rebuild.ts:254) — добавить `if (!getNode(op.id))` перед `createPrimitiveNode` для предотвращения дубликатов при undo/redo
 
 ### Фаза 1 — Критические (немедленно)
 1. **CRIT-18-1**: Исправить мутацию `newObjects` до успешного завершения асинхронных операций в `extrudeSelected`
@@ -412,12 +368,13 @@
 | Метрика | Значение |
 |---------|----------|
 | Всего выявлено проблем | ~260+ (за всё время) |
-| Исправлено | ~110+ |
-| Активных (Раунд 18 + Раунд 19) | **150** (138 + 12 mirror) |
+| Исправлено | ~119+ |
+| Активных (Раунд 18 + Раунд 19) | **144** (138 + 6 mirror) |
 | Точность ревью (Раунд 16) | ~50% (8/18 полностью верных) |
 | Точность ревью (Раунд 17 + SourceCraft) | ~83% (12.5/15 подтверждено) |
 | Точность ревью (Раунд 18) | Ожидает верификации |
-| Точность ревью (Раунд 20 — CSG-PARAM) | ✅ **ИСПРАВЛЕНО** (все 3 проблемы решены в коммите acb7847) |
+| Точность ревью (Раунд 19 — Mirror) | **50%** (6/12 исправлено) |
+| Точность ревью (Раунд 20 — CSG-PARAM) | **100%** (3/3 подтверждено, ✅ исправлено) |
 
 ### Распределение по типам
 
@@ -436,7 +393,7 @@
 3. **Типобезопасность** — множественные `as unknown as`, `any`, index signature ослабляют strict mode TypeScript.
 4. **Архитектура IO** — отсутствие единой системы типов ошибок и унифицированного подхода к обработке ошибок.
 5. **Производительность snap-utils** — избыточное создание объектов Vector3 в горячем цикле raycasting.
-6. **Параметрические CSG** — инфраструктура готова (build tree ✅, rebuildFromHistory ✅, applyCSGMeshes ✅), нужно 3 изменения для включения.
+6. **Параметрические CSG** — инфраструктура готова (build tree ✅, rebuildFromHistory ✅, applyCSGMeshes ✅), все 3 изменения CSG-PARAM применены ✅.
 
 ---
 
@@ -448,7 +405,7 @@
 
 ### Параметрическая история операций (Фаза 8)
 
-После завершения Раунда 19 (Mirror) и Раунда 20 (CSG-PARAM) — следующий этап улучшения:
+После завершения Раунда 19 (Mirror) — следующий этап улучшения:
 
 - **Раскрытие CSG-операций** в Timeline — редактирование состава operand-ов и типа boolean операции
 - **Редактирование параметров** примитивов прямо в истории (width/height/depth, radius, segments)
@@ -456,4 +413,4 @@
 - **Edit modal** для fillet, extrude, mirror — изменение параметров без undo/redo
 - **Undo для edit** — запись предыдущего состояния в историю
 
-Базовая инфраструктура уже готова: история операций ✅, build tree ✅, rebuildFromHistory ✅, boolean-ноды в дереве ✅ (после CSG-PARAM-1). Нужно только UI.
+Базовая инфраструктура уже готова: история операций ✅, build tree ✅, rebuildFromHistory ✅, boolean-ноды в дереве ✅ (CSG-PARAM-1). Нужно только UI.

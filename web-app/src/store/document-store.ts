@@ -110,9 +110,12 @@ async function syncObjectsForOperation(
   for (const id of ids) {
     const obj = objects[id]
     if (!obj) continue
-    const isCsgResult = obj.shapeType === 'cube' && !obj.params.width
     const isImport = obj.shapeType === 'import_mesh'
-    console.log(`[DIAG:syncObjectsForOperation] id=${id} shapeType=${obj.shapeType} params.width=${obj.params?.width} isCsgResult=${isCsgResult} isImport=${isImport} route=${isCsgResult || isImport ? 'workerSyncMesh' : 'workerSyncObjects'}`)
+    // FIX (MIRROR-CSG-DETECT): прежняя проверка `shapeType==='cube' && !params.width`
+    // слишком узкая — CSG-результат может иметь любой shapeType-заглушку.
+    // Надёжный признак CSG/baked: нет params или params пустой объект.
+    const isCsgResult = !isImport && (!obj.params || Object.keys(obj.params).length === 0)
+    console.log(`[DIAG:syncObjectsForOperation] id=${id} shapeType=${obj.shapeType} params=${JSON.stringify(obj.params)} isCsgResult=${isCsgResult} isImport=${isImport} route=${isCsgResult || isImport ? 'workerSyncMesh' : 'workerSyncObjects'}`)
     if (isCsgResult || isImport) {
       // CSG result or imported mesh — sync mesh data with current transform
       meshSyncs.push(

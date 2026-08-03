@@ -218,12 +218,68 @@ export async function previewMirror(
     try {
         await syncObjectsForOperation(ids, objects)
 
-        const id = ids[0]
-        const obj = objects[id]
-        if (!obj) return null
+        // Исправление MIRROR-19-2: preview для multi-select
+        // Работаем со всеми выделенными объектами, а не только с первым
+        const results: SceneObject[] = []
+        for (const id of ids) {
+            const obj = objects[id]
+            if (!obj) continue
 
-        const result = await mirrorObject(obj, plane)
-        return result.object
+            const result = await mirrorObject(obj, plane)
+            results.push(result.object)
+        }
+
+        // Если нет объектов для зеркала, возвращаем null
+        if (results.length === 0) return null
+
+        // Если один объект, возвращаем его напрямую (старое поведение)
+        if (results.length === 1) return results[0]
+
+        // Если несколько объектов, объединяем их геометрию
+        // Объединяем вершины, индексы и нормали всех объектов
+        let totalVertices: number[] = []
+        let totalIndices: number[] = []
+        let totalNormals: number[] = []
+        let vertexOffset = 0
+
+        for (const result of results) {
+            // Добавляем вершины
+            totalVertices = totalVertices.concat(Array.from(result.vertices))
+
+            // Корректируем индексы с учетом смещения
+            for (let i = 0; i < result.indices.length; i++) {
+                totalIndices.push(result.indices[i] + vertexOffset)
+            }
+
+            // Добавляем нормали, если есть
+            if (result.normals) {
+                totalNormals = totalNormals.concat(Array.from(result.normals))
+            }
+
+            // Обновляем смещение для следующего объекта
+            vertexOffset += result.vertices.length / 3
+        }
+
+        // Создаем объединенный объект
+        const mergedObject: SceneObject = {
+            id: nextId(),
+            shapeType: 'import_mesh',
+            params: {},
+            transform: {
+                x: 0, y: 0, z: 0,
+                rotX: 0, rotY: 0, rotZ: 0,
+                scaleX: 1, scaleY: 1, scaleZ: 1
+            },
+            vertices: new Float32Array(totalVertices),
+            indices: new Uint32Array(totalIndices),
+            normals: totalNormals.length > 0 ? new Float32Array(totalNormals) : null,
+            color: results[0].color, // Берем цвет первого объекта
+            visible: true,
+            locked: false,
+            name: "Multi-mirror preview"
+        }
+
+        return mergedObject
     } catch (e) {
         console.error('[Mirror] previewMirror error:', e)
         return null
