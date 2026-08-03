@@ -726,8 +726,18 @@ function mirrorNodeRecursive(
   plane: 'XY' | 'XZ' | 'YZ',
   center: Point3D = { x: 0, y: 0, z: 0 },
 ): void {
-  if (node.type === 'primitive' && node.localTransform) {
-    const t = node.localTransform
+  // FIX (MIRROR-19-7): Если у primitive нет localTransform, используем identity
+  // вместо молчаливого пропуска. Это предотвращает потерю нод при mirror.
+  if (node.type === 'primitive') {
+    const t = node.localTransform ?? {
+      x: 0, y: 0, z: 0,
+      rotX: 0, rotY: 0, rotZ: 0,
+      scaleX: 1, scaleY: 1, scaleZ: 1,
+    }
+    if (!node.localTransform) {
+      console.warn(`[MIRROR:mirrorNodeRecursive] nodeId=${node.id} type=primitive: localTransform отсутствует, используется identity`)
+    }
+
     const mirroredPos = mirrorPoint({ x: t.x, y: t.y, z: t.z }, plane, center)
 
     // FIX (MIRROR-9): Euler rotation mirroring via SIMPLE SIGN FLIP.
@@ -768,7 +778,16 @@ function mirrorNodeRecursive(
     return
   }
 
-  if (node.type === 'baked' && node.localTransform) {
+  // FIX (MIRROR-19-7): Если у baked нет localTransform, используем identity
+  if (node.type === 'baked') {
+    const t = node.localTransform ?? {
+      x: 0, y: 0, z: 0,
+      rotX: 0, rotY: 0, rotZ: 0,
+      scaleX: 1, scaleY: 1, scaleZ: 1,
+    }
+    if (!node.localTransform) {
+      console.warn(`[MIRROR:mirrorNodeRecursive] nodeId=${node.id} type=baked: localTransform отсутствует, используется identity`)
+    }
     // FIX (MIRROR-BAKED-2): For baked nodes (CSG results, imports), rotation/scale
     // are applied by Viewport3D at render time (Three.js pivot transform), NOT by
     // transformBakedMesh (which applies only translation).
@@ -782,7 +801,6 @@ function mirrorNodeRecursive(
     // Viewport3D will apply the mirrored rotation/scale at render time.
     // transformBakedMesh applies only translation — which is correct because
     // the geometry is centered at origin and rotation/scale are render-time.
-    const t = node.localTransform
 
     // Step 1: Mirror vertex positions across the plane + исправляем winding order.
     // FIX (MIRROR-WINDING): инвертирование одной оси переворачивает CCW→CW.
@@ -828,7 +846,12 @@ function mirrorNodeRecursive(
     return
   }
 
-  if (node.type === 'boolean' && node.children) {
+  // FIX (MIRROR-19-8): boolean без children — логируем предупреждение
+  if (node.type === 'boolean') {
+    if (!node.children || node.children.length === 0) {
+      console.warn(`[MIRROR:mirrorNodeRecursive] nodeId=${node.id} type=boolean: children отсутствуют или пусты, нода пропущена`)
+      return
+    }
     node.children.forEach(childId => {
       const child = treeStore.getNode(childId)
       if (child) mirrorNodeRecursive(child, plane, center)
