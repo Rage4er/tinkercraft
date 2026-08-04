@@ -3,7 +3,7 @@
 // ============================================================
 
 import { describe, it, expect } from 'vitest'
-import { mergeCoincidentVertices, MAX_STL_FILE_SIZE, MAX_STL_TRIANGLES } from './stl-import'
+import { mergeCoincidentVertices, detectStlFormat, MAX_STL_FILE_SIZE, MAX_STL_TRIANGLES } from './stl-import'
 
 describe('mergeCoincidentVertices', () => {
   it('merges identical vertices', () => {
@@ -73,5 +73,37 @@ describe('STL import limits', () => {
 
   it('exports MAX_STL_TRIANGLES constant (5 million)', () => {
     expect(MAX_STL_TRIANGLES).toBe(5_000_000)
+  })
+})
+
+describe('detectStlFormat', () => {
+  it('detects ASCII STL by "solid" header', () => {
+    const buffer = new ArrayBuffer(100)
+    const header = new Uint8Array(buffer, 0, 5)
+    header.set([115, 111, 108, 105, 100]) // "solid"
+    expect(detectStlFormat(buffer)).toBe('ascii')
+  })
+
+  it('detects binary STL by non-"solid" header', () => {
+    const buffer = new ArrayBuffer(100)
+    const header = new Uint8Array(buffer, 0, 5)
+    header.set([0x42, 0x43, 0x31, 0x00, 0x00])
+    expect(detectStlFormat(buffer)).toBe('binary')
+  })
+
+  it('returns unknown for too small buffer', () => {
+    const buffer = new ArrayBuffer(10)
+    expect(detectStlFormat(buffer)).toBe('unknown')
+  })
+
+  it('distinguishes ASCII vs binary when header is "solid" but size matches binary', () => {
+    const triCount = 1
+    const expectedSize = 84 + triCount * 50
+    const buffer = new ArrayBuffer(expectedSize)
+    const header = new Uint8Array(buffer, 0, 5)
+    header.set([115, 111, 108, 105, 100]) // "solid"
+    const view = new DataView(buffer)
+    view.setUint32(80, triCount, true)
+    expect(detectStlFormat(buffer)).toBe('binary')
   })
 })

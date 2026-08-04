@@ -32,6 +32,11 @@ export interface RebuildMeta {
   transform: TransformNR
   visible: boolean
   name?: string
+  // CSG result mesh data — stored for rebuildFromHistory reconstruction
+  resultVertices?: Float32Array | number[]
+  resultIndices?: Uint32Array | number[]
+  resultNormals?: Float32Array | number[]
+  originalBboxSize?: { x: number; y: number; z: number }
 }
 
 /**
@@ -137,13 +142,13 @@ export function buildRebuildMeta(ops: TinkerCraftOperation[]): {
         meta[op.resultId] = { color: srcColor, shapeType: 'cube', params: {}, transform: startT, visible: true }
         transforms[op.resultId] = startT
         csgResultIds.add(op.resultId)
-          // Store result mesh data for rebuild (FIX CRIT-CSG-2)
-          // This replaces shapeType-based reconstruction which loses all CSG geometry.
-          ; (meta[op.resultId] as RebuildMeta & { resultVertices?: Float32Array | number[]; resultIndices?: Uint32Array | number[]; resultNormals?: Float32Array | number[]; originalBboxSize?: { x: number; y: number; z: number } }).resultVertices = op.resultVertices
-          ; (meta[op.resultId] as RebuildMeta & { resultVertices?: Float32Array | number[]; resultIndices?: Uint32Array | number[]; resultNormals?: Float32Array | number[]; originalBboxSize?: { x: number; y: number; z: number } }).resultIndices = op.resultIndices
-          ; (meta[op.resultId] as RebuildMeta & { resultVertices?: Float32Array | number[]; resultIndices?: Uint32Array | number[]; resultNormals?: Float32Array | number[]; originalBboxSize?: { x: number; y: number; z: number } }).resultNormals = op.resultNormals
+        // Store result mesh data for rebuild (FIX CRIT-CSG-2)
+        // No more type casting — fields are now part of RebuildMeta interface.
+        meta[op.resultId].resultVertices = op.resultVertices
+        meta[op.resultId].resultIndices = op.resultIndices
+        meta[op.resultId].resultNormals = op.resultNormals
         if (op.originalBboxSize) {
-          ; (meta[op.resultId] as RebuildMeta & { originalBboxSize?: { x: number; y: number; z: number } }).originalBboxSize = op.originalBboxSize
+          meta[op.resultId].originalBboxSize = op.originalBboxSize
         }
       }
     }
@@ -259,7 +264,8 @@ export function rebuildBuildTree(
 
     } else if (op.type === 'import_mesh') {
       transforms[op.id] = { ...op.transform }
-      // Baked nodes registered after mesh data is available
+      // Baked node created in registerBakedNodes() after mesh data is available
+      // (called at end of rebuildBuildTree when `objects` parameter is provided)
 
     } else if (op.type === 'move') {
       const d: Vec3 = op.delta

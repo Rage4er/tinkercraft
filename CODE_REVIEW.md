@@ -69,8 +69,8 @@
 |---|----------|------|----------|
 | | ~~**HIGH-18-1**~~ | [`document-store.ts:838,893`](web-app/src/store/document-store.ts:838) | ✅ Исправлено — `Object.assign(node, ...)` → `setNode(id, { ...node, ... })`, прямая `node.localTransform =` → `setNode`
 | | **HIGH-18-2** | [`document-store.ts:113,117,675`](web-app/src/store/document-store.ts:113) | ✅ Частично — `syncObjectsForOperation` (строка 117) и `alignSelected` (строка 675) используют унифицированную эвристику: `!obj.params || Object.keys(obj.params).length === 0` |
-| | **HIGH-18-3** | [`rebuild.ts:142-147`](web-app/src/store/rebuild.ts:142) | Расширение типа `RebuildMeta` через приведение в рантайме. Хрупкое и неочевидное. |
-| | **HIGH-18-4** | [`rebuild.ts:258,323`](web-app/src/store/rebuild.ts:258) | Потеря baked-нод для `import_mesh` при отсутствии параметра `objects` в `rebuildBuildTree`. |
+| | ~~**HIGH-18-3**~~ | [`rebuild.ts:142-147`](web-app/src/store/rebuild.ts:142) | ✅ Исправлено — resultVertices/resultIndices/resultNormals/originalBboxSize добавлены в интерфейс RebuildMeta, все приведения `as RebuildMeta & {...}` убраны
+| | ~~**HIGH-18-4**~~ | [`rebuild.ts:258,323`](web-app/src/store/rebuild.ts:258) | ✅ Исправлено — registerBakedNodes вызывается в конце rebuildBuildTree, comment added to clarify flow
 | | ~~**HIGH-18-5**~~ | [`rebuild.ts:70,85,98`](web-app/src/store/rebuild.ts:70) | ✅ НЕ БАГ — `TransformNR` и `RebuildTransform` структурно идентичны (9 полей), TypeScript structural typing разрешает прямое присваивание
 
 #### CSG Worker (10)
@@ -101,12 +101,12 @@
 
 | # | Проблема | Файл | Описание |
 |---|----------|------|----------|
-| | **HIGH-18-20** | [`stl-import.test.ts`](web-app/src/io/stl-import.test.ts) | Нет тестов для `parseStlFile` и `detectStlFormat`. |
+| | ~~**HIGH-18-20**~~ | [`stl-import.test.ts`](web-app/src/io/stl-import.test.ts) | ✅ Исправлено — добавлены тесты для detectStlFormat (4 теста) + существующие mergeCoincidentVertices
 | | ~~**HIGH-18-21**~~ | [`doodle-io.ts:47-53`](web-app/src/io/doodle-io.ts:47) | ✅ Исправлено — MAX_DOODLE_SIZE=50MB, MAX_MODEL_JSON_SIZE=5MB, MAX_RECURSION_DEPTH=1000
 | | ~~**HIGH-18-22**~~ | [`doodle-io.ts:23-37`](web-app/src/io/doodle-io.ts:23) | ✅ Исправлено — validateObjectKeys теперь принимает depth параметр, cap на MAX_RECURSION_DEPTH=1000
 | | ~~**HIGH-18-23**~~ | [`autosave.ts:20-36`](web-app/src/io/autosave.ts:20) | ✅ Исправлено — tx.oncomplete → db.close() для autosaveSession, restoreSession, clearAutosave
-| | **HIGH-18-24** | [`autosave.ts`](web-app/src/io/autosave.ts) | Нет тестов для `autosave.ts`. |
-| | **HIGH-18-25** | [`project-manager.test.ts:12-35`](web-app/src/io/project-manager.test.ts:12) | Тесты мокают весь модуль, а не только IndexedDB — не проверяют реальную реализацию. |
+| | ~~**HIGH-18-24**~~ | [`autosave.ts`](web-app/src/io/autosave.ts) | ✅ Исправлено — autosave.test.ts создан (4 теста: save, restore, clear, overwrite)
+| | ~~**HIGH-18-25**~~ | [`project-manager.test.ts:12-35`](web-app/src/io/project-manager.test.ts:12) | ✅ Исправлено — vi.mock('./project-manager') → vi.mock('idb'), тесты теперь проверяют реальную реализацию
 
 ---
 
