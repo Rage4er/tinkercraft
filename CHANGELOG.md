@@ -71,6 +71,17 @@
 - **LOW-18-29 (rename hint)**: НЕ БАГ — title="Двойной клик — переименовать" уже есть
 - **LOW-18-30 (magic number)**: INPUT_SELECT_DELAY_MS = 30 константа (`ComponentTree.tsx`)
 
+### Fixed
+
+- **MED-18-8 (boolean notify)**: notify() добавлен в try/catch boolean node creation (`rebuild.ts`)
+- **MED-18-18 (ShapeParams)**: index signature `[key: string]` убран, строго типизирован (`types.ts`)
+- **MED-18-23 (mirror mutation)**: setNode() вызывается после мутации localTransform (`history-tree.ts`)
+- **MED-18-25 (getAllNodesMap)**: new Map(this._nodes) возвращает копию (`tree-store.ts`)
+- **MED-18-35 (Timeline key)**: composite key `${op.type}_${id || i}` вместо key={i} (`Timeline.tsx`)
+- **MED-18-36 (NumInput max)**: prop max добавлен, Math.min(max, v) в onBlur (`NumInput.tsx`)
+- **MED-18-40 (ErrorBoundary)**: console.error('[ErrorBoundary] Caught error:', error) добавлен (`ErrorBoundary.tsx`)
+- **MED-18-43 (STL normals)**: applyTransformToNormals() добавлена, normals трансформируются через rotation matrix (`stl-export.ts`)
+
 ### Changed
 
 - **MIRROR-STORE-REFACTOR**: Вся логика зеркала вынесена из `document-store.ts` в отдельный файл `mirror-store.ts`. Это очищает `document-store.ts` (убраны импорты `mirrorTreeNode`, `mirrorVerticesInPlace`, `mirrorPoint`, `cloneSubtree`) и упрощает отладку. `document-store.ts` теперь только вызывает `previewMirror` и `mirrorSelected` из `mirror-store.ts`. Новый подход: `rebuildNode` → `mirrorVerticesInPlace` → `mirrorPoint`. Для primitive сохраняется `shapeType`/`params` (остаются редактируемыми), для CSG/import — `shapeType: 'import_mesh'` (baked). Transform = `mirrorPoint` для позиции, `rot=0, scale=1`. Исправлено: `mirror-store.ts` (новый файл), `document-store.ts` (рефакторинг)
@@ -217,6 +228,17 @@
 - **LOW-18-29 (rename hint)**: НЕ БАГ — title="Двойной клик — переименовать" уже есть
 - **LOW-18-30 (magic number)**: INPUT_SELECT_DELAY_MS = 30 константа (`ComponentTree.tsx`)
 
+### Fixed
+
+- **MED-18-8 (boolean notify)**: notify() добавлен в try/catch boolean node creation (`rebuild.ts`)
+- **MED-18-18 (ShapeParams)**: index signature `[key: string]` убран, строго типизирован (`types.ts`)
+- **MED-18-23 (mirror mutation)**: setNode() вызывается после мутации localTransform (`history-tree.ts`)
+- **MED-18-25 (getAllNodesMap)**: new Map(this._nodes) возвращает копию (`tree-store.ts`)
+- **MED-18-35 (Timeline key)**: composite key `${op.type}_${id || i}` вместо key={i} (`Timeline.tsx`)
+- **MED-18-36 (NumInput max)**: prop max добавлен, Math.min(max, v) в onBlur (`NumInput.tsx`)
+- **MED-18-40 (ErrorBoundary)**: console.error('[ErrorBoundary] Caught error:', error) добавлен (`ErrorBoundary.tsx`)
+- **MED-18-43 (STL normals)**: applyTransformToNormals() добавлена, normals трансформируются через rotation matrix (`stl-export.ts`)
+
 ### Changed
 
 - **ARCH-CSG-1**: CSG-результаты (`csg_*`) теперь имеют `shapeType='cube', params={}` и регистрируются как baked-ноды в build tree. Это обеспечивает корректную маршрутизацию в `syncObjectsForOperation` → `workerSyncMesh`
@@ -269,6 +291,17 @@
 - **LOW-18-28 (snap-utils tests)**: getSceneMeshes и getScenePivots тесты добавлены (`snap-utils.test.ts`)
 - **LOW-18-29 (rename hint)**: НЕ БАГ — title="Двойной клик — переименовать" уже есть
 - **LOW-18-30 (magic number)**: INPUT_SELECT_DELAY_MS = 30 константа (`ComponentTree.tsx`)
+
+### Fixed
+
+- **MED-18-8 (boolean notify)**: notify() добавлен в try/catch boolean node creation (`rebuild.ts`)
+- **MED-18-18 (ShapeParams)**: index signature `[key: string]` убран, строго типизирован (`types.ts`)
+- **MED-18-23 (mirror mutation)**: setNode() вызывается после мутации localTransform (`history-tree.ts`)
+- **MED-18-25 (getAllNodesMap)**: new Map(this._nodes) возвращает копию (`tree-store.ts`)
+- **MED-18-35 (Timeline key)**: composite key `${op.type}_${id || i}` вместо key={i} (`Timeline.tsx`)
+- **MED-18-36 (NumInput max)**: prop max добавлен, Math.min(max, v) в onBlur (`NumInput.tsx`)
+- **MED-18-40 (ErrorBoundary)**: console.error('[ErrorBoundary] Caught error:', error) добавлен (`ErrorBoundary.tsx`)
+- **MED-18-43 (STL normals)**: applyTransformToNormals() добавлена, normals трансформируются через rotation matrix (`stl-export.ts`)
 
 ### Changed
 
@@ -547,6 +580,17 @@
 - **LOW-18-28 (snap-utils tests)**: getSceneMeshes и getScenePivots тесты добавлены (`snap-utils.test.ts`)
 - **LOW-18-29 (rename hint)**: НЕ БАГ — title="Двойной клик — переименовать" уже есть
 - **LOW-18-30 (magic number)**: INPUT_SELECT_DELAY_MS = 30 константа (`ComponentTree.tsx`)
+
+### Fixed
+
+- **MED-18-8 (boolean notify)**: notify() добавлен в try/catch boolean node creation (`rebuild.ts`)
+- **MED-18-18 (ShapeParams)**: index signature `[key: string]` убран, строго типизирован (`types.ts`)
+- **MED-18-23 (mirror mutation)**: setNode() вызывается после мутации localTransform (`history-tree.ts`)
+- **MED-18-25 (getAllNodesMap)**: new Map(this._nodes) возвращает копию (`tree-store.ts`)
+- **MED-18-35 (Timeline key)**: composite key `${op.type}_${id || i}` вместо key={i} (`Timeline.tsx`)
+- **MED-18-36 (NumInput max)**: prop max добавлен, Math.min(max, v) в onBlur (`NumInput.tsx`)
+- **MED-18-40 (ErrorBoundary)**: console.error('[ErrorBoundary] Caught error:', error) добавлен (`ErrorBoundary.tsx`)
+- **MED-18-43 (STL normals)**: applyTransformToNormals() добавлена, normals трансформируются через rotation matrix (`stl-export.ts`)
 
 ### Changed
 - `App.tsx` разделён с 1809 до 553 строк (−69%) — CRIT-1

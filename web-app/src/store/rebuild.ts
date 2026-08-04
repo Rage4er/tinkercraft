@@ -23,6 +23,7 @@ import {
   getNode,
 } from '../csg/history-tree'
 import { computeRSMatrix } from '../csg/worker-matrix'
+import { notify } from './notifications'
 
 /** Metadata accumulated over the operation chain. Exported for testing. */
 export interface RebuildMeta {
@@ -318,9 +319,11 @@ export function rebuildBuildTree(
         try {
           // Pass the transform to the boolean node creation
           createBooleanNode(op.resultId, treeOp, op.ids[0], op.ids[1], startT)
-        } catch {
-          // Tree creation failed (e.g., orphaned CSG) — skip
-          console.warn('[rebuildBuildTree] Failed to create boolean node:', op.resultId)
+        } catch (e) {
+          // Tree creation failed (e.g., orphaned CSG) — notify user
+          console.warn('[rebuildBuildTree] Failed to create boolean node:', op.resultId, e)
+          // FIX (MED-18-8): Notify user about boolean node creation failure
+          try { notify('Ошибка создания булевой операции', 'error') } catch { /* notify not available */ }
         }
       }
     }

@@ -114,9 +114,11 @@ export default function Timeline({
     <div className="tl-list" ref={listRef}>
       {visible.map(({ op, i }) => {
         const idx = i + 1;
+        // FIX (MED-18-35): Use composite key (type+index) — most ops have id, others fall back to index
+        const key = 'id' in op ? `${op.type}_${(op as { id?: string }).id}` : `${op.type}_${i}`
         return (
           <div
-            key={i}
+            key={key}
             className={`tl-item${idx <= historyIndex ? " active" : ""}${idx === historyIndex ? " current" : ""}`}
             title={`Перейти к шагу ${idx}`}
             onClick={() => !busy && onJump(idx)}

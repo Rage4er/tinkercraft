@@ -133,7 +133,9 @@ export interface ShapeParams {
   radius?: number
   segments?: number
   filletRadius?: number
-  [key: string]: number | undefined
+  // FIX (MED-18-18): Removed index signature `[key: string]: number | undefined` —
+  // ShapeParams should only accept known shape parameters for type safety.
+  // Dynamic params are handled via sanitizeParams in the worker.
 }
 
 export interface SceneObject {

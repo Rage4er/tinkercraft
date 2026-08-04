@@ -56,9 +56,9 @@ export class TreeStore {
         return [...this._nodes.values()]
     }
 
-    /** Получить все узлы как ReadonlyMap (без копирования) */
+    /** Получить все узлы как ReadonlyMap (копия, чтобы caller не мутировал store) */
     getAllNodesMap(): ReadonlyMap<string, TreeNode> {
-        return this._nodes
+        return new Map(this._nodes)
     }
 
     /** Количество узлов в дереве */

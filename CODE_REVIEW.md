@@ -123,7 +123,7 @@
 | | **MED-18-5** | [`ui-store.ts:63`](web-app/src/store/ui-store.ts:63) | `mirrorPreviewMesh` хранит полные mesh-данные без Transferable. |
 | | **MED-18-6** | [`helpers.ts:37`](web-app/src/store/helpers.ts:37) | `extractAndCenterInPlace` мутирует входной массив — неочевидно для вызывающего кода. |
 | | **MED-18-7** | [`types.ts:11`](web-app/src/store/types.ts:11) | Отсутствие `isCsgResult` в `SceneObject` — вынуждает эвристику. |
-| | **MED-18-8** | [`rebuild.ts:313`](web-app/src/store/rebuild.ts:313) | `try/catch` без уведомления пользователя при ошибке создания boolean-ноды. |
+| | ~~**MED-18-8**~~ | [`rebuild.ts:313`](web-app/src/store/rebuild.ts:313) | ✅ Исправлено — import notify добавлен, notify('Ошибка создания булевой операции', 'error') вызывается при ошибке
 | | **MED-18-9** | [`snapshots.ts:74-76`](web-app/src/store/snapshots.ts:74) | Копирование TypedArray → Array при сериализации дерева (дорого для больших мешей). |
 | | ~~**MED-18-10**~~ | [`notifications.ts:28`](web-app/src/store/notifications.ts:28) | ✅ Исправлено — timeouts Map хранит ID таймаутов, dismiss() очищает таймаут + clearTimeout
 
@@ -138,14 +138,14 @@
 | | **MED-18-15** | [`worker-handlers.ts:791-989`](web-app/src/csg/worker-handlers.ts:791) | `handleRebuildScene` — гигантский switch на 200 строк. Нарушение SRP. |
 | | **MED-18-16** | [`worker-handlers.ts:921-922`](web-app/src/csg/worker-handlers.ts:921) | Нет валидации `resultVertices`/`resultIndices` — повреждённые данные могут создать гигантский массив. |
 | | **MED-18-17** | [`worker-handlers.ts:1030-1031`](web-app/src/csg/worker-handlers.ts:1030) | Stale cache в `handleCsgBoolean` — caller должен помнить о `workerSyncObjects`. |
-| | **MED-18-18** | [`types.ts:129-137`](web-app/src/csg/types.ts:129) | `ShapeParams` — index signature `[key: string]: number \| undefined` делает тип нестрогим. |
+| | ~~**MED-18-18**~~ | [`types.ts:129-137`](web-app/src/csg/types.ts:129) | ✅ Исправлено — index signature убран, ShapeParams строго типизирован
 | | **MED-18-19** | [`types.ts:193-230`](web-app/src/csg/types.ts:193) | `TreeNode` — не discriminated union, много опциональных полей. |
 | | **MED-18-20** | [`history-tree.ts:366-406`](web-app/src/csg/history-tree.ts:366) | Дуальная логика WASM vs worker в `rebuildNode` — усложняет тестирование. |
 | | **MED-18-21** | [`history-tree.ts:564,566-569`](web-app/src/csg/history-tree.ts:564) | Non-null assertion для `shapeType` и `localTransform` — падение с cryptic error. |
 | | **MED-18-22** | [`history-tree.ts:594-598`](web-app/src/csg/history-tree.ts:594) | Конструктор `Manifold` без try/catch для baked-мешей. |
-| | **MED-18-23** | [`history-tree.ts:639-653`](web-app/src/csg/history-tree.ts:639) | Мутация node напрямую в `mirrorTreeNode` — проблемы с React re-render. |
+| | ~~**MED-18-23**~~ | [`history-tree.ts:639-653`](web-app/src/csg/history-tree.ts:639) | ✅ Исправлено — setNode() вызывается после мутации localTransform для primitive и baked нод
 | | **MED-18-24** | [`tree-store.ts:76`](web-app/src/csg/tree-store.ts:76) | Singleton усложняет тестирование (нельзя изолировать тесты). |
-| | **MED-18-25** | [`tree-store.ts:60-62`](web-app/src/csg/tree-store.ts:60) | `getAllNodesMap()` возвращает ссылку на внутренний Map — caller может мутировать store. |
+| | ~~**MED-18-25**~~ | [`tree-store.ts:60-62`](web-app/src/csg/tree-store.ts:60) | ✅ Исправлено — new Map(this._nodes) возвращает копию, caller не может мутировать store
 | | **MED-18-26** | [`rebuildOps.ts:33-50`](web-app/src/csg/rebuildOps.ts:33) | Аддитивное применение scale — дрейф при последовательных move операциях. |
 | | **MED-18-27** | [`worker-matrix.ts:15-39`](web-app/src/csg/worker-matrix.ts:15) | Фиксированный порядок Euler XYZ — несовместимость при другом порядке в других частях кода. |
 
@@ -160,12 +160,12 @@
 | | **MED-18-32** | [`snap-utils.test.ts`](web-app/src/components/snap-utils.test.ts) | Нет тестов для `findNearestSnap` — основной функции snap-to-geometry. |
 | | **MED-18-33** | [`Toolbar.tsx:6-84`](web-app/src/components/Toolbar.tsx:6) | 45 пропсов — компонент делает слишком много. |
 | | **MED-18-34** | [`PropertiesPanel.tsx:238-391`](web-app/src/components/PropertiesPanel.tsx:238) | Дублирование кода для разных `shapeType` — if/else на 150 строк. |
-| | **MED-18-35** | [`Timeline.tsx:119`](web-app/src/components/Timeline.tsx:119) | `key={i}` вместо уникального id операции — проблемы с фокусом и анимациями. |
-| | **MED-18-36** | [`NumInput.tsx:18`](web-app/src/components/NumInput.tsx:18) | Нет валидации `max` — пользователь может ввести сколь угодно большое число. |
+| | ~~**MED-18-35**~~ | [`Timeline.tsx:119`](web-app/src/components/Timeline.tsx:119) | ✅ Исправлено — composite key `${op.type}_${id || i}` для стабильной идентичности
+| | ~~**MED-18-36**~~ | [`NumInput.tsx:18`](web-app/src/components/NumInput.tsx:18) | ✅ Исправлено — prop max добавлен, Math.min(max, v) в onBlur
 | | **MED-18-37** | [`App.tsx:26-66`](web-app/src/App.tsx:26) | Гигантский `useShallow` селектор (32 поля) — ререндер всего App при любом изменении. |
 | | **MED-18-38** | [`App.tsx:79-122`](web-app/src/App.tsx:79) | Гигантский docStore селектор (42 поля) — аналогично. |
 | | **MED-18-39** | [`App.tsx:211`](web-app/src/App.tsx:211) | Шорткаты не проверяют наличие модальных окон — Escape закроет модалку и вызовет `clearSelection`. |
-| | **MED-18-40** | [`ErrorBoundary.tsx:9-10`](web-app/src/components/ErrorBoundary.tsx:9) | Ошибки не логируются — разработчик не узнает о произошедшей ошибке. |
+| | ~~**MED-18-40**~~ | [`ErrorBoundary.tsx:9-10`](web-app/src/components/ErrorBoundary.tsx:9) | ✅ Исправлено — console.error('[ErrorBoundary] Caught error:', error) добавлен
 
 #### IO (13)
 
@@ -173,7 +173,7 @@
 |---|----------|------|----------|
 | | **MED-18-41** | [`stl-import.ts:34-56`](web-app/src/io/stl-import.ts:34) | `mergeCoincidentVertices` возвращает `number[]` вместо `Float32Array` — двойное выделение памяти. |
 | | **MED-18-42** | [`stl-import.ts:75-93`](web-app/src/io/stl-import.ts:75) | `detectStlFormat` может ошибочно детектить ASCII STL при совпадении "solid" в бинарном файле. |
-| | **MED-18-43** | [`stl-export.ts:120-140`](web-app/src/io/stl-export.ts:120) | Нормали не трансформируются при повороте — неверные нормали для повёрнутых CSG-объектов. |
+| | ~~**MED-18-43**~~ | [`stl-export.ts:120-140`](web-app/src/io/stl-export.ts:120) | ✅ Исправлено — applyTransformToNormals() добавлена, normals трансформируются через rotation matrix
 | | **MED-18-44** | [`stl-export.test.ts`](web-app/src/io/stl-export.test.ts) | Нет тестов для `applyTransformToVertices` с поворотом. |
 | | ~~**MED-18-45**~~ | [`doodle-io.ts:23-37`](web-app/src/io/doodle-io.ts:23) | ✅ Исправлено — sanitizeObjectKeys() добавлена, удаляет unsafe keys, parseDoodle использует sanitized объект
 | | ~~**MED-18-46**~~ | [`doodle-io.ts:157-167`](web-app/src/io/doodle-io.ts:157) | ✅ Исправлено — setTimeout 2s для revokeObjectURL, асинхронный cleanup

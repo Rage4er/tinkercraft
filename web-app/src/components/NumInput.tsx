@@ -7,6 +7,7 @@ export default function NumInput({
   disabled,
   unit = "мм",
   min,
+  max,
   step,
   onChange,
 }: {
@@ -15,6 +16,7 @@ export default function NumInput({
   disabled?: boolean;
   unit?: string;
   min?: number;
+  max?: number;
   step?: number;
   onChange: (v: number) => void;
 }) {
@@ -42,6 +44,8 @@ export default function NumInput({
               return;
             }
             if (min !== undefined) v = Math.max(min, v);
+            // FIX (MED-18-36): Validate max value — user can enter arbitrarily large numbers
+            if (max !== undefined) v = Math.min(max, v);
             onChange(v);
           }}
           onKeyDown={(e) => {

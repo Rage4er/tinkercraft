@@ -3,7 +3,8 @@
 // Compatible with TinkerCraft Java ExportManager.java
 // ============================================================
 
-import type { SceneObject } from '../csg/types'
+import * as THREE from 'three'
+import type { SceneObject, TransformNR } from '../csg/types'
 
 /**
  * Применить трансформацию (position, rotation, scale) к вершинам.
@@ -75,6 +76,49 @@ function applyTransformToVertices(
 }
 
 /**
+ * Transform normals by rotation+scale (NO translation — normals are direction vectors).
+ * FIX (MED-18-43): Enables correct normals for rotated objects in STL export.
+ */
+function applyTransformToNormals(
+  normals: Float32Array,
+  transform: TransformNR,
+): Float32Array {
+  // If no rotation — return as-is (optimization)
+  if (transform.rotX === 0 && transform.rotY === 0 && transform.rotZ === 0) {
+    return normals
+  }
+
+  const rx = THREE.MathUtils.degToRad(transform.rotX)
+  const ry = THREE.MathUtils.degToRad(transform.rotY)
+  const rz = THREE.MathUtils.degToRad(transform.rotZ)
+
+  const cx = Math.cos(rx), sx = Math.sin(rx)
+  const cy = Math.cos(ry), sy = Math.sin(ry)
+  const cz = Math.cos(rz), sz = Math.sin(rz)
+
+  // Rotation matrix (same order as applyTransformToVertices: Rz × Ry × Rx)
+  const r00 = cz * cy, r01 = cz * sy * sx - sz * cx, r02 = cz * sy * cx + sz * sx
+  const r10 = sz * cy, r11 = sz * sy * sx + cz * cx, r12 = sz * sy * cx - cz * sx
+  const r20 = -sy, r21 = cy * sx, r22 = cy * cx
+
+  const Sx = transform.scaleX, Sy = transform.scaleY, Sz = transform.scaleZ
+  const count = normals.length / 3
+  const transformed = new Float32Array(count * 3)
+
+  for (let i = 0; i < count; i++) {
+    const nx = normals[i * 3]
+    const ny = normals[i * 3 + 1]
+    const nz = normals[i * 3 + 2]
+
+    transformed[i * 3] = (r00 * nx + r01 * ny + r02 * nz) * Sx
+    transformed[i * 3 + 1] = (r10 * nx + r11 * ny + r12 * nz) * Sy
+    transformed[i * 3 + 2] = (r20 * nx + r21 * ny + r22 * nz) * Sz
+  }
+
+  return transformed
+}
+
+/**
  * Объединить несколько mesh-объектов и записать в binary STL.
  */
 export function exportToStl(objects: SceneObject[]): Blob {
@@ -113,6 +157,12 @@ export function exportToStl(objects: SceneObject[]): Blob {
     // FIX (WARN-R3-8): Apply transform to vertices before exporting
     const transformedVerts = applyTransformToVertices(vertices, obj.transform)
 
+    // FIX (MED-18-43): Transform normals when object has rotation — unrotated objects pass through
+    const hasRotation = obj.transform.rotX !== 0 || obj.transform.rotY !== 0 || obj.transform.rotZ !== 0
+    const transformedNormals = hasRotation && normals && normals.length === vertices.length
+      ? applyTransformToNormals(normals, obj.transform)
+      : null
+
     for (let t = 0; t < indices.length / 3; t++) {
       const i0 = indices[t * 3]
       const i1 = indices[t * 3 + 1]
@@ -124,15 +174,20 @@ export function exportToStl(objects: SceneObject[]): Blob {
 
       // Use per-vertex normals from manifold-3d when available (CSG results),
       // otherwise compute face normal via cross product.
-      // NOTE: normals are from original geometry (pre-transform). For rotated meshes
-      // this is approximate — ideally normals should also be transformed, but for
-      // STL export this is acceptable since most viewers recalculate normals.
+      // FIX (MED-18-43): For rotated objects, use transformed normals instead of original.
       let nx: number, ny: number, nz: number
-      if (normals && normals.length === vertices.length) {
+      if (transformedNormals && transformedNormals.length === vertices.length) {
+        // Average the three transformed vertex normals for a smoother face normal
+        nx = (transformedNormals[i0 * 3] + transformedNormals[i1 * 3] + transformedNormals[i2 * 3]) / 3
+        ny = (transformedNormals[i0 * 3 + 1] + transformedNormals[i1 * 3 + 1] + transformedNormals[i2 * 3 + 1]) / 3
+        nz = (transformedNormals[i0 * 3 + 2] + transformedNormals[i1 * 3 + 2] + transformedNormals[i2 * 3 + 2]) / 3
+        const len = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1
+        nx /= len; ny /= len; nz /= len
+      } else if (normals && normals.length === vertices.length) {
         // Average the three vertex normals for a smoother face normal
         nx = (normals[i0 * 3] + normals[i1 * 3] + normals[i2 * 3]) / 3
         ny = (normals[i0 * 3 + 1] + normals[i1 * 3 + 1] + normals[i2 * 3 + 1]) / 3
-        nz = (normals[i0 * 3 + 2] + normals[i1 * 3 + 2] + normals[i2 * 3 + 2]) / 3
+        nz = (normals[i0 * 3 + 2] + normals[i2 * 3 + 2] + normals[i2 * 3 + 2]) / 3
         const len = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1
         nx /= len; ny /= len; nz /= len
       } else {
