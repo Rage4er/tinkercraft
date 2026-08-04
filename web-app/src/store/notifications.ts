@@ -15,22 +15,62 @@ export interface Notification {
 
 interface NotificationStore {
   notifications: Notification[]
+  timeouts: Map<string, number>
   show: (message: string, type?: NotificationType) => void
   dismiss: (id: string) => void
 }
 
-export const useNotifications = create<NotificationStore>((set) => ({
+const MAX_NOTIFICATIONS = 5
+
+export const useNotifications = create<NotificationStore>((set, get) => ({
   notifications: [],
+  timeouts: new Map(),
   show: (message, type = 'info') => {
+    // FIX (MED-18-12): Limit max notifications to prevent UI clutter
+    const state = get()
+    if (state.notifications.length >= MAX_NOTIFICATIONS) {
+      const oldest = state.notifications[0]
+      if (oldest) {
+        const timeout = state.timeouts.get(oldest.id)
+        if (timeout) clearTimeout(timeout)
+        state.timeouts.delete(oldest.id)
+        set((s) => ({ notifications: s.notifications.slice(1) }))
+      }
+    }
+
     const id = crypto.randomUUID()
     set((s) => ({ notifications: [...s.notifications, { id, message, type }] }))
-    // Auto-dismiss after 5 seconds
-    setTimeout(() => {
-      set((s) => ({ notifications: s.notifications.filter((n) => n.id !== id) }))
+
+    const timeout = window.setTimeout(() => {
+      set((s) => {
+        const newTimeouts = new Map(s.timeouts)
+        newTimeouts.delete(id)
+        return {
+          notifications: s.notifications.filter((n) => n.id !== id),
+          timeouts: newTimeouts,
+        }
+      })
     }, 5000)
+
+    // FIX (MED-18-10): Store timeout id for cleanup on dismiss
+    set((s) => ({ timeouts: new Map(s.timeouts).set(id, timeout) }))
   },
-  dismiss: (id) =>
-    set((s) => ({ notifications: s.notifications.filter((n) => n.id !== id) })),
+  dismiss: (id) => {
+    // FIX (MED-18-10): Clear pending timeout when manually dismissed
+    const state = get()
+    const timeout = state.timeouts.get(id)
+    if (timeout) {
+      window.clearTimeout(timeout)
+      const newTimeouts = new Map(state.timeouts)
+      newTimeouts.delete(id)
+      set((s) => ({
+        notifications: s.notifications.filter((n) => n.id !== id),
+        timeouts: newTimeouts,
+      }))
+    } else {
+      set((s) => ({ notifications: s.notifications.filter((n) => n.id !== id) }))
+    }
+  },
 }))
 
 /**

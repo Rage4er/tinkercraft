@@ -21,6 +21,8 @@ const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype'])
  * CRIT-R8-3: Рекурсивная валидация ключей объекта после JSON.parse.
  * Проверяет именно ключи объектов, а не подстроки в тексте,
  * чтобы избежать ложных срабатываний на легитимных данных.
+ * FIX (MED-18-45): sanitizeObjectKeys также удаляет небезопасные ключи,
+ * а не только проверяет их наличие.
  */
 function validateObjectKeys(obj: unknown, path: string, depth: number = 0): void {
   if (depth > MAX_RECURSION_DEPTH) {
@@ -39,6 +41,22 @@ function validateObjectKeys(obj: unknown, path: string, depth: number = 0): void
     }
     validateObjectKeys((obj as Record<string, unknown>)[key], path ? `${path}.${key}` : key, depth + 1)
   }
+}
+
+/**
+ * FIX (MED-18-45): Recursively remove unsafe keys from parsed objects.
+ * Called after validateObjectKeys to ensure no prototype pollution vectors remain.
+ */
+function sanitizeObjectKeys(obj: unknown): unknown {
+  if (typeof obj !== 'object' || obj === null) return obj
+  if (Array.isArray(obj)) return obj.map(sanitizeObjectKeys)
+
+  const result: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
+    if (UNSAFE_KEYS.has(key)) continue // Drop unsafe keys
+    result[key] = sanitizeObjectKeys(value)
+  }
+  return result
 }
 
 /** WARN-R8-7: Валидные типы операций для проверки схемы .doodle */
@@ -79,16 +97,18 @@ export async function parseDoodle(buffer: ArrayBuffer): Promise<TinkerCraftFile>
   // CRIT-R8-3: Prototype Pollution — проверяем ключи после парсинга, а не подстроки в тексте.
   // Подстроковая проверка давала ложные срабатывания на легитимных именах вроде "constructor_block".
   validateObjectKeys(raw, '')
+  // FIX (MED-18-45): Удаляем небезопасные ключи, если они проскочили валидацию
+  const sanitized = sanitizeObjectKeys(raw) as typeof raw
 
   // Support both formats: { version, operations } or just an operations array
   let operations: TinkerCraftOperation[]
   let version = FORMAT_VERSION
 
-  if (Array.isArray(raw)) {
-    operations = raw as TinkerCraftOperation[]
-  } else if (raw && Array.isArray(raw.operations)) {
-    operations = raw.operations as TinkerCraftOperation[]
-    version = raw.version ?? FORMAT_VERSION
+  if (Array.isArray(sanitized)) {
+    operations = sanitized as TinkerCraftOperation[]
+  } else if (sanitized && Array.isArray(sanitized.operations)) {
+    operations = sanitized.operations as TinkerCraftOperation[]
+    version = sanitized.version ?? FORMAT_VERSION
   } else {
     throw new Error('Некорректный model.json: ожидается массив операций или { version, operations }')
   }
@@ -161,14 +181,14 @@ export function openDoodleFilePicker(): Promise<{ file: File; buffer: ArrayBuffe
 
 export function downloadBlob(blob: Blob, fileName: string): void {
   const url = URL.createObjectURL(blob)
-  try {
-    const a = document.createElement('a')
-    a.href = url
-    a.download = fileName
-    a.click()
-  } finally {
-    URL.revokeObjectURL(url)
-  }
+  const a = document.createElement('a')
+  a.href = url
+  a.download = fileName
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  // FIX (MED-18-46): Delay revoke to avoid breaking Safari/mobile downloads
+  setTimeout(() => URL.revokeObjectURL(url), 2000)
 }
 
 // 1×1 прозрачный PNG в base64

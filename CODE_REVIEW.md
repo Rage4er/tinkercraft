@@ -116,7 +116,7 @@
 
 | # | Проблема | Файл | Описание |
 |---|----------|------|----------|
-| | **MED-18-1** | [`document-store.ts:891-953`](web-app/src/store/document-store.ts:891) | Дублирование паттерна undo/redo/jumpToHistory (~90 строк, повторённых трижды). |
+| | ~~**MED-18-1**~~ | [`document-store.ts:891-953`](web-app/src/store/document-store.ts:891) | ✅ Исправлено — jumpToHistoryInner() extracted, undo/redo/jumpToHistory теперь 3 строки каждый
 | | **MED-18-2** | [`document-store.ts:834`](web-app/src/store/document-store.ts:834) | Избыточная синхронизация с воркером в `alignSelected` — выравнивание меняет только позицию. |
 | | **MED-18-3** | [`document-store.ts:66`](web-app/src/store/document-store.ts:66) | Non-null assertion для опциональных полей baked-нод в `restoreTreeFromSnapshot`. |
 | | **MED-18-4** | [`document-store.ts:468`](web-app/src/store/document-store.ts:468) | `rebuildNode` после `set()` без rollback при ошибке. |
@@ -125,13 +125,13 @@
 | | **MED-18-7** | [`types.ts:11`](web-app/src/store/types.ts:11) | Отсутствие `isCsgResult` в `SceneObject` — вынуждает эвристику. |
 | | **MED-18-8** | [`rebuild.ts:313`](web-app/src/store/rebuild.ts:313) | `try/catch` без уведомления пользователя при ошибке создания boolean-ноды. |
 | | **MED-18-9** | [`snapshots.ts:74-76`](web-app/src/store/snapshots.ts:74) | Копирование TypedArray → Array при сериализации дерева (дорого для больших мешей). |
-| | **MED-18-10** | [`notifications.ts:28`](web-app/src/store/notifications.ts:28) | `setTimeout` не очищается при `dismiss()` — лишняя операция при быстром закрытии. |
+| | ~~**MED-18-10**~~ | [`notifications.ts:28`](web-app/src/store/notifications.ts:28) | ✅ Исправлено — timeouts Map хранит ID таймаутов, dismiss() очищает таймаут + clearTimeout
 
 #### CSG Worker (17)
 
 | # | Проблема | Файл | Описание |
 |---|----------|------|----------|
-| | **MED-18-11** | [`worker.ts:70`](web-app/src/csg/worker.ts:70) | Нет валидации `ids` в `deleteObjects` — `for (const id of msg.ids)` упадёт с TypeError. |
+| | ~~**MED-18-11**~~ | [`worker.ts:70`](web-app/src/csg/worker.ts:70) | ✅ Исправлено — `const ids = (msg as { ids?: string[] }).ids ?? []`, защита от null/undefined
 | | **MED-18-12** | [`worker-client.ts:118`](web-app/src/csg/worker-client.ts:118) | Таймаут 30s по умолчанию — для sync-операций слишком много. |
 | | **MED-18-13** | [`worker-client.ts:143`](web-app/src/csg/worker-client.ts:143) | Нет Transferable объектов при отправке — лишнее копирование для больших массивов. |
 | | **MED-18-14** | [`worker-client.ts:76-80`](web-app/src/csg/worker-client.ts:76) | При ошибке воркера reject всех pending — может скрыть реальную проблему. |
@@ -175,10 +175,10 @@
 | | **MED-18-42** | [`stl-import.ts:75-93`](web-app/src/io/stl-import.ts:75) | `detectStlFormat` может ошибочно детектить ASCII STL при совпадении "solid" в бинарном файле. |
 | | **MED-18-43** | [`stl-export.ts:120-140`](web-app/src/io/stl-export.ts:120) | Нормали не трансформируются при повороте — неверные нормали для повёрнутых CSG-объектов. |
 | | **MED-18-44** | [`stl-export.test.ts`](web-app/src/io/stl-export.test.ts) | Нет тестов для `applyTransformToVertices` с поворотом. |
-| | **MED-18-45** | [`doodle-io.ts:23-37`](web-app/src/io/doodle-io.ts:23) | `validateObjectKeys` не удаляет небезопасные ключи (`__proto__`), только проверяет. |
-| | **MED-18-46** | [`doodle-io.ts:157-167`](web-app/src/io/doodle-io.ts:157) | `revokeObjectURL` без задержки — может прервать скачивание в Safari/мобильных браузерах. |
-| | **MED-18-47** | [`autosave.ts:52-54`](web-app/src/io/autosave.ts:52) | Нет обработки `QuotaExceededError` — пользователь не получит уведомления. |
-| | **MED-18-48** | [`autosave.ts:46-51`](web-app/src/io/autosave.ts:46) | Нет обработки `tx.onabort` — Promise может зависнуть навсегда. |
+| | ~~**MED-18-45**~~ | [`doodle-io.ts:23-37`](web-app/src/io/doodle-io.ts:23) | ✅ Исправлено — sanitizeObjectKeys() добавлена, удаляет unsafe keys, parseDoodle использует sanitized объект
+| | ~~**MED-18-46**~~ | [`doodle-io.ts:157-167`](web-app/src/io/doodle-io.ts:157) | ✅ Исправлено — setTimeout 2s для revokeObjectURL, асинхронный cleanup
+| | ~~**MED-18-47**~~ | [`autosave.ts:52-54`](web-app/src/io/autosave.ts:52) | ✅ Исправлено — QuotaExceededError обрабатывается с console.error, tx.onabort добавлен
+| | ~~**MED-18-48**~~ | [`autosave.ts:46-51`](web-app/src/io/autosave.ts:46) | ✅ Исправлено — tx.onabort → reject с понятной ошибкой
 | | **MED-18-49** | [`project-manager.ts:24-36`](web-app/src/io/project-manager.ts:24) | Избыточное открытие соединений с IndexedDB — каждая операция открывает новое соединение. |
 | | **MED-18-50** | [`project-manager.ts:65-72`](web-app/src/io/project-manager.ts:65) | `getAll()` загружает полные данные проектов для списка метаданных. |
 | | **MED-18-51** | [`project-manager.ts:105-119`](web-app/src/io/project-manager.ts:105) | `updateProject` создаёт новый проект при несуществующем `id` (IndexedDB `put`). |

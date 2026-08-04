@@ -55,6 +55,26 @@ import {
 import { getAllNodes } from '../csg/history-tree'
 import { previewMirror as mirrorPreviewFn, mirrorSelected as mirrorConfirmFn } from './mirror-store'
 
+// ── Shared undo/redo/jumpToHistory helper — FIX (MED-18-1): eliminates ~90 lines of duplication ──
+
+/** Internal helper: rebuilds scene from history up to the given index. */
+async function jumpToHistoryInner(newIdx: number, actionName: string): Promise<void> {
+  const getState = useDocumentStore.getState
+  const setState = useDocumentStore.setState
+  setState({ busy: true })
+  try {
+    const t0 = performance.now()
+    const cached = getCachedSnapshot(newIdx)
+    const newObjects = cached ?? await rebuildFromHistory(getState().operations.slice(0, newIdx))
+    if (!cached) {
+      cacheSnapshotWithTree(newIdx, newObjects)
+      rebuildBuildTree(getState().operations.slice(0, newIdx), newObjects)
+    }
+    restoreTreeFromSnapshot(newIdx)
+    setState({ historyIndex: newIdx, objects: newObjects, selectedIds: [], busy: false, lastCsgMs: performance.now() - t0 })
+  } catch (e) { setState({ busy: false }); console.error(actionName + ':', e); notify(`Ошибка ${actionName.toLowerCase()}`, 'error') }
+}
+
 // ── Type guard ──
 
 function isShapeType(v: string): v is ShapeType {
@@ -702,24 +722,9 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   // ── Undo ──
   undo: async () => {
     if (get().busy) return
-    const { historyIndex, operations } = get()
+    const { historyIndex } = get()
     if (historyIndex === 0) return
-    const newIdx = historyIndex - 1
-    set({ busy: true })
-    try {
-      const t0 = performance.now()
-      const cached = getCachedSnapshot(newIdx)
-      const newObjects = cached ?? await rebuildFromHistory(operations.slice(0, newIdx))
-      if (!cached) {
-        cacheSnapshotWithTree(newIdx, newObjects)
-        // FIX (R17-7): Rebuild build tree when snapshot cache misses
-        // to ensure CSG/mirror/align operations have the correct tree structure.
-        rebuildBuildTree(operations.slice(0, newIdx), newObjects)
-      }
-      // Restore build tree from snapshot
-      restoreTreeFromSnapshot(newIdx)
-      set({ historyIndex: newIdx, objects: newObjects, selectedIds: [], busy: false, lastCsgMs: performance.now() - t0 })
-    } catch (e) { set({ busy: false }); console.error('undo:', e); notify('Ошибка отмены действия', 'error') }
+    await jumpToHistoryInner(historyIndex - 1, 'Отмена')
   },
 
   // ── Redo ──
@@ -727,20 +732,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     if (get().busy) return
     const { historyIndex, operations } = get()
     if (historyIndex >= operations.length) return
-    const newIdx = historyIndex + 1
-    set({ busy: true })
-    try {
-      const t0 = performance.now()
-      const cached = getCachedSnapshot(newIdx)
-      const newObjects = cached ?? await rebuildFromHistory(operations.slice(0, newIdx))
-      if (!cached) {
-        cacheSnapshotWithTree(newIdx, newObjects)
-        rebuildBuildTree(operations.slice(0, newIdx), newObjects)
-      }
-      // Restore build tree from snapshot
-      restoreTreeFromSnapshot(newIdx)
-      set({ historyIndex: newIdx, objects: newObjects, selectedIds: [], busy: false, lastCsgMs: performance.now() - t0 })
-    } catch (e) { set({ busy: false }); console.error('redo:', e); notify('Ошибка повтора действия', 'error') }
+    await jumpToHistoryInner(historyIndex + 1, 'Повтор')
   },
 
   // ── Jump to history ──
@@ -749,19 +741,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const { historyIndex, operations } = get()
     const newIdx = Math.max(0, Math.min(index, operations.length))
     if (newIdx === historyIndex) return
-    set({ busy: true })
-    try {
-      const t0 = performance.now()
-      const cached = getCachedSnapshot(newIdx)
-      const newObjects = cached ?? await rebuildFromHistory(operations.slice(0, newIdx))
-      if (!cached) {
-        cacheSnapshotWithTree(newIdx, newObjects)
-        rebuildBuildTree(operations.slice(0, newIdx), newObjects)
-      }
-      // Restore build tree from snapshot
-      restoreTreeFromSnapshot(newIdx)
-      set({ historyIndex: newIdx, objects: newObjects, selectedIds: [], busy: false, lastCsgMs: performance.now() - t0 })
-    } catch (e) { set({ busy: false }); console.error('jumpToHistory:', e); notify('Ошибка перехода в истории', 'error') }
+    await jumpToHistoryInner(newIdx, 'Переход в истории')
   },
 
   // ── Clear ──

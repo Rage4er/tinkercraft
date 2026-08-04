@@ -42,16 +42,22 @@ export async function autosaveSession(
 ): Promise<void> {
   try {
     const db = await openDB()
-    const entry: AutosaveEntry = { operations, historyIndex, fileName, savedAt: Date.now() }
     await new Promise<void>((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, 'readwrite')
-      const req = tx.objectStore(STORE_NAME).put(entry, KEY)
+      const req = tx.objectStore(STORE_NAME).put({ operations, historyIndex, fileName, savedAt: Date.now() }, KEY)
       req.onsuccess = () => resolve()
       req.onerror = () => reject(req.error)
+      // FIX (MED-18-48): Handle transaction abort — Promise would hang forever without this
+      tx.onabort = () => reject(new Error('[AutoSave] Transaction aborted'))
       tx.oncomplete = () => db.close()
     })
   } catch (e) {
-    console.warn('[AutoSave] write error:', e)
+    // FIX (MED-18-47): Handle QuotaExceededError with clear user-facing message
+    if (e instanceof DOMException && e.name === 'QuotaExceededError') {
+      console.error('[AutoSave] IndexedDB quota exceeded — auto-save disabled until cleared')
+    } else {
+      console.warn('[AutoSave] write error:', e)
+    }
   }
 }
 

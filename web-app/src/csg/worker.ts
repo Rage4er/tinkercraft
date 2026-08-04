@@ -67,7 +67,9 @@ self.addEventListener('message', async (e: MessageEvent) => {
       case 'syncMesh': await handleSyncMesh(msg as unknown as import('./worker-handlers').SyncMeshMessage); break
       case 'rebuildTreeNode': await handleRebuildTreeNode(msg as unknown as import('./worker-handlers').RebuildTreeNodeMessage); break
       case 'deleteObjects':
-        for (const id of (msg.ids as string[])) disposeCached(id)
+        // FIX (MED-18-11): Validate ids before iterating — prevent TypeError on null/undefined
+        const ids = (msg as { ids?: string[] }).ids ?? []
+        for (const id of ids) disposeCached(id)
         safePostMessage({ reqId: msg.reqId, type: 'ok' })
         break
       case 'clearAll':
