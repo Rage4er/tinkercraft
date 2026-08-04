@@ -28,9 +28,10 @@ describe('worker-sync types', () => {
 
   it('workerSyncObjects can be called with multiple objects', () => {
     const entries = [
-      { objId: 'obj_1', shapeType: 'cube' as const, params: { width: 10, height: 10, depth: 10 }, transform: { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 } as const },
-      { objId: 'obj_2', shapeType: 'sphere' as const, params: { radius: 5 }, transform: { x: 100, y: 0, z: 0, rotX: 45, rotY: 0, rotZ: 0, scaleX: 2, scaleY: 2, scaleZ: 2 } as const },
+      { objId: 'obj_1', shapeType: 'cube' as const, params: { width: 10, height: 10, depth: 10 }, transform: { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 } },
+      { objId: 'obj_2', shapeType: 'sphere' as const, params: { radius: 5 }, transform: { x: 100, y: 0, z: 0, rotX: 45, rotY: 0, rotZ: 0, scaleX: 2, scaleY: 2, scaleZ: 2 } },
     ]
+    // FIX (LOW-18-22): Removed unnecessary `as const` on transform — not needed for plain objects
     expect(entries.length).toBe(2)
     expect(entries[0].objId).toBe('obj_1')
     expect(entries[1].objId).toBe('obj_2')

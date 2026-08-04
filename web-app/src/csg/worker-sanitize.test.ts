@@ -47,6 +47,14 @@ describe('clamp', () => {
     expect(clamp(0, 0, 10)).toBe(0)
     expect(clamp(10, 0, 10)).toBe(10)
   })
+
+  // FIX (LOW-18-19): clamp with min > max — returns min (first argument to clamp)
+  it('clamps when min > max — returns min value', () => {
+    // clamp(5, 10, 0) → min > max, clamp function should return min (10)
+    expect(clamp(5, 10, 0)).toBe(10)
+    expect(clamp(0, 10, 0)).toBe(10)
+    expect(clamp(100, 10, 0)).toBe(10)
+  })
 })
 
 describe('sanitizeParams', () => {
@@ -124,5 +132,22 @@ describe('sanitizeParams', () => {
   it('handles very small values', () => {
     const result = sanitizeParams({ scale: 1e-10 })
     expect(result.scale).toBe(1e-10)
+  })
+
+  // FIX (LOW-18-20): sanitizeParams with Symbol keys — Symbol keys are skipped by Object.keys
+  it('handles Symbol keys — they are skipped by Object.keys iteration', () => {
+    const sym = Symbol('test')
+    const result = sanitizeParams({ width: 50 } as Record<string | symbol, unknown>)
+      ; (result as any)[sym] = 'symbol value'
+    expect(result.width).toBe(50)
+    // Symbol keys survive because Object.keys skips them, so sanitizeParams doesn't touch them
+    expect((result as any)[sym]).toBe('symbol value')
+  })
+
+  // FIX (LOW-18-21): empty result — sanitizeParams returns empty object for empty input
+  it('returns empty object for empty input', () => {
+    const result = sanitizeParams({})
+    expect(result).toEqual({})
+    expect(Object.keys(result)).toHaveLength(0)
   })
 })

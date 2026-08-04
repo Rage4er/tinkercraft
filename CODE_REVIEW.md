@@ -204,14 +204,14 @@
 | | **LOW-18-2** | [`document-store.ts:1100`](web-app/src/store/document-store.ts:1100) | Потеря `lastCsgMs` в CSG-ветке `resizeObject`. |
 | | **LOW-18-3** | [`document-store.ts:285-286`](web-app/src/store/document-store.ts:285) | Потенциальная утечка TypedArray в clipboard при копировании больших мешей. |
 | | **LOW-18-4** | [`ui-store.ts:76-131`](web-app/src/store/ui-store.ts:76) | Избыточность индивидуальных сеттеров (16 сеттеров для 16 полей). |
-| | **LOW-18-5** | [`ui-store.ts:84`](web-app/src/store/ui-store.ts:84) | Отсутствие рантайм-валидации в `setGizmoMode`. |
+| | ~~**LOW-18-5**~~ | [`ui-store.ts:84`](web-app/src/store/ui-store.ts:84) | ✅ Исправлено — runtime validation: validModes check, console.warn on invalid
 | | **LOW-18-6** | [`helpers.ts:86`](web-app/src/store/helpers.ts:86) | Избыточный `computeAABB` в `makeObject` при известном AABB. |
 | | **LOW-18-7** | [`helpers.ts:91`](web-app/src/store/helpers.ts:91) | `nextId` не потокобезопасен (проблема только при Web Workers). |
 | | **LOW-18-8** | [`types.ts:20`](web-app/src/store/types.ts:20) | `lastCsgMs` в document-store вместо ui-store. |
 | | **LOW-18-9** | [`rebuild.ts:167,215`](web-app/src/store/rebuild.ts:167) | Двойной проход с мутацией `result.results` — неочевидно. |
 | | **LOW-18-10** | [`snapshots.ts:123-129`](web-app/src/store/snapshots.ts:123) | Touch-on-access с удалением/вставкой в Map. |
 | | **LOW-18-11** | [`snapshots.ts:52`](web-app/src/store/snapshots.ts:52) | `enforceCacheLimit` удаляет по 1 элементу за вызов. |
-| | **LOW-18-12** | [`notifications.ts:22`](web-app/src/store/notifications.ts:22) | Отсутствие лимита на количество уведомлений. |
+| | ~~**LOW-18-12**~~ | [`notifications.ts:22`](web-app/src/store/notifications.ts:22) | ✅ Исправлено — MAX_NOTIFICATIONS=5, oldest auto-dismissed (part of MED-18-10 fix)
 
 #### CSG Worker (10)
 
@@ -223,10 +223,10 @@
 | | **LOW-18-16** | [`types.ts:89-101`](web-app/src/csg/types.ts:89) | `GroupOperation` — много опциональных полей для разных сценариев. |
 | | **LOW-18-17** | [`history-tree.ts:24`](web-app/src/csg/history-tree.ts:24) | Импорт `ManifoldObject` без `type`. |
 | | **LOW-18-18** | [`worker-matrix.ts:56-57`](web-app/src/csg/worker-matrix.ts:56) | Двойной вызов `computeRSMatrix` при mirror. |
-| | **LOW-18-19** | [`worker-sanitize.test.ts:10-49`](web-app/src/csg/worker-sanitize.test.ts:10) | Нет теста `clamp` с `min > max`. |
-| | **LOW-18-20** | [`worker-sanitize.test.ts:52-128`](web-app/src/csg/worker-sanitize.test.ts:52) | Нет теста с Symbol ключами. |
-| | **LOW-18-21** | [`worker-sanitize.test.ts:52-128`](web-app/src/csg/worker-sanitize.test.ts:52) | Нет теста для пустого результата `sanitizeParams`. |
-| | **LOW-18-22** | [`worker-sync.test.ts:29-37`](web-app/src/csg/worker-sync.test.ts:29) | `as const` на transform не нужен. |
+| | ~~**LOW-18-19**~~ | [`worker-sanitize.test.ts:10-49`](web-app/src/csg/worker-sanitize.test.ts:10) | ✅ Исправлено — тест clamp(min > max) добавлен
+| | ~~**LOW-18-20**~~ | [`worker-sanitize.test.ts:52-128`](web-app/src/csg/worker-sanitize.test.ts:52) | ✅ Исправлено — тест Symbol ключей добавлен
+| | ~~**LOW-18-21**~~ | [`worker-sanitize.test.ts:52-128`](web-app/src/csg/worker-sanitize.test.ts:52) | ✅ Исправлено — тест empty result добавлен
+| | ~~**LOW-18-22**~~ | [`worker-sync.test.ts:29-37`](web-app/src/csg/worker-sync.test.ts:29) | ✅ Исправлено — `as const` на transform убран
 
 #### UI Components (20)
 

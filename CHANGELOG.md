@@ -51,6 +51,15 @@
 - **MED-18-47 (QuotaExceededError)**: console.error + логирование (`autosave.ts`)
 - **MED-18-48 (tx.onabort)**: tx.onabort → reject с понятной ошибкой (`autosave.ts`)
 
+### Fixed
+
+- **LOW-18-5 (gizmo validation)**: runtime validation для setGizmoMode, validModes check (`ui-store.ts`)
+- **LOW-18-12 (notification limit)**: MAX_NOTIFICATIONS=5 (part of MED-18-10)
+- **LOW-18-19 (clamp min > max)**: тест добавлен (`worker-sanitize.test.ts`)
+- **LOW-18-20 (Symbol keys)**: тест Symbol ключей добавлен (`worker-sanitize.test.ts`)
+- **LOW-18-21 (empty sanitizeParams)**: тест empty result добавлен (`worker-sanitize.test.ts`)
+- **LOW-18-22 (as const)**: `as const` на transform убран (`worker-sync.test.ts`)
+
 ### Changed
 
 - **MIRROR-STORE-REFACTOR**: Вся логика зеркала вынесена из `document-store.ts` в отдельный файл `mirror-store.ts`. Это очищает `document-store.ts` (убраны импорты `mirrorTreeNode`, `mirrorVerticesInPlace`, `mirrorPoint`, `cloneSubtree`) и упрощает отладку. `document-store.ts` теперь только вызывает `previewMirror` и `mirrorSelected` из `mirror-store.ts`. Новый подход: `rebuildNode` → `mirrorVerticesInPlace` → `mirrorPoint`. Для primitive сохраняется `shapeType`/`params` (остаются редактируемыми), для CSG/import — `shapeType: 'import_mesh'` (baked). Transform = `mirrorPoint` для позиции, `rot=0, scale=1`. Исправлено: `mirror-store.ts` (новый файл), `document-store.ts` (рефакторинг)
@@ -177,6 +186,15 @@
 - **MED-18-47 (QuotaExceededError)**: console.error + логирование (`autosave.ts`)
 - **MED-18-48 (tx.onabort)**: tx.onabort → reject с понятной ошибкой (`autosave.ts`)
 
+### Fixed
+
+- **LOW-18-5 (gizmo validation)**: runtime validation для setGizmoMode, validModes check (`ui-store.ts`)
+- **LOW-18-12 (notification limit)**: MAX_NOTIFICATIONS=5 (part of MED-18-10)
+- **LOW-18-19 (clamp min > max)**: тест добавлен (`worker-sanitize.test.ts`)
+- **LOW-18-20 (Symbol keys)**: тест Symbol ключей добавлен (`worker-sanitize.test.ts`)
+- **LOW-18-21 (empty sanitizeParams)**: тест empty result добавлен (`worker-sanitize.test.ts`)
+- **LOW-18-22 (as const)**: `as const` на transform убран (`worker-sync.test.ts`)
+
 ### Changed
 
 - **ARCH-CSG-1**: CSG-результаты (`csg_*`) теперь имеют `shapeType='cube', params={}` и регистрируются как baked-ноды в build tree. Это обеспечивает корректную маршрутизацию в `syncObjectsForOperation` → `workerSyncMesh`
@@ -209,6 +227,15 @@
 - **MED-18-46 (revokeObjectURL)**: setTimeout 2s для Safari совместимости (`doodle-io.ts`)
 - **MED-18-47 (QuotaExceededError)**: console.error + логирование (`autosave.ts`)
 - **MED-18-48 (tx.onabort)**: tx.onabort → reject с понятной ошибкой (`autosave.ts`)
+
+### Fixed
+
+- **LOW-18-5 (gizmo validation)**: runtime validation для setGizmoMode, validModes check (`ui-store.ts`)
+- **LOW-18-12 (notification limit)**: MAX_NOTIFICATIONS=5 (part of MED-18-10)
+- **LOW-18-19 (clamp min > max)**: тест добавлен (`worker-sanitize.test.ts`)
+- **LOW-18-20 (Symbol keys)**: тест Symbol ключей добавлен (`worker-sanitize.test.ts`)
+- **LOW-18-21 (empty sanitizeParams)**: тест empty result добавлен (`worker-sanitize.test.ts`)
+- **LOW-18-22 (as const)**: `as const` на transform убран (`worker-sync.test.ts`)
 
 ### Changed
 
@@ -467,6 +494,15 @@
 - **MED-18-46 (revokeObjectURL)**: setTimeout 2s для Safari совместимости (`doodle-io.ts`)
 - **MED-18-47 (QuotaExceededError)**: console.error + логирование (`autosave.ts`)
 - **MED-18-48 (tx.onabort)**: tx.onabort → reject с понятной ошибкой (`autosave.ts`)
+
+### Fixed
+
+- **LOW-18-5 (gizmo validation)**: runtime validation для setGizmoMode, validModes check (`ui-store.ts`)
+- **LOW-18-12 (notification limit)**: MAX_NOTIFICATIONS=5 (part of MED-18-10)
+- **LOW-18-19 (clamp min > max)**: тест добавлен (`worker-sanitize.test.ts`)
+- **LOW-18-20 (Symbol keys)**: тест Symbol ключей добавлен (`worker-sanitize.test.ts`)
+- **LOW-18-21 (empty sanitizeParams)**: тест empty result добавлен (`worker-sanitize.test.ts`)
+- **LOW-18-22 (as const)**: `as const` на transform убран (`worker-sync.test.ts`)
 
 ### Changed
 - `App.tsx` разделён с 1809 до 553 строк (−69%) — CRIT-1

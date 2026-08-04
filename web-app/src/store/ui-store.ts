@@ -83,7 +83,16 @@ export const useUiStore = create<UiStore>((set) => ({
 
   gizmoMode: 'none',
   setGizmoMode: (mode) =>
-    set((s) => ({ gizmoMode: typeof mode === 'function' ? (mode as (prev: GizmoMode) => GizmoMode)(s.gizmoMode) : mode })),
+    set((s) => {
+      const next = typeof mode === 'function' ? (mode as (prev: GizmoMode) => GizmoMode)(s.gizmoMode) : mode
+      // FIX (LOW-18-5): Runtime validation — reject invalid gizmo modes
+      const validModes: GizmoMode[] = ['none', 'translate', 'rotate', 'scale']
+      if (!validModes.includes(next)) {
+        console.warn(`[ui-store] Invalid gizmoMode: "${next}", ignoring`)
+        return s
+      }
+      return { ...s, gizmoMode: next }
+    }),
 
   snapValue: 1,
   setSnapValue: (v) => set({ snapValue: v }),
