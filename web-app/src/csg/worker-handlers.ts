@@ -1094,15 +1094,20 @@ export async function handleSyncObjects(msg: SyncObjectsMessage): Promise<void> 
 
     const params = sanitizeParams(e.params)
     const m = buildPrimitive(e.shapeType, params)
-    // Apply TRS: rotation/scale around origin, then translate to position.
-    // buildTransformMatrix creates [RS, 0; pos, 1] — correct for primitives centered at origin.
-    const fullMatrix = buildTransformMatrix(
-      { x: e.transform.x, y: e.transform.y, z: e.transform.z },
-      { rotX: e.transform.rotX, rotY: e.transform.rotY, rotZ: e.transform.rotZ },
-      { scaleX: e.transform.scaleX, scaleY: e.transform.scaleY, scaleZ: e.transform.scaleZ },
-    )
-    const tm = m.transform(fullMatrix)
-    setCached(e.objId, tm)
+    let success = false
+    try {
+      const fullMatrix = buildTransformMatrix(
+        { x: e.transform.x, y: e.transform.y, z: e.transform.z },
+        { rotX: e.transform.rotX, rotY: e.transform.rotY, rotZ: e.transform.rotZ },
+        { scaleX: e.transform.scaleX, scaleY: e.transform.scaleY, scaleZ: e.transform.scaleZ },
+      )
+      const tm = m.transform(fullMatrix)
+      setCached(e.objId, tm)
+      success = true
+    } finally {
+      // FIX (LOW-18-15): Dispose on error to prevent WASM memory leak
+      if (!success) m.delete()
+    }
   }
 
   safePostMessage({ reqId: msg.reqId, type: 'ok' })

@@ -62,6 +62,8 @@ export default function ViewCube({ mainCamera, mainControls }: Props) {
   const meshesRef = useRef<THREE.Mesh[]>([])
   const rafRef = useRef<number | null>(null)
   const hoverRef = useRef<THREE.Mesh | null>(null)
+  // FIX (LOW-18-25): Cache Raycaster to avoid allocation on every mouse move
+  const raycasterRef = useRef(new THREE.Raycaster())
 
   // Drag state
   const pointerDownRef = useRef(false)
@@ -172,7 +174,8 @@ export default function ViewCube({ mainCamera, mainControls }: Props) {
       ((clientX - rect.left) / rect.width) * 2 - 1,
       -((clientY - rect.top) / rect.height) * 2 + 1,
     )
-    const ray = new THREE.Raycaster()
+    // FIX (LOW-18-25): Use cached Raycaster instead of creating new one
+    const ray = raycasterRef.current
     ray.setFromCamera(ndc, camera)
     const hits = ray.intersectObjects(meshesRef.current, false)
 
@@ -296,30 +299,18 @@ export default function ViewCube({ mainCamera, mainControls }: Props) {
   }, [])
 
   return (
-    <div style={{
-      position: 'absolute', bottom: 40, right: 8, width: 100, height: 100,
-      borderRadius: 8, overflow: 'hidden',
-      border: '1px solid rgba(58,58,92,0.6)', background: 'rgba(19,19,31,0.7)',
-      cursor: 'grab', boxShadow: '0 2px 8px rgba(0,0,0,0.4)', zIndex: 10,
-    }}>
+    <div className="viewcube-container">
       <canvas
         ref={canvasRef}
         width={100}
         height={100}
-        style={{ display: 'block' }}
+        className="viewcube-canvas"
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerLeave={handlePointerLeave}
       />
-      <div style={{
-        position: 'absolute', bottom: 0, left: 0, right: 0,
-        textAlign: 'center', fontSize: 9, color: 'rgba(137,180,250,0.8)',
-        padding: '2px 0', background: 'rgba(19,19,31,0.5)', letterSpacing: '0.05em',
-        pointerEvents: 'none',
-      }}>
-        ViewCube
-      </div>
+      <div className="viewcube-label">ViewCube</div>
     </div>
   )
 }

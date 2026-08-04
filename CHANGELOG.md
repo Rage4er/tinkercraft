@@ -60,6 +60,17 @@
 - **LOW-18-21 (empty sanitizeParams)**: тест empty result добавлен (`worker-sanitize.test.ts`)
 - **LOW-18-22 (as const)**: `as const` на transform убран (`worker-sync.test.ts`)
 
+### Fixed
+
+- **LOW-18-1 (dynamic import)**: НЕ БАГ — динамический импорт предотвращает circular dependency
+- **LOW-18-2 (lastCsgMs)**: lastCsgMs: 0 добавлен в resizeObject CSG ветку (`document-store.ts`)
+- **LOW-18-15 (dispose on error)**: try/finally с dispose в handleSyncObjects (`worker-handlers.ts`)
+- **LOW-18-25 (Raycaster)**: raycasterRef кэширует Raycaster (`ViewCube.tsx`)
+- **LOW-18-26 (inline styles)**: viewcube-container и viewcube-label CSS классы добавлены (`ViewCube.tsx`, `App.css`)
+- **LOW-18-28 (snap-utils tests)**: getSceneMeshes и getScenePivots тесты добавлены (`snap-utils.test.ts`)
+- **LOW-18-29 (rename hint)**: НЕ БАГ — title="Двойной клик — переименовать" уже есть
+- **LOW-18-30 (magic number)**: INPUT_SELECT_DELAY_MS = 30 константа (`ComponentTree.tsx`)
+
 ### Changed
 
 - **MIRROR-STORE-REFACTOR**: Вся логика зеркала вынесена из `document-store.ts` в отдельный файл `mirror-store.ts`. Это очищает `document-store.ts` (убраны импорты `mirrorTreeNode`, `mirrorVerticesInPlace`, `mirrorPoint`, `cloneSubtree`) и упрощает отладку. `document-store.ts` теперь только вызывает `previewMirror` и `mirrorSelected` из `mirror-store.ts`. Новый подход: `rebuildNode` → `mirrorVerticesInPlace` → `mirrorPoint`. Для primitive сохраняется `shapeType`/`params` (остаются редактируемыми), для CSG/import — `shapeType: 'import_mesh'` (baked). Transform = `mirrorPoint` для позиции, `rot=0, scale=1`. Исправлено: `mirror-store.ts` (новый файл), `document-store.ts` (рефакторинг)
@@ -195,6 +206,17 @@
 - **LOW-18-21 (empty sanitizeParams)**: тест empty result добавлен (`worker-sanitize.test.ts`)
 - **LOW-18-22 (as const)**: `as const` на transform убран (`worker-sync.test.ts`)
 
+### Fixed
+
+- **LOW-18-1 (dynamic import)**: НЕ БАГ — динамический импорт предотвращает circular dependency
+- **LOW-18-2 (lastCsgMs)**: lastCsgMs: 0 добавлен в resizeObject CSG ветку (`document-store.ts`)
+- **LOW-18-15 (dispose on error)**: try/finally с dispose в handleSyncObjects (`worker-handlers.ts`)
+- **LOW-18-25 (Raycaster)**: raycasterRef кэширует Raycaster (`ViewCube.tsx`)
+- **LOW-18-26 (inline styles)**: viewcube-container и viewcube-label CSS классы добавлены (`ViewCube.tsx`, `App.css`)
+- **LOW-18-28 (snap-utils tests)**: getSceneMeshes и getScenePivots тесты добавлены (`snap-utils.test.ts`)
+- **LOW-18-29 (rename hint)**: НЕ БАГ — title="Двойной клик — переименовать" уже есть
+- **LOW-18-30 (magic number)**: INPUT_SELECT_DELAY_MS = 30 константа (`ComponentTree.tsx`)
+
 ### Changed
 
 - **ARCH-CSG-1**: CSG-результаты (`csg_*`) теперь имеют `shapeType='cube', params={}` и регистрируются как baked-ноды в build tree. Это обеспечивает корректную маршрутизацию в `syncObjectsForOperation` → `workerSyncMesh`
@@ -236,6 +258,17 @@
 - **LOW-18-20 (Symbol keys)**: тест Symbol ключей добавлен (`worker-sanitize.test.ts`)
 - **LOW-18-21 (empty sanitizeParams)**: тест empty result добавлен (`worker-sanitize.test.ts`)
 - **LOW-18-22 (as const)**: `as const` на transform убран (`worker-sync.test.ts`)
+
+### Fixed
+
+- **LOW-18-1 (dynamic import)**: НЕ БАГ — динамический импорт предотвращает circular dependency
+- **LOW-18-2 (lastCsgMs)**: lastCsgMs: 0 добавлен в resizeObject CSG ветку (`document-store.ts`)
+- **LOW-18-15 (dispose on error)**: try/finally с dispose в handleSyncObjects (`worker-handlers.ts`)
+- **LOW-18-25 (Raycaster)**: raycasterRef кэширует Raycaster (`ViewCube.tsx`)
+- **LOW-18-26 (inline styles)**: viewcube-container и viewcube-label CSS классы добавлены (`ViewCube.tsx`, `App.css`)
+- **LOW-18-28 (snap-utils tests)**: getSceneMeshes и getScenePivots тесты добавлены (`snap-utils.test.ts`)
+- **LOW-18-29 (rename hint)**: НЕ БАГ — title="Двойной клик — переименовать" уже есть
+- **LOW-18-30 (magic number)**: INPUT_SELECT_DELAY_MS = 30 константа (`ComponentTree.tsx`)
 
 ### Changed
 
@@ -503,6 +536,17 @@
 - **LOW-18-20 (Symbol keys)**: тест Symbol ключей добавлен (`worker-sanitize.test.ts`)
 - **LOW-18-21 (empty sanitizeParams)**: тест empty result добавлен (`worker-sanitize.test.ts`)
 - **LOW-18-22 (as const)**: `as const` на transform убран (`worker-sync.test.ts`)
+
+### Fixed
+
+- **LOW-18-1 (dynamic import)**: НЕ БАГ — динамический импорт предотвращает circular dependency
+- **LOW-18-2 (lastCsgMs)**: lastCsgMs: 0 добавлен в resizeObject CSG ветку (`document-store.ts`)
+- **LOW-18-15 (dispose on error)**: try/finally с dispose в handleSyncObjects (`worker-handlers.ts`)
+- **LOW-18-25 (Raycaster)**: raycasterRef кэширует Raycaster (`ViewCube.tsx`)
+- **LOW-18-26 (inline styles)**: viewcube-container и viewcube-label CSS классы добавлены (`ViewCube.tsx`, `App.css`)
+- **LOW-18-28 (snap-utils tests)**: getSceneMeshes и getScenePivots тесты добавлены (`snap-utils.test.ts`)
+- **LOW-18-29 (rename hint)**: НЕ БАГ — title="Двойной клик — переименовать" уже есть
+- **LOW-18-30 (magic number)**: INPUT_SELECT_DELAY_MS = 30 константа (`ComponentTree.tsx`)
 
 ### Changed
 - `App.tsx` разделён с 1809 до 553 строк (−69%) — CRIT-1

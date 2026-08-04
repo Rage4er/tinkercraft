@@ -889,7 +889,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         const newOps = [...operations.slice(0, historyIndex), op]
         const newObjects = { ...objects, [id]: newObj }
 
-        set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true, busy: false })
+        set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true, busy: false, lastCsgMs: 0 })
         console.log(`[MIRROR:resizeObject] id=${id} newTransform={x:${newTransform.x}, y:${newTransform.y}, z:${newTransform.z}, rotX:${newTransform.rotX}, rotY:${newTransform.rotY}, rotZ:${newTransform.rotZ}, scaleX:${newTransform.scaleX}, scaleY:${newTransform.scaleY}, scaleZ:${newTransform.scaleZ}}`)
         cacheSnapshotWithTree(newOps.length, newObjects)
       } catch (e) { set({ busy: false }); console.error('resizeObject (CSG):', e); notify('Ошибка изменения размера CSG-объекта', 'error') }

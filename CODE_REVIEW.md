@@ -200,8 +200,8 @@
 
 | # | Проблема | Файл | Описание |
 |---|----------|------|----------|
-| | **LOW-18-1** | [`document-store.ts:598`](web-app/src/store/document-store.ts:598) | Динамический импорт ui-store в `previewMirror` — лишняя асинхронная задержка. |
-| | **LOW-18-2** | [`document-store.ts:1100`](web-app/src/store/document-store.ts:1100) | Потеря `lastCsgMs` в CSG-ветке `resizeObject`. |
+| | ~~**LOW-18-1**~~ | [`document-store.ts:598`](web-app/src/store/document-store.ts:598) | ✅ НЕ БАГ — динамический импорт предотвращает circular dependency, задержка неизбежна
+| | ~~**LOW-18-2**~~ | [`document-store.ts:1100`](web-app/src/store/document-store.ts:1100) | ✅ Исправлено — lastCsgMs: 0 добавлен в set() после resizeObject
 | | **LOW-18-3** | [`document-store.ts:285-286`](web-app/src/store/document-store.ts:285) | Потенциальная утечка TypedArray в clipboard при копировании больших мешей. |
 | | **LOW-18-4** | [`ui-store.ts:76-131`](web-app/src/store/ui-store.ts:76) | Избыточность индивидуальных сеттеров (16 сеттеров для 16 полей). |
 | | ~~**LOW-18-5**~~ | [`ui-store.ts:84`](web-app/src/store/ui-store.ts:84) | ✅ Исправлено — runtime validation: validModes check, console.warn on invalid
@@ -219,7 +219,7 @@
 |---|----------|------|----------|
 | | **LOW-18-13** | [`worker.ts:46`](web-app/src/csg/worker.ts:46) | `await initPromise` на каждое сообщение — микротаск даже после инициализации. |
 | | **LOW-18-14** | [`worker-handlers.ts:507-510`](web-app/src/csg/worker-handlers.ts:507) | Двойное копирование mesh в `handleBuildShape`. |
-| | **LOW-18-15** | [`worker-handlers.ts:1084-1103`](web-app/src/csg/worker-handlers.ts:1084) | Нет dispose при ошибке `buildPrimitive` в `handleSyncObjects`. |
+| | ~~**LOW-18-15**~~ | [`worker-handlers.ts:1084-1103`](web-app/src/csg/worker-handlers.ts:1084) | ✅ Исправлено — try/finally с dispose на ошибку в handleSyncObjects
 | | **LOW-18-16** | [`types.ts:89-101`](web-app/src/csg/types.ts:89) | `GroupOperation` — много опциональных полей для разных сценариев. |
 | | **LOW-18-17** | [`history-tree.ts:24`](web-app/src/csg/history-tree.ts:24) | Импорт `ManifoldObject` без `type`. |
 | | **LOW-18-18** | [`worker-matrix.ts:56-57`](web-app/src/csg/worker-matrix.ts:56) | Двойной вызов `computeRSMatrix` при mirror. |
@@ -234,12 +234,12 @@
 |---|----------|------|----------|
 | | **LOW-18-23** | [`viewport-hooks.ts:264-271`](web-app/src/components/viewport-hooks.ts:264) | ResizeObserver — штатно, но стоит проверить pixelRatio. |
 | | **LOW-18-24** | [`Viewport3D.tsx:211`](web-app/src/components/Viewport3D.tsx:211) | Избыточный `computeBoundingBox` в fitView. |
-| | **LOW-18-25** | [`ViewCube.tsx:160-162`](web-app/src/components/ViewCube.tsx:160) | Raycaster создаётся при каждом движении мыши. |
-| | **LOW-18-26** | [`ViewCube.tsx:284-309`](web-app/src/components/ViewCube.tsx:284) | Инлайн-стили вместо CSS классов. |
+| | ~~**LOW-18-25**~~ | [`ViewCube.tsx:160-162`](web-app/src/components/ViewCube.tsx:160) | ✅ Исправлено — raycasterRef кэширует Raycaster, обновляется setFromCamera
+| | ~~**LOW-18-26**~~ | [`ViewCube.tsx:284-309`](web-app/src/components/ViewCube.tsx:284) | ✅ Исправлено — viewcube-container и viewcube-label CSS классы добавлены, inline styles убраны
 | | **LOW-18-27** | [`snap-utils.ts:314-318`](web-app/src/components/snap-utils.ts:314) | Избыточный второй Raycaster в `findNearestSnap`. |
-| | **LOW-18-28** | [`snap-utils.test.ts`](web-app/src/components/snap-utils.test.ts) | Нет тестов для `getSceneMeshes`/`getScenePivots`. |
-| | **LOW-18-29** | [`ComponentTree.tsx:91`](web-app/src/components/ComponentTree.tsx:91) | Нет визуальной подсказки для переименования. |
-| | **LOW-18-30** | [`ComponentTree.tsx:48`](web-app/src/components/ComponentTree.tsx:48) | Магическое число 30ms в setTimeout. |
+| | ~~**LOW-18-28**~~ | [`snap-utils.test.ts`](web-app/src/components/snap-utils.test.ts) | ✅ Исправлено — тесты getSceneMeshes и getScenePivots добавлены (4 теста)
+| | ~~**LOW-18-29**~~ | [`ComponentTree.tsx:91`](web-app/src/components/ComponentTree.tsx:91) | ✅ НЕ БАГ — title="Двойной клик — переименовать" уже есть
+| | ~~**LOW-18-30**~~ | [`ComponentTree.tsx:48`](web-app/src/components/ComponentTree.tsx:48) | ✅ Исправлено — INPUT_SELECT_DELAY_MS = 30 константа добавлена
 | | **LOW-18-31** | [`LeftPanel.tsx:49-57`](web-app/src/components/LeftPanel.tsx:49) | Избыточный `useMemo` для 8 элементов. |
 | | **LOW-18-32** | [`NumInput.tsx:21`](web-app/src/components/NumInput.tsx:21) | Избыточное вычисление decimals. |
 | | **LOW-18-33** | [`TextModal.tsx:43-46`](web-app/src/components/TextModal.tsx:43) | Нет ограничения длины текста. |

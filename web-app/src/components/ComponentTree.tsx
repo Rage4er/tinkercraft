@@ -20,6 +20,9 @@ const SHAPE_ICON: Record<string, string> = {
   torus: '⭕', prism: '🔷', pyramid: '🔺', import_mesh: '📦',
 }
 
+// FIX (LOW-18-30): Named constant instead of magic number
+const INPUT_SELECT_DELAY_MS = 30
+
 function displayName(obj: SceneObject): string {
   if (obj.name) return obj.name
   const icon = SHAPE_ICON[obj.shapeType] ?? '▪'
@@ -45,7 +48,7 @@ export default function ComponentTree({ objects, selectedIds, onSelect, onRename
     setEditingId(obj.id)
     setEditValue(obj.name ?? displayName(obj))
     if (selectTimerRef.current !== null) clearTimeout(selectTimerRef.current)
-    selectTimerRef.current = setTimeout(() => inputRef.current?.select(), 30)
+    selectTimerRef.current = setTimeout(() => inputRef.current?.select(), INPUT_SELECT_DELAY_MS)
   }
 
   function commitEdit(id: string) {

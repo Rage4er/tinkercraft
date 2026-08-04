@@ -7,6 +7,8 @@ import {
   createSnapIndicator,
   removeSnapIndicators,
   snapLabel,
+  getSceneMeshes,
+  getScenePivots,
 } from './snap-utils'
 
 describe('closestPointOnSegment', () => {
@@ -213,5 +215,53 @@ describe('removeSnapIndicators', () => {
     removeSnapIndicators(scene)
     expect(scene.children.length).toBe(1)
     expect(scene.children[0]).toBe(regularMesh)
+  })
+})
+
+describe('getSceneMeshes', () => {
+  it('returns visible meshes from the map', () => {
+    const ref = { current: new Map<string, { mesh: THREE.Mesh; pivot: THREE.Object3D }>() }
+    const m1 = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1))
+    const m2 = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1))
+    const m3 = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1))
+    m3.visible = false
+    const p1 = new THREE.Object3D()
+    const p2 = new THREE.Object3D()
+    const p3 = new THREE.Object3D()
+    ref.current.set('a', { mesh: m1, pivot: p1 })
+    ref.current.set('b', { mesh: m2, pivot: p2 })
+    ref.current.set('c', { mesh: m3, pivot: p3 })
+    const meshes = getSceneMeshes(ref as any)
+    expect(meshes.length).toBe(2)
+    expect(meshes).toContain(m1)
+    expect(meshes).toContain(m2)
+    expect(meshes).not.toContain(m3)
+  })
+
+  it('returns empty array for empty map', () => {
+    const ref = { current: new Map() }
+    expect(getSceneMeshes(ref as any)).toEqual([])
+  })
+})
+
+describe('getScenePivots', () => {
+  it('returns visible pivots from the map', () => {
+    const ref = { current: new Map<string, { mesh: THREE.Mesh; pivot: THREE.Object3D }>() }
+    const m1 = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1))
+    const m2 = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1))
+    m2.visible = false
+    const p1 = new THREE.Object3D()
+    const p2 = new THREE.Object3D()
+    ref.current.set('a', { mesh: m1, pivot: p1 })
+    ref.current.set('b', { mesh: m2, pivot: p2 })
+    const pivots = getScenePivots(ref as any)
+    expect(pivots.length).toBe(1)
+    expect(pivots).toContain(p1)
+    expect(pivots).not.toContain(p2)
+  })
+
+  it('returns empty array for empty map', () => {
+    const ref = { current: new Map() }
+    expect(getScenePivots(ref as any)).toEqual([])
   })
 })
