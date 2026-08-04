@@ -290,7 +290,7 @@ function computeNodeHash(node: TreeNode): string {
       ? `${t.x},${t.y},${t.z},${t.rotX},${t.rotY},${t.rotZ},${t.scaleX},${t.scaleY},${t.scaleZ}`
       : 'none'
     const pStr = p
-      ? Object.keys(p).sort().map(k => `${k}:${p[k]}`).join(',')
+      ? Object.keys(p as Record<string, unknown>).sort().map(k => `${k}:${(p as Record<string, unknown>)[k]}`).join(',')
       : 'none'
     return `p:${node.shapeType ?? '?'}|${pStr}|${tStr}`
   }
@@ -561,13 +561,21 @@ async function applyCSGMeshes(node: TreeNode): Promise<ExtractedMesh> {
 
 /** Rebuild a primitive node */
 function rebuildPrimitive(node: TreeNode): ExtractedMesh {
+  // FIX (MED-18-21): Use safe access instead of non-null assertions
+  const shapeType = node.shapeType
+  const params = node.params
+  const lt = node.localTransform
+  if (!shapeType || !params || !lt) {
+    throw new Error(`Primitive node ${node.id} missing required fields: shapeType=${!!shapeType}, params=${!!params}, localTransform=${!!lt}`)
+  }
+
   const wasm = getWasm()
-  const m = buildPrimitive(node.shapeType!, sanitizeParams(node.params!))
+  const m = buildPrimitive(shapeType, sanitizeParams(params as Record<string, unknown>))
   try {
     const matrix = buildTransformMatrix(
-      { x: node.localTransform!.x, y: node.localTransform!.y, z: node.localTransform!.z },
-      { rotX: node.localTransform!.rotX, rotY: node.localTransform!.rotY, rotZ: node.localTransform!.rotZ },
-      { scaleX: node.localTransform!.scaleX, scaleY: node.localTransform!.scaleY, scaleZ: node.localTransform!.scaleZ },
+      { x: lt.x, y: lt.y, z: lt.z },
+      { rotX: lt.rotX, rotY: lt.rotY, rotZ: lt.rotZ },
+      { scaleX: lt.scaleX, scaleY: lt.scaleY, scaleZ: lt.scaleZ },
     )
     const transformed = m.transform(matrix)
     m.delete()

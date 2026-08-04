@@ -135,7 +135,11 @@ export interface ShapeParams {
   filletRadius?: number
   // FIX (MED-18-18): Removed index signature `[key: string]: number | undefined` —
   // ShapeParams should only accept known shape parameters for type safety.
-  // Dynamic params are handled via sanitizeParams in the worker.
+  // Additional params (torusRadius, tubeRadius, tubeSegments, sides) are explicit.
+  torusRadius?: number
+  tubeRadius?: number
+  tubeSegments?: number
+  sides?: number
 }
 
 export interface SceneObject {
@@ -149,12 +153,10 @@ export interface SceneObject {
   locked: boolean
   vertices: Float32Array
   indices: Uint32Array
-  /** Per-vertex normals from manifold-3d (null for simple primitives without normals) */
   normals?: Float32Array | null
-  /** Cached axis-aligned bounding box in local space (computed from vertices) */
   aabb?: { min: Vec3; max: Vec3 }
-  /** Original bbox size for CSG results — used to compute scale relative to original dimensions */
   originalBboxSize?: { x: number; y: number; z: number }
+  isCsgResult?: boolean
 }
 
 export type CsgBooleanOp = 'union' | 'subtract' | 'intersect'

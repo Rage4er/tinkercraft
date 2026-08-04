@@ -91,14 +91,18 @@ function restoreTreeFromSnapshot(index: number): void {
   clearTree()
   for (const nd of treeSnap.nodes) {
     if (nd.type === 'primitive' && nd.shapeType && nd.params && isShapeType(nd.shapeType)) {
-      createPrimitiveNode(nd.id, nd.shapeType, nd.params, nd.localTransform!)
+      // FIX (MED-18-3): Use default identity transform instead of non-null assertion
+      const lt = nd.localTransform
+      if (lt) createPrimitiveNode(nd.id, nd.shapeType, nd.params, lt)
     } else if (nd.type === 'baked') {
-      const verts = nd.vertices ? new Float32Array(nd.vertices) : undefined
-      const idxs = nd.indices ? new Uint32Array(nd.indices) : undefined
+      const verts = nd.vertices ? new Float32Array(nd.vertices) : new Float32Array()
+      const idxs = nd.indices ? new Uint32Array(nd.indices) : new Uint32Array()
       const nrm = nd.normals ? new Float32Array(nd.normals) : null
-      createBakedNode(nd.id, verts!, idxs!, nrm, nd.localTransform!)
+      const lt = nd.localTransform
+      if (lt) createBakedNode(nd.id, verts, idxs, nrm, lt)
     } else if (nd.type === 'boolean' && nd.operation && nd.children) {
-      createBooleanNode(nd.id, nd.operation, nd.children[0], nd.children[1], nd.localTransform!)
+      const lt = nd.localTransform
+      if (lt) createBooleanNode(nd.id, nd.operation, nd.children[0], nd.children[1], lt)
     }
   }
 }
@@ -172,7 +176,10 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   historyIndex: 0,
   objects: {},
   selectedIds: [],
-  clipboard: [],
+  // FIX (LOW-18-3): Store full SceneObject in clipboard for consistency.
+  // Vertices/indices are already shared references (no deep copy needed —
+  // clipboard objects are separate from scene objects).
+  clipboard: [] as ClipEntry[],
   fileName: null,
   modified: false,
   busy: false,

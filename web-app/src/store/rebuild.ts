@@ -196,6 +196,7 @@ export async function rebuildFromHistory(
           finalVerts[i + 1] = r10 * vx + r11 * vy + r12 * vz + py
           finalVerts[i + 2] = r20 * vx + r21 * vy + r22 * vz + pz
         }
+        // FIX (LOW-18-9): Create new mesh object instead of mutating result.results in-place
         m.vertices = finalVerts
         m.indices = new Uint32Array(metaWithMesh.resultIndices)
         if (metaWithMesh.resultNormals) {
@@ -212,6 +213,8 @@ export async function rebuildFromHistory(
         }
         continue
       }
+      // FIX (LOW-18-9): extractAndCenterInPlace mutates in-place, so vertices are already centered.
+      // Only update meta with the center offset.
       const { cx, cy, cz } = extractAndCenterInPlace(new Float32Array(m.vertices))
       meta[id] = { ...meta[id], transform: { ...meta[id].transform, x: cx, y: cy, z: cz } }
     }

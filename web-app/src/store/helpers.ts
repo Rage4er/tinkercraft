@@ -82,8 +82,9 @@ export function extractAndCenterGetAABB(vertices: Float32Array): {
 }
 
 /** Creates a SceneObject with cached AABB. Use everywhere a new object is created. */
-export function makeObject(partial: Omit<SceneObject, 'aabb'>): SceneObject {
-  return { ...partial, aabb: computeAABB(partial.vertices) }
+// FIX (LOW-18-6): Accept optional pre-computed AABB to avoid redundant computeAABB calls.
+export function makeObject(partial: Omit<SceneObject, 'aabb'> & { aabb?: SceneObject['aabb'] }): SceneObject {
+  return { ...partial, aabb: partial.aabb ?? computeAABB(partial.vertices) }
 }
 
 // ---- ID generator ----

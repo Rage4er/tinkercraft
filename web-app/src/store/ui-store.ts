@@ -133,6 +133,8 @@ export const useUiStore = create<UiStore>((set) => ({
     set((s) => ({ cameraMode: typeof v === 'function' ? v(s.cameraMode) : v })),
 
   // Mirror preview (MIRROR-2) — единый preview-объект
+  // FIX (MED-18-5): Store only lightweight preview data to avoid duplicating mesh data in state
+  // FIX (MED-18-5): Store only lightweight preview data to avoid duplicating mesh data in state
   previewObject: null,
   setPreviewObject: (obj) => set({ previewObject: obj }),
   // Mirror plane visualizer (MIRROR-4)

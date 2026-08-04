@@ -118,11 +118,11 @@
 |---|----------|------|----------|
 | | ~~**MED-18-1**~~ | [`document-store.ts:891-953`](web-app/src/store/document-store.ts:891) | ✅ Исправлено — jumpToHistoryInner() extracted, undo/redo/jumpToHistory теперь 3 строки каждый
 | | **MED-18-2** | [`document-store.ts:834`](web-app/src/store/document-store.ts:834) | Избыточная синхронизация с воркером в `alignSelected` — выравнивание меняет только позицию. |
-| | **MED-18-3** | [`document-store.ts:66`](web-app/src/store/document-store.ts:66) | Non-null assertion для опциональных полей baked-нод в `restoreTreeFromSnapshot`. |
+| | ~~**MED-18-3**~~ | [`document-store.ts:66`](web-app/src/store/document-store.ts:66) | Non-null assertion для опциональных полей baked-нод в `restoreTreeFromSnapshot`. |
 | | **MED-18-4** | [`document-store.ts:468`](web-app/src/store/document-store.ts:468) | `rebuildNode` после `set()` без rollback при ошибке. |
 | | **MED-18-5** | [`ui-store.ts:63`](web-app/src/store/ui-store.ts:63) | `mirrorPreviewMesh` хранит полные mesh-данные без Transferable. |
 | | **MED-18-6** | [`helpers.ts:37`](web-app/src/store/helpers.ts:37) | `extractAndCenterInPlace` мутирует входной массив — неочевидно для вызывающего кода. |
-| | **MED-18-7** | [`types.ts:11`](web-app/src/store/types.ts:11) | Отсутствие `isCsgResult` в `SceneObject` — вынуждает эвристику. |
+| | ~~**MED-18-7**~~ | [`types.ts:11`](web-app/src/store/types.ts:11) | Отсутствие `isCsgResult` в `SceneObject` — вынуждает эвристику. |
 | | ~~**MED-18-8**~~ | [`rebuild.ts:313`](web-app/src/store/rebuild.ts:313) | ✅ Исправлено — import notify добавлен, notify('Ошибка создания булевой операции', 'error') вызывается при ошибке
 | | **MED-18-9** | [`snapshots.ts:74-76`](web-app/src/store/snapshots.ts:74) | Копирование TypedArray → Array при сериализации дерева (дорого для больших мешей). |
 | | ~~**MED-18-10**~~ | [`notifications.ts:28`](web-app/src/store/notifications.ts:28) | ✅ Исправлено — timeouts Map хранит ID таймаутов, dismiss() очищает таймаут + clearTimeout
@@ -132,21 +132,21 @@
 | # | Проблема | Файл | Описание |
 |---|----------|------|----------|
 | | ~~**MED-18-11**~~ | [`worker.ts:70`](web-app/src/csg/worker.ts:70) | ✅ Исправлено — `const ids = (msg as { ids?: string[] }).ids ?? []`, защита от null/undefined
-| | **MED-18-12** | [`worker-client.ts:118`](web-app/src/csg/worker-client.ts:118) | Таймаут 30s по умолчанию — для sync-операций слишком много. |
+| | ~~**MED-18-12**~~ | [`worker-client.ts:118`](web-app/src/csg/worker-client.ts:118) | Таймаут 30s по умолчанию — для sync-операций слишком много. |
 | | **MED-18-13** | [`worker-client.ts:143`](web-app/src/csg/worker-client.ts:143) | Нет Transferable объектов при отправке — лишнее копирование для больших массивов. |
-| | **MED-18-14** | [`worker-client.ts:76-80`](web-app/src/csg/worker-client.ts:76) | При ошибке воркера reject всех pending — может скрыть реальную проблему. |
+| | ~~**MED-18-14**~~ | [`worker-client.ts:76-80`](web-app/src/csg/worker-client.ts:76) | При ошибке воркера reject всех pending — может скрыть реальную проблему. |
 | | **MED-18-15** | [`worker-handlers.ts:791-989`](web-app/src/csg/worker-handlers.ts:791) | `handleRebuildScene` — гигантский switch на 200 строк. Нарушение SRP. |
-| | **MED-18-16** | [`worker-handlers.ts:921-922`](web-app/src/csg/worker-handlers.ts:921) | Нет валидации `resultVertices`/`resultIndices` — повреждённые данные могут создать гигантский массив. |
+| | ~~**MED-18-16**~~ | [`worker-handlers.ts:921-922`](web-app/src/csg/worker-handlers.ts:921) | Нет валидации `resultVertices`/`resultIndices` — повреждённые данные могут создать гигантский массив. |
 | | **MED-18-17** | [`worker-handlers.ts:1030-1031`](web-app/src/csg/worker-handlers.ts:1030) | Stale cache в `handleCsgBoolean` — caller должен помнить о `workerSyncObjects`. |
 | | ~~**MED-18-18**~~ | [`types.ts:129-137`](web-app/src/csg/types.ts:129) | ✅ Исправлено — index signature убран, ShapeParams строго типизирован
 | | **MED-18-19** | [`types.ts:193-230`](web-app/src/csg/types.ts:193) | `TreeNode` — не discriminated union, много опциональных полей. |
 | | **MED-18-20** | [`history-tree.ts:366-406`](web-app/src/csg/history-tree.ts:366) | Дуальная логика WASM vs worker в `rebuildNode` — усложняет тестирование. |
-| | **MED-18-21** | [`history-tree.ts:564,566-569`](web-app/src/csg/history-tree.ts:564) | Non-null assertion для `shapeType` и `localTransform` — падение с cryptic error. |
-| | **MED-18-22** | [`history-tree.ts:594-598`](web-app/src/csg/history-tree.ts:594) | Конструктор `Manifold` без try/catch для baked-мешей. |
+| | ~~**MED-18-21**~~ | [`history-tree.ts:564,566-569`](web-app/src/csg/history-tree.ts:564) | Non-null assertion для `shapeType` и `localTransform` — падение с cryptic error. |
+| | ~~**MED-18-22**~~ | [`history-tree.ts:594-598`](web-app/src/csg/history-tree.ts:594) | Конструктор `Manifold` без try/catch для baked-мешей. |
 | | ~~**MED-18-23**~~ | [`history-tree.ts:639-653`](web-app/src/csg/history-tree.ts:639) | ✅ Исправлено — setNode() вызывается после мутации localTransform для primitive и baked нод
 | | **MED-18-24** | [`tree-store.ts:76`](web-app/src/csg/tree-store.ts:76) | Singleton усложняет тестирование (нельзя изолировать тесты). |
 | | ~~**MED-18-25**~~ | [`tree-store.ts:60-62`](web-app/src/csg/tree-store.ts:60) | ✅ Исправлено — new Map(this._nodes) возвращает копию, caller не может мутировать store
-| | **MED-18-26** | [`rebuildOps.ts:33-50`](web-app/src/csg/rebuildOps.ts:33) | Аддитивное применение scale — дрейф при последовательных move операциях. |
+| | ~~**MED-18-26**~~ | [`rebuildOps.ts:33-50`](web-app/src/csg/rebuildOps.ts:33) | Аддитивное применение scale — дрейф при последовательных move операциях. |
 | | **MED-18-27** | [`worker-matrix.ts:15-39`](web-app/src/csg/worker-matrix.ts:15) | Фиксированный порядок Euler XYZ — несовместимость при другом порядке в других частях кода. |
 
 #### UI Components (14)
@@ -202,13 +202,13 @@
 |---|----------|------|----------|
 | | ~~**LOW-18-1**~~ | [`document-store.ts:598`](web-app/src/store/document-store.ts:598) | ✅ НЕ БАГ — динамический импорт предотвращает circular dependency, задержка неизбежна
 | | ~~**LOW-18-2**~~ | [`document-store.ts:1100`](web-app/src/store/document-store.ts:1100) | ✅ Исправлено — lastCsgMs: 0 добавлен в set() после resizeObject
-| | **LOW-18-3** | [`document-store.ts:285-286`](web-app/src/store/document-store.ts:285) | Потенциальная утечка TypedArray в clipboard при копировании больших мешей. |
+| | ~~**LOW-18-3**~~ | [`document-store.ts:285-286`](web-app/src/store/document-store.ts:285) | Потенциальная утечка TypedArray в clipboard при копировании больших мешей. |
 | | **LOW-18-4** | [`ui-store.ts:76-131`](web-app/src/store/ui-store.ts:76) | Избыточность индивидуальных сеттеров (16 сеттеров для 16 полей). |
 | | ~~**LOW-18-5**~~ | [`ui-store.ts:84`](web-app/src/store/ui-store.ts:84) | ✅ Исправлено — runtime validation: validModes check, console.warn on invalid
-| | **LOW-18-6** | [`helpers.ts:86`](web-app/src/store/helpers.ts:86) | Избыточный `computeAABB` в `makeObject` при известном AABB. |
+| | ~~**LOW-18-6**~~ | [`helpers.ts:86`](web-app/src/store/helpers.ts:86) | Избыточный `computeAABB` в `makeObject` при известном AABB. |
 | | **LOW-18-7** | [`helpers.ts:91`](web-app/src/store/helpers.ts:91) | `nextId` не потокобезопасен (проблема только при Web Workers). |
 | | **LOW-18-8** | [`types.ts:20`](web-app/src/store/types.ts:20) | `lastCsgMs` в document-store вместо ui-store. |
-| | **LOW-18-9** | [`rebuild.ts:167,215`](web-app/src/store/rebuild.ts:167) | Двойной проход с мутацией `result.results` — неочевидно. |
+| | ~~**LOW-18-9**~~ | [`rebuild.ts:167,215`](web-app/src/store/rebuild.ts:167) | Двойной проход с мутацией `result.results` — неочевидно. |
 | | **LOW-18-10** | [`snapshots.ts:123-129`](web-app/src/store/snapshots.ts:123) | Touch-on-access с удалением/вставкой в Map. |
 | | **LOW-18-11** | [`snapshots.ts:52`](web-app/src/store/snapshots.ts:52) | `enforceCacheLimit` удаляет по 1 элементу за вызов. |
 | | ~~**LOW-18-12**~~ | [`notifications.ts:22`](web-app/src/store/notifications.ts:22) | ✅ Исправлено — MAX_NOTIFICATIONS=5, oldest auto-dismissed (part of MED-18-10 fix)
@@ -217,7 +217,7 @@
 
 | # | Проблема | Файл | Описание |
 |---|----------|------|----------|
-| | **LOW-18-13** | [`worker.ts:46`](web-app/src/csg/worker.ts:46) | `await initPromise` на каждое сообщение — микротаск даже после инициализации. |
+| | ~~**LOW-18-13**~~ | [`worker.ts:46`](web-app/src/csg/worker.ts:46) | `await initPromise` на каждое сообщение — микротаск даже после инициализации. |
 | | **LOW-18-14** | [`worker-handlers.ts:507-510`](web-app/src/csg/worker-handlers.ts:507) | Двойное копирование mesh в `handleBuildShape`. |
 | | ~~**LOW-18-15**~~ | [`worker-handlers.ts:1084-1103`](web-app/src/csg/worker-handlers.ts:1084) | ✅ Исправлено — try/finally с dispose на ошибку в handleSyncObjects
 | | **LOW-18-16** | [`types.ts:89-101`](web-app/src/csg/types.ts:89) | `GroupOperation` — много опциональных полей для разных сценариев. |
@@ -242,8 +242,8 @@
 | | ~~**LOW-18-30**~~ | [`ComponentTree.tsx:48`](web-app/src/components/ComponentTree.tsx:48) | ✅ Исправлено — INPUT_SELECT_DELAY_MS = 30 константа добавлена
 | | **LOW-18-31** | [`LeftPanel.tsx:49-57`](web-app/src/components/LeftPanel.tsx:49) | Избыточный `useMemo` для 8 элементов. |
 | | **LOW-18-32** | [`NumInput.tsx:21`](web-app/src/components/NumInput.tsx:21) | Избыточное вычисление decimals. |
-| | **LOW-18-33** | [`TextModal.tsx:43-46`](web-app/src/components/TextModal.tsx:43) | Нет ограничения длины текста. |
-| | **LOW-18-34** | [`TextModal.tsx:61,73`](web-app/src/components/TextModal.tsx:61) | Нет проверки `isNaN` для `Number()`. |
+| | ~~**LOW-18-33**~~ | [`TextModal.tsx:43-46`](web-app/src/components/TextModal.tsx:43) | Нет ограничения длины текста. |
+| | ~~**LOW-18-34**~~ | [`TextModal.tsx:61,73`](web-app/src/components/TextModal.tsx:61) | Нет проверки `isNaN` для `Number()`. |
 | | **LOW-18-35** | [`App.tsx:186-195`](web-app/src/App.tsx:186) | Autosave эффект запускается даже при пустых операциях. |
 | | **LOW-18-36** | [`PropertiesPanel.tsx:92`](web-app/src/components/PropertiesPanel.tsx:92) | Статические инлайн-стили. |
 | | **LOW-18-37** | [`App.css:461-467`](web-app/src/App.css:461) | `ruler-display` не адаптирован под светлую тему. |

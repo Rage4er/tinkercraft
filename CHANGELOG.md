@@ -82,6 +82,20 @@
 - **MED-18-40 (ErrorBoundary)**: console.error('[ErrorBoundary] Caught error:', error) добавлен (`ErrorBoundary.tsx`)
 - **MED-18-43 (STL normals)**: applyTransformToNormals() добавлена, normals трансформируются через rotation matrix (`stl-export.ts`)
 
+
+- **MED-18-3 (restoreTreeFromSnapshot)**: Non-null assertions заменены на safe access с fallback к identity transform (`document-store.ts`)
+- **MED-18-7 (isCsgResult)**: Поле `isCsgResult` добавлено в `SceneObject` — заменяет эвристику `!obj.params` (`types.ts`)
+- **MED-18-12 (timeout)**: Таймаут send() по умолчанию снижен с 30s до 10s для sync-операций (`worker-client.ts`)
+- **MED-18-14 (worker error)**: Ошибка воркера теперь включает reqId в сообщение (`worker-client.ts`)
+- **MED-18-16 (mesh validation)**: Лимит 10M вершин / 30M индексов для resultVertices/resultIndices (`worker-handlers.ts`)
+- **MED-18-21 (rebuildPrimitive)**: Safe access shapeType/params/localTransform с явной проверкой (`history-tree.ts`)
+- **MED-18-26 (scale drift)**: Clamp scale [0.001, 1000] в applyMoveDelta для предотвращения floating-point drift (`rebuildOps.ts`)
+- **LOW-18-3 (clipboard)**: Комментарий о разделении объектов сцены и буфера обмена (`document-store.ts`)
+- **LOW-18-6 (makeObject)**: Принимает опциональный aabb для пропуска redundant computeAABB (`helpers.ts`)
+- **LOW-18-9 (rebuild)**: Комментарий о in-place мутации extractAndCenterInPlace (`rebuild.ts`)
+- **LOW-18-13 (worker init)**: Флаг _initialized для пропуска await initPromise после инициализации (`worker.ts`)
+- **LOW-18-33 (text modal)**: maxLength={64} для ограничения длины текста (`TextModal.tsx`)
+- **LOW-18-34 (text modal)**: isNaN проверка для Number() в onChange size/depth (`TextModal.tsx`)
 ### Changed
 
 - **MIRROR-STORE-REFACTOR**: Вся логика зеркала вынесена из `document-store.ts` в отдельный файл `mirror-store.ts`. Это очищает `document-store.ts` (убраны импорты `mirrorTreeNode`, `mirrorVerticesInPlace`, `mirrorPoint`, `cloneSubtree`) и упрощает отладку. `document-store.ts` теперь только вызывает `previewMirror` и `mirrorSelected` из `mirror-store.ts`. Новый подход: `rebuildNode` → `mirrorVerticesInPlace` → `mirrorPoint`. Для primitive сохраняется `shapeType`/`params` (остаются редактируемыми), для CSG/import — `shapeType: 'import_mesh'` (baked). Transform = `mirrorPoint` для позиции, `rot=0, scale=1`. Исправлено: `mirror-store.ts` (новый файл), `document-store.ts` (рефакторинг)
@@ -239,6 +253,20 @@
 - **MED-18-40 (ErrorBoundary)**: console.error('[ErrorBoundary] Caught error:', error) добавлен (`ErrorBoundary.tsx`)
 - **MED-18-43 (STL normals)**: applyTransformToNormals() добавлена, normals трансформируются через rotation matrix (`stl-export.ts`)
 
+
+- **MED-18-3 (restoreTreeFromSnapshot)**: Non-null assertions заменены на safe access с fallback к identity transform (`document-store.ts`)
+- **MED-18-7 (isCsgResult)**: Поле `isCsgResult` добавлено в `SceneObject` — заменяет эвристику `!obj.params` (`types.ts`)
+- **MED-18-12 (timeout)**: Таймаут send() по умолчанию снижен с 30s до 10s для sync-операций (`worker-client.ts`)
+- **MED-18-14 (worker error)**: Ошибка воркера теперь включает reqId в сообщение (`worker-client.ts`)
+- **MED-18-16 (mesh validation)**: Лимит 10M вершин / 30M индексов для resultVertices/resultIndices (`worker-handlers.ts`)
+- **MED-18-21 (rebuildPrimitive)**: Safe access shapeType/params/localTransform с явной проверкой (`history-tree.ts`)
+- **MED-18-26 (scale drift)**: Clamp scale [0.001, 1000] в applyMoveDelta для предотвращения floating-point drift (`rebuildOps.ts`)
+- **LOW-18-3 (clipboard)**: Комментарий о разделении объектов сцены и буфера обмена (`document-store.ts`)
+- **LOW-18-6 (makeObject)**: Принимает опциональный aabb для пропуска redundant computeAABB (`helpers.ts`)
+- **LOW-18-9 (rebuild)**: Комментарий о in-place мутации extractAndCenterInPlace (`rebuild.ts`)
+- **LOW-18-13 (worker init)**: Флаг _initialized для пропуска await initPromise после инициализации (`worker.ts`)
+- **LOW-18-33 (text modal)**: maxLength={64} для ограничения длины текста (`TextModal.tsx`)
+- **LOW-18-34 (text modal)**: isNaN проверка для Number() в onChange size/depth (`TextModal.tsx`)
 ### Changed
 
 - **ARCH-CSG-1**: CSG-результаты (`csg_*`) теперь имеют `shapeType='cube', params={}` и регистрируются как baked-ноды в build tree. Это обеспечивает корректную маршрутизацию в `syncObjectsForOperation` → `workerSyncMesh`
@@ -303,6 +331,20 @@
 - **MED-18-40 (ErrorBoundary)**: console.error('[ErrorBoundary] Caught error:', error) добавлен (`ErrorBoundary.tsx`)
 - **MED-18-43 (STL normals)**: applyTransformToNormals() добавлена, normals трансформируются через rotation matrix (`stl-export.ts`)
 
+
+- **MED-18-3 (restoreTreeFromSnapshot)**: Non-null assertions заменены на safe access с fallback к identity transform (`document-store.ts`)
+- **MED-18-7 (isCsgResult)**: Поле `isCsgResult` добавлено в `SceneObject` — заменяет эвристику `!obj.params` (`types.ts`)
+- **MED-18-12 (timeout)**: Таймаут send() по умолчанию снижен с 30s до 10s для sync-операций (`worker-client.ts`)
+- **MED-18-14 (worker error)**: Ошибка воркера теперь включает reqId в сообщение (`worker-client.ts`)
+- **MED-18-16 (mesh validation)**: Лимит 10M вершин / 30M индексов для resultVertices/resultIndices (`worker-handlers.ts`)
+- **MED-18-21 (rebuildPrimitive)**: Safe access shapeType/params/localTransform с явной проверкой (`history-tree.ts`)
+- **MED-18-26 (scale drift)**: Clamp scale [0.001, 1000] в applyMoveDelta для предотвращения floating-point drift (`rebuildOps.ts`)
+- **LOW-18-3 (clipboard)**: Комментарий о разделении объектов сцены и буфера обмена (`document-store.ts`)
+- **LOW-18-6 (makeObject)**: Принимает опциональный aabb для пропуска redundant computeAABB (`helpers.ts`)
+- **LOW-18-9 (rebuild)**: Комментарий о in-place мутации extractAndCenterInPlace (`rebuild.ts`)
+- **LOW-18-13 (worker init)**: Флаг _initialized для пропуска await initPromise после инициализации (`worker.ts`)
+- **LOW-18-33 (text modal)**: maxLength={64} для ограничения длины текста (`TextModal.tsx`)
+- **LOW-18-34 (text modal)**: isNaN проверка для Number() в onChange size/depth (`TextModal.tsx`)
 ### Changed
 
 - **MED-UI-4**: 45 отдельных селекторов `useUiStore` в `App.tsx` объединены в один `useShallow` селектор, что уменьшает количество ре-рендеров и упрощает код (`App.tsx`)
@@ -592,6 +634,20 @@
 - **MED-18-40 (ErrorBoundary)**: console.error('[ErrorBoundary] Caught error:', error) добавлен (`ErrorBoundary.tsx`)
 - **MED-18-43 (STL normals)**: applyTransformToNormals() добавлена, normals трансформируются через rotation matrix (`stl-export.ts`)
 
+
+- **MED-18-3 (restoreTreeFromSnapshot)**: Non-null assertions заменены на safe access с fallback к identity transform (`document-store.ts`)
+- **MED-18-7 (isCsgResult)**: Поле `isCsgResult` добавлено в `SceneObject` — заменяет эвристику `!obj.params` (`types.ts`)
+- **MED-18-12 (timeout)**: Таймаут send() по умолчанию снижен с 30s до 10s для sync-операций (`worker-client.ts`)
+- **MED-18-14 (worker error)**: Ошибка воркера теперь включает reqId в сообщение (`worker-client.ts`)
+- **MED-18-16 (mesh validation)**: Лимит 10M вершин / 30M индексов для resultVertices/resultIndices (`worker-handlers.ts`)
+- **MED-18-21 (rebuildPrimitive)**: Safe access shapeType/params/localTransform с явной проверкой (`history-tree.ts`)
+- **MED-18-26 (scale drift)**: Clamp scale [0.001, 1000] в applyMoveDelta для предотвращения floating-point drift (`rebuildOps.ts`)
+- **LOW-18-3 (clipboard)**: Комментарий о разделении объектов сцены и буфера обмена (`document-store.ts`)
+- **LOW-18-6 (makeObject)**: Принимает опциональный aabb для пропуска redundant computeAABB (`helpers.ts`)
+- **LOW-18-9 (rebuild)**: Комментарий о in-place мутации extractAndCenterInPlace (`rebuild.ts`)
+- **LOW-18-13 (worker init)**: Флаг _initialized для пропуска await initPromise после инициализации (`worker.ts`)
+- **LOW-18-33 (text modal)**: maxLength={64} для ограничения длины текста (`TextModal.tsx`)
+- **LOW-18-34 (text modal)**: isNaN проверка для Number() в onChange size/depth (`TextModal.tsx`)
 ### Changed
 - `App.tsx` разделён с 1809 до 553 строк (−69%) — CRIT-1
 - `document-store.ts` разделён с 757 до 500 строк (−34%) — CRIT-2

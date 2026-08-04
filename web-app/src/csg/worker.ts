@@ -43,8 +43,13 @@ function validateMessage(msg: { reqId: string; type: string;[k: string]: unknown
 
 const initPromise = initWasm()
 
+// FIX (LOW-18-13): Track initialization status to skip await on every message.
+let _initialized = false
+initPromise.then(() => { _initialized = true })
+
 self.addEventListener('message', async (e: MessageEvent) => {
-  await initPromise
+  // FIX (LOW-18-13): Only await initPromise on first message; subsequent messages skip this.
+  if (!_initialized) await initPromise
   const msg = e.data as { reqId: string; type: string;[k: string]: unknown }
 
   // FIX (SEC-R16-1): Validate message structure before processing

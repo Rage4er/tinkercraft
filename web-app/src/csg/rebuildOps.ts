@@ -27,9 +27,13 @@ export interface ShapeMeta {
 }
 
 /**
- * Применить delta трансформации к текущей трансформации.
- * Аддитивное применение — корректно, так как delta = newScale - oldScale.
+ * Apply delta transform to current transform.
+ * ADDITIVE application — correct because delta = newScale - oldScale.
+ * FIX (MED-18-26): Clamp scale to prevent drift from accumulated floating-point errors.
  */
+const SCALE_MIN = 0.001
+const SCALE_MAX = 1000
+
 export function applyMoveDelta(
   t: RebuildTransform,
   delta?: Vec3,
@@ -43,9 +47,10 @@ export function applyMoveDelta(
     rotX: t.rotX + (rotDelta?.x ?? 0),
     rotY: t.rotY + (rotDelta?.y ?? 0),
     rotZ: t.rotZ + (rotDelta?.z ?? 0),
-    scaleX: t.scaleX + (scaleDelta?.x ?? 0),
-    scaleY: t.scaleY + (scaleDelta?.y ?? 0),
-    scaleZ: t.scaleZ + (scaleDelta?.z ?? 0),
+    // FIX (MED-18-26): Clamp scale to prevent floating-point drift
+    scaleX: Math.max(SCALE_MIN, Math.min(SCALE_MAX, t.scaleX + (scaleDelta?.x ?? 0))),
+    scaleY: Math.max(SCALE_MIN, Math.min(SCALE_MAX, t.scaleY + (scaleDelta?.y ?? 0))),
+    scaleZ: Math.max(SCALE_MIN, Math.min(SCALE_MAX, t.scaleZ + (scaleDelta?.z ?? 0))),
   }
 }
 

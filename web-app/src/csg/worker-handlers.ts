@@ -924,6 +924,14 @@ export async function handleRebuildScene(msg: RebuildSceneMessage): Promise<void
         const resultVerts = op.resultVertices as Float32Array | number[] | undefined
         const resultIdxs = op.resultIndices as Uint32Array | number[] | undefined
         if (resultVerts && resultIdxs && resultId) {
+          // FIX (MED-18-16): Validate array sizes to prevent malicious/corrupt data
+          // from creating gigantic arrays (buffer overflow / OOM protection)
+          const vertCount = resultVerts instanceof Float32Array ? resultVerts.length : (resultVerts as ArrayLike<number>).length
+          const idxCount = resultIdxs instanceof Uint32Array ? resultIdxs.length : (resultIdxs as ArrayLike<number>).length
+          if (vertCount > 10_000_000 || idxCount > 30_000_000) {
+            console.error(`[rebuild] resultVertices (${vertCount}) or resultIndices (${idxCount}) exceeds safety limit — skipping`)
+            continue
+          }
           // Build Manifold from stored vertices/indices
           const wasm = getWasm()
           const verts = new Float32Array(resultVerts)

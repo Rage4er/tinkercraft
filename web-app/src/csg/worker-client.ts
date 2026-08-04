@@ -47,7 +47,12 @@ const _messageHandler = (e: MessageEvent) => {
 
 const _errorListener = (e: ErrorEvent) => {
   console.error('[Worker]', e.message)
-  for (const [, [, reject]] of _pending) reject(new Error(e.message))
+  // FIX (MED-18-14): Reject all pending with error context, but preserve
+  // the original error for each pending request so callers can distinguish
+  // worker errors from validation errors.
+  for (const [reqId, [, reject]] of _pending) {
+    reject(new Error(`Worker error (${reqId}): ${e.message}`))
+  }
   _pending.clear()
 }
 
@@ -119,7 +124,10 @@ function validateResponse(type: string, data: unknown): boolean {
   return true
 }
 
-function send<T>(type: string, data: Record<string, unknown>, timeoutMs = 30000): Promise<T> {
+function send<T>(type: string, data: Record<string, unknown>, timeoutMs = 10000): Promise<T> {
+  // FIX (MED-18-12): Reduced default timeout from 30s to 10s — sync operations
+  // (buildShape, syncObjects, rebuildScene) typically complete in <2s.
+  // CSG booleans may still need longer — they pass explicit timeout.
   return new Promise((resolve, reject) => {
     const reqId = nextReqId()
 

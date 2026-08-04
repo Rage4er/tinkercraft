@@ -27,8 +27,8 @@ export default function TextModal({
 
   return (
     <div className="text-modal-backdrop" onClick={onClose}>
-      <div 
-        className="text-modal-box" 
+      <div
+        className="text-modal-box"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -40,6 +40,7 @@ export default function TextModal({
         <input
           className="text-modal-input"
           type="text"
+          maxLength={64}
           value={textInput}
           placeholder="Введите текст…"
           autoFocus
@@ -58,7 +59,11 @@ export default function TextModal({
               min={1}
               max={200}
               className="text-modal-num"
-              onChange={(e) => onSizeChange(Number(e.target.value))}
+              onChange={(e) => {
+                const v = Number(e.target.value)
+                // FIX (LOW-18-34): Validate Number() result — empty input gives NaN
+                if (!isNaN(v)) onSizeChange(v)
+              }}
             />
             мм
           </label>
@@ -70,7 +75,11 @@ export default function TextModal({
               min={0.5}
               max={100}
               className="text-modal-num"
-              onChange={(e) => onDepthChange(Number(e.target.value))}
+              onChange={(e) => {
+                const v = Number(e.target.value)
+                // FIX (LOW-18-34): Validate Number() result — empty input gives NaN
+                if (!isNaN(v)) onDepthChange(v)
+              }}
             />
             мм
           </label>
