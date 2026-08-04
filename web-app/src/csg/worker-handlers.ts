@@ -200,16 +200,19 @@ export function buildPrimitive(shapeType: string, params: Record<string, number>
       if (depth === undefined || depth <= 0) depth = 20
       return Manifold.cube([width, height, depth], true)
     }
-    case 'sphere':
-      return Manifold.sphere(params.radius ?? 12, params.segments ?? 32)
-    case 'cylinder':
-      return Manifold.cylinder(
-        params.height ?? 30,
-        params.radius ?? 10,
-        params.radius ?? 10,
-        params.segments ?? 32,
-        true,
-      )
+    case 'sphere': {
+      const r = params.radius ?? 12
+      const seg = params.segments ?? 32
+      if (r <= 0) return Manifold.cube([20, 20, 20], true)
+      return Manifold.sphere(r, seg)
+    }
+    case 'cylinder': {
+      const h = params.height ?? 30
+      const r = params.radius ?? 10
+      const seg = params.segments ?? 32
+      if (h <= 0 || r <= 0) return Manifold.cube([20, 20, 20], true)
+      return Manifold.cylinder(h, r, r, seg, true)
+    }
     case 'cone':
       return Manifold.cylinder(
         params.height ?? 30,
@@ -1149,6 +1152,8 @@ export async function handleCsgBooleanSync(msg: CsgBooleanSyncMessage): Promise<
       { scaleX: msg.transformA.scaleX, scaleY: msg.transformA.scaleY, scaleZ: msg.transformA.scaleZ },
     )
     setCached(msg.idA, m.transform(fullMatrix))
+    // FIX (HIGH-18-11): Dispose operand primitive after applying transform to prevent WASM memory leak
+    m.delete()
   }
   // If shapeA is undefined (CSG result or imported mesh), skip rebuild —
   // rely on previous syncObjectsForOperation that called workerSyncMesh.
@@ -1163,6 +1168,8 @@ export async function handleCsgBooleanSync(msg: CsgBooleanSyncMessage): Promise<
       { scaleX: msg.transformB.scaleX, scaleY: msg.transformB.scaleY, scaleZ: msg.transformB.scaleZ },
     )
     setCached(msg.idB, m.transform(fullMatrix))
+    // FIX (HIGH-18-11): Dispose operand primitive after applying transform to prevent WASM memory leak
+    m.delete()
   }
 
   // Perform boolean

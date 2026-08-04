@@ -29,6 +29,28 @@ let _reqCounter = 0
 
 function nextReqId(): string { return `r${++_reqCounter}` }
 
+/** FIX (HIGH-18-7): Named listeners for proper cleanup on disposeWorker */
+const _messageHandler = (e: MessageEvent) => {
+  const msg = e.data as { reqId?: string; type: string }
+
+  // Ready message is handled by getReadyPromise() — skip here
+  if (msg.type === 'ready') return
+
+  if (!msg.reqId) return
+  const entry = _pending.get(msg.reqId)
+  if (!entry) return
+  _pending.delete(msg.reqId)
+  const [resolve, reject] = entry
+  if (msg.type === 'error') reject(new Error((msg as unknown as { message: string }).message))
+  else resolve(msg)
+}
+
+const _errorListener = (e: ErrorEvent) => {
+  console.error('[Worker]', e.message)
+  for (const [, [, reject]] of _pending) reject(new Error(e.message))
+  _pending.clear()
+}
+
 /**
  * FIX (CRIT-R3-2): Safe worker initialization with handler pattern.
  * Replaces the _readyResolve pattern which could leak on hot-reload.
@@ -58,26 +80,8 @@ function getWorker(): Worker {
 
   _worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' })
 
-  _worker.addEventListener('message', (e: MessageEvent) => {
-    const msg = e.data as { reqId?: string; type: string }
-
-    // Ready message is handled by getReadyPromise() — skip here
-    if (msg.type === 'ready') return
-
-    if (!msg.reqId) return
-    const entry = _pending.get(msg.reqId)
-    if (!entry) return
-    _pending.delete(msg.reqId)
-    const [resolve, reject] = entry
-    if (msg.type === 'error') reject(new Error((msg as unknown as { message: string }).message))
-    else resolve(msg)
-  })
-
-  _worker.addEventListener('error', (e: ErrorEvent) => {
-    console.error('[Worker]', e.message)
-    for (const [, [, reject]] of _pending) reject(new Error(e.message))
-    _pending.clear()
-  })
+  _worker.addEventListener('message', _messageHandler)
+  _worker.addEventListener('error', _errorListener)
 
   return _worker
 }
@@ -227,7 +231,7 @@ export async function workerCsgBooleanWithSync(
 }
 
 export async function workerMirrorObject(
-  objId: string, plane: 'XY' | 'XZ' | 'YZ', shapeType?: string, params?: Record<string, number>, transform?: any,
+  objId: string, plane: 'XY' | 'XZ' | 'YZ', shapeType?: string, params?: Record<string, number>, transform?: TransformNR,
   mirrorCenter?: { x: number; y: number; z: number },
 ): Promise<MeshResult> {
   await waitReady()
@@ -278,6 +282,9 @@ export function isWorkerReady(): boolean { return _ready }
  */
 export function disposeWorker(): void {
   if (_worker) {
+    // FIX (HIGH-18-7): Remove listeners before terminate to prevent double-reject on HMR
+    _worker.removeEventListener('message', _messageHandler)
+    _worker.removeEventListener('error', _errorListener)
     _worker.terminate()
     _worker = null
     _ready = false

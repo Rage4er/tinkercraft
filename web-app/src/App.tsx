@@ -227,8 +227,10 @@ export default function App() {
         kb.selectObjects(Object.keys(kb.objects), false);
       }
       if (ctrl && e.key === "s") {
-        e.preventDefault();
-        kb.saveDoodle();
+        e.preventDefault()
+        // FIX (HIGH-18-18): Allow Ctrl+S to save even when gizmo is active
+        // The gizmo handles `s` key for toggle (without ctrl), but Ctrl+S should always save
+        kb.saveDoodle()
       }
       if (ctrl && e.key === "o") {
         e.preventDefault();

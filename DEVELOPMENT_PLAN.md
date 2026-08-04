@@ -111,18 +111,18 @@
 
 | # | Проблема | Severity | Статус |
 |---|----------|----------|--------|
-| | **MIRROR-19-1** | mirrorCenter из локальных координат вместо мировых | **CRITICAL** | 🔄 |
-| | **MIRROR-19-2** | Preview только для первого объекта (multi-select) | **CRITICAL** | 🔄 |
-| | **MIRROR-19-3** | Утечка preview-узлов в build tree | **HIGH** | 🔄 |
-| | **MIRROR-19-4** | Race condition в preview (нет debounce) | **HIGH** | 🔄 |
-| | **MIRROR-19-5** | Preview-узлы не очищаются после confirm | **HIGH** | 🔄 |
-| | **MIRROR-19-6** | Хрупкая эвристика детекции CSG-результата | **HIGH** | 🔄 |
-| | **MIRROR-19-7** | baked без localTransform молча пропускается | **MEDIUM** | 🔄 |
-| | **MIRROR-19-8** | boolean без children молча пропускается | **MEDIUM** | 🔄 |
-| | **MIRROR-19-9** | treeTransform устаревает после rebuildNode | **MEDIUM** | 🔄 |
-| | **MIRROR-19-10** | Fallback-логика не совпадает с mirrorTreeNode | **MEDIUM** | 🔄 |
-| | **MIRROR-19-11** | as unknown as в rebuild.ts для mirror | **MEDIUM** | 🔄 |
-| | **MIRROR-19-12** | Matrix4.compose с отражёнными углами Euler | **LOW** | 🔄 |
+| | **MIRROR-19-1** | mirrorCenter из локальных координат вместо мировых | **CRITICAL** | ✅ |
+| | **MIRROR-19-2** | Preview только для первого объекта (multi-select) | **CRITICAL** | ✅ |
+| | **MIRROR-19-3** | Утечка preview-узлов в build tree | **HIGH** | ✅ |
+| | **MIRROR-19-4** | Race condition в preview (нет debounce) | **HIGH** | ✅ |
+| | **MIRROR-19-5** | Preview-узлы не очищаются после confirm | **HIGH** | ✅ |
+| | **MIRROR-19-6** | Хрупкая эвристика детекции CSG-результата | **HIGH** | ✅ |
+| | **MIRROR-19-7** | baked без localTransform молча пропускается | **MEDIUM** | ✅ |
+| | **MIRROR-19-8** | boolean без children молча пропускается | **MEDIUM** | ✅ |
+| | **MIRROR-19-9** | treeTransform устаревает после rebuildNode | **MEDIUM** | ✅ |
+| | **MIRROR-19-10** | Fallback-логика не совпадает с mirrorTreeNode | **MEDIUM** | ✅ |
+| | **MIRROR-19-11** | as unknown as в rebuild.ts для mirror | **MEDIUM** | ✅ НЕ БАГ |
+| | **MIRROR-19-12** | Matrix4.compose с отражёнными углами Euler | **LOW** | ✅ |
 | | CRIT-R16-3 | `any` в `collectSubtreeForWorker` / `applyCSGMeshes` | WARN | ✅ |
 | | TEST-R16-3 | Нет тестов для `snap-utils.ts` (468 строк) | WARN | ✅ |
 | | CODE-R16-1 | Дублирование матричной математики | COSM | ✅ |
@@ -306,39 +306,13 @@ web-app/
 
 | # | Проблема | Приоритет | Статус |
 |---|----------|-----------|--------|
-| | **MIRROR-19-1: mirrorCenter из локальных координат** | **CRITICAL** | 🔄 Активна |
-| | **MIRROR-19-2: Preview только для первого объекта** | **CRITICAL** | 🔄 Активна |
-| | **MIRROR-19-3: Утечка preview-узлов** | **HIGH** | 🔄 Активна |
-| | **MIRROR-19-4: Race condition в preview** | **HIGH** | 🔄 Активна |
-| | **MIRROR-19-5: Preview-узлы после confirm** | **HIGH** | 🔄 Активна |
-| | **MIRROR-19-6: Хрупкая эвристика CSG** | **HIGH** | 🔄 Активна |
-| | **MIRROR-19-7: baked без localTransform** | **MEDIUM** | 🔄 Активна |
-| | **MIRROR-19-8: boolean без children** | **MEDIUM** | 🔄 Активна |
-| | **MIRROR-19-9: treeTransform устаревает** | **MEDIUM** | 🔄 Активна |
-| | **MIRROR-19-10: Fallback-логика** | **MEDIUM** | 🔄 Активна |
-| | **MIRROR-19-11: as unknown as в rebuild.ts** | **MEDIUM** | 🔄 Активна |
-| | **MIRROR-19-12: Matrix4.compose с отражёнными углами** | **LOW** | 🔄 Активна |
+| | ~~MIRROR-19-11: as unknown as в rebuild.ts~~ | **MEDIUM** | ✅ НЕ БАГ |
 | | CRIT-R16-3: `any` в worker | WARN | ✅ Исправлено |
 | | TEST-R16-3: snap-utils тесты | WARN | ✅ Исправлено |
 | | CODE-R16-1: дублирование матриц | COSM | ✅ Исправлено |
 | | CODE-R16-2: магические числа | COSM | ✅ Исправлено |
 | | CODE-R16-3: смешение языков | COSM | ✅ Исправлено |
 | | PERF-R16-4: коллизии хеша | PERF | ✅ Исправлено |
-| | **CRIT-17-1: boolean hash без localTransform** | **CRITICAL** | 🔄 Активна |
-| | **CRIT-17-2: resizeObject без try/catch** | **CRITICAL** | 🔄 Активна |
-| | **HIGH-1: Дублирование sync-логики** | **HIGH** | 🔄 Активна |
-| | **HIGH-2: alignSelected rebuild** | **HIGH** | 🔄 Активна |
-| | **HIGH-3: computeBakedBBox без R/S** | **MEDIUM** | 🔄 Активна |
-| | **HIGH-4: pasteClipboard build tree** | **MEDIUM** | 🔄 Активна |
-| | **HIGH-5: rebuildBuildTree не вызывается** | **HIGH** | 🔄 Активна |
-| | **LOW-1: circle-snap не работает** | **MEDIUM** | 🔄 Активна |
-| | **LOW-2: мёртвый код getWorldPointFromPointer** | **LOW** | 🔄 Активна |
-| | **LOW-3: console.error вместо notify** | **LOW** | 🔄 Активна |
-| | **LOW-4: slabId утечка в worker** | **LOW** | 🔄 Активна |
-| | **LOW-5: неограниченный snapshot cache** | **LOW** | 🔄 Активна |
-| | **LOW-6: sequential await syncOperand** | **LOW** | 🔄 Активна |
-| | **LOW-7: рекурсия invalidateCache** | **LOW** | 🔄 Активна |
-| | **LOW-8: смешение языков в константах** | **LOW** | 🔄 Активна |
 
 ---
 

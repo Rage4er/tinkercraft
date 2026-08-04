@@ -325,6 +325,11 @@ export function useThreeInit(
             renderer.dispose();
             if (container.contains(renderer.domElement))
                 container.removeChild(renderer.domElement);
+            // FIX (HIGH-18-15): Dispose TransformControls to prevent listener/WebGL leaks
+            if (transformCtRef.current) {
+                transformCtRef.current.dispose();
+                transformCtRef.current = null;
+            }
         };
     }, [webglOk]);
 
@@ -440,6 +445,12 @@ export function useMeshSync(
                 if (vertsChanged) {
                     existing.mesh.userData.cachedRawVertices = new Float32Array(obj.vertices);
                     existing.mesh.userData.cachedVertsHash = vertsHash;
+
+                    // FIX (CRIT-18-4): Dispose old BufferAttribute before replacing to prevent memory leak
+                    const oldPos = existing.mesh.geometry.getAttribute('position');
+                    if (oldPos) oldPos.dispose();
+                    const oldIdx = existing.mesh.geometry.index;
+                    if (oldIdx) oldIdx.dispose();
 
                     existing.mesh.geometry.setAttribute(
                         "position",

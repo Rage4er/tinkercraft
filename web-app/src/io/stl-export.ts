@@ -84,9 +84,16 @@ export function exportToStl(objects: SceneObject[]): Blob {
   let totalTris = 0
   for (const obj of visible) totalTris += obj.indices.length / 3
 
+  // FIX (HIGH-18-19): Protection against memory overflow — cap at 10M triangles (~500MB buffer)
+  const MAX_TRIANGLES = 10_000_000
+  if (totalTris > MAX_TRIANGLES) {
+    console.warn(`[STL export] Too many triangles: ${totalTris}, capping at ${MAX_TRIANGLES}`)
+    totalTris = MAX_TRIANGLES
+  }
+
   // Allocate buffer: 80 (header) + 4 (count) + 50 * tris
-  const buf    = new ArrayBuffer(84 + 50 * totalTris)
-  const dv     = new DataView(buf)
+  const buf = new ArrayBuffer(84 + 50 * totalTris)
+  const dv = new DataView(buf)
   const header = new Uint8Array(buf, 0, 80)
 
   // Header — ASCII текст
@@ -140,23 +147,23 @@ export function exportToStl(objects: SceneObject[]): Blob {
       }
 
       // Normal (12 bytes)
-      dv.setFloat32(offset,      nx, true); offset += 4
-      dv.setFloat32(offset,      ny, true); offset += 4
-      dv.setFloat32(offset,      nz, true); offset += 4
+      dv.setFloat32(offset, nx, true); offset += 4
+      dv.setFloat32(offset, ny, true); offset += 4
+      dv.setFloat32(offset, nz, true); offset += 4
       // Vertex A
-      dv.setFloat32(offset,      ax, true); offset += 4
-      dv.setFloat32(offset,      ay, true); offset += 4
-      dv.setFloat32(offset,      az, true); offset += 4
+      dv.setFloat32(offset, ax, true); offset += 4
+      dv.setFloat32(offset, ay, true); offset += 4
+      dv.setFloat32(offset, az, true); offset += 4
       // Vertex B
-      dv.setFloat32(offset,      bx, true); offset += 4
-      dv.setFloat32(offset,      by, true); offset += 4
-      dv.setFloat32(offset,      bz, true); offset += 4
+      dv.setFloat32(offset, bx, true); offset += 4
+      dv.setFloat32(offset, by, true); offset += 4
+      dv.setFloat32(offset, bz, true); offset += 4
       // Vertex C
-      dv.setFloat32(offset,      cx, true); offset += 4
-      dv.setFloat32(offset,      cy, true); offset += 4
-      dv.setFloat32(offset,      cz, true); offset += 4
+      dv.setFloat32(offset, cx, true); offset += 4
+      dv.setFloat32(offset, cy, true); offset += 4
+      dv.setFloat32(offset, cz, true); offset += 4
       // Attribute byte count
-      dv.setUint16(offset, 0, true);        offset += 2
+      dv.setUint16(offset, 0, true); offset += 2
     }
   }
 
@@ -165,8 +172,8 @@ export function exportToStl(objects: SceneObject[]): Blob {
 
 export function downloadStl(objects: SceneObject[], fileName = 'tinkercraft-export.stl'): void {
   const blob = exportToStl(objects)
-  const url  = URL.createObjectURL(blob)
-  const a    = document.createElement('a')
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
   a.href = url
   a.download = fileName
   a.click()

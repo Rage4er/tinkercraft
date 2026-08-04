@@ -43,10 +43,11 @@ import {
   createBooleanNode,
   createBakedNode,
   syncNodeTransform,
+  getNode,
+  setNode,
   rebuildNode,
   computeNodeBBox,
   bboxCenter,
-  getNode,
   deleteNode,
   clearTree,
   resetSubtreeTransform,
@@ -672,7 +673,9 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         // FIX (CRIT-CSG-3): For CSG results and imported meshes, sync via workerSyncMesh.
         // For regular primitives, use workerSyncObjects (updates only transform in cache,
         // avoids full geometry rebuild via workerBuildShape).
-        if (obj.shapeType === 'cube' && !obj.params.width || obj.shapeType === 'import_mesh') {
+        const isImport = obj.shapeType === 'import_mesh'
+        const isCsgResult = !isImport && (!obj.params || Object.keys(obj.params).length === 0)
+        if (isCsgResult || isImport) {
           await workerSyncMesh(id, obj.vertices, obj.indices, nt).catch(() => { })
           // Update the SceneObject with new transform (mesh geometry unchanged, only position shifted)
           newObjects[id] = { ...obj, transform: nt }
@@ -832,10 +835,10 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     if (obj.shapeType && obj.params) {
       const mergedParams = { ...obj.params, ...params }
 
-      // Обновляем params в ноде дерева (иммутабельно)
+      // Обновляем params в ноде дерева (иммутабельно через setNode)
       const node = getNode(id)
       if (node && node.type === 'primitive') {
-        Object.assign(node, { params: { ...mergedParams } })
+        setNode(id, { ...node, params: { ...mergedParams } })
       }
 
       set({ busy: true })
@@ -885,10 +888,10 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
           scaleZ: targetDepth / currentSize.z,
         }
 
-        // Для CSG объектов в дереве: создаём baked ноду с scale
+        // Для CSG объектов в дереве: обновляем localTransform иммутабельно
         const node = getNode(id)
         if (node) {
-          node.localTransform = newTransform
+          setNode(id, { ...node, localTransform: newTransform })
         }
 
         // Синхронизируем с worker

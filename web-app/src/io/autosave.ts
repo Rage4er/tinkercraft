@@ -48,6 +48,7 @@ export async function autosaveSession(
       const req = tx.objectStore(STORE_NAME).put(entry, KEY)
       req.onsuccess = () => resolve()
       req.onerror = () => reject(req.error)
+      tx.oncomplete = () => db.close()
     })
   } catch (e) {
     console.warn('[AutoSave] write error:', e)
@@ -57,12 +58,14 @@ export async function autosaveSession(
 export async function restoreSession(): Promise<AutosaveEntry | null> {
   try {
     const db = await openDB()
-    return await new Promise<AutosaveEntry | null>((resolve, reject) => {
+    const result = await new Promise<AutosaveEntry | null>((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, 'readonly')
       const req = tx.objectStore(STORE_NAME).get(KEY)
       req.onsuccess = () => resolve((req.result as AutosaveEntry) ?? null)
       req.onerror = () => reject(req.error)
+      tx.oncomplete = () => db.close()
     })
+    return result
   } catch (e) {
     console.warn('[AutoSave] read error:', e)
     return null
@@ -77,6 +80,7 @@ export async function clearAutosave(): Promise<void> {
       const req = tx.objectStore(STORE_NAME).delete(KEY)
       req.onsuccess = () => resolve()
       req.onerror = () => reject(req.error)
+      tx.oncomplete = () => db.close()
     })
   } catch (e) {
     console.warn('[AutoSave] clear error:', e)

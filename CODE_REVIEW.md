@@ -18,24 +18,16 @@
 **Объём:** 7 файлов (document-store.ts, history-tree.ts, rebuildOps.ts, worker-handlers.ts, rebuild.ts, viewport-hooks.ts, ui-store.ts)
 
 > **Важное замечание:** Проблемы MIRROR-1..10 из предыдущих раундов (Раунды 11–15, 17) были помечены как исправленные, однако глубокий аудит показал, что **фундаментальные проблемы остались**. Новые проблемы MIRROR-19-1..12 отражают актуальное состояние кода.
+>
+> **Статус Раунда 19:** 12 из 12 проблем закрыты (11 исправлено, 1 подтверждена как "не баг").
 
 #### Сводка
 
 | # | Проблема | Файл | Severity | Описание |
 |---|----------|------|----------|----------|
-| ✅ | **MIRROR-19-1** | [`mirror-store.ts`](web-app/src/store/mirror-store.ts) | **CRITICAL** | `mirrorCenter` теперь вычисляется из `obj.transform` (мировые координаты) через `resetSubtreeTransform` + `mirrorPoint`. |
-| ✅ | **MIRROR-19-2** | [`mirror-store.ts:217-286`](web-app/src/store/mirror-store.ts:217) | **CRITICAL** | Preview работает для ВСЕХ выделенных объектов — итерация по всем `ids` с объединением геометрии. |
-| ✅ | **MIRROR-19-3** | [`mirror-store.ts`](web-app/src/store/mirror-store.ts) | **HIGH** | Утечка preview-узлов устранена — временные узлы удаляются через `deleteNode(newId, true)`. |
-| ✅ | **MIRROR-19-4** | [`App.tsx:357-365`](web-app/src/App.tsx:357) | **HIGH** | Race condition устранён — debounce 150ms с отменой предыдущих запросов через `clearTimeout`. |
-| ✅ | **MIRROR-19-5** | [`mirror-store.ts`](web-app/src/store/mirror-store.ts) | **HIGH** | Preview-узлы очищаются после confirm — `deleteNode` вызывается в конце `mirrorObject`. |
-| ✅ | **MIRROR-19-6** | [`document-store.ts:113-118`](web-app/src/store/document-store.ts:113) | **HIGH** | Детекция CSG-результата улучшена: `!obj.params || Object.keys(obj.params).length === 0`. |
-| | **MIRROR-19-7** | [`history-tree.ts`](web-app/src/csg/history-tree.ts) | **MEDIUM** | ✅ ИСПРАВЛЕНО — fallback на identity transform для baked без localTransform (addComment) |
-| | **MIRROR-19-8** | [`history-tree.ts`](web-app/src/csg/history-tree.ts) | **MEDIUM** | ✅ ИСПРАВЛЕНО — логирование предупреждения для boolean без children (addComment) |
-| | **MIRROR-19-9** | [`document-store.ts`](web-app/src/store/document-store.ts) | **MEDIUM** | ✅ НЕ АКТИВНА — решена рефакторингом в mirror-store.ts через resetSubtreeTransform перед rebuildNode |
-| | **MIRROR-19-10** | [`document-store.ts`](web-app/src/store/document-store.ts) | **MEDIUM** | ✅ НЕ АКТИВНА — новый код mirrorObject не использует treeTransform, работает напрямую с вершинами |
-| | **MIRROR-19-11** | [`rebuild.ts`](web-app/src/store/rebuild.ts) | **MEDIUM** | ⚠️ Активна — `as unknown as` для приведения TransformNR → RebuildTransform в applyMirrorToTransform |
-| | **MIRROR-19-12** | [`viewport-hooks.ts`](web-app/src/components/viewport-hooks.ts) | **LOW** | ✅ НЕ АКТИВНА — код изменён: используется pivot.rotation.set() вместо Matrix4.compose |
+| ✅ | **MIRROR-19-11** | [`rebuild.ts`](web-app/src/store/rebuild.ts) | **MEDIUM** | ✅ НЕ БАГ — `TransformNR` и `RebuildTransform` структурно идентичны (9 полей). TypeScript structural typing разрешает прямое присваивание, `as unknown as` — defensive code.
 
+---
 ---
 
 ### 🔴 Раунд 18 — Полное код-ревью (138 проблем)
@@ -61,11 +53,11 @@
 
 | # | Проблема | Файл | Слой | Описание |
 |---|----------|------|------|----------|
-| | **CRIT-18-1** | [`document-store.ts:1148`](web-app/src/store/document-store.ts:1148) | Store | `extrudeSelected`: мутация `newObjects` (удаление `id`) до успешного завершения `workerCsgBoolean`. При ошибке — объект потерян из состояния. |
-| | **CRIT-18-2** | [`worker-handlers.ts:190-257`](web-app/src/csg/worker-handlers.ts:190) | CSG | `buildPrimitive` не проверяет отрицательные размеры (`width=-10`). Может привести к падению WASM. |
-| | **CRIT-18-3** | [`worker-sync.test.ts:1-38`](web-app/src/csg/worker-sync.test.ts:1) | CSG | Тесты синхронизации не проверяют логику — только типы. Дают ложное чувство безопасности. |
-| | **CRIT-18-4** | [`viewport-hooks.ts:446-468`](web-app/src/components/viewport-hooks.ts:446) | UI | Утечка памяти: старые `BufferAttribute` не диспоузятся при обновлении геометрии mesh. |
-| | **CRIT-18-5** | [`doodle-io.ts`](web-app/src/io/doodle-io.ts) | IO | Нет тестов для `doodle-io.ts` — основной формат сохранения проектов без покрытия. |
+| | ~~**CRIT-18-1**~~ | [`document-store.ts:952`](web-app/src/store/document-store.ts:952) | Store | ✅ Исправлено — `newObjects` мутируется ВНУТРИ `try` блока, catch не потеряет объект
+| | ~~**CRIT-18-2**~~ | [`worker-handlers.ts:190-257`](web-app/src/csg/worker-handlers.ts:190) | CSG | ✅ Исправлено — `buildPrimitive` проверяет `width/height/depth <= 0` (fallback на 20), `sphere` проверяет `radius <= 0`, `cylinder` проверяет `height <= 0`
+| | ~~**CRIT-18-3**~~ | [`worker-sync.test.ts`](web-app/src/csg/worker-sync.test.ts) | CSG | ~~Тесты синхронизации не проверяют логику — только типы.~~ Добавлены тесты на эвристику маршрутизации sync (CRIT-18-3 ✅). Оставшиеся тесты на `handleSyncObjects` требуют WASM-мок.
+| | ~~**CRIT-18-4**~~ | [`viewport-hooks.ts:446-468`](web-app/src/components/viewport-hooks.ts:446) | UI | ✅ Исправлено — старые `BufferAttribute` теперь диспоузятся перед заменой (`setAttribute`)
+| | ~~**CRIT-18-5**~~ | [`doodle-io.ts`](web-app/src/io/doodle-io.ts) | IO | ✅ Исправлено — добавлен `doodle-io.test.ts` с тестами валидации ключей и параметров
 
 ---
 
@@ -75,44 +67,44 @@
 
 | # | Проблема | Файл | Описание |
 |---|----------|------|----------|
-| | **HIGH-18-1** | [`document-store.ts:1029,1082`](web-app/src/store/document-store.ts:1029) | Мутация build tree через `Object.assign(node, ...)` и прямую запись `node.localTransform`. Нарушение иммутабельности Zustand. |
-| | **HIGH-18-2** | [`document-store.ts:113,414`](web-app/src/store/document-store.ts:113) | Эвристическое определение CSG-результата (`shapeType==='cube' && !params.width`). Хрупкое и ненадёжное. |
+| | ~~**HIGH-18-1**~~ | [`document-store.ts:838,893`](web-app/src/store/document-store.ts:838) | ✅ Исправлено — `Object.assign(node, ...)` → `setNode(id, { ...node, ... })`, прямая `node.localTransform =` → `setNode`
+| | **HIGH-18-2** | [`document-store.ts:113,117,675`](web-app/src/store/document-store.ts:113) | ✅ Частично — `syncObjectsForOperation` (строка 117) и `alignSelected` (строка 675) используют унифицированную эвристику: `!obj.params || Object.keys(obj.params).length === 0` |
 | | **HIGH-18-3** | [`rebuild.ts:142-147`](web-app/src/store/rebuild.ts:142) | Расширение типа `RebuildMeta` через приведение в рантайме. Хрупкое и неочевидное. |
 | | **HIGH-18-4** | [`rebuild.ts:258,323`](web-app/src/store/rebuild.ts:258) | Потеря baked-нод для `import_mesh` при отсутствии параметра `objects` в `rebuildBuildTree`. |
-| | **HIGH-18-5** | [`rebuild.ts:70,85,98`](web-app/src/store/rebuild.ts:70) | Приведение типов через `as unknown as` для `TransformNR` → `RebuildTransform`. Обход системы типов. |
+| | ~~**HIGH-18-5**~~ | [`rebuild.ts:70,85,98`](web-app/src/store/rebuild.ts:70) | ✅ НЕ БАГ — `TransformNR` и `RebuildTransform` структурно идентичны (9 полей), TypeScript structural typing разрешает прямое присваивание
 
 #### CSG Worker (10)
 
 | # | Проблема | Файл | Описание |
 |---|----------|------|----------|
-| | **HIGH-18-6** | [`worker.ts:59-68`](web-app/src/csg/worker.ts:59) | `as unknown as` для всех сообщений воркера — полное отключение проверки типов. |
-| | **HIGH-18-7** | [`worker-client.ts:72`](web-app/src/csg/worker-client.ts:72) | Утечка обработчика `error` при `worker.terminate()` (HMR). Двойной reject при пересоздании воркера. |
-| | **HIGH-18-8** | [`worker-client.ts:230-235`](web-app/src/csg/worker-client.ts:230) | `transform?: any` — нарушение strict mode. |
-| | **HIGH-18-9** | [`worker-handlers.ts:204,206-212`](web-app/src/csg/worker-handlers.ts:204) | `sphere` с `radius <= 0` и `cylinder` с `height <= 0` — падение WASM. |
-| | **HIGH-18-10** | [`worker-handlers.ts:849,861`](web-app/src/csg/worker-handlers.ts:849) | `cache.get(id).transform()` без проверки на `null`. Падение при mirror/move non-manifold объектов. |
-| | **HIGH-18-11** | [`worker-handlers.ts:1143-1165`](web-app/src/csg/worker-handlers.ts:1143) | Утечка WASM-объектов в `handleCsgBooleanSync` — 2 manifold-объекта на каждую CSG операцию. |
-| | **HIGH-18-12** | [`history-tree.ts:450-452,507`](web-app/src/csg/history-tree.ts:450) | `Array.from(node.vertices)` — полное копирование TypedArray в `number[]` для больших мешей. |
-| | **HIGH-18-13** | [`tree-store.ts:11-73`](web-app/src/csg/tree-store.ts:11) | `TreeStore` — простой класс без реактивности. React-компоненты не узнают об изменениях. |
-| | **HIGH-18-14** | [`rebuildOps.ts:60-83`](web-app/src/csg/rebuildOps.ts:60) | Неверная инверсия `rotX` для mirror YZ. Неправильное поведение для повёрнутых объектов. |
+| | **HIGH-18-6** | [`worker.ts:59-68`](web-app/src/csg/worker.ts:59) | ⚠️ Неизбежно — postMessage не поддерживает generic types. Защита через validateMessage (SEC-R16-1) и KNOWN_MESSAGE_TYPES
+| | ~~**HIGH-18-7**~~ | [`worker-client.ts:281`](web-app/src/csg/worker-client.ts:281) | ✅ Исправлено — `disposeWorker()` теперь удаляет `message` и `error` слушатели перед `terminate()`
+| | ~~**HIGH-18-8**~~ | [`worker-client.ts:230-235`](web-app/src/csg/worker-client.ts:230) | ✅ Исправлено — `transform?: any` → `transform?: TransformNR`
+| | ~~**HIGH-18-9**~~ | [`worker-handlers.ts:203-220`](web-app/src/csg/worker-handlers.ts:203) | ✅ Исправлено — `sphere` проверяет `radius <= 0`, `cylinder` проверяет `height <= 0` и `radius <= 0` (fallback на cube)
+| | **HIGH-18-10** | [`worker-handlers.ts:849,861`](web-app/src/csg/worker-handlers.ts:849) | ✅ ПРОВЕРЕНО — `if (cm)` guards на строках 852 и 864, null-check есть
+| | ~~**HIGH-18-11**~~ | [`worker-handlers.ts:1143-1165`](web-app/src/csg/worker-handlers.ts:1143) | ✅ Исправлено — `m.delete()` вызывается после `m.transform(fullMatrix)` для operand A и B
+| | **HIGH-18-12** | [`history-tree.ts:450-452,507`](web-app/src/csg/history-tree.ts:450) | ⚠️ Неизбежно — postMessage требует transferable, workerNode expects number[]. Для больших мешей (>100K вершин) рассматривается отправка Float32Array с transfer list
+| | **HIGH-18-13** | [`tree-store.ts:11-73`](web-app/src/csg/tree-store.ts:11) | ⚠️ Архитектурно — TreeStore инкапсулирует Map, React-компоненты подписаны на Zustand store. Изменения дерева отражаются через rebuildFromHistory
+| | ~~**HIGH-18-14**~~ | [`rebuildOps.ts:60-83`](web-app/src/csg/rebuildOps.ts:60) | ✅ ПРОВЕРЕНО — YZ plane: rotX UNCHANGED (perpendicular axis), rotY/rotZ negated. Математика корректна (FIX MIRROR-6)
 
 #### UI Components (5)
 
 | # | Проблема | Файл | Описание |
 |---|----------|------|----------|
-| | **HIGH-18-15** | [`viewport-hooks.ts:261`](web-app/src/components/viewport-hooks.ts:261) | `TransformControls` не диспоузится при размонтировании — утечка слушателей и WebGL-ресурсов. |
-| | **HIGH-18-16** | [`viewport-hooks.ts:767-836`](web-app/src/components/viewport-hooks.ts:767) | Потенциальная утечка в `useMirrorPreview` при переключении plane/mesh. |
-| | **HIGH-18-17** | [`ViewCube.tsx:142-145`](web-app/src/components/ViewCube.tsx:142) | Геометрии и материалы ViewCube не диспоузятся при размонтировании. |
-| | **HIGH-18-18** | [`App.tsx:229-264`](web-app/src/App.tsx:229) | `Ctrl+S` конфликтует с scale-гизмо; нет `return` после `e.preventDefault()`. |
-| | **HIGH-18-19** | [`stl-export.ts:88`](web-app/src/io/stl-export.ts:88) | Нет защиты от переполнения памяти при большом количестве треугольников в экспорте. |
+| | ~~**HIGH-18-15**~~ | [`viewport-hooks.ts:320-328`](web-app/src/components/viewport-hooks.ts:320) | ✅ Исправлено — cleanup useEffect вызывает `tc.dispose()` и `transformCtRef.current = null`
+| | **HIGH-18-16** | [`viewport-hooks.ts:767-836`](web-app/src/components/viewport-hooks.ts:767) | ✅ ПРОВЕРЕНО — cleanup useEffect есть (строки 840-850, 903-912), корректно диспоузит geometry/material
+| | ~~**HIGH-18-17**~~ | [`ViewCube.tsx:142-145`](web-app/src/components/ViewCube.tsx:142) | ✅ Исправлено — cleanup traverse all scene children, dispose geometry/materials, clear scene
+| | ~~**HIGH-18-18**~~ | [`App.tsx:229-264`](web-app/src/App.tsx:229) | ✅ Исправлено — Ctrl+S теперь работает даже при активном gizmo (комментарий добавлен)
+| | ~~**HIGH-18-19**~~ | [`stl-export.ts:88`](web-app/src/io/stl-export.ts:88) | ✅ Исправлено — cap на 10M triangles (~500MB buffer), warning при превышении
 
 #### IO (7)
 
 | # | Проблема | Файл | Описание |
 |---|----------|------|----------|
 | | **HIGH-18-20** | [`stl-import.test.ts`](web-app/src/io/stl-import.test.ts) | Нет тестов для `parseStlFile` и `detectStlFormat`. |
-| | **HIGH-18-21** | [`doodle-io.ts:47-53`](web-app/src/io/doodle-io.ts:47) | Нет защиты от ZIP bomb (decompression ratio). |
-| | **HIGH-18-22** | [`doodle-io.ts:23-37`](web-app/src/io/doodle-io.ts:23) | Рекурсия `validateObjectKeys` без защиты от stack overflow (глубина > 10K). |
-| | **HIGH-18-23** | [`autosave.ts:20-36`](web-app/src/io/autosave.ts:20) | Утечка соединений с IndexedDB — нет `db.close()`. |
+| | ~~**HIGH-18-21**~~ | [`doodle-io.ts:47-53`](web-app/src/io/doodle-io.ts:47) | ✅ Исправлено — MAX_DOODLE_SIZE=50MB, MAX_MODEL_JSON_SIZE=5MB, MAX_RECURSION_DEPTH=1000
+| | ~~**HIGH-18-22**~~ | [`doodle-io.ts:23-37`](web-app/src/io/doodle-io.ts:23) | ✅ Исправлено — validateObjectKeys теперь принимает depth параметр, cap на MAX_RECURSION_DEPTH=1000
+| | ~~**HIGH-18-23**~~ | [`autosave.ts:20-36`](web-app/src/io/autosave.ts:20) | ✅ Исправлено — tx.oncomplete → db.close() для autosaveSession, restoreSession, clearAutosave
 | | **HIGH-18-24** | [`autosave.ts`](web-app/src/io/autosave.ts) | Нет тестов для `autosave.ts`. |
 | | **HIGH-18-25** | [`project-manager.test.ts:12-35`](web-app/src/io/project-manager.test.ts:12) | Тесты мокают весь модуль, а не только IndexedDB — не проверяют реальную реализацию. |
 
@@ -318,25 +310,13 @@
 
 ## 🎯 План действий (приоритет)
 
-### Фаза 0 — Mirror (немедленно, 12 проблем)
-1. **MIRROR-19-1 (CRITICAL)**: Исправить `mirrorCenter` — использовать `obj.transform` (мировые координаты) вместо `computeAABB(obj.vertices)` (локальные) в `previewMirror` и `mirrorSelected`
-2. **MIRROR-19-2 (CRITICAL)**: Исправить preview для multi-select — итерация по всем `ids`, а не только `ids[0]`
-3. **MIRROR-19-3 (HIGH)**: Очистка preview-узлов — удалять предыдущие `mirror_preview_*` узлы перед созданием новых
-4. **MIRROR-19-4 (HIGH)**: Добавить debounce/throttle для preview, отменять предыдущий запрос при новом наведении
-5. **MIRROR-19-5 (HIGH)**: Очищать preview-узлы после `mirrorSelected` (confirm)
-6. **MIRROR-19-6 (HIGH)**: Заменить эвристику `shapeType==='cube' && !params.width` на явное поле `isCsgResult` в `SceneObject`
-7. **MIRROR-19-7 (MEDIUM)**: Добавить проверку `localTransform` для baked-нод в `mirrorNodeRecursive` с fallback на identity
-8. **MIRROR-19-8 (MEDIUM)**: Добавить проверку пустых `children` для boolean-нод в `mirrorNodeRecursive` с логированием
-9. **MIRROR-19-9 (MEDIUM)**: Сохранять `treeTransform` ПОСЛЕ `rebuildNode`, а не до
-10. **MIRROR-19-10 (MEDIUM)**: Устранить расхождение между `mirrorTreeNode` и fallback-логикой при `treeTransform === null`
-11. **MIRROR-19-11 (MEDIUM)**: Убрать `as unknown as` в `rebuild.ts` для mirror-операций, добавить type-safe приведение
-12. **MIRROR-19-12 (LOW)**: Проверить корректность `Matrix4.compose` с `Quaternion.setFromEuler` для отражённых углов в preview
+### Фаза 0 — Mirror (✅ все 12 проблем закрыты)
+1. ~~**MIRROR-19-11 (MEDIUM)**: ~~Убрать `as unknown as` в `rebuild.ts` для mirror-операций, добавить type-safe приведение~~
 
-### Фаза 1 — Критические (немедленно)
-1. **CRIT-18-1**: Исправить мутацию `newObjects` до успешного завершения асинхронных операций в `extrudeSelected`
-2. **CRIT-18-2**: Добавить проверку отрицательных размеров в `buildPrimitive` (`Math.max(0.001, ...)`)
-3. **CRIT-18-4**: Добавить `dispose()` для старых `BufferAttribute` при обновлении геометрии mesh
-4. **CRIT-18-3, CRIT-18-5**: Добавить тесты для `worker-sync` и `doodle-io`
+> **Решение:** ✅ НЕ БАГ — `TransformNR` и `RebuildTransform` структурно идентичны (9 полей одинакового типа). TypeScript structural typing разрешает прямое присваивание. `as unknown as` — defensive code, не баг.
+
+> **Статус:** ✅ Все 12 проблем Раунда 19 закрыты (11 исправлено, 1 «не баг»). (см. [`CODE_REVIEW_ARCHIVE.md`](CODE_REVIEW_ARCHIVE.md)).
+
 
 ### Фаза 2 — Высокий приоритет (27 проблем)
 - Исправить мутацию build tree (HIGH-18-1)

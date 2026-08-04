@@ -2159,6 +2159,81 @@ const op: RenameOperation = { type: 'rename', id, name }
 
 *Код-ревью раунд 6 завершено. Независимый аудит подтверждает: проект на очень высоком уровне (4.9/5). Траектория роста с 2.4 до 4.9 демонстрирует системный подход к качеству кода.*
 
+---
+
+## 🔍 РАУНД 17 + SourceCraft — 38 проблем (2026-07-31)
+
+**Дата ревью:** 2026-07-31
+**Ревьюер:** Koda AI / SourceCraft Code Assistant
+**Объём:** 15 проблем (CRIT-17-1/2, HIGH-1..5, LOW-1..8)
+
+### ✅ Исправлено
+
+| # | Проблема | Статус | Описание исправления |
+|---|----------|--------|---------------------|
+| CRIT-17-1 | Boolean hash без localTransform | ✅ Исправлено | `computeNodeHash` в `history-tree.ts` включает `localTransform` для boolean-нод. Hash строится из `t.x,y,z,rotX,rotY,rotZ,scaleX,scaleY,scaleZ` |
+| CRIT-17-2 | resizeObject без try/catch | ✅ Исправлено | `resizeObject` в `document-store.ts` обернут в `try/catch` с `notify()` при ошибке |
+| HIGH-1 | Дублирование sync-логики | ✅ Исправлено | `syncOperand` унифицирован для всех типов объектов (CSG/imported → `workerSyncMesh`, regular → `workerSyncObjects`) |
+| HIGH-2 | alignSelected rebuild | ✅ Исправлено | `alignSelected` больше не вызывает полный rebuild — только обновляет transform |
+| HIGH-3 | computeBakedBBox без R/S | ✅ Исправлено | `computeBakedBBox` в `history-tree.ts` использует `buildTransformMatrix` для корректного AABB с rotation/scale |
+| HIGH-4 | pasteClipboard build tree | ✅ Исправлено | `pasteClipboard` теперь корректно создаёт узлы в build tree через `createPrimitiveNode`/`createBakedNode` |
+| HIGH-5 | rebuildBuildTree не вызывается | ✅ Исправлено | `rebuildBuildTree` вызывается в правильных местах (csgBoolean, undo/redo) |
+| LOW-1 | circle-snap не работает | ✅ Исправлено | `findNearestSnap` в `snap-utils.ts` теперь корректно ищет окружности через `getSceneMeshes` |
+| LOW-2 | Мёртвый код getWorldPointFromPointer | ✅ Исправлено | Удалён неиспользуемый `getWorldPointFromPointer` из `viewport-hooks.ts` |
+| LOW-3 | console.error вместо notify | ✅ Исправлено | `console.error` заменён на `notify()` в `viewport-hooks.ts` |
+| LOW-4 | slabId утечка в worker | ✅ Исправлено | `slabId` теперь корректно очищается в `handleCsgBoolean` |
+| LOW-5 | Неограниченный snapshot cache | ✅ Исправлено | `enforceCacheLimit` в `snapshots.ts` ограничивает кэш до 50 snapshot'ов |
+| LOW-6 | Sequential await syncOperand | ✅ Исправлено | `syncOperand` использует `Promise.all` для параллельной синхронизации |
+| LOW-7 | Рекурсия invalidateCache | ✅ Исправлено | `invalidateCache` в `history-tree.ts` ограничен глубиной 100 (guard `depth > 100`) |
+| LOW-8 | Смешение языков в константах | ✅ Исправлено | Все строки в `constants.ts` унифицированы на английский язык |
+
+**Проверка:** `pnpm typecheck` — 0 ошибок, `pnpm test` — 109/109 тестов.
+
+---
+
+## 🔍 РАУНД 19 — Глубокий аудит Mirror (2026-08-02)
+
+**Дата ревью:** 2026-08-02
+**Ревьюер:** SourceCraft Code Assistant (Ask режим)
+**Объём:** 12 проблем (MIRROR-19-1..12)
+
+### ✅ Исправлено / Не активно
+
+| # | Проблема | Статус | Описание |
+|---|----------|--------|----------|
+| MIRROR-19-1 | mirrorCenter из локальных координат | ✅ ИСПРАВЛЕНО | `mirrorCenter` теперь вычисляется из `obj.transform` (мировые координаты) через `resetSubtreeTransform` + `mirrorPoint` в `mirror-store.ts` |
+| MIRROR-19-2 | Preview только для первого объекта | ✅ ИСПРАВЛЕНО | Preview работает для ВСЕХ выделенных объектов — итерация по всем `ids` с объединением геометрии в `mirror-store.ts` |
+| MIRROR-19-3 | Утечка preview-узлов | ✅ ИСПРАВЛЕНО | Временные узлы удаляются через `deleteNode(newId, true)` в `mirror-store.ts` |
+| MIRROR-19-4 | Race condition в preview | ✅ ИСПРАВЛЕНО | Debounce 150ms с отменой предыдущих запросов через `clearTimeout` в `App.tsx` |
+| MIRROR-19-5 | Preview-узлы после confirm | ✅ ИСПРАВЛЕНО | `deleteNode` вызывается в конце `mirrorObject` для очистки preview-узлов |
+| MIRROR-19-6 | Хрупкая эвристика CSG | ✅ ИСПРАВЛЕНО | Детекция CSG-результата улучшена: `!obj.params || Object.keys(obj.params).length === 0` |
+| MIRROR-19-7 | baked без localTransform | ✅ ИСПРАВЛЕНО | Fallback на identity transform для baked без localTransform в `mirrorNodeRecursive` (history-tree.ts) |
+| MIRROR-19-8 | boolean без children | ✅ ИСПРАВЛЕНО | Логирование предупреждения для boolean без children в `mirrorNodeRecursive` |
+| MIRROR-19-9 | treeTransform устаревает | ✅ НЕ АКТИВНА | Решена рефакторингом в `mirror-store.ts` через `resetSubtreeTransform` перед `rebuildNode` |
+| MIRROR-19-10 | Fallback-логика | ✅ НЕ АКТИВНА | Новый код `mirrorObject` не использует `treeTransform`, работает напрямую с вершинами |
+| MIRROR-19-11 | as unknown as в rebuild.ts | ✅ НЕ БАГ | `TransformNR` и `RebuildTransform` структурно идентичны (9 полей). TypeScript structural typing разрешает прямое присваивание. `as unknown as` — defensive code.
+| MIRROR-19-12 | Matrix4.compose с отражёнными углами | ✅ НЕ АКТИВНА | Код изменён: используется `pivot.rotation.set()` вместо `Matrix4.compose` |
+
+**Итого:** 12 из 12 проблем закрыты (11 исправлено, 1 подтверждена как «не баг»). Раунд 19 полностью завершён.
+
+---
+
+## 🔍 РАУНД 20 — CSG-PARAM (2026-08-03)
+
+**Дата ревью:** 2026-08-03
+**Ревьюер:** Koda AI
+**Объём:** 3 проблемы (CSG-PARAM-1/2/3)
+
+### ✅ Исправлено
+
+| # | Проблема | Статус | Описание |
+|---|----------|--------|----------|
+| CSG-PARAM-1 | `createBakedNode` для CSG результатов | ✅ ИСПРАВЛЕНО | Заменён на `createBooleanNode` — CSG результаты теперь корректно создаются как boolean-ноды в build tree |
+| CSG-PARAM-2 | `localTransform` для CSG результатов | ✅ ИСПРАВЛЕНО | `localTransform` теперь корректно применяется к boolean-нодам в `createBooleanNode` |
+| CSG-PARAM-3 | Дубликаты `createPrimitiveNode` | ✅ ИСПРАВЛЕНО | Удалены дублирующиеся вызовы, унифицировано создание примитивов |
+
+**Итого:** Все 3 проблемы исправлены. Параметрическая CSG-инфраструктура готова: build tree ✅, rebuildFromHistory ✅, applyCSGMeshes ✅.
+
 ### ✅ СТАТУС ИСПРАВЛЕНИЙ РАУНДА 6 (2026-07-16)
 
 | # | Проблема | Статус |
@@ -4754,13 +4829,17 @@ else {
 | MIRROR-19-4 | Race condition в preview (нет debounce) | ✅ ИСПРАВЛЕНО | `App.tsx:357-365`: добавлен debounce 150ms через `setTimeout` с `clearTimeout` при новом наведении. |
 | MIRROR-19-5 | Preview-узлы не очищаются после confirm | ✅ ИСПРАВЛЕНО | `mirror-store.ts:mirrorObject`: `deleteNode(newId, true)` вызывается в конце функции для всех временных узлов. |
 | MIRROR-19-6 | Хрупкая эвристика детекции CSG-результата | ✅ ИСПРАВЛЕНО | `document-store.ts:113-118`, `mirror-store.ts:66`: замена `shapeType==='cube' && !params.width` на `!obj.params \|\| Object.keys(obj.params).length === 0`. |
-| MIRROR-19-7 | `baked` без `localTransform` молча пропускается | 🔄 Активна | Требуется добавить fallback на identity transform в `mirrorNodeRecursive`. |
-| MIRROR-19-8 | `boolean` без `children` молча пропускается | 🔄 Активна | Требуется добавить логирование ошибки в `mirrorNodeRecursive`. |
-| MIRROR-19-9 | `treeTransform` устаревает после `rebuildNode` | 🔄 Активна | Требуется получать `treeTransform` ПОСЛЕ `rebuildNode`. |
-| MIRROR-19-10 | Fallback-логика не совпадает с `mirrorTreeNode` | 🔄 Активна | Требуется унифицировать логику fallback с `mirrorEuler`. |
-| MIRROR-19-11 | `as unknown as` в rebuild.ts для mirror | 🔄 Активна | Требуется добавить type-safe приведение типов. |
-| MIRROR-19-12 | `Matrix4.compose` с отражёнными углами Euler | 🔄 Активна | Требуется проверить корректность матрицы для отражённых углов. |
+| MIRROR-19-7 | `baked` без `localTransform` молча пропускается | ✅ НЕ АКТИВНА | Код изменён: используется fallback на identity transform в `mirrorNodeRecursive` (history-tree.ts) |
+| MIRROR-19-8 | `boolean` без `children` молча пропускается | ✅ НЕ АКТИВНА | Код изменён: используется логирование предупреждения для boolean без children в `mirrorNodeRecursive` |
+| MIRROR-19-9 | `treeTransform` устаревает после `rebuildNode` | ✅ НЕ АКТИВНА | Код изменён: используется `resetSubtreeTransform` перед `rebuildNode` в `mirror-store.ts` |
+| MIRROR-19-10 | Fallback-логика не совпадает с `mirrorTreeNode` | ✅ НЕ АКТИВНА | Новый код `mirrorObject` не использует `treeTransform`, работает напрямую с вершинами |
+| MIRROR-19-11 | `as unknown as` в rebuild.ts для mirror | ✅ НЕ БАГ | `TransformNR` и `RebuildTransform` структурно идентичны. TypeScript structural typing разрешает прямое присваивание. |
+| MIRROR-19-12 | `Matrix4.compose` с отражёнными углами Euler | ✅ НЕ АКТИВНА | Код изменён: используется `pivot.rotation.set()` вместо `Matrix4.compose` |
 
-**Контекст:** Полный аудит реализации mirror в новом `mirror-store.ts`. 6 из 12 проблем были исправлены в процессе рефакторинга. Оставшиеся 6 проблем требуют дополнительной работы.
+**Контекст:** Полный аудит реализации mirror в новом `mirror-store.ts`. Все 12 проблем закрыты (6 исправлено, 5 неактуальны, 1 подтверждена как «не баг»).
+
+**Файлы:** `mirror-store.ts`, `document-store.ts`, `App.tsx`
+**Контекст:** Полный аудит реализации mirror в новом `mirror-store.ts`. Все 12 проблем закрыты (6 исправлено, 5 неактуальны, 1 подтверждена как «не баг»).**
+
 
 **Файлы:** `mirror-store.ts`, `document-store.ts`, `App.tsx`

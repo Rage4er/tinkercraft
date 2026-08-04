@@ -11,6 +11,8 @@ const FORMAT_VERSION = '1.0.0'
 const MAX_MODEL_JSON_SIZE = 5 * 1024 * 1024
 /** SEC-R8-1: Максимальный размер .doodle файла (50 МБ) для защиты от ZIP bomb */
 const MAX_DOODLE_SIZE = 50 * 1024 * 1024
+/** MAX_RECURSION_DEPTH: защита от stack overflow при рекурсивной валидации */
+const MAX_RECURSION_DEPTH = 1000
 
 /** Ключи, которые могут привести к prototype pollution через JSON.parse. */
 const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype'])
@@ -20,11 +22,14 @@ const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype'])
  * Проверяет именно ключи объектов, а не подстроки в тексте,
  * чтобы избежать ложных срабатываний на легитимных данных.
  */
-function validateObjectKeys(obj: unknown, path: string): void {
+function validateObjectKeys(obj: unknown, path: string, depth: number = 0): void {
+  if (depth > MAX_RECURSION_DEPTH) {
+    throw new Error(`Некорректный model.json: слишком глубокая вложенность (>${MAX_RECURSION_DEPTH}) по пути "${path}"`)
+  }
   if (typeof obj !== 'object' || obj === null) return
   if (Array.isArray(obj)) {
     for (let i = 0; i < obj.length; i++) {
-      validateObjectKeys(obj[i], `${path}[${i}]`)
+      validateObjectKeys(obj[i], `${path}[${i}]`, depth + 1)
     }
     return
   }
@@ -32,7 +37,7 @@ function validateObjectKeys(obj: unknown, path: string): void {
     if (UNSAFE_KEYS.has(key)) {
       throw new Error(`Некорректный model.json: обнаружен небезопасный ключ "${key}" по пути "${path}"`)
     }
-    validateObjectKeys((obj as Record<string, unknown>)[key], path ? `${path}.${key}` : key)
+    validateObjectKeys((obj as Record<string, unknown>)[key], path ? `${path}.${key}` : key, depth + 1)
   }
 }
 
