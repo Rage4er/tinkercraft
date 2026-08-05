@@ -8,7 +8,12 @@
  * FIX (CODE-R16-1): Extracted shared logic to eliminate duplication between
  * rebuild.ts and worker-matrix.ts. Returns row-indexed elements r<row><col>.
  *
- * @param rot   Rotation in degrees (rotX, rotY, rotZ)
+ * FIX (MED-18-27): Euler order is fixed as XYZ (Rz × Ry × Rx) and documented.
+ * All code in the project uses this same order — Three.js Euler 'XYZ' default
+ * and manifold-3d transforms are consistent with this convention.
+ * If a different Euler order is needed in the future, add an `order` param.
+ *
+ * @param rot   Rotation in degrees (rotX, rotY, rotZ), applied as Rz × Ry × Rx
  * @param scale Scale factors (scaleX, scaleY, scaleZ)
  * @returns 9 elements: [r00, r01, r02, r10, r11, r12, r20, r21, r22]
  */

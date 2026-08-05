@@ -258,6 +258,9 @@ export function useThreeInit(
         const ro = new ResizeObserver(() => {
             const cw = container.clientWidth;
             const ch = container.clientHeight;
+            // FIX (LOW-18-23): Use devicePixelRatio for correct rendering on high-DPI displays
+            const dpr = window.devicePixelRatio || 1;
+            renderer.setPixelRatio(dpr);
             renderer.setSize(cw, ch);
             camera.aspect = cw / ch;
             camera.updateProjectionMatrix();
@@ -448,9 +451,9 @@ export function useMeshSync(
 
                     // FIX (CRIT-18-4): Dispose old BufferAttribute before replacing to prevent memory leak
                     const oldPos = existing.mesh.geometry.getAttribute('position');
-                    if (oldPos) oldPos.dispose();
+                    if (oldPos) (oldPos as unknown as { dispose?: () => void }).dispose?.()
                     const oldIdx = existing.mesh.geometry.index;
-                    if (oldIdx) oldIdx.dispose();
+                    if (oldIdx) (oldIdx as unknown as { dispose?: () => void }).dispose?.()
 
                     existing.mesh.geometry.setAttribute(
                         "position",

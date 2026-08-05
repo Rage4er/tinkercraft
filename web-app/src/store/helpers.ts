@@ -27,11 +27,10 @@ export function computeCenter(vertices: Float32Array): Vec3 {
 }
 
 /** Shifts vertices so bbox center is at origin; MUTATES the input array in-place.
- *
- * FIX (CRIT-R16-2): Renamed from extractAndCenter to make the in-place
- * mutation explicit. Callers that need to preserve the original array
- * should pass a copy.
- *
+/**
+ * Extract center from vertices, center them in place, and return center.
+ * MUTATES the input array — caller should pass a copy if they need the original.
+ * FIX (MED-18-6): Explicit mutation documented in JSDoc and name (extractAndCenterInPlace).
  * @returns the offset {cx, cy, cz} that was subtracted from all vertices.
  */
 export function extractAndCenterInPlace(vertices: Float32Array): { cx: number; cy: number; cz: number } {

@@ -4,8 +4,9 @@ export default function WebGLFallback() {
       <span className="fallback-icon">🖥️</span>
       <strong className="fallback-title">WebGL недоступен</strong>
       <p className="fallback-msg">
-        Это окружение Replit не поддерживает WebGL (headless).
-        Откройте приложение в&nbsp;браузере для полной 3D-визуализации.
+        {/* FIX (LOW-18-41): Remove hardcoded "Replit" reference — generic message */}
+        Это окружение не поддерживает WebGL (headless или software rendering).
+        Откройте приложение в&nbsp;браузере с аппаратным ускорением для полной 3D-визуализации.
       </p>
       <p className="fallback-hint">
         CSG движок и остальной UI работают корректно.

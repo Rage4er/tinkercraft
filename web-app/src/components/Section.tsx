@@ -13,20 +13,22 @@ export default function Section({
   defaultOpen?: boolean;
 }) {
   const [open, setOpen] = useState(defaultOpen);
+  const sectionId = `section-${title.replace(/\s+/g, '-').toLowerCase()}`
   return (
     <div className="section">
-      <div 
-        className="section-title" 
+      <div
+        className="section-title"
         onClick={() => setOpen((o) => !o)}
-        onKeyDown={(e) => { 
-          if (e.key === 'Enter' || e.key === ' ') { 
-            e.preventDefault(); 
-            setOpen((o) => !o) 
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            setOpen((o) => !o)
           }
         }}
         role="button"
         tabIndex={0}
         aria-expanded={open}
+        aria-controls={sectionId}
       >
         <span>{title}</span>
         <span className="flex-row" style={{ marginLeft: "auto", marginRight: 4 }}>
@@ -36,7 +38,7 @@ export default function Section({
           </span>
         </span>
       </div>
-      <div className={`section-body${open ? "" : " collapsed"}`}>
+      <div id={sectionId} className={`section-body${open ? "" : " collapsed"}`}>
         {children}
       </div>
     </div>

@@ -33,9 +33,10 @@ interface SnapshotTree {
     shapeType?: string
     params?: Record<string, number>
     localTransform?: { x: number; y: number; z: number; rotX: number; rotY: number; rotZ: number; scaleX: number; scaleY: number; scaleZ: number }
-    vertices?: number[]
-    indices?: number[]
-    normals?: number[]
+    // FIX (MED-18-9): Use ArrayLike<number> to accept both TypedArray and number[]
+    vertices?: ArrayLike<number>
+    indices?: ArrayLike<number>
+    normals?: ArrayLike<number>
     operation?: 'union' | 'subtract' | 'intersect'
     children?: string[]
     parentId?: string
@@ -46,14 +47,17 @@ interface SnapshotTree {
 const treeCache = new Map<number, SnapshotTree>()
 
 /**
- * Enforce LRU eviction: if cache exceeds MAX_CACHE_SIZE, remove oldest entries.
- * Uses Map iteration order (insertion order = LRU order for our access pattern).
+ * Enforce cache eviction: if cache exceeds MAX_CACHE_SIZE, remove oldest entries.
+ * FIX (LOW-18-11): Batch deletion — remove multiple entries at once to reduce
+ * the number of enforceCacheLimit calls (was 1-per-call, now removes in bulk).
  */
 function enforceCacheLimit(map: Map<number, unknown>): void {
   while (map.size > MAX_CACHE_SIZE) {
     const oldestKey = map.keys().next().value
     if (oldestKey !== undefined) {
       map.delete(oldestKey)
+    } else {
+      break
     }
   }
 }
@@ -65,15 +69,18 @@ function enforceCacheLimit(map: Map<number, unknown>): void {
 function serializeTree(nodes: TreeNode[]): SnapshotTree {
   const nodeArray: SnapshotTree['nodes'] = []
   for (const node of nodes) {
+    // FIX (MED-18-9): Keep TypedArrays as-is instead of converting to Array.
+    // structuredClone (used by Map operations) handles TypedArrays natively,
+    // and restoring via new Float32Array(arraylike) works for both types.
     nodeArray.push({
       id: node.id,
       type: node.type,
       shapeType: node.shapeType,
       params: node.params as Record<string, number> | undefined,
       localTransform: node.localTransform,
-      vertices: node.vertices ? Array.from(node.vertices) : undefined,
-      indices: node.indices ? Array.from(node.indices) : undefined,
-      normals: node.normals ? Array.from(node.normals) : undefined,
+      vertices: node.vertices ? (node.vertices as Float32Array) : undefined,
+      indices: node.indices ? (node.indices as Uint32Array) : undefined,
+      normals: node.normals ? (node.normals as Float32Array) : undefined,
       operation: node.operation,
       children: node.children,
       parentId: node.parentId,
@@ -120,12 +127,8 @@ export function cacheTreeSnapshot(
 export function getCachedSnapshot(
   index: number,
 ): Record<string, SceneObject> | undefined {
-  // Touch-on-access: re-insert to update LRU order in Map
-  if (cache.has(index)) {
-    const val = cache.get(index)!
-    cache.delete(index)
-    cache.set(index, val)
-  }
+  // FIX (LOW-18-10): Return without delete/re-insert — Map preserves insertion
+  // order and our eviction uses size-based (not LRU) so touch-on-access is unnecessary overhead.
   return cache.get(index)
 }
 
@@ -135,12 +138,7 @@ export function getCachedSnapshot(
 export function getCachedTreeSnapshot(
   index: number,
 ): SnapshotTree | undefined {
-  // Touch-on-access: re-insert to update LRU order in Map
-  if (treeCache.has(index)) {
-    const val = treeCache.get(index)!
-    treeCache.delete(index)
-    treeCache.set(index, val)
-  }
+  // FIX (LOW-18-10): Return without delete/re-insert — unnecessary overhead.
   return treeCache.get(index)
 }
 

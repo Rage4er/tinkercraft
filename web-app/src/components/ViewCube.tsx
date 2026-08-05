@@ -25,8 +25,9 @@ const FACES: { label: string; normal: [number, number, number]; up: [number, num
   { label: 'Низ', normal: [0, 0, -1], up: [0, 1, 0], color: '#3a8eef' },
 ]
 
-// Global RAF tracking for animateTo — cancel previous animation on new call
-let _activeAnimRaf = 0
+// Global animation generation counter — prevents stale closure issues
+// when user clicks rapidly on different ViewCube faces.
+let _animGen = 0
 
 function animateTo(
   camera: THREE.PerspectiveCamera,
@@ -35,23 +36,25 @@ function animateTo(
   toUp: THREE.Vector3,
   duration = 500,
 ) {
-  cancelAnimationFrame(_activeAnimRaf)
+  const gen = ++_animGen // Capture current generation
   const fromPos = camera.position.clone()
   const fromUp = camera.up.clone()
   const target = controls.target.clone()
   const start = performance.now()
 
   function tick() {
+    // FIX (MED-18-29): Skip if a newer animation has started
+    if (gen !== _animGen) return
     const t = Math.min((performance.now() - start) / duration, 1)
-    const e = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2
+    const e = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2
     camera.position.lerpVectors(fromPos, toPos, e)
     camera.up.lerpVectors(fromUp, toUp, e).normalize()
     camera.lookAt(target)
     controls.update()
-    if (t < 1) _activeAnimRaf = requestAnimationFrame(tick)
+    if (t < 1) requestAnimationFrame(tick)
   }
 
-  _activeAnimRaf = requestAnimationFrame(tick)
+  requestAnimationFrame(tick)
 }
 
 export default function ViewCube({ mainCamera, mainControls }: Props) {

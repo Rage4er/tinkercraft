@@ -91,10 +91,11 @@ function restoreTreeFromSnapshot(index: number): void {
   clearTree()
   for (const nd of treeSnap.nodes) {
     if (nd.type === 'primitive' && nd.shapeType && nd.params && isShapeType(nd.shapeType)) {
-      // FIX (MED-18-3): Use default identity transform instead of non-null assertion
+      // FIX (MED-18-3): Use safe access instead of non-null assertions
       const lt = nd.localTransform
       if (lt) createPrimitiveNode(nd.id, nd.shapeType, nd.params, lt)
     } else if (nd.type === 'baked') {
+      // FIX (MED-18-9): TypedArrays stored directly — no need for Array.from conversion
       const verts = nd.vertices ? new Float32Array(nd.vertices) : new Float32Array()
       const idxs = nd.indices ? new Uint32Array(nd.indices) : new Uint32Array()
       const nrm = nd.normals ? new Float32Array(nd.normals) : null

@@ -22,7 +22,7 @@ export default function StatusBar({
   fps: number;
 }) {
   return (
-    <div 
+    <div
       className="statusbar"
       role="status"
       aria-live="polite"
@@ -74,8 +74,8 @@ export default function StatusBar({
         FPS: <strong>{fps}</strong>
       </span>
       <span className="status-item text-muted-xs">
-        Фазы 0–6 · Resize · Extrude · Ruler · ComponentTree · ProjectManager ·
-        ViewCube fix
+        {/* FIX (LOW-18-42): Remove debug phase info from production status bar */}
+        TinkerCraft Web
       </span>
     </div>
   );

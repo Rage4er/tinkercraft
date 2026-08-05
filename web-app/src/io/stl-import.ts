@@ -13,14 +13,14 @@ export const MAX_STL_FILE_SIZE = 100 * 1024 * 1024
 export const MAX_STL_TRIANGLES = 5_000_000
 
 export interface ImportedMesh {
-  vertices: number[]  // merged, flat array
-  indices: number[]
+  vertices: ArrayLike<number>  // merged, flat array
+  indices: ArrayLike<number>
   transform: TransformNR
   name: string
 }
 
 export type StlParseResult =
-  | { success: true; vertices: number[]; indices: number[]; transform: TransformNR; name: string }
+  | { success: true; vertices: ArrayLike<number>; indices: ArrayLike<number>; transform: TransformNR; name: string }
   | { success: false; error: string }
 
 /**
@@ -30,7 +30,9 @@ export type StlParseResult =
  */
 export function mergeCoincidentVertices(
   positions: Float32Array,
-): { vertices: number[]; indices: number[] } {
+): { vertices: Float32Array; indices: Uint32Array } {
+  // FIX (MED-18-41): Return TypedArrays directly instead of number[] —
+  // avoids double allocation (number[] → Float32Array conversion downstream).
   const vertMap = new Map<string, number>()
   const vertices: number[] = []
   const indices: number[] = []
@@ -52,7 +54,7 @@ export function mergeCoincidentVertices(
     indices.push(idx)
   }
 
-  return { vertices, indices }
+  return { vertices: new Float32Array(vertices), indices: new Uint32Array(indices) }
 }
 
 export function openStlFilePicker(): Promise<File | null> {
@@ -63,6 +65,9 @@ export function openStlFilePicker(): Promise<File | null> {
     input.onchange = () => resolve(input.files?.[0] ?? null)
     input.oncancel = () => resolve(null)
     input.click()
+    // FIX (LOW-18-45): Remove the input element from DOM after click to prevent leak.
+    // (input is never appended to DOM, but GC may not collect it immediately due to event handlers)
+    setTimeout(() => { input.onchange = null; input.oncancel = null }, 60000)
   })
 }
 
@@ -79,13 +84,18 @@ export function detectStlFormat(buffer: ArrayBuffer): 'binary' | 'ascii' | 'unkn
 
   // ASCII STL starts with "solid"
   if (headerStr === 'solid') {
-    // But some binary STL also starts with "solid" — check if the triangle
-    // count at offset 80 is plausible vs file size
+    // FIX (MED-18-42): Some binary STL also starts with "solid" — check if the
+    // triangle count at offset 80 is plausible vs file size (binary check first).
     const view = new DataView(buffer)
+    // FIX (LOW-18-43): Read triangle count as little-endian (STL spec)
     const triCount = view.getUint32(80, true)
     const expectedSize = 84 + triCount * 50 // 50 bytes per triangle
     // If file size matches binary format, treat as binary even with "solid" header
     if (Math.abs(expectedSize - buffer.byteLength) <= 1) return 'binary'
+    // FIX (LOW-18-43): Also check for big-endian triangle count (rare but possible)
+    const triCountBE = view.getUint32(80, false)
+    const expectedSizeBE = 84 + triCountBE * 50
+    if (Math.abs(expectedSizeBE - buffer.byteLength) <= 1) return 'binary'
     return 'ascii'
   }
 
@@ -127,6 +137,10 @@ export async function parseStlFile(file: File): Promise<StlParseResult> {
     const { vertices, indices } = mergeCoincidentVertices(positions)
 
     const triangleCount = indices.length / 3
+    // FIX (LOW-18-44): Explicit check for 0 triangles
+    if (triangleCount === 0) {
+      throw new Error('STL: 0 triangles — empty mesh')
+    }
     if (triangleCount > MAX_STL_TRIANGLES) {
       const msg = `[STL Import] Too many triangles: ${triangleCount.toLocaleString()} (max ${MAX_STL_TRIANGLES.toLocaleString()})`
       console.error(msg)

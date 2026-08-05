@@ -20,7 +20,7 @@ import {
   buildPrimitive,
   sanitizeParams,
   extractMesh,
-  ManifoldObject,
+  type ManifoldObject,
   isWasmReady,
 } from './worker-handlers'
 import { buildTransformMatrix } from './worker-matrix'

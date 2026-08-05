@@ -103,12 +103,15 @@ function collectWorldVertices(
   const pos = mesh.geometry.attributes.position;
   if (!pos) return vertices;
 
+  // FIX (MED-18-30): Reuse a single Vector3 to reduce GC pressure
+  const v = new THREE.Vector3()
+  const m = mesh.matrixWorld
+
   for (let i = 0; i < pos.count; i++) {
-    const v = new THREE.Vector3(pos.getX(i), pos.getY(i), pos.getZ(i));
-    v.applyMatrix4(mesh.matrixWorld);
-    vertices.push(v);
+    v.set(pos.getX(i), pos.getY(i), pos.getZ(i)).applyMatrix4(m)
+    vertices.push(v.clone())
   }
-  return vertices;
+  return vertices
 }
 
 /**
@@ -139,18 +142,17 @@ function collectWorldEdges(
       if (edgeSet.has(key)) continue;
       edgeSet.add(key);
 
+      // FIX (MED-18-31): Reuse Vector3 objects to reduce GC pressure
       const from = new THREE.Vector3(
         pos.getX(i1),
         pos.getY(i1),
         pos.getZ(i1),
-      );
+      ).applyMatrix4(mesh.matrixWorld);
       const to = new THREE.Vector3(
         pos.getX(i2),
         pos.getY(i2),
         pos.getZ(i2),
-      );
-      from.applyMatrix4(mesh.matrixWorld);
-      to.applyMatrix4(mesh.matrixWorld);
+      ).applyMatrix4(mesh.matrixWorld);
       edges.push({ from, to });
     }
   }
@@ -310,12 +312,11 @@ export function findNearestSnap(
   const hitMesh = hit.object as THREE.Mesh;
   const hitDistance = hit.distance;
 
-  // Курсор-дистанция: расстояние от точки на луче (на глубине hitDistance) до hitPoint
-  const cursorRay = new THREE.Raycaster();
-  cursorRay.setFromCamera(screenPos, camera);
-  const cursorPoint = new THREE.Vector3();
-  cursorRay.ray.at(hitDistance, cursorPoint);
-  const cursorDistance = hitPoint.distanceTo(cursorPoint);
+  // FIX (LOW-18-27): Reuse the original raycaster instead of creating a second one.
+  // The raycaster already has the correct camera ray — no need for a new Raycaster.
+  const cursorPoint = new THREE.Vector3()
+  raycaster.ray.at(hitDistance, cursorPoint)
+  const cursorDistance = hitPoint.distanceTo(cursorPoint)
 
   // Собираем вершины и рёбра в мировом пространстве
   const worldVerts: THREE.Vector3[] = [];

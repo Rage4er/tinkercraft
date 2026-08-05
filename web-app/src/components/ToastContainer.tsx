@@ -21,9 +21,10 @@ export default function ToastContainer() {
       {notifications.map((n) => {
         const style = STYLES[n.type];
         return (
+          // FIX (LOW-18-40): Add toast-enter animation class for fade-in/out
           <div
             key={n.id}
-            className="toast"
+            className="toast toast-enter"
             style={{ borderLeftColor: style.bg }}
             onClick={() => dismiss(n.id)}
           >

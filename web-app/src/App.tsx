@@ -199,10 +199,12 @@ export default function App() {
   const kbRef = useRef({
     objects, deleteSelected, undo, redo, selectObjects,
     saveDoodle, openDoodle, clearSelection, copySelected, pasteClipboard,
+    showTextModal, showPM,
   });
   kbRef.current = {
     objects, deleteSelected, undo, redo, selectObjects,
     saveDoodle, openDoodle, clearSelection, copySelected, pasteClipboard,
+    showTextModal, showPM,
   };
 
   useEffect(() => {
@@ -265,6 +267,8 @@ export default function App() {
         setGizmoMode((m) => (m === "scale" ? "none" : "scale"));
       }
       if (e.key === "Escape") {
+        // FIX (MED-18-39): Don't clear selection / gizmo if a modal is open
+        if (showTextModal || showPM) return
         setGizmoMode("none");
         kb.clearSelection();
         setRulerActive(false);

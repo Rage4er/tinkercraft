@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import Section from "./Section";
 import Timeline from "./Timeline";
 import ComponentTree from "./ComponentTree";
@@ -46,15 +46,12 @@ export default function LeftPanel({
   onFilterChange: (key: string, checked: boolean) => void;
   onJumpHistory: (index: number) => void;
 }) {
-  const filteredShapes = useMemo(
-    () =>
-      shapeSearch.trim()
-        ? ALL_SHAPES.filter((s) =>
-            s.label.toLowerCase().includes(shapeSearch.toLowerCase()),
-          )
-        : ALL_SHAPES,
-    [shapeSearch],
-  );
+  // FIX (LOW-18-31): Remove useMemo — ALL_SHAPES has only 8 elements, memo overhead > benefit
+  const filteredShapes = shapeSearch.trim()
+    ? ALL_SHAPES.filter((s) =>
+      s.label.toLowerCase().includes(shapeSearch.toLowerCase()),
+    )
+    : ALL_SHAPES;
 
   // Filter dropdown state
   const [filtersOpen, setFiltersOpen] = useState(false);

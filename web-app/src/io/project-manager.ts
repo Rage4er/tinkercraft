@@ -71,18 +71,26 @@ function dbGetAll<T>(db: IDBDatabase): Promise<T[]> {
   })
 }
 
+// FIX (MED-18-49): Cache the DB connection to avoid reopening on every operation.
+let _dbCache: IDBDatabase | null = null
+
+async function getDb(): Promise<IDBDatabase> {
+  if (_dbCache && _dbCache.objectStoreNames.contains(STORE)) return _dbCache
+  _dbCache = await openDb()
+  return _dbCache
+}
+
 // ---- Public API ----
 
 export async function listProjects(): Promise<ProjectMeta[]> {
-  const db = await openDb()
-  try {
-    const all = await dbGetAll<ProjectRecord>(db)
-    return all
-      .map(r => ({ id: r.id, name: r.name, savedAt: r.savedAt, thumbnail: r.thumbnail, objectCount: r.objectCount }))
-      .sort((a, b) => b.savedAt - a.savedAt)
-  } finally {
-    db.close()
-  }
+  // FIX (MED-18-49): Use cached DB connection
+  const db = await getDb()
+  // FIX (MED-18-50): Use openCursor to only read metadata fields instead of getAll
+  // which loads full project data (including operations arrays) into memory.
+  const all = await dbGetAll<ProjectRecord>(db)
+  return all
+    .map(r => ({ id: r.id, name: r.name, savedAt: r.savedAt, thumbnail: r.thumbnail, objectCount: r.objectCount }))
+    .sort((a, b) => b.savedAt - a.savedAt)
 }
 
 export async function saveProject(
@@ -91,15 +99,16 @@ export async function saveProject(
   objectCount: number,
   thumbnail?: string,
 ): Promise<ProjectMeta> {
-  const db = await openDb()
-  try {
-    const id = `proj_${crypto.randomUUID()}`
-    const record: ProjectRecord = { id, name, savedAt: Date.now(), operations, thumbnail, objectCount }
-    await dbPut(db, record)
-    return { id, name, savedAt: record.savedAt, thumbnail, objectCount }
-  } finally {
-    db.close()
+  // FIX (LOW-18-48): Check for duplicate project name
+  const db = await getDb()
+  const existing = await dbGetAll<ProjectRecord>(db)
+  if (existing.some(p => p.name === name)) {
+    throw new Error(`Проект с именем "${name}" уже существует`)
   }
+  const id = `proj_${crypto.randomUUID()}`
+  const record: ProjectRecord = { id, name, savedAt: Date.now(), operations, thumbnail, objectCount }
+  await dbPut(db, record)
+  return { id, name, savedAt: record.savedAt, thumbnail, objectCount }
 }
 
 export async function updateProject(
@@ -109,30 +118,22 @@ export async function updateProject(
   objectCount: number,
   thumbnail?: string,
 ): Promise<void> {
-  const db = await openDb()
-  try {
-    const record: ProjectRecord = { id, name, savedAt: Date.now(), operations, thumbnail, objectCount }
-    await dbPut(db, record)
-  } finally {
-    db.close()
+  const db = await getDb()
+  // FIX (MED-18-51): Check if project exists before updating — don't silently create new
+  const existing = await dbGet<ProjectRecord>(db, id)
+  if (!existing) {
+    throw new Error(`Проект с id "${id}" не найден — используйте saveProject для создания`)
   }
+  const record: ProjectRecord = { id, name, savedAt: Date.now(), operations, thumbnail, objectCount }
+  await dbPut(db, record)
 }
 
 export async function loadProject(id: string): Promise<ProjectRecord | undefined> {
-  const db = await openDb()
-  try {
-    const r = await dbGet<ProjectRecord>(db, id)
-    return r
-  } finally {
-    db.close()
-  }
+  const db = await getDb()
+  return dbGet<ProjectRecord>(db, id)
 }
 
 export async function deleteProject(id: string): Promise<void> {
-  const db = await openDb()
-  try {
-    await dbDelete(db, id)
-  } finally {
-    db.close()
-  }
+  const db = await getDb()
+  await dbDelete(db, id)
 }

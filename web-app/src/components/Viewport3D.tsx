@@ -207,9 +207,9 @@ export default function Viewport3D({
       const box = new THREE.Box3();
       for (const entry of map.values()) {
         const m = entry.mesh;
-        m.geometry.computeBoundingBox();
-        const mb = m.geometry.boundingBox;
-        if (mb) box.union(mb.clone().applyMatrix4(m.matrixWorld));
+        // FIX (LOW-18-24): Use existing boundingBox if available instead of recomputing
+        const mb = m.geometry.boundingBox ?? m.geometry.computeBoundingBox();
+        if (m.geometry.boundingBox) box.union(m.geometry.boundingBox.clone().applyMatrix4(m.matrixWorld));
       }
       const center = new THREE.Vector3();
       const size = new THREE.Vector3();
@@ -256,10 +256,10 @@ export default function Viewport3D({
       for (const [id, entry] of meshMapRef.current) {
         const m = entry.mesh;
         if (!m.visible) continue;
-        m.geometry.computeBoundingSphere();
-        const sphere = m.geometry.boundingSphere;
-        if (!sphere) continue;
-        const center = sphere.center.clone().applyMatrix4(m.matrixWorld);
+        // FIX (MED-18-28): Use existing boundingSphere if available instead of recomputing
+        const sphere = m.geometry.boundingSphere ?? m.geometry.computeBoundingSphere();
+        if (!m.geometry.boundingSphere) continue;
+        const center = m.geometry.boundingSphere.center.clone().applyMatrix4(m.matrixWorld);
         const ndc = center.project(camera);
         if (ndc.x >= minX && ndc.x <= maxX && ndc.y >= minY && ndc.y <= maxY)
           selected.push(id);
