@@ -22,7 +22,6 @@ import {
   createBakedNode,
   getNode,
 } from '../csg/history-tree'
-import { computeRSMatrix } from '../csg/worker-matrix'
 import { notify } from './notifications'
 
 /** Metadata accumulated over the operation chain. Exported for testing. */
@@ -176,40 +175,19 @@ export async function rebuildFromHistory(
     if (m && meta[id]) {
       const metaWithMesh = meta[id] as RebuildMeta & { resultVertices?: Float32Array | number[]; resultIndices?: Uint32Array | number[]; resultNormals?: Float32Array | number[] }
       if (metaWithMesh.resultVertices && metaWithMesh.resultIndices) {
-        // Use the stored CSG result mesh data directly. The mesh is already
-        // centered at origin (extractAndCenter was applied when the CSG
-        // operation was performed). Now apply the accumulated transform
-        // (position/rotation/scale) from the operation chain.
-        const t = meta[id].transform
-        const storedVerts = new Float32Array(metaWithMesh.resultVertices)
-        const finalVerts = new Float32Array(storedVerts.length)
-        const { x: px, y: py, z: pz } = t
-        // FIX (CODE-R16-1): Use shared computeRSMatrix instead of duplicated inline math
-        const [r00, r01, r02, r10, r11, r12, r20, r21, r22] = computeRSMatrix(
-          { rotX: t.rotX, rotY: t.rotY, rotZ: t.rotZ },
-          { scaleX: t.scaleX, scaleY: t.scaleY, scaleZ: t.scaleZ },
-        )
-        for (let i = 0; i < storedVerts.length; i += 3) {
-          const vx = storedVerts[i], vy = storedVerts[i + 1], vz = storedVerts[i + 2]
-          // RS * v + pos
-          finalVerts[i] = r00 * vx + r01 * vy + r02 * vz + px
-          finalVerts[i + 1] = r10 * vx + r11 * vy + r12 * vz + py
-          finalVerts[i + 2] = r20 * vx + r21 * vy + r22 * vz + pz
-        }
-        // FIX (LOW-18-9): Create new mesh object instead of mutating result.results in-place
-        m.vertices = finalVerts
+        // The stored CSG result mesh data is ALREADY centered at origin
+        // (extractAndCenter was applied when the CSG operation was performed).
+        // Keep vertices centered — the accumulated transform (position/rotation/
+        // scale) from the operation chain is applied at render time via the pivot
+        // (Viewport3D) and in the worker via handleSyncMesh (full TRS).
+        //
+        // FIX (MIRROR-CSG-RS): Previously this baked RS (rotation/scale) into the
+        // vertices AND kept the RS in the transform, causing double-application
+        // after undo/redo (both at render and in subsequent boolean operations).
+        m.vertices = new Float32Array(metaWithMesh.resultVertices)
         m.indices = new Uint32Array(metaWithMesh.resultIndices)
         if (metaWithMesh.resultNormals) {
-          // Transform normals (no translation)
-          const storedNorms = new Float32Array(metaWithMesh.resultNormals)
-          const finalNorms = new Float32Array(storedNorms.length)
-          for (let i = 0; i < storedNorms.length; i += 3) {
-            const nx = storedNorms[i], ny = storedNorms[i + 1], nz = storedNorms[i + 2]
-            finalNorms[i] = r00 * nx + r01 * ny + r02 * nz
-            finalNorms[i + 1] = r10 * nx + r11 * ny + r12 * nz
-            finalNorms[i + 2] = r20 * nx + r21 * ny + r22 * nz
-          }
-          m.normals = finalNorms
+          m.normals = new Float32Array(metaWithMesh.resultNormals)
         }
         continue
       }

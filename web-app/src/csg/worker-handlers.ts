@@ -689,13 +689,25 @@ export async function handleRebuildTreeNode(msg: RebuildTreeNodeMessage): Promis
           vertProperties: new Float32Array(nd.vertices),
           triVerts: new Uint32Array(nd.indices),
         })
-        // Apply position transform (scale=1, rot=0 for baked)
+        // Baked geometry is centered at origin. Apply the node's world transform.
+        // FIX (MIRROR-CSG-RS): Previously applied only translation, dropping the
+        // rotation/scale of mirrored CSG results (baked nodes) used as nested
+        // operands in a boolean tree — booleans were computed from unrotated/
+        // unscaled simple shapes. Now apply full TRS when the transform has
+        // non-trivial rotation/scale.
         const t = nd.localTransform || { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
-        const matrix = buildTransformMatrix(
-          { x: t.x, y: t.y, z: t.z },
-          { rotX: 0, rotY: 0, rotZ: 0 },
-          { scaleX: 1, scaleY: 1, scaleZ: 1 },
-        )
+        const hasRS = hasSR(t)
+        let matrix: number[]
+        if (hasRS) {
+          matrix = buildTransformMatrix(
+            { x: t.x, y: t.y, z: t.z },
+            { rotX: t.rotX, rotY: t.rotY, rotZ: t.rotZ },
+            { scaleX: t.scaleX, scaleY: t.scaleY, scaleZ: t.scaleZ },
+          )
+        } else {
+          // Fast path: translation only.
+          matrix = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, t.x, t.y, t.z, 1]
+        }
         const transformed = m.transform(matrix)
         m.delete()
         m = transformed
@@ -1381,19 +1393,27 @@ export interface SyncMeshMessage {
  * Sync a mesh into worker cache from raw vertices/indices.
  * Used for CSG results and imported meshes that cannot be rebuilt from shapeType+params.
  *
- * FIX (CRIT-CSG-5): For CSG results, apply only translation — geometry is already
- * centered and has rotation/scale baked in. For imported meshes (shapeType=import_mesh),
- * apply full SRT around center (same as handleRebuildScene for primitives).
+ * FIX (CRIT-CSG-5 / MIRROR-CSG-RS): CSG result meshes are centered at origin.
+ * The transform carries the full TRS (position + rotation + scale). Rotation/scale
+ * are applied at render time via the Three.js pivot (Viewport3D), so the stored
+ * vertices do NOT have rotation/scale baked in.
  *
- * The caller (syncObjectsForOperation) passes obj.transform which for CSG results
- * contains only translation (rotX/Y/Z=0, scaleX/Y/Z=1). For imported meshes,
- * transform may contain rotation/scale that need to be applied.
+ * For booleans to work, the worker cache manifold must be at the object's true
+ * world position WITH rotation/scale applied. Two cases:
+ *  - Translation-only transform (normal CSG results from csgBoolean): fast path —
+ *    apply only translation (v' = v + pos).
+ *  - Transform with non-trivial rotation/scale (mirrored CSG results, CSG results
+ *    moved with rotation/scale, imported meshes): apply full TRS
+ *    (v' = RS·v + pos) via buildTransformMatrix. Without this, booleans on
+ *    mirrored/rotated/scaled CSG results lose rotation/scale and produce
+ *    incorrect geometry.
  */
 export async function handleSyncMesh(msg: SyncMeshMessage): Promise<void> {
   const wasm = getWasm()
   const verts = new Float32Array(msg.vertices)
   const tris = new Uint32Array(msg.indices)
-  console.log(`[DIAG:handleSyncMesh] objId=${msg.objId} verts=${verts.length} tris=${tris.length} transform=(${msg.transform.x}, ${msg.transform.y}, ${msg.transform.z})`)
+  const hasRotationOrScale = hasSR(msg.transform)
+  console.log(`[DIAG:handleSyncMesh] objId=${msg.objId} verts=${verts.length} tris=${tris.length} transform=(${msg.transform.x}, ${msg.transform.y}, ${msg.transform.z}) hasSR=${hasRotationOrScale}`)
   try {
     let m = new wasm.Manifold({
       numProp: 3,
@@ -1401,11 +1421,21 @@ export async function handleSyncMesh(msg: SyncMeshMessage): Promise<void> {
       triVerts: tris,
     })
     console.log(`[DIAG:handleSyncMesh] Manifold created successfully for ${msg.objId}`)
-    // FIX (CRIT-CSG-5): Only apply translation for CSG results.
-    // CSG result meshes are already centered at origin with rotation/scale baked in.
-    // The transform.x/y/z is the centroid position from extractAndCenterGetAABB.
-    const tm = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, msg.transform.x, msg.transform.y, msg.transform.z, 1]
-    m = m.transform(tm)
+    // Geometry is centered at origin. Apply the object's world transform so the
+    // cached manifold is at the correct world position with rotation/scale.
+    let matrix: number[]
+    if (hasRotationOrScale) {
+      // Full TRS: v' = RS·v + pos (geometry centered at origin).
+      matrix = buildTransformMatrix(
+        { x: msg.transform.x, y: msg.transform.y, z: msg.transform.z },
+        { rotX: msg.transform.rotX, rotY: msg.transform.rotY, rotZ: msg.transform.rotZ },
+        { scaleX: msg.transform.scaleX, scaleY: msg.transform.scaleY, scaleZ: msg.transform.scaleZ },
+      )
+    } else {
+      // Fast path: translation only (normal CSG results have translation-only transform).
+      matrix = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, msg.transform.x, msg.transform.y, msg.transform.z, 1]
+    }
+    m = m.transform(matrix)
     setCached(msg.objId, m)
     console.log(`[DIAG:handleSyncMesh] Cached ${msg.objId} as ManifoldObject`)
     safePostMessage({ reqId: msg.reqId, type: 'ok' })

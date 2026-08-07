@@ -606,17 +606,31 @@ function transformBakedMesh(node: TreeNode): ExtractedMesh {
       triVerts: new Uint32Array(node.indices),
     })
 
-    // FIX (CRIT-CSG-7): Apply only translation for baked nodes.
-    // Baked nodes (CSG results, imported meshes) have geometry already centered
-    // at origin. The localTransform carries position (x/y/z) which must be applied.
-    // Rotation/scale are NOT applied here — they are baked into the geometry itself
-    // (for CSG results) or handled by the caller (for imported meshes in Viewport3D).
-    // This prevents double-application of rotation/scale when the mesh is rendered.
-    const matrix = buildTransformMatrix(
-      { x: t.x, y: t.y, z: t.z },
-      { rotX: 0, rotY: 0, rotZ: 0 },
-      { scaleX: 1, scaleY: 1, scaleZ: 1 },
-    )
+    // Baked geometry is centered at origin. Apply the node's world transform.
+    // FIX (CRIT-CSG-7 / MIRROR-CSG-RS): Translation-only path applies when the
+    // transform has no rotation/scale. Rotation/scale are NOT baked into the
+    // geometry of mirrored CSG results / CSG results moved with rotation/scale
+    // — they live in the transform (applied by the render pivot). When such a
+    // node is rebuilt as a nested operand of a boolean tree, the full TRS must
+    // be applied here, otherwise booleans lose rotation/scale.
+    const hasRS = Math.abs(t.rotX) > 1e-6 || Math.abs(t.rotY) > 1e-6 || Math.abs(t.rotZ) > 1e-6 ||
+      Math.abs(t.scaleX - 1) > 1e-6 || Math.abs(t.scaleY - 1) > 1e-6 || Math.abs(t.scaleZ - 1) > 1e-6
+    let matrix: number[]
+    if (hasRS) {
+      matrix = buildTransformMatrix(
+        { x: t.x, y: t.y, z: t.z },
+        { rotX: t.rotX, rotY: t.rotY, rotZ: t.rotZ },
+        { scaleX: t.scaleX, scaleY: t.scaleY, scaleZ: t.scaleZ },
+      )
+    } else {
+      // Fast path: translation only (geometry centered at origin).
+      matrix = [
+        1, 0, 0, 0,
+        0, 1, 0, 0,
+        0, 0, 1, 0,
+        t.x, t.y, t.z, 1,
+      ]
+    }
     const transformed = m.transform(matrix)
     m.delete()
 

@@ -474,15 +474,25 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       // so rebuildFromHistory can reconstruct the CSG result geometry at the correct position.
       const histOp: GroupOperation = { type: 'group', ids: [idA, idB], resultId, resultVertices: mesh.vertices, resultIndices: mesh.indices, resultNormals: mesh.normals ?? undefined, resultCenter: { x: cx, y: cy, z: cz }, originalBboxSize: originalBboxSize, treeOperation: op as 'union' | 'subtract' | 'intersect' }
       const newOps = [...operations.slice(0, historyIndex), histOp]
-      // Ensure children are registered in build tree
+      // Ensure children are registered in build tree.
+      // FIX (MIRROR-CSG-KEEPTYPE): CSG results (empty params) must be registered
+      // as BAKED nodes (carrying their actual mesh + transform), NOT as primitive
+      // cubes with empty params. Registering a placeholder cube would poison the
+      // tree: subsequent mirror/boolean rebuilds would build a default 20×20×20
+      // cube instead of the real CSG geometry ("параметры детей обнуляются").
       const ensureInTree = (id: string) => {
         if (!getNode(id)) {
           const obj = objects[id]
           if (obj) {
-            if (obj.shapeType === 'import_mesh') {
-              createBakedNode(id, obj.vertices, obj.indices, obj.normals ?? null, obj.transform)
-            } else {
+            const isPrimitive =
+              obj.shapeType &&
+              obj.shapeType !== 'import_mesh' &&
+              obj.params &&
+              Object.keys(obj.params).length > 0
+            if (isPrimitive && obj.shapeType && obj.params) {
               createPrimitiveNode(id, obj.shapeType, obj.params, obj.transform)
+            } else {
+              createBakedNode(id, obj.vertices || new Float32Array(), obj.indices || new Uint32Array(), obj.normals || null, obj.transform)
             }
           }
         }
