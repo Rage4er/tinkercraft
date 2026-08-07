@@ -18,6 +18,11 @@
 //
 // FIX (MIRROR-INNER-CSG): Воркер применяет localTransform для внутренних boolean-нод
 // после центрирования, чтобы они оказались на правильной позиции для внешнего CSG.
+//
+// OPT (MIRROR-CACHE): previewMirror кэширует результаты mirrorObject в mirrorCache.
+// Если пользователь нажимает mirror сразу после preview (не двигая объекты),
+// mirrorSelected использует закэшированные результаты вместо повторного вызова
+// mirrorObject, что экономит ресурсы WASM-воркера.
 // ============================================================
 
 import type { TransformNR, SceneObject, ShapeType, ShapeParams } from '../csg/types'
@@ -274,6 +279,36 @@ export async function mirrorObject(
     return { object: newObj, id: newId }
 }
 
+// ── Кэш preview результатов ──
+// OPT (MIRROR-CACHE): Кэшируем результаты mirrorObject из preview,
+// чтобы mirrorSelected не выполнял всю работу заново.
+// Ключ кэша: plane + ids + transforms hash.
+// Инвалидация: при изменении selectedIds, transform объектов, или plane.
+
+interface MirrorCacheEntry {
+    plane: 'XY' | 'XZ' | 'YZ'
+    ids: string[]
+    transformHash: string
+    results: Map<string, MirrorResult>
+    synced: boolean // syncObjectsForOperation уже вызван
+}
+
+let mirrorCache: MirrorCacheEntry | null = null
+
+function computeTransformHash(ids: string[], objects: Record<string, SceneObject>): string {
+    return ids.map(id => {
+        const obj = objects[id]
+        if (!obj) return ''
+        const t = obj.transform
+        // Hash с точностью до 6 знаков после запятой (достаточно для сравнения)
+        return `${id}:${t.x.toFixed(6)},${t.y.toFixed(6)},${t.z.toFixed(6)},${t.rotX.toFixed(6)},${t.rotY.toFixed(6)},${t.rotZ.toFixed(6)},${t.scaleX.toFixed(6)},${t.scaleY.toFixed(6)},${t.scaleZ.toFixed(6)}`
+    }).join('|')
+}
+
+function invalidateMirrorCache(): void {
+    mirrorCache = null
+}
+
 // ── Preview зеркала ──
 
 export async function previewMirror(
@@ -290,62 +325,61 @@ export async function previewMirror(
     try {
         await syncObjectsForOperation(ids, objects)
 
-        // Исправление MIRROR-19-2: preview для multi-select
-        // Работаем со всеми выделенными объектами, а не только с первым
-        const results: SceneObject[] = []
+        // OPT (MIRROR-CACHE): Кэшируем результаты mirrorObject для переиспользования в mirrorSelected
+        const transformHash = computeTransformHash(ids, objects)
+        const results = new Map<string, MirrorResult>()
+        const sceneObjects: SceneObject[] = []
+
         for (const id of ids) {
             const obj = objects[id]
             if (!obj) continue
 
             const result = await mirrorObject(obj, plane)
-            results.push(result.object)
+            results.set(id, result)
+            sceneObjects.push(result.object)
+        }
+
+        // Сохраняем в кэш
+        mirrorCache = {
+            plane,
+            ids: [...ids],
+            transformHash,
+            results,
+            synced: true,
         }
 
         // Если нет объектов для зеркала, возвращаем null
-        if (results.length === 0) return null
+        if (sceneObjects.length === 0) return null
 
         // Если один объект, возвращаем его напрямую (старое поведение)
-        if (results.length === 1) return results[0]
+        if (sceneObjects.length === 1) return sceneObjects[0]
 
         // Если несколько объектов, объединяем их геометрию
-        // Объединяем вершины, индексы и нормали всех объектов
         let totalVertices: number[] = []
         let totalIndices: number[] = []
         let totalNormals: number[] = []
         let vertexOffset = 0
 
-        for (const result of results) {
-            // Добавляем вершины
+        for (const result of sceneObjects) {
             totalVertices = totalVertices.concat(Array.from(result.vertices))
-
-            // Корректируем индексы с учетом смещения
             for (let i = 0; i < result.indices.length; i++) {
                 totalIndices.push(result.indices[i] + vertexOffset)
             }
-
-            // Добавляем нормали, если есть
             if (result.normals) {
                 totalNormals = totalNormals.concat(Array.from(result.normals))
             }
-
-            // Обновляем смещение для следующего объекта
             vertexOffset += result.vertices.length / 3
         }
 
-        // Создаем объединенный объект
         const mergedObject: SceneObject = {
             id: nextId(),
             shapeType: 'import_mesh',
             params: {},
-            transform: {
-                x: 0, y: 0, z: 0,
-                rotX: 0, rotY: 0, rotZ: 0,
-                scaleX: 1, scaleY: 1, scaleZ: 1
-            },
+            transform: { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 },
             vertices: new Float32Array(totalVertices),
             indices: new Uint32Array(totalIndices),
             normals: totalNormals.length > 0 ? new Float32Array(totalNormals) : null,
-            color: results[0].color, // Берем цвет первого объекта
+            color: sceneObjects[0].color,
             visible: true,
             locked: false,
             name: "Multi-mirror preview"
@@ -372,21 +406,63 @@ export async function mirrorSelected(
     }
 
     try {
-        await syncObjectsForOperation(ids, objects)
-
-        const newObjects: Record<string, SceneObject> = {}
-        const newIds: string[] = []
+        // OPT (MIRROR-CACHE): Используем закэшированные результаты из previewMirror, если актуальны
+        let newObjects: Record<string, SceneObject> = {}
+        let newIds: string[] = []
         const originalIds: string[] = []
 
-        for (const id of ids) {
-            originalIds.push(id)
-            const obj = objects[id]
-            if (!obj) continue
+        // Проверяем, можно ли использовать кэш
+        if (
+            mirrorCache &&
+            mirrorCache.plane === plane &&
+            mirrorCache.ids.length === ids.length &&
+            mirrorCache.ids.every((id, i) => id === ids[i]) &&
+            mirrorCache.transformHash === computeTransformHash(ids, objects)
+        ) {
+            // Кэш актуален - используем закэшированные результаты
+            for (const id of ids) {
+                originalIds.push(id)
+                const cachedResult = mirrorCache.results.get(id)
+                if (cachedResult) {
+                    newObjects[cachedResult.id] = cachedResult.object
+                    newIds.push(cachedResult.id)
+                } else {
+                    // Если кэш частично недоступен, откатываемся к полному вычислению
+                    console.log('[MIRROR:mirrorSelected] cache miss for id:', id)
+                    break
+                }
+            }
 
-            const result = await mirrorObject(obj, plane)
-            newObjects[result.id] = result.object
-            newIds.push(result.id)
+            // Если все результаты были в кэше, используем их
+            if (Object.keys(newObjects).length === ids.length) {
+                console.log('[MIRROR:mirrorSelected] using cached results')
+            } else {
+                // Иначе, откатываемся к полному вычислению
+                newObjects = {}
+                newIds = []
+            }
         }
+
+        // Если кэш не использовался или был частичным, вычисляем всё заново
+        if (Object.keys(newObjects).length === 0) {
+            // Синхронизируем объекты, если кэш не использовался или устарел
+            if (!mirrorCache || !mirrorCache.synced) {
+                await syncObjectsForOperation(ids, objects)
+            }
+
+            for (const id of ids) {
+                originalIds.push(id)
+                const obj = objects[id]
+                if (!obj) continue
+
+                const result = await mirrorObject(obj, plane)
+                newObjects[result.id] = result.object
+                newIds.push(result.id)
+            }
+        }
+
+        // Инвалидируем кэш после использования
+        invalidateMirrorCache()
 
         return {
             newObjects,
@@ -395,6 +471,8 @@ export async function mirrorSelected(
         }
     } catch (e) {
         console.error('[Mirror] mirrorSelected error:', e)
+        // Инвалидируем кэш при ошибке
+        invalidateMirrorCache()
         notify('Ошибка зеркального отражения', 'error')
         return null
     }

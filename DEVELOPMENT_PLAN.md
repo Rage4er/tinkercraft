@@ -549,6 +549,7 @@ web-app/
 | # | Проблема | Приоритет | Статус |
 |---|----------|-----------|--------|
 | | **MIRROR-CSG-RS** — Потеря rotation/scale при булевых операциях над зеркальными CSG-результатами | **CRITICAL** | ✅ **ИСПРАВЛЕНО** (2026-08-07) |
+| | **OPT (MIRROR-CACHE)** — Дублированная работа previewMirror и mirrorSelected | **PERFORMANCE** | ✅ **ИСПРАВЛЕНО** (2026-08-07) |
 | | ~~MIRROR-19-11: as unknown as в rebuild.ts~~ | **MEDIUM** | ✅ НЕ БАГ |
 | | CRIT-R16-3: `any` в worker | WARN | ✅ Исправлено |
 | | TEST-R16-3: snap-utils тесты | WARN | ✅ Исправлено |
