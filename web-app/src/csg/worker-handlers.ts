@@ -723,10 +723,18 @@ export async function handleRebuildTreeNode(msg: RebuildTreeNodeMessage): Promis
         // from the frontend is applied via the pivot — the centered geometry + mirrored
         // TRS gives the correct mirrored CSG result.
         //
-        // For INNER boolean nodes (id !== rootId): DO NOT center. The geometry is already
-        // in world coordinates with correct positions. Applying localTransform directly
-        // positions the inner result without shifting the geometry (centering would shift
-        // the geometry by centroid_delta, causing the sphere to "fly away").
+        // For INNER boolean nodes (id !== rootId): return the boolean result as-is
+        // (in world coordinates). DO NOT center, shift, or apply localTransform.
+        //
+        // Why? The inner boolean's localTransform is STALE — moveTreeNode only updates
+        // primitive/baked children, NOT boolean nodes. So localTransform.position is the
+        // ORIGINAL centroid, not the current one. Using it would shift geometry by
+        // (stale_centroid - actual_centroid), causing children to scatter.
+        //
+        // The ROOT boolean centers the final result at origin, which removes the overall
+        // translation. Inner boolean results are in correct world coordinates relative
+        // to each other and to sibling primitives (sphere). Root centering preserves
+        // these relative positions while removing the absolute offset.
         if (id === rootId) {
           // Center root boolean — frontend pivot applies mirrored TRS
           const mesh = m.getMesh()
@@ -749,17 +757,9 @@ export async function handleRebuildTreeNode(msg: RebuildTreeNodeMessage): Promis
           m.delete()
           m = centered
         } else {
-          // Inner boolean: apply localTransform directly to world-coordinate result.
-          // DO NOT center — centering shifts geometry by centroid_delta.
-          const lt = nd.localTransform ?? { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
-          const ltMatrix = buildTransformMatrix(
-            { x: lt.x, y: lt.y, z: lt.z },
-            { rotX: lt.rotX, rotY: lt.rotY, rotZ: lt.rotZ },
-            { scaleX: lt.scaleX, scaleY: lt.scaleY, scaleZ: lt.scaleZ },
-          )
-          const positioned = m.transform(ltMatrix)
-          m.delete()
-          m = positioned
+          // Inner boolean: pass-through. Return the boolean result as-is in world
+          // coordinates. The ROOT boolean will center the final result.
+          // See comment above for details.
         }
       }
     }

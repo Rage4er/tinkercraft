@@ -11,7 +11,7 @@
 
 ### Fixed
 
-- **MIRROR-CSG-CHILDREN**: Исправлено разбегание детей вложенных CSG-объектов после зеркала. Корневая причина: воркер центрировал CSG-результат (boolean union) в origin, затем применял localTransform. Но centroid изменился из-за добавления сферического примитива → геометрия сдвигалась на `centroid_new - centroid_old`, сфера "улетала". Решение: для ВНУТРЕННИХ boolean-нод (inner CSG) центрирование убрано — геометрия уже в мировых координатах, localTransform применяется напрямую. ROOT boolean всё-таки центрируется (Three.js pivot требует). (`worker-handlers.ts`, `mirror-store.ts`, `history-tree.ts`)
+- **MIRROR-CSG-CHILDREN-3**: Окончательное исправление разбегания детей вложенных CSG-объектов после зеркала. Корневая причина: `moveTreeNode` обновляет только primitive/baked ноды, НЕ boolean. Поэтому `localTransform` внутреннего boolean-узла оставался устаревшим (оригинальный centroid). После mirror этот устаревший centroid сдвигал геометрию на `(stale_centroid - actual_centroid)`. Решение: внутренний boolean-узел теперь **прозрачный pass-through** — не центрируется, не сдвигается, не применяет localTransform. Геометрия возвращается в мировых координатах как есть. ROOT boolean центрирует финальный результат, сохраняя правильные относительные позиции детей. (`worker-handlers.ts`)
 
 ### Changed
 
