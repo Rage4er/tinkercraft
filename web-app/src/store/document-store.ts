@@ -51,6 +51,7 @@ import {
   deleteNode,
   clearTree,
   resetSubtreeTransform,
+  moveTreeNode,
 } from '../csg/history-tree'
 import { getAllNodes } from '../csg/history-tree'
 import { previewMirror as mirrorPreviewFn, mirrorSelected as mirrorConfirmFn } from './mirror-store'
@@ -540,6 +541,31 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         createBakedNode(id, obj.vertices || new Float32Array(), obj.indices || new Uint32Array(), obj.normals || null, obj.transform)
       }
     }
+
+    // FIX (MIRROR-SYNC-TREE): For CSG boolean nodes, keep child primitives in sync
+    // with the parent SceneObject position.
+    //
+    // Problem: when the user moves a CSG object, only SceneObject.transform is updated.
+    // The tree children stay at their ORIGINAL world positions (from when the CSG was
+    // created). When mirror later rebuilds the CSG from the tree, it uses the stale
+    // child positions → the mirrored geometry is offset from the visual representation.
+    //
+    // Solution: when translating a CSG object, also translate all child primitives in
+    // the tree by the same delta. This keeps the tree's world coordinates in sync with
+    // the scene position, so the tree-rebuild mirror gives the correct geometry.
+    //
+    // Only TRANSLATION is synced here — rotation/scale are render-time concerns
+    // (applied by Viewport3D's pivot) and do NOT affect tree child positions.
+    const node = getNode(id)
+    if (node?.type === 'boolean') {
+      const dx = newTransform.x - obj.transform.x
+      const dy = newTransform.y - obj.transform.y
+      const dz = newTransform.z - obj.transform.z
+      if (Math.abs(dx) > 1e-9 || Math.abs(dy) > 1e-9 || Math.abs(dz) > 1e-9) {
+        moveTreeNode(id, { x: dx, y: dy, z: dz })
+      }
+    }
+
     // Sync the new transform to the tree node (for future CSG/mirror/align ops)
     syncNodeTransform(id, newTransform)
     console.log(`[MIRROR:moveObject] id=${id} newTransform={x:${newTransform.x}, y:${newTransform.y}, z:${newTransform.z}, rotX:${newTransform.rotX}, rotY:${newTransform.rotY}, rotZ:${newTransform.rotZ}, scaleX:${newTransform.scaleX}, scaleY:${newTransform.scaleY}, scaleZ:${newTransform.scaleZ}}`)

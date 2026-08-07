@@ -9,16 +9,15 @@
 // Алгоритм для ВСЕХ типов объектов:
 // 1. ensureInTree + syncNodeTransform → регистрация в build tree
 // 2. cloneSubtree → копируем дерево
-// 3. resetSubtreeTransform → обнуляем transform у клона (identity)
-// 4. rebuildNode → перестраиваем геометрию с transform=identity
-// 5. mirrorVerticesInPlace → отражаем вершины (negate перпендикулярной оси)
-// 6. mirrorPoint → вычисляем отражённую позицию
-// 7. Создаём SceneObject с transform = {mirrorPoint, оригинальные rot/scale}
-//    Rotation/scale НЕ отражаются — геометрия уже отражена в вершинах,
-//    а rotation/scale применяются через pivot в Viewport3D.
-//    Если бы мы отразили rotation/scale, было бы двойное отражение.
-// 8. Для primitive — сохраняем shapeType/params (остаются редактируемыми)
+// 3. Для primitive: resetSubtreeTransform + rebuildNode + mirrorVerticesInPlace
+//    Для CSG/import: mirrorTreeNode (отражает все nodы) + reset root to identity + rebuildNode
+// 4. mirrorPoint/mirrorEuler → вычисляем отражённую позицию/поворот
+// 5. Создаём SceneObject с transform = {mirroredPos, mirroredRot, abs(scale)}
+//    Для primitive — сохраняем shapeType/params (остаются редактируемыми)
 //    Для CSG/import — shapeType: 'import_mesh' (baked)
+//
+// FIX (MIRROR-INNER-CSG): Воркер применяет localTransform для внутренних boolean-нод
+// после центрирования, чтобы они оказались на правильной позиции для внешнего CSG.
 // ============================================================
 
 import type { TransformNR, SceneObject, ShapeType, ShapeParams } from '../csg/types'
@@ -33,9 +32,11 @@ import {
     rebuildNode,
     deleteNode,
     resetSubtreeTransform,
+    mirrorTreeNode,
     mirrorVerticesInPlace,
     mirrorPoint,
     mirrorEuler,
+    logMirrorTreeSnapshot,
 } from '../csg/history-tree'
 import { workerSyncObjects, workerSyncMesh } from '../csg/worker-client'
 
@@ -115,56 +116,112 @@ export async function mirrorObject(
     const id = obj.id
     const newId = nextId()
 
-    // 1. Регистрируем оригинал в дереве
-    ensureInTree(id, obj)
-    syncNodeTransform(id, obj.transform)
-
-    // 2. Клонируем и обнуляем transform у клона
-    //    Это нужно, чтобы rebuildNode не bake-ил transform в вершины.
-    //    После resetSubtreeTransform геометрия строится вокруг origin,
-    //    mirrorVerticesInPlace отражает её.
-    cloneSubtree(id, newId)
-    resetSubtreeTransform(newId)
-    const rebuiltMesh = await rebuildNode(newId)
-
-    // 3. Отражаем вершины (negate перпендикулярной оси) и исправляем winding order.
-    //
-    // FIX (MIRROR-WINDING): инвертирование одной оси позиций переворачивает порядок обхода
-    // треугольников CCW→CW. Manifold-3d определяет «снаружи/внутри» по winding order,
-    // поэтому вывернутый меш делает булевы операции неработоспособными.
-    // Решение: после отражения вершин — переставить v1↔v2 в каждом треугольнике.
-    mirrorVerticesInPlace(rebuiltMesh.vertices, rebuiltMesh.normals, plane)
-    // Исправляем winding: меняем местами второй и третий индексы каждого треугольника
-    for (let i = 0; i < rebuiltMesh.indices.length; i += 3) {
-        const tmp = rebuiltMesh.indices[i + 1]
-        rebuiltMesh.indices[i + 1] = rebuiltMesh.indices[i + 2]
-        rebuiltMesh.indices[i + 2] = tmp
-    }
-
-    // 4. Вычисляем отражённую позицию (mirrorPoint)
-    //    Геометрия строится с identity-трансформацией (resetSubtreeTransform),
-    //    поэтому поворот/scale НЕ запечены в вершины — они применяются через pivot в Viewport3D.
-    //    Это означает, что rotation И scale нужно зеркалить явно (шаг 5).
-    const mirroredPos = mirrorPoint(
-        { x: obj.transform.x, y: obj.transform.y, z: obj.transform.z },
-        plane,
-    )
-
-    // 5. Для primitive сохраняем shapeType/params (остаются редактируемыми)
-    //    Для CSG/import: shapeType: 'import_mesh' (baked)
-    //    isPrimitive требует непустые params — CSG-результат имеет shapeType='cube' с {} и не должен
-    //    считаться примитивом, иначе пользователь получает объект с обнулёнными параметрами.
+    // isPrimitive: непустые params — объект можно перестроить из параметров
+    // Для CSG-результатов params = {} → не примитив
     const isPrimitive =
         obj.shapeType &&
         obj.shapeType !== 'import_mesh' &&
         obj.params &&
         Object.keys(obj.params).length > 0
 
-    // Применяем зеркальное отражение поворота через mirrorEuler.
-    // FIX (MIRROR-ROT): без отражения поворота повёрнутые объекты выглядят как копии, а не зеркало.
-    // mirrorEuler корректно инвертирует оси, лежащие в плоскости зеркала; перпендикулярная ось не меняется.
-    // Это НЕ двойное отражение: вершины строятся с identity-трансформацией (resetSubtreeTransform),
-    // поэтому поворот не запечён в вершины — он применяется только через pivot в Viewport3D.
+    let vertices: Float32Array
+    let indices: Uint32Array
+    let normals: Float32Array | null
+
+    if (isPrimitive) {
+        // ── Primitive ──────────────────────────────────────────────────────────
+        // ensureInTree создаёт primitive-ноду (не boolean), resetSubtreeTransform
+        // сбрасывает только эту одну ноду к identity, rebuildNode строит геометрию
+        // в origin, mirrorVerticesInPlace отражает вершины.
+
+        // 1. Регистрируем оригинал в дереве
+        ensureInTree(id, obj)
+        syncNodeTransform(id, obj.transform)
+
+        // 2. Клонируем и обнуляем transform у клона (геометрия строится вокруг origin)
+        cloneSubtree(id, newId)
+        resetSubtreeTransform(newId)
+        const rebuiltMesh = await rebuildNode(newId)
+
+        vertices = rebuiltMesh.vertices
+        indices = rebuiltMesh.indices
+        normals = rebuiltMesh.normals ?? null
+
+        // 3. Отражаем вершины (negate перпендикулярной оси) и исправляем winding order.
+        //
+        // FIX (MIRROR-WINDING): инвертирование одной оси позиций переворачивает CCW→CW.
+        // Manifold-3d определяет «снаружи/внутри» по winding order — вывернутый меш
+        // делает булевы операции неработоспособными.
+        mirrorVerticesInPlace(vertices, normals, plane)
+        for (let i = 0; i < indices.length; i += 3) {
+            const tmp = indices[i + 1]
+            indices[i + 1] = indices[i + 2]
+            indices[i + 2] = tmp
+        }
+
+        deleteNode(newId, true)
+    } else {
+        // ── CSG-результат или import ───────────────────────────────────────────
+        //
+        // Для CSG-результатов используем tree-rebuild: клонируем поддерево,
+        // зеркалим позиции дочерних примитивов, пересобираем CSG через manifold.
+        // Это сохраняет параметричность дерева.
+        //
+        // Дочерние примитивы в дереве всегда синхронизированы с текущим положением
+        // CSG-объекта в сцене: moveObject транслирует их при каждом перемещении
+        // (см. FIX MIRROR-SYNC-TREE в document-store.ts). Поэтому tree-rebuild
+        // даёт геометрию, точно соответствующую визуальному положению объекта.
+        //
+        // Для import_mesh (нет дерева) — baked-путь через ensureInTree/cloneSubtree
+        // создаёт baked-ноду, mirrorNodeRecursive зеркалит вершины и transform.
+
+        // 1. Регистрируем оригинал в дереве (если ещё не зарегистрирован)
+        ensureInTree(id, obj)
+        syncNodeTransform(id, obj.transform)
+        logMirrorTreeSnapshot(id, 'source-before-clone')
+
+        // 2. Клонируем поддерево
+        const idMap = new Map<string, string>()
+        cloneSubtree(id, newId, idMap)
+        logMirrorTreeSnapshot(newId, `clone-before-mirror source=${id}`)
+
+        // 3. Зеркалим всё поддерево (примитивы + inner boolean localTransforms)
+        mirrorTreeNode(newId, plane)
+        logMirrorTreeSnapshot(newId, `clone-after-mirror plane=${plane} source=${id}`)
+
+        // 4. Сбрасываем root в identity → rebuildNode вернёт центрированную геометрию
+        //    (translation-only shape, без rotation/scale — они применяются через
+        //    Viewport3D pivot). Inner boolean localTransforms применяются воркером.
+        syncNodeTransform(newId, {
+            x: 0, y: 0, z: 0,
+            rotX: 0, rotY: 0, rotZ: 0,
+            scaleX: 1, scaleY: 1, scaleZ: 1,
+        })
+        logMirrorTreeSnapshot(newId, `clone-before-rebuild plane=${plane} source=${id}`)
+
+        const rebuiltMesh = await rebuildNode(newId)
+        deleteNode(newId, true)
+
+        vertices = rebuiltMesh.vertices
+        indices = rebuiltMesh.indices
+        normals = rebuiltMesh.normals ?? null
+    }
+
+    // Вычисляем отражённую позицию и поворот для SceneObject.transform.
+    // Геометрия центрирована в origin; Viewport3D применяет TRS через pivot.
+    // Children positions в дереве — translation-only (moveObject синхронизирует
+    // только translation, rotation/scale — render-time через Viewport3D).
+    // Поэтому центрированный CSG результат имеет правильную форму (translation-only),
+    // и mirrored TRS применяется Viewport3D как для обычного CSG-объекта.
+    const mirroredPos = mirrorPoint(
+        { x: obj.transform.x, y: obj.transform.y, z: obj.transform.z },
+        plane,
+    )
+
+    // FIX (MIRROR-ROT): без отражения поворота повёрнутый объект выглядит как копия, а не зеркало.
+    // mirrorEuler инвертирует оси, лежащие в плоскости зеркала; перпендикулярная ось не меняется.
+    // Это НЕ двойное отражение: вершины центрированы (translation-only shape),
+    // поворот не запечён — применяется через pivot в Viewport3D.
     const mirroredRot = mirrorEuler(
         { x: obj.transform.rotX, y: obj.transform.rotY, z: obj.transform.rotZ },
         plane,
@@ -178,26 +235,22 @@ export async function mirrorObject(
             x: Math.round(mirroredPos.x * 1e6) / 1e6,
             y: Math.round(mirroredPos.y * 1e6) / 1e6,
             z: Math.round(mirroredPos.z * 1e6) / 1e6,
-            // Поворот отражается через mirrorEuler — это исправляет "зеркало = копия" для повёрнутых объектов
             rotX: mirroredRot.x,
             rotY: mirroredRot.y,
             rotZ: mirroredRot.z,
-            // Scale всегда положительный (abs), геометрия уже отражена на уровне вершин
+            // Scale всегда положительный (abs), геометрия отражена через позиции/повороты в дереве
             scaleX: Math.abs(obj.transform.scaleX),
             scaleY: Math.abs(obj.transform.scaleY),
             scaleZ: Math.abs(obj.transform.scaleZ),
         },
-        vertices: rebuiltMesh.vertices,
-        indices: rebuiltMesh.indices,
-        normals: rebuiltMesh.normals ?? null,
+        vertices,
+        indices,
+        normals,
         color: obj.color,
         visible: obj.visible ?? true,
         locked: obj.locked ?? false,
         name: obj.name,
     }
-
-    // 6. Очищаем временную ноду
-    deleteNode(newId, true)
 
     return { object: newObj, id: newId }
 }

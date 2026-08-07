@@ -657,7 +657,10 @@ export async function handleRebuildTreeNode(msg: RebuildTreeNodeMessage): Promis
   }
 
   // Recursive function to rebuild a node and return ManifoldObject
-  function rebuildNode(id: string): ManifoldObject | null {
+  // rootId: the top-level node being rebuilt. Its localTransform is NOT applied
+  // here (it's applied by applyCSGMeshes in history-tree.ts). Inner boolean nodes
+  // get their localTransform applied after centering to position them correctly.
+  function rebuildNode(id: string, rootId: string): ManifoldObject | null {
     const nd = nodeMap.get(id)
     if (!nd) return null
 
@@ -699,8 +702,8 @@ export async function handleRebuildTreeNode(msg: RebuildTreeNodeMessage): Promis
       }
 
     } else if (nd.type === 'boolean' && nd.children && nd.operation) {
-      const childA = rebuildNode(nd.children[0])
-      const childB = rebuildNode(nd.children[1])
+      const childA = rebuildNode(nd.children[0], rootId)
+      const childB = rebuildNode(nd.children[1], rootId)
       if (childA && childB) {
         if (nd.operation === 'subtract') {
           m = childA.subtract(childB)
@@ -712,31 +715,52 @@ export async function handleRebuildTreeNode(msg: RebuildTreeNodeMessage): Promis
         childA.delete()
         childB.delete()
 
-        // FIX (BUG-CSG-POS-4): Center geometry at origin only.
         // Children have their transforms applied (world coordinates), so the boolean result
-        // is also in world coordinates. We center it (extractAndCenterInPlace behavior).
-        // DO NOT apply boolean node's localTransform here — it's applied in history-tree.ts
-        // in the applyCSGMeshes function.
-        const mesh = m.getMesh()
-        const verts = mesh.vertProperties
-        const numVerts = verts.length / mesh.numProp
-        let cx = 0, cy = 0, cz = 0
-        for (let i = 0; i < numVerts; i++) {
-          cx += verts[i * mesh.numProp]
-          cy += verts[i * mesh.numProp + 1]
-          cz += verts[i * mesh.numProp + 2]
-        }
-        cx /= numVerts; cy /= numVerts; cz /= numVerts
+        // is also in world coordinates.
+        //
+        // For ROOT boolean node (id === rootId): center the result at origin so the
+        // Three.js pivot (TRS) renders it at the mirrored position. The mirrored transform
+        // from the frontend is applied via the pivot — the centered geometry + mirrored
+        // TRS gives the correct mirrored CSG result.
+        //
+        // For INNER boolean nodes (id !== rootId): DO NOT center. The geometry is already
+        // in world coordinates with correct positions. Applying localTransform directly
+        // positions the inner result without shifting the geometry (centering would shift
+        // the geometry by centroid_delta, causing the sphere to "fly away").
+        if (id === rootId) {
+          // Center root boolean — frontend pivot applies mirrored TRS
+          const mesh = m.getMesh()
+          const verts = mesh.vertProperties
+          const numVerts = verts.length / mesh.numProp
+          let cx = 0, cy = 0, cz = 0
+          for (let i = 0; i < numVerts; i++) {
+            cx += verts[i * mesh.numProp]
+            cy += verts[i * mesh.numProp + 1]
+            cz += verts[i * mesh.numProp + 2]
+          }
+          cx /= numVerts; cy /= numVerts; cz /= numVerts
 
-        // Translate to center only
-        const centerMatrix = buildTransformMatrix(
-          { x: -cx, y: -cy, z: -cz },
-          { rotX: 0, rotY: 0, rotZ: 0 },
-          { scaleX: 1, scaleY: 1, scaleZ: 1 },
-        )
-        const centered = m.transform(centerMatrix)
-        m.delete()
-        m = centered
+          const centerMatrix = buildTransformMatrix(
+            { x: -cx, y: -cy, z: -cz },
+            { rotX: 0, rotY: 0, rotZ: 0 },
+            { scaleX: 1, scaleY: 1, scaleZ: 1 },
+          )
+          const centered = m.transform(centerMatrix)
+          m.delete()
+          m = centered
+        } else {
+          // Inner boolean: apply localTransform directly to world-coordinate result.
+          // DO NOT center — centering shifts geometry by centroid_delta.
+          const lt = nd.localTransform ?? { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
+          const ltMatrix = buildTransformMatrix(
+            { x: lt.x, y: lt.y, z: lt.z },
+            { rotX: lt.rotX, rotY: lt.rotY, rotZ: lt.rotZ },
+            { scaleX: lt.scaleX, scaleY: lt.scaleY, scaleZ: lt.scaleZ },
+          )
+          const positioned = m.transform(ltMatrix)
+          m.delete()
+          m = positioned
+        }
       }
     }
 
@@ -745,7 +769,7 @@ export async function handleRebuildTreeNode(msg: RebuildTreeNodeMessage): Promis
 
   try {
     // Rebuild the target node
-    const result = rebuildNode(msg.nodeId)
+    const result = rebuildNode(msg.nodeId, msg.nodeId)
     if (!result) {
       safePostMessage({ reqId: msg.reqId, type: 'error', message: `Node ${msg.nodeId} not found` })
       return

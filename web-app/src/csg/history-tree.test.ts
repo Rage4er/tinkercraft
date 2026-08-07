@@ -326,6 +326,55 @@ describe('BuildTree', () => {
       expect(newIdMap.has('union')).toBe(true)
     })
 
+    it('should preserve nested boolean transforms and remap every parent link', () => {
+      const innerTransform = { x: 12, y: -8, z: 6, rotX: 10, rotY: 20, rotZ: 30, scaleX: 1, scaleY: 2, scaleZ: 0.5 }
+      createPrimitiveNode('a', 'cube', { width: 10, height: 10, depth: 10 }, { x: 20, y: -8, z: 6, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 })
+      createPrimitiveNode('b', 'cube', { width: 10, height: 10, depth: 10 }, { x: 30, y: -8, z: 6, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 })
+      createBooleanNode('inner', 'union', 'a', 'b', innerTransform)
+      createPrimitiveNode('c', 'sphere', { radius: 5, segments: 16 }, { x: 0, y: 10, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 })
+      createBooleanNode('outer', 'union', 'inner', 'c', { ...defaultTransform })
+
+      const idMap = new Map<string, string>()
+      cloneSubtree('outer', 'outer_clone', idMap)
+
+      const clonedInnerId = idMap.get('inner')!
+      const clonedAId = idMap.get('a')!
+      const clonedBId = idMap.get('b')!
+      const clonedCId = idMap.get('c')!
+
+      expect(getNode('outer_clone')?.children).toEqual([clonedInnerId, clonedCId])
+      expect(getNode(clonedInnerId)?.children).toEqual([clonedAId, clonedBId])
+      expect(getNode(clonedInnerId)?.localTransform).toEqual(innerTransform)
+      expect(getNode(clonedInnerId)?.parentId).toBe('outer_clone')
+      expect(getNode(clonedAId)?.parentId).toBe(clonedInnerId)
+      expect(getNode(clonedBId)?.parentId).toBe(clonedInnerId)
+      expect(getNode(clonedCId)?.parentId).toBe('outer_clone')
+      expect(getNode('outer_clone')?.parentId).toBeUndefined()
+    })
+
+    it('should mirror the preserved nested boolean transform in the cloned tree', () => {
+      const innerTransform = { x: 12, y: -8, z: 6, rotX: 10, rotY: 20, rotZ: 30, scaleX: 1, scaleY: 2, scaleZ: 0.5 }
+      createPrimitiveNode('a', 'cube', { width: 10, height: 10, depth: 10 }, { x: 20, y: -8, z: 6, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 })
+      createPrimitiveNode('b', 'cube', { width: 10, height: 10, depth: 10 }, { x: 30, y: -8, z: 6, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 })
+      createBooleanNode('inner', 'union', 'a', 'b', innerTransform)
+      createPrimitiveNode('c', 'sphere', { radius: 5, segments: 16 }, { x: 0, y: 10, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 })
+      createBooleanNode('outer', 'union', 'inner', 'c', { ...defaultTransform })
+
+      const idMap = new Map<string, string>()
+      cloneSubtree('outer', 'outer_clone', idMap)
+      mirrorTreeNode('outer_clone', 'YZ')
+
+      const mirroredInner = getNode(idMap.get('inner')!)?.localTransform
+      expect(mirroredInner).toEqual({
+        ...innerTransform,
+        x: -innerTransform.x,
+        rotY: -innerTransform.rotY,
+        rotZ: -innerTransform.rotZ,
+      })
+      expect(getNode(idMap.get('a')!)?.parentId).toBe(idMap.get('inner'))
+      expect(getNode(idMap.get('b')!)?.parentId).toBe(idMap.get('inner'))
+    })
+
     it('should throw on non-existent source', () => {
       expect(() => cloneSubtree('nonexistent', 'clone')).toThrow('not found')
     })

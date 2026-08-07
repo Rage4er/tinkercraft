@@ -662,6 +662,105 @@ export function mirrorTreeNode(
   invalidateCache(nodeId)
 }
 
+/**
+ * Emit a complete, compact snapshot of a mirror subtree.
+ *
+ * The mirror bug is especially difficult to diagnose from leaf transforms
+ * alone: a nested boolean can have the right leaf position but the wrong
+ * child link, parent link, or intermediate boolean transform. Keep this
+ * diagnostic intentionally read-only and stringify it so browser logs can be
+ * copied as a useful, one-line record.
+ *
+ * `relativeToParent` is the raw transform delta currently stored in the tree.
+ * It is labelled explicitly because tree transforms are not matrix-composed
+ * here; this lets us distinguish a bad relationship from a bad world-space
+ * transform in the captured log.
+ */
+export function logMirrorTreeSnapshot(rootId: string, phase: string): void {
+  const root = treeStore.getNode(rootId)
+  if (!root) {
+    console.warn(`[MIRROR:TREE] phase=${phase} rootId=${rootId} missing`)
+    return
+  }
+
+  const visited = new Set<string>()
+
+  const transformForLog = (transform?: TransformNR) => transform
+    ? {
+      x: transform.x, y: transform.y, z: transform.z,
+      rotX: transform.rotX, rotY: transform.rotY, rotZ: transform.rotZ,
+      scaleX: transform.scaleX, scaleY: transform.scaleY, scaleZ: transform.scaleZ,
+    }
+    : null
+
+  const relativeToParent = (transform?: TransformNR, parentTransform?: TransformNR) => {
+    if (!transform || !parentTransform) return null
+    return {
+      positionDelta: {
+        x: transform.x - parentTransform.x,
+        y: transform.y - parentTransform.y,
+        z: transform.z - parentTransform.z,
+      },
+      rotationDelta: {
+        x: transform.rotX - parentTransform.rotX,
+        y: transform.rotY - parentTransform.rotY,
+        z: transform.rotZ - parentTransform.rotZ,
+      },
+      scaleRatio: {
+        x: parentTransform.scaleX === 0 ? null : transform.scaleX / parentTransform.scaleX,
+        y: parentTransform.scaleY === 0 ? null : transform.scaleY / parentTransform.scaleY,
+        z: parentTransform.scaleZ === 0 ? null : transform.scaleZ / parentTransform.scaleZ,
+      },
+    }
+  }
+
+  const visit = (nodeId: string, parentId: string | null, depth: number, path: string[]): void => {
+    if (visited.has(nodeId)) {
+      console.warn(`[MIRROR:TREE] phase=${phase} cycle-or-shared-node=${nodeId} path=${path.join('>')}`)
+      return
+    }
+    visited.add(nodeId)
+
+    const node = treeStore.getNode(nodeId)
+    if (!node) {
+      console.warn(`[MIRROR:TREE] phase=${phase} missing-child=${nodeId} expectedParent=${parentId ?? 'none'} path=${path.join('>')}`)
+      return
+    }
+
+    const parent = parentId ? treeStore.getNode(parentId) : undefined
+    const record = {
+      phase,
+      depth,
+      path: [...path, node.id],
+      id: node.id,
+      type: node.type,
+      operation: node.operation ?? null,
+      shapeType: node.shapeType ?? null,
+      params: node.params ?? null,
+      parentId: node.parentId ?? null,
+      expectedParentId: parentId,
+      children: node.children ?? [],
+      childCount: node.children?.length ?? 0,
+      localTransform: transformForLog(node.localTransform),
+      relativeToParent: relativeToParent(node.localTransform, parent?.localTransform),
+      geometry: {
+        vertices: node.vertices?.length ?? 0,
+        indices: node.indices?.length ?? 0,
+        triangles: node.indices ? node.indices.length / 3 : null,
+        normals: node.normals?.length ?? 0,
+      },
+    }
+
+    console.log(`[MIRROR:TREE] ${JSON.stringify(record)}`)
+
+    for (const childId of node.children ?? []) {
+      visit(childId, node.id, depth + 1, [...path, node.id])
+    }
+  }
+
+  visit(rootId, null, 0, [])
+}
+
 export function mirrorPoint(p: Point3D, plane: 'XY' | 'XZ' | 'YZ', center: Point3D = { x: 0, y: 0, z: 0 }): Point3D {
   // Mirror relative to center: p' = 2*center - p (on mirrored axis only)
   switch (plane) {
@@ -864,6 +963,27 @@ function mirrorNodeRecursive(
       console.warn(`[MIRROR:mirrorNodeRecursive] nodeId=${node.id} type=boolean: children отсутствуют или пусты, нода пропущена`)
       return
     }
+
+    // FIX (MIRROR-CSG-BOOLEAN-TRANSFORM): Зеркалим собственный localTransform булевой ноды.
+    // Для вложенных CSG (CSG из CSG-результатов) inner-boolean нода несёт в localTransform
+    // позицию центроида результата. Воркер применяет этот transform после центрирования
+    // внутреннего CSG-результата, чтобы вернуть его в мировые координаты.
+    // Для root-ноды transform применяется в applyCSGMeshes (history-tree.ts).
+    if (node.localTransform) {
+      const t = node.localTransform
+      const mp = mirrorPoint({ x: t.x, y: t.y, z: t.z }, plane, center)
+      const mr = mirrorEuler({ x: t.rotX, y: t.rotY, z: t.rotZ }, plane)
+      node.localTransform = {
+        ...t,
+        x: mp.x, y: mp.y, z: mp.z,
+        rotX: mr.x, rotY: mr.y, rotZ: mr.z,
+        scaleX: Math.abs(t.scaleX),
+        scaleY: Math.abs(t.scaleY),
+        scaleZ: Math.abs(t.scaleZ),
+      }
+      setNode(node.id, { ...node })
+    }
+
     node.children.forEach(childId => {
       const child = treeStore.getNode(childId)
       if (child) mirrorNodeRecursive(child, plane, center)
@@ -884,16 +1004,7 @@ export function resetSubtreeTransform(nodeId: string): void {
 }
 
 function resetTransformRecursive(node: TreeNode): void {
-  if (node.type === 'primitive' && node.localTransform) {
-    node.localTransform = {
-      x: 0, y: 0, z: 0,
-      rotX: 0, rotY: 0, rotZ: 0,
-      scaleX: 1, scaleY: 1, scaleZ: 1,
-    }
-    return
-  }
-
-  if (node.type === 'baked' && node.localTransform) {
+  if (node.type === 'primitive' || node.type === 'baked') {
     node.localTransform = {
       x: 0, y: 0, z: 0,
       rotX: 0, rotY: 0, rotZ: 0,
@@ -1066,7 +1177,39 @@ export function cloneSubtree(
   if (!source) throw new Error(`Source node ${sourceId} not found`)
 
   const visited = new Set<string>()
-  return cloneRecursive(sourceId, newRootId, newIdMap, visited)
+  const clone = cloneRecursive(sourceId, newRootId, newIdMap, visited)
+  // Rebuild parent links against the cloned IDs. The old implementation copied
+  // source.parentId verbatim, leaving cloned children attached to the original
+  // tree (for example, a clone child still pointed at `csg_5`). This is not
+  // just a diagnostic inconsistency: cache invalidation and any relationship
+  // based traversal then walk the wrong tree.
+  //
+  // A cloned subtree is a new standalone root, so an external source parent
+  // must not be retained on the clone root.
+  for (const [sourceNodeId, clonedNodeId] of newIdMap) {
+    const sourceNode = treeStore.getNode(sourceNodeId)
+    const clonedNode = treeStore.getNode(clonedNodeId)
+    if (!sourceNode || !clonedNode) continue
+    const clonedParentId = sourceNode.parentId ? newIdMap.get(sourceNode.parentId) : undefined
+    if (clonedParentId) clonedNode.parentId = clonedParentId
+    else delete clonedNode.parentId
+  }
+
+  console.log(`[MIRROR:CLONE] ${JSON.stringify({
+    sourceRootId: sourceId,
+    cloneRootId: newRootId,
+    idMap: Object.fromEntries(newIdMap),
+    sourceNodeCount: visited.size,
+    cloneRoot: {
+      id: clone.id,
+      type: clone.type,
+      operation: clone.operation ?? null,
+      children: clone.children ?? [],
+      parentId: clone.parentId ?? null,
+      localTransform: clone.localTransform ?? null,
+    },
+  })}`)
+  return clone
 }
 
 function cloneRecursive(
@@ -1091,11 +1234,6 @@ function cloneRecursive(
     type: source.type,
   }
 
-  // Preserve parentId for tree integrity (navigation, cascade cache invalidation)
-  if (source.parentId) {
-    clone.parentId = source.parentId
-  }
-
   if (source.type === 'primitive') {
     clone.shapeType = source.shapeType
     clone.params = { ...source.params }
@@ -1112,6 +1250,13 @@ function cloneRecursive(
 
   if (source.type === 'boolean' && source.children) {
     clone.operation = source.operation
+    // Boolean nodes carry their own transform (especially intermediate CSG
+    // results). Omitting it makes the mirrored clone lose the intermediate
+    // result's centroid/rotation/scale before mirrorNodeRecursive can mirror
+    // it, which puts nested geometry in the wrong place.
+    clone.localTransform = source.localTransform
+      ? { ...source.localTransform }
+      : undefined
     clone.children = source.children.map(childId => {
       const existing = newIdMap.get(childId)
       if (existing) return existing // already cloned
