@@ -20,7 +20,7 @@ export interface ImportedMesh {
 }
 
 export type StlParseResult =
-  | { success: true; vertices: ArrayLike<number>; indices: ArrayLike<number>; transform: TransformNR; name: string }
+  | { success: true; vertices: Float32Array; indices: Uint32Array; transform: TransformNR; name: string }
   | { success: false; error: string }
 
 /**

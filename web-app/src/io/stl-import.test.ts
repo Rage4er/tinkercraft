@@ -40,7 +40,7 @@ describe('mergeCoincidentVertices', () => {
     ])
     const result = mergeCoincidentVertices(positions)
     expect(result.vertices).toHaveLength(9)
-    expect(result.indices).toEqual([0, 1, 2])
+    expect(Array.from(result.indices)).toEqual([0, 1, 2])
   })
 
   it('handles a cube (12 triangles, 8 unique vertices)', () => {

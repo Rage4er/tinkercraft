@@ -850,7 +850,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
 
     if (!treeExists) {
       // FIX (MIRROR-CSG-KEEPTYPE): CSG-результаты (пустые params) → baked нода.
-      const isPrimitive = obj.shapeType && obj.shapeType !== 'import_mesh' && obj.params && Object.keys(obj.params).length > 0
+      // import_mesh уже отфильтрован ранним return выше — сужение типа TS.
+      const isPrimitive = obj.shapeType && obj.params && Object.keys(obj.params).length > 0
       if (isPrimitive && obj.shapeType && obj.params) {
         createPrimitiveNode(id, obj.shapeType, obj.params, obj.transform)
       } else {

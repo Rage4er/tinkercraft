@@ -23,7 +23,7 @@
 cd web-app
 pnpm dev          # dev-сервер (порт 5000)
 pnpm build        # production-сборка
-pnpm test         # запуск тестов (104 теста)
+pnpm test         # запуск тестов (205 тестов)
 pnpm typecheck    # tsc --noEmit
 ```
 
@@ -93,7 +93,8 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 
 ### Тесты
 - Type-level тесты: `src/csg/types.test.ts`
-- Unit-тесты: `src/io/*.test.ts`, `src/store/*.test.ts`
+- Unit-тесты: `src/csg/*.test.ts`, `src/io/*.test.ts`, `src/store/*.test.ts`, `src/components/*.test.ts`
+- Мок IndexedDB: `src/__mocks__/indexeddb.ts` (in-memory IDB для jsdom)
 - Среда: jsdom (через vite.config.ts)
 - Имена: `describe('FunctionName')` → `it('описание')`
 

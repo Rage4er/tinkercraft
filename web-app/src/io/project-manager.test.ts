@@ -1,36 +1,35 @@
 // ============================================================
 // Unit tests — project-manager (IndexedDB mock, real module)
-// FIX (HIGH-18-25): Mock only IndexedDB, not the module itself.
-// This verifies the real implementation logic.
+// Uses shared mock from __mocks__/indexeddb.ts
 // ============================================================
 
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import type { ProjectRecord, ProjectMeta } from './project-manager'
 
-// ---- Mock IndexedDB only (not the module) ----
+// Install IndexedDB mock on globalThis
+import '../__mocks__/indexeddb'
+import { _resetMockIndexedDB } from '../__mocks__/indexeddb'
 
-const _store: Record<string, unknown> = {}
-
-vi.mock('idb', async () => {
-  const openDB = vi.fn(() => Promise.resolve({
-    tx: vi.fn(() => ({
-      objectStore: vi.fn(() => ({
-        put: vi.fn(() => ({
-          then: vi.fn((cb: any) => cb()),
-        })),
-        get: vi.fn((id: string) => Promise.resolve(_store[id])),
-        delete: vi.fn(() => ({ then: vi.fn((cb: any) => cb()) })),
-        getAll: vi.fn(() => Promise.resolve(Object.values(_store))),
-      })),
-    })),
-  }))
-  return { openDB }
-})
-
-import { saveProject, listProjects, loadProject, deleteProject, updateProject } from './project-manager'
+// Dynamic imports — need vi.resetModules() because project-manager caches _dbCache
+let saveProject: typeof import('./project-manager').saveProject
+let listProjects: typeof import('./project-manager').listProjects
+let loadProject: typeof import('./project-manager').loadProject
+let deleteProject: typeof import('./project-manager').deleteProject
+let updateProject: typeof import('./project-manager').updateProject
 
 describe('project-manager (IndexedDB mock)', () => {
-  beforeEach(() => { Object.keys(_store).forEach(k => delete _store[k]) })
+  beforeEach(async () => {
+    _resetMockIndexedDB()
+    vi.resetModules()
+    // Re-install mock after module reset
+    await import('../__mocks__/indexeddb')
+    const mod = await import('./project-manager')
+    saveProject = mod.saveProject
+    listProjects = mod.listProjects
+    loadProject = mod.loadProject
+    deleteProject = mod.deleteProject
+    updateProject = mod.updateProject
+  })
 
   it('saves a project and returns meta', async () => {
     const meta = await saveProject('Test Project', [], 3)

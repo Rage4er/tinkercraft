@@ -77,7 +77,7 @@ cd /home/small-room/GitHub/tinkercraft/web-app
 pnpm test         # vitest run
 ```
 
-**Результат:** 180/180 тестов прошли (12 файлов).
+**Результат:** 205/205 тестов прошли (14 файлов).
 
 ### 3. Dev-сервер
 
@@ -140,7 +140,7 @@ pnpm dev          # порт 5000
 3. [ ] Клонировать репозиторий
 4. [ ] `cd web-app && pnpm install`
 5. [ ] `pnpm typecheck` — 0 ошибок
-6. [ ] `pnpm test` — 180/180 прошли
+6. [ ] `pnpm test` — 205/205 прошли
 7. [ ] `pnpm dev` — сервер на порту 5000
 
 ---
