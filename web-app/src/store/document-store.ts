@@ -535,7 +535,10 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     // Ensure node exists in tree (may be missing after undo/redo tree restore)
     const treeExists = getNode(id) !== undefined
     if (!treeExists) {
-      if (obj.shapeType && obj.params && obj.shapeType !== 'import_mesh') {
+      // FIX (MIRROR-CSG-KEEPTYPE): CSG-результаты (shapeType='cube', params={})
+      // регистрируются как baked-ноды (готовый меш), а не как primitive cube.
+      const isPrimitive = obj.shapeType && obj.shapeType !== 'import_mesh' && obj.params && Object.keys(obj.params).length > 0
+      if (isPrimitive && obj.shapeType && obj.params) {
         createPrimitiveNode(id, obj.shapeType, obj.params, obj.transform)
       } else {
         createBakedNode(id, obj.vertices || new Float32Array(), obj.indices || new Uint32Array(), obj.normals || null, obj.transform)
@@ -836,11 +839,12 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     syncNodeTransform(id, obj.transform)
 
     if (!treeExists) {
-      // Для простых объектов создаём primitive ноду
-      if (obj.shapeType && obj.params) {
+      // FIX (MIRROR-CSG-KEEPTYPE): CSG-результаты (пустые params) → baked нода.
+      const isPrimitive = obj.shapeType && obj.shapeType !== 'import_mesh' && obj.params && Object.keys(obj.params).length > 0
+      if (isPrimitive && obj.shapeType && obj.params) {
         createPrimitiveNode(id, obj.shapeType, obj.params, obj.transform)
       } else {
-        // Для CSG/baked создаём baked ноду
+        // Для CSG/baked/import создаём baked ноду (готовый меш)
         createBakedNode(id, obj.vertices || new Float32Array(), obj.indices || new Uint32Array(), obj.normals || null, obj.transform)
       }
     }

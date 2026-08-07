@@ -94,7 +94,17 @@ async function syncObjectsForOperation(
 function ensureInTree(id: string, obj: SceneObject): void {
     if (getNode(id) !== undefined) return
 
-    if (obj.shapeType && obj.params && obj.shapeType !== 'import_mesh') {
+    // FIX (MIRROR-CSG-KEEPTYPE): CSG-результаты (shapeType='cube', params={})
+    // и import_mesh должны регистрироваться как BAKED-ноды (у них есть готовый
+    // меш), а не как primitive cube с пустыми params (это построило бы дефолтный
+    // куб 20×20×20 вместо реальной геометрии).
+    const isPrimitive =
+        obj.shapeType &&
+        obj.shapeType !== 'import_mesh' &&
+        obj.params &&
+        Object.keys(obj.params).length > 0
+
+    if (isPrimitive && obj.shapeType && obj.params) {
         createPrimitiveNode(id, obj.shapeType, obj.params, obj.transform)
     } else {
         createBakedNode(
@@ -123,6 +133,13 @@ export async function mirrorObject(
         obj.shapeType !== 'import_mesh' &&
         obj.params &&
         Object.keys(obj.params).length > 0
+
+    // FIX (MIRROR-CSG-KEEPTYPE): CSG-результат определяется так же, как в
+    // syncObjectsForOperation — не import и пустые params. Зеркальная копия
+    // CSG-результата должна ОСТАВАТЬСЯ CSG-результатом (shapeType='cube',
+    // params={}), а не превращаться в import_mesh. Иначе булевы операции
+    // блокируются проверкой `shapeType === 'import_mesh'` в csgBoolean.
+    const isCSGResult = obj.shapeType !== 'import_mesh' && (!obj.params || Object.keys(obj.params).length === 0)
 
     let vertices: Float32Array
     let indices: Uint32Array
@@ -229,7 +246,9 @@ export async function mirrorObject(
 
     const newObj: SceneObject = {
         id: newId,
-        shapeType: (isPrimitive ? obj.shapeType : 'import_mesh') as ShapeType,
+        // FIX (MIRROR-CSG-KEEPTYPE): CSG-результат → остаётся CSG-результатом,
+        // примитив → примитив, только import → import_mesh.
+        shapeType: (isPrimitive ? obj.shapeType : isCSGResult ? 'cube' : 'import_mesh') as ShapeType,
         params: (isPrimitive ? { ...obj.params } : {}) as ShapeParams,
         transform: {
             x: Math.round(mirroredPos.x * 1e6) / 1e6,

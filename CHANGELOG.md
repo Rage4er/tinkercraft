@@ -12,6 +12,7 @@
 ### Fixed
 
 - **MIRROR-CSG-CHILDREN-3**: Окончательное исправление разбегания детей вложенных CSG-объектов после зеркала. Корневая причина: `moveTreeNode` обновляет только primitive/baked ноды, НЕ boolean. Поэтому `localTransform` внутреннего boolean-узла оставался устаревшим (оригинальный centroid). После mirror этот устаревший centroid сдвигал геометрию на `(stale_centroid - actual_centroid)`. Решение: внутренний boolean-узел теперь **прозрачный pass-through** — не центрируется, не сдвигается, не применяет localTransform. Геометрия возвращается в мировых координатах как есть. ROOT boolean центрирует финальный результат, сохраняя правильные относительные позиции детей. (`worker-handlers.ts`)
+- **MIRROR-CSG-KEEPTYPE**: Зеркальная копия CSG-результата больше не превращается в `import_mesh` — она остаётся CSG-результатом (`shapeType='cube'`, `params={}`), что разблокирует булевы операции для зеркальных копий сложной геометрии. Также исправлены `ensureInTree` в `mirror-store.ts` и два блока регистрации в дереве в `document-store.ts` (`moveObject` + `csgBoolean` sync): CSG-результаты с пустыми params теперь регистрируются как **baked-ноды** (готовый меш), а не как primitive cube с пустыми params (что строило дефолтный куб 20×20×20). (`mirror-store.ts`, `document-store.ts`)
 
 ### Changed
 
