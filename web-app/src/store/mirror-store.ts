@@ -305,7 +305,7 @@ function computeTransformHash(ids: string[], objects: Record<string, SceneObject
     }).join('|')
 }
 
-function invalidateMirrorCache(): void {
+export function invalidateMirrorCache(): void {
     mirrorCache = null
 }
 
@@ -323,10 +323,21 @@ export async function previewMirror(
     }
 
     try {
-        await syncObjectsForOperation(ids, objects)
+        // OPT (MIRROR-CACHE-SYNC): Skip syncObjectsForOperation if cache is valid
+        // for the same plane/ids/transform — prevents redundant worker calls on
+        // hover across YZ → XZ → XY buttons without object movement.
+        const transformHash = computeTransformHash(ids, objects)
+        const cacheValid = mirrorCache !== null &&
+            mirrorCache.plane === plane &&
+            mirrorCache.ids.length === ids.length &&
+            mirrorCache.ids.every((id, i) => id === ids[i]) &&
+            mirrorCache.transformHash === transformHash &&
+            mirrorCache.synced
+        if (!cacheValid) {
+            await syncObjectsForOperation(ids, objects)
+        }
 
         // OPT (MIRROR-CACHE): Кэшируем результаты mirrorObject для переиспользования в mirrorSelected
-        const transformHash = computeTransformHash(ids, objects)
         const results = new Map<string, MirrorResult>()
         const sceneObjects: SceneObject[] = []
 

@@ -1,7 +1,9 @@
+import { MonitorIcon } from './icons'
+
 export default function WebGLFallback() {
   return (
     <div className="fallback-screen" style={{ height: '100%', gap: 16 }}>
-      <span className="fallback-icon">🖥️</span>
+      <MonitorIcon size={48} />
       <strong className="fallback-title">WebGL недоступен</strong>
       <p className="fallback-msg">
         {/* FIX (LOW-18-41): Remove hardcoded "Replit" reference — generic message */}

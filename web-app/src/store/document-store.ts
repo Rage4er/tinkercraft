@@ -37,7 +37,7 @@ import type { ClipEntry } from './helpers'
 import type { DocumentStore } from './types'
 import { rebuildFromHistory, rebuildBuildTree } from './rebuild'
 import { cacheSnapshot, getCachedSnapshot, clearSnapshots, cacheTreeSnapshot, getCachedTreeSnapshot } from './snapshots'
-import { OBJECT_SPACING, PASTE_OFFSET, MOVE_DELTA_EPSILON } from '../constants'
+import { OBJECT_SPACING, PASTE_OFFSET } from '../constants'
 import {
   createPrimitiveNode,
   createBooleanNode,
@@ -54,7 +54,7 @@ import {
   moveTreeNode,
 } from '../csg/history-tree'
 import { getAllNodes } from '../csg/history-tree'
-import { previewMirror as mirrorPreviewFn, mirrorSelected as mirrorConfirmFn } from './mirror-store'
+import { previewMirror as mirrorPreviewFn, mirrorSelected as mirrorConfirmFn, invalidateMirrorCache } from './mirror-store'
 
 // ── Shared undo/redo/jumpToHistory helper — FIX (MED-18-1): eliminates ~90 lines of duplication ──
 
@@ -73,6 +73,7 @@ async function jumpToHistoryInner(newIdx: number, actionName: string): Promise<v
     }
     restoreTreeFromSnapshot(newIdx)
     setState({ historyIndex: newIdx, objects: newObjects, selectedIds: [], busy: false, lastCsgMs: performance.now() - t0 })
+    invalidateMirrorCache()
   } catch (e) { setState({ busy: false }); console.error(actionName + ':', e); notify(`Ошибка ${actionName.toLowerCase()}`, 'error') }
 }
 
@@ -218,6 +219,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       console.log(`[MIRROR:addShape] id=${id} shapeType=${shapeType} params=${JSON.stringify(finalParams)} transform={x:${transform.x}, y:${transform.y}, z:${transform.z}, rotX:${transform.rotX}, rotY:${transform.rotY}, rotZ:${transform.rotZ}, scaleX:${transform.scaleX}, scaleY:${transform.scaleY}, scaleZ:${transform.scaleZ}}`)
       set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true, busy: false, lastCsgMs: ms })
       cacheSnapshotWithTree(newOps.length, newObjects)
+      invalidateMirrorCache()
     } catch (e) { set({ busy: false }); console.error('addShape:', e); notify('Ошибка создания фигуры', 'error') }
   },
 
@@ -241,6 +243,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       createBakedNode(id, result.vertices, result.indices, result.normals, transform)
       set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, selectedIds: [id], modified: true, busy: false, lastCsgMs: ms })
       cacheSnapshotWithTree(newOps.length, newObjects)
+      invalidateMirrorCache()
     } catch (e) { set({ busy: false }); console.error('addRawMesh:', e); notify('Ошибка импорта меша', 'error') }
   },
 
@@ -270,6 +273,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       createBakedNode(id, workerResult.vertices, workerResult.indices, workerResult.normals, result.transform)
       set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, selectedIds: [id], modified: true, busy: false, lastCsgMs: ms })
       cacheSnapshotWithTree(newOps.length, newObjects)
+      invalidateMirrorCache()
     } catch (e) { set({ busy: false }); notify(`Ошибка импорта STL: ${e}`, 'error') }
   },
 
@@ -303,6 +307,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         lastCsgMs: ms,
       })
       cacheSnapshotWithTree(newOps.length, newObjects)
+      invalidateMirrorCache()
     } catch (e) { set({ busy: false }); console.error('applyFillet:', e); notify('Ошибка скругления', 'error') }
   },
 
@@ -362,6 +367,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const ms = performance.now() - t0
       set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, selectedIds: pastedIds, modified: true, busy: false, lastCsgMs: ms })
       cacheSnapshotWithTree(newOps.length, newObjects)
+      invalidateMirrorCache()
     } catch (e) {
       set({ busy: false })
       // Clean up partially created objects from worker cache
@@ -396,6 +402,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const newOps = [...operations.slice(0, historyIndex), op]
     set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, selectedIds: [], modified: true })
     cacheSnapshotWithTree(newOps.length, newObjects)
+    invalidateMirrorCache()
   },
 
   selectObjects: (ids, add) => {
@@ -507,6 +514,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       createBooleanNode(resultId, op as 'union' | 'subtract' | 'intersect', idA, idB, resultTransform)
       set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, selectedIds: [resultId], modified: true, busy: false, lastCsgMs: ms })
       cacheSnapshotWithTree(newOps.length, newObjects)
+      invalidateMirrorCache()
       // Rebuild tree node to cache the mesh in history-tree
       rebuildNode(resultId).catch(e => console.error('[csgBoolean] rebuildNode failed:', e))
     } catch (e) { set({ busy: false }); console.error('csgBoolean:', e); notify('Ошибка CSG-операции', 'error') }
@@ -518,6 +526,30 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const { objects, operations, historyIndex } = get()
     const obj = objects[id]
     if (!obj) return
+
+    // FIX (MIRROR-DELTA-EP): Skip near-identical transforms — prevent duplicate
+    // history entries and cache invalidation when moveObject is called twice
+    // with the same values (e.g. React Strict Mode double-mount, simultaneous
+    // 3D viewport drag + property panel sync).
+    const t = obj.transform
+    const dx = newTransform.x - t.x
+    const dy = newTransform.y - t.y
+    const dz = newTransform.z - t.z
+    const drx = newTransform.rotX - t.rotX
+    const dry = newTransform.rotY - t.rotY
+    const drz = newTransform.rotZ - t.rotZ
+    const dsx = newTransform.scaleX - t.scaleX
+    const dsy = newTransform.scaleY - t.scaleY
+    const dsz = newTransform.scaleZ - t.scaleZ
+    const epsilon = 1e-6
+    if (
+      Math.abs(dx) < epsilon && Math.abs(dy) < epsilon && Math.abs(dz) < epsilon &&
+      Math.abs(drx) < epsilon && Math.abs(dry) < epsilon && Math.abs(drz) < epsilon &&
+      Math.abs(dsx) < epsilon && Math.abs(dsy) < epsilon && Math.abs(dsz) < epsilon
+    ) {
+      // Near-identical transform — skip silently
+      return
+    }
 
     // FIX (BUG-CSG-POS-5/6): Do NOT rebuild the mesh on transform changes.
     //
@@ -571,9 +603,6 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     // (applied by Viewport3D's pivot) and do NOT affect tree child positions.
     const node = getNode(id)
     if (node?.type === 'boolean') {
-      const dx = newTransform.x - obj.transform.x
-      const dy = newTransform.y - obj.transform.y
-      const dz = newTransform.z - obj.transform.z
       if (Math.abs(dx) > 1e-9 || Math.abs(dy) > 1e-9 || Math.abs(dz) > 1e-9) {
         moveTreeNode(id, { x: dx, y: dy, z: dz })
       }
@@ -619,6 +648,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
 
     set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true })
     cacheSnapshotWithTree(newOps.length, newObjects)
+    invalidateMirrorCache()
   },
 
   // ── Color ──
@@ -763,6 +793,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const newOps = [...operations.slice(0, historyIndex), op]
       set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true, busy: false, lastCsgMs: performance.now() - t0 })
       cacheSnapshotWithTree(newOps.length, newObjects)
+      invalidateMirrorCache()
     } catch (e) { set({ busy: false }); console.error('alignSelected:', e); notify('Ошибка выравнивания', 'error') }
   },
 
@@ -798,6 +829,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     clearSnapshots()
     clearTree()
     set({ operations: [], historyIndex: 0, objects: {}, selectedIds: [], modified: false, fileName: null, lastCsgMs: null })
+    invalidateMirrorCache()
   },
 
   // ── Open .doodle ──
@@ -817,6 +849,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       rebuildBuildTree(doc.operations, newObjects)
       set({ operations: doc.operations, historyIndex: doc.operations.length, objects: newObjects, selectedIds: [], fileName: picked.file.name, modified: false, busy: false, lastCsgMs: performance.now() - t0 })
       cacheSnapshotWithTree(doc.operations.length, newObjects)
+      invalidateMirrorCache()
     } catch (e) { set({ busy: false }); notify(`Ошибка открытия: ${e}`, 'error') }
   },
 
@@ -892,6 +925,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true, busy: false, lastCsgMs: ms })
         console.log(`[MIRROR:resizeObject] id=${id} newParams=${JSON.stringify(mergedParams)}`)
         cacheSnapshotWithTree(newOps.length, newObjects)
+        invalidateMirrorCache()
       } catch (e) { set({ busy: false }); console.error('resizeObject:', e); notify('Ошибка изменения размера', 'error') }
     }
     // Для CSG результатов: используем scale трансформацию
@@ -941,6 +975,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true, busy: false, lastCsgMs: 0 })
         console.log(`[MIRROR:resizeObject] id=${id} newTransform={x:${newTransform.x}, y:${newTransform.y}, z:${newTransform.z}, rotX:${newTransform.rotX}, rotY:${newTransform.rotY}, rotZ:${newTransform.rotZ}, scaleX:${newTransform.scaleX}, scaleY:${newTransform.scaleY}, scaleZ:${newTransform.scaleZ}}`)
         cacheSnapshotWithTree(newOps.length, newObjects)
+        invalidateMirrorCache()
       } catch (e) { set({ busy: false }); console.error('resizeObject (CSG):', e); notify('Ошибка изменения размера CSG-объекта', 'error') }
     }
   },
@@ -999,6 +1034,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const newOps = [...operations.slice(0, historyIndex), addOp, grpOp]
       set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, selectedIds: [resultId], modified: true, busy: false, lastCsgMs: ms })
       cacheSnapshotWithTree(newOps.length, newObjects)
+      invalidateMirrorCache()
     } catch (e) { set({ busy: false }); console.error('extrudeSelected:', e); notify('Ошибка экструзии', 'error') }
   },
 

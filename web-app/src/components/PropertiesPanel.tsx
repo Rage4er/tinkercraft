@@ -3,6 +3,7 @@ import NumInput from "./NumInput";
 import AlignButtons from "./AlignButtons";
 import CsgButtons from "./CsgButtons";
 import type { ShapeParams, SceneObject } from "../csg/types";
+import { EyeIcon, EyeOffIcon, FilletIcon, FolderIcon, SaveIcon } from "./icons";
 
 export default function PropertiesPanel({
   firstSelected,
@@ -104,7 +105,7 @@ export default function PropertiesPanel({
             className="btn btn-full"
             onClick={onShowProjects}
           >
-            📁 Менеджер проектов
+            <FolderIcon size={16} /> Менеджер проектов
           </button>
           <button
             className="btn primary btn-full mt-2"
@@ -115,7 +116,7 @@ export default function PropertiesPanel({
               )
             }
           >
-            💾 Быстрое сохранение
+            <SaveIcon size={16} /> Быстрое сохранение
           </button>
         </div>
       </>
@@ -152,7 +153,8 @@ export default function PropertiesPanel({
           className="btn btn-compact"
           onClick={() => onToggleVisible(firstSelected.id)}
         >
-          {firstSelected.visible ? "👁 Да" : "🚫 Нет"}
+          {firstSelected.visible ? <EyeIcon size={16} /> : <EyeOffIcon size={16} />}{" "}
+          {firstSelected.visible ? "Да" : "Нет"}
         </button>
       </div>
 
@@ -406,7 +408,7 @@ export default function PropertiesPanel({
             disabled={!canFillet}
             onClick={() => onApplyFillet(firstSelected.id, filletRadius)}
           >
-            ◌ Применить
+            <FilletIcon size={16} /> Применить
           </button>
         </div>
       )}

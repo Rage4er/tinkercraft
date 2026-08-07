@@ -112,6 +112,25 @@
 
 ---
 
+## 🪞 Mirror Pipeline — Раунд 9 (2025-08-07)
+
+**Проблемы, найденные при анализе production-логов:**
+
+| ID | Проблема | Статус | Файлы |
+|----|----------|--------|-------|
+| **MIRROR-R9-1** | Дублирование preview+confirm (mirrorObject x2) | ✅ ИСПРАВЛЕНО | `mirror-store.ts` |
+| **MIRROR-R9-2** | Тройной syncObjectsForOperation (preview hover YZ→XZ→XY) | ✅ ИСПРАВЛЕНО | `mirror-store.ts` |
+| **MIRROR-R9-3** | Дубль moveObject с одинаковыми параметрами | ✅ ИСПРАВЛЕНО | `document-store.ts` |
+| **MIRROR-R9-4** | Кэш не инвалидировался при изменениях сцены | ✅ ИСПРАВЛЕНО | `document-store.ts`, `mirror-store.ts` |
+
+**Решения:**
+1. **MIRROR-CACHE**: `previewMirror` сохраняет результаты в `mirrorCache`, `mirrorSelected` проверяет кэш по plane+ids+transformHash — skip full rebuild.
+2. **MIRROR-CACHE-SYNC**: `previewMirror` проверяет кэш перед `syncObjectsForOperation` — skip sync при hover без изменений.
+3. **MIRROR-DELTA-EP**: `moveObject` проверяет delta < 1e-6 по всем 9 параметрам — skip near-identical calls.
+4. **MIRROR-CACHE-INVALIDATE**: `invalidateMirrorCache()` вызывается в 14 мутирующих методах.
+
+---
+
 ## 📌 Будущие направления
 
 ### Параметрическая история операций (Фаза 8)

@@ -1,4 +1,5 @@
 import { useCallback } from "react";
+import { TextIcon, PlusIcon } from "./icons";
 
 export default function TextModal({
   textInput,
@@ -35,7 +36,7 @@ export default function TextModal({
         aria-labelledby="text-modal-title"
       >
         <div className="text-modal-title" id="text-modal-title">
-          ✚ 3D Текст
+          <PlusIcon size={16} /> 3D Текст
         </div>
         <input
           className="text-modal-input"
@@ -90,7 +91,7 @@ export default function TextModal({
             disabled={busy || !workerOk}
             onClick={handleAdd}
           >
-            ✚ Добавить
+            <PlusIcon size={16} /> Добавить
           </button>
           <button className="btn" onClick={onClose}>
             Отмена

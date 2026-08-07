@@ -8,21 +8,22 @@ import {
   listProjects, saveProject, deleteProject, updateProject,
   type ProjectMeta,
 } from '../io/project-manager'
+import { FolderIcon, CloseIcon, SaveIcon, OpenIcon, DeleteIcon } from './icons'
 
 interface Props {
-  onClose:   () => void
-  onLoad:    (id: string) => void
-  onSave:    (name: string) => Promise<void>
+  onClose: () => void
+  onLoad: (id: string) => void
+  onSave: (name: string) => Promise<void>
   currentProjectId?: string
   setCurrentProjectId: (id: string | undefined) => void
 }
 
 export default function ProjectManagerModal({ onClose, onLoad, onSave, currentProjectId, setCurrentProjectId }: Props) {
-  const [projects,    setProjects]    = useState<ProjectMeta[]>([])
-  const [loading,     setLoading]     = useState(true)
-  const [newName,     setNewName]     = useState('Новый проект')
-  const [saving,      setSaving]      = useState(false)
-  const [deleting,    setDeleting]    = useState<string | null>(null)
+  const [projects, setProjects] = useState<ProjectMeta[]>([])
+  const [loading, setLoading] = useState(true)
+  const [newName, setNewName] = useState('Новый проект')
+  const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState<string | null>(null)
 
   const refresh = useCallback(async () => {
     setLoading(true)
@@ -59,8 +60,8 @@ export default function ProjectManagerModal({ onClose, onLoad, onSave, currentPr
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal-box" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
-          <span>📁 Менеджер проектов</span>
-          <button className="btn" onClick={onClose} title="Закрыть">✕</button>
+          <span><FolderIcon size={18} /> Менеджер проектов</span>
+          <button className="btn" onClick={onClose} title="Закрыть"><CloseIcon size={16} /></button>
         </div>
 
         {/* Сохранить текущий */}
@@ -76,7 +77,7 @@ export default function ProjectManagerModal({ onClose, onLoad, onSave, currentPr
               onKeyDown={e => { if (e.key === 'Enter') handleSave() }}
             />
             <button className="btn primary" onClick={handleSave} disabled={saving || !newName.trim()}>
-              {saving ? '…' : '💾 Сохранить'}
+              {saving ? '…' : <><SaveIcon size={16} /> Сохранить</>}
             </button>
           </div>
         </div>
@@ -105,7 +106,7 @@ export default function ProjectManagerModal({ onClose, onLoad, onSave, currentPr
                   </div>
                   <div className="proj-actions">
                     <button className="btn" onClick={() => handleLoad(p.id)}>
-                      📂 Открыть
+                      <OpenIcon size={16} /> Открыть
                     </button>
                     <button
                       className="btn danger"
@@ -113,7 +114,7 @@ export default function ProjectManagerModal({ onClose, onLoad, onSave, currentPr
                       onClick={() => handleDelete(p.id)}
                       title="Удалить проект"
                     >
-                      {deleting === p.id ? '…' : '✕'}
+                      {deleting === p.id ? '…' : <DeleteIcon size={16} />}
                     </button>
                   </div>
                 </div>

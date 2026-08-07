@@ -2,8 +2,10 @@ import { useState } from "react";
 import Section from "./Section";
 import Timeline from "./Timeline";
 import ComponentTree from "./ComponentTree";
-import { ALL_SHAPES, OP_FILTER_LABELS } from "../constants";
+import { ALL_SHAPES_DATA, OP_FILTER_LABELS } from "../constants";
+import { ALL_SHAPES_ICONS } from "../constants-react";
 import type { ShapeType, TinkerCraftOperation, SceneObject } from "../csg/types";
+import { ChevronUpIcon, ChevronDownIcon } from "./icons";
 
 export default function LeftPanel({
   shapeSearch,
@@ -87,7 +89,7 @@ export default function LeftPanel({
                   : onAddShape(s.type as ShapeType)
               }
             >
-              <span className="shape-icon">{s.icon}</span>
+              <span className="shape-icon">{s.icon({ size: 16 })}</span>
               <span className="shape-lbl">{s.label}</span>
             </button>
           ))}
@@ -162,7 +164,7 @@ export default function LeftPanel({
             className="btn btn-compact tl-filter-toggle"
             onClick={() => setFiltersOpen(!filtersOpen)}
           >
-            {filtersOpen ? "▲" : "▼"} Фильтр
+            {filtersOpen ? <ChevronUpIcon size={14} /> : <ChevronDownIcon size={14} />} Фильтр
           </button>
           {filtersOpen && (
             <div className="tl-filter-panel">

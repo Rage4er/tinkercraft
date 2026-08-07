@@ -1,20 +1,29 @@
+// ============================================================
+// Constants — Pure data (NO React, NO JSX)
+// ============================================================
+// Этот файл НЕ импортирует React/JSX, поэтому воркер может безопасно
+// импортировать отсюда константы без активации React Refresh в бандле.
+// React-компоненты и иконки находятся в constants-react.tsx.
+
 import type { ShapeType } from "./csg/types";
 
-// ---- Shapes ----
-export const ALL_SHAPES: {
+// ---- Shapes (data only, NO JSX) ----
+// Иконки — это строковые ключи, не React-компоненты.
+// UI-слой подставляет реальные иконки из constants.tsx.
+export const ALL_SHAPES_DATA: {
   type: ShapeType | "text";
   label: string;
-  icon: string;
+  iconKey: string;
   category: string;
 }[] = [
-    { type: "cube", label: "Куб", icon: "⬛", category: "Основные" },
-    { type: "sphere", label: "Сфера", icon: "🔵", category: "Основные" },
-    { type: "cylinder", label: "Цилиндр", icon: "🥫", category: "Основные" },
-    { type: "cone", label: "Конус", icon: "🔺", category: "Основные" },
-    { type: "torus", label: "Тор", icon: "⭕", category: "Основные" },
-    { type: "prism", label: "Призма", icon: "◬", category: "Основные" },
-    { type: "pyramid", label: "Пирамида", icon: "▲", category: "Основные" },
-    { type: "text", label: "Текст", icon: "T", category: "Особые" },
+    { type: "cube", label: "Куб", iconKey: "cube", category: "Основные" },
+    { type: "sphere", label: "Сфера", iconKey: "sphere", category: "Основные" },
+    { type: "cylinder", label: "Цилиндр", iconKey: "cylinder", category: "Основные" },
+    { type: "cone", label: "Конус", iconKey: "cone", category: "Основные" },
+    { type: "torus", label: "Тор", iconKey: "torus", category: "Основные" },
+    { type: "prism", label: "Призма", iconKey: "prism", category: "Основные" },
+    { type: "pyramid", label: "Пирамида", iconKey: "pyramid", category: "Основные" },
+    { type: "text", label: "Текст", iconKey: "text", category: "Особые" },
   ];
 
 // ---- Snap values ----

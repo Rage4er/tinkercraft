@@ -4,6 +4,15 @@
 
 import type { CsgBooleanOp, ShapeType, ShapeParams, TransformNR } from './types'
 
+// FIX: Vite HMR type
+declare global {
+  interface ImportMeta {
+    hot?: {
+      on(event: 'vite:beforeFullReload', handler: () => void): void
+    }
+  }
+}
+
 export interface MeshResult {
   objId: string
   vertices: Float32Array
@@ -45,13 +54,11 @@ const _messageHandler = (e: MessageEvent) => {
   else resolve(msg)
 }
 
-const _errorListener = (e: ErrorEvent) => {
-  console.error('[Worker]', e.message)
-  // FIX (MED-18-14): Reject all pending with error context, but preserve
-  // the original error for each pending request so callers can distinguish
-  // worker errors from validation errors.
+const _errorListener = (_e: MessageEvent) => {
+  console.error('[Worker] Error occurred')
+  // FIX (MED-18-14): Reject all pending with error context
   for (const [reqId, [, reject]] of _pending) {
-    reject(new Error(`Worker error (${reqId}): ${e.message}`))
+    reject(new Error(`Worker error (${reqId}): Error occurred during initialization`))
   }
   _pending.clear()
 }
@@ -65,9 +72,15 @@ const _errorListener = (e: ErrorEvent) => {
 function getReadyPromise(): Promise<void> {
   if (_ready) return Promise.resolve()
   if (!_readyPromise) {
-    _readyPromise = new Promise<void>((resolve) => {
+    _readyPromise = new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        _readyPromise = null
+        reject(new Error('Worker initialization timeout (10s)'))
+      }, 10000)
+
       const handler = (e: MessageEvent) => {
         if (e.data?.type === 'ready') {
+          clearTimeout(timeout)
           _ready = true
           _readyPromise = null
           _worker?.removeEventListener('message', handler)
@@ -83,10 +96,14 @@ function getReadyPromise(): Promise<void> {
 function getWorker(): Worker {
   if (_worker) return _worker
 
-  _worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' })
-
-  _worker.addEventListener('message', _messageHandler)
-  _worker.addEventListener('error', _errorListener)
+  try {
+    _worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' })
+    _worker.addEventListener('message', _messageHandler)
+    _worker.addEventListener('error', _errorListener)
+  } catch (e) {
+    console.error('[Worker] Failed to create worker:', e)
+    throw new Error(`Failed to initialize CSG worker: ${e instanceof Error ? e.message : String(e)}`)
+  }
 
   return _worker
 }

@@ -3,6 +3,8 @@
 // Used in both Toolbar (compact) and PropertiesPanel (full)
 // ============================================================
 
+import { AlignIcon } from "./icons";
+
 type AlignAxis = "X" | "Y" | "Z";
 type AlignAnchor = "min" | "center" | "max";
 
@@ -17,12 +19,12 @@ export default function AlignButtons({
 }) {
   if (variant === "full") {
     const buttons: { axis: AlignAxis; anchor: AlignAnchor; label: string }[] = [
-      { axis: "X", anchor: "min", label: "X◧" },
-      { axis: "X", anchor: "center", label: "X⊡" },
-      { axis: "X", anchor: "max", label: "X◨" },
-      { axis: "Y", anchor: "min", label: "Y◧" },
-      { axis: "Y", anchor: "center", label: "Y⊡" },
-      { axis: "Y", anchor: "max", label: "Y◨" },
+      { axis: "X", anchor: "min", label: "X min" },
+      { axis: "X", anchor: "center", label: "X center" },
+      { axis: "X", anchor: "max", label: "X max" },
+      { axis: "Y", anchor: "min", label: "Y min" },
+      { axis: "Y", anchor: "center", label: "Y center" },
+      { axis: "Y", anchor: "max", label: "Y max" },
     ];
     return (
       <>
@@ -37,7 +39,7 @@ export default function AlignButtons({
               disabled={disabled}
               onClick={() => onAlign(axis, anchor)}
             >
-              {label}
+              <AlignIcon size={16} /> {label}
             </button>
           ))}
         </div>
@@ -47,11 +49,11 @@ export default function AlignButtons({
 
   // Compact: X min/center/max + Y center + Z center
   const buttons: { axis: AlignAxis; anchor: AlignAnchor; label: string }[] = [
-    { axis: "X", anchor: "min", label: "◧X" },
-    { axis: "X", anchor: "center", label: "⊡X" },
-    { axis: "X", anchor: "max", label: "◨X" },
-    { axis: "Y", anchor: "center", label: "⊡Y" },
-    { axis: "Z", anchor: "center", label: "⊡Z" },
+    { axis: "X", anchor: "min", label: "X min" },
+    { axis: "X", anchor: "center", label: "X center" },
+    { axis: "X", anchor: "max", label: "X max" },
+    { axis: "Y", anchor: "center", label: "Y center" },
+    { axis: "Z", anchor: "center", label: "Z center" },
   ];
   return (
     <div className="toolbar-group">
@@ -63,7 +65,7 @@ export default function AlignButtons({
           onClick={() => onAlign(axis, anchor)}
           title={label}
         >
-          {label}
+          <AlignIcon size={14} />
         </button>
       ))}
     </div>

@@ -5,6 +5,19 @@
 
 import { useState, useRef, useEffect } from 'react'
 import type { SceneObject } from '../csg/types'
+import {
+  CubeIcon,
+  SphereIcon,
+  CylinderIcon,
+  ConeIcon,
+  TorusIcon,
+  PrismIcon,
+  PyramidIcon,
+  ImportIcon,
+  EyeIcon,
+  EyeOffIcon,
+  DeleteIcon,
+} from './icons'
 
 interface Props {
   objects: SceneObject[]
@@ -15,18 +28,12 @@ interface Props {
   onDelete: (id: string) => void
 }
 
-const SHAPE_ICON: Record<string, string> = {
-  cube: '⬛', sphere: '🔵', cylinder: '🥫', cone: '🔺',
-  torus: '⭕', prism: '🔷', pyramid: '🔺', import_mesh: '📦',
-}
-
 // FIX (LOW-18-30): Named constant instead of magic number
 const INPUT_SELECT_DELAY_MS = 30
 
 function displayName(obj: SceneObject): string {
   if (obj.name) return obj.name
-  const icon = SHAPE_ICON[obj.shapeType] ?? '▪'
-  return `${icon} ${obj.shapeType} ${obj.id.split('_')[1] ?? ''}`
+  return `${obj.shapeType} ${obj.id.split('_')[1] ?? ''}`
 }
 
 export default function ComponentTree({ objects, selectedIds, onSelect, onRename, onToggleVis, onDelete }: Props) {
@@ -74,6 +81,18 @@ export default function ComponentTree({ objects, selectedIds, onSelect, onRename
             {/* Цветовая метка */}
             <div className="ct-swatch" style={{ background: obj.color, opacity: obj.visible ? 1 : 0.4 }} />
 
+            {/* Иконка фигуры */}
+            <span className="ct-icon">
+              {obj.shapeType === 'cube' && <CubeIcon size={14} />}
+              {obj.shapeType === 'sphere' && <SphereIcon size={14} />}
+              {obj.shapeType === 'cylinder' && <CylinderIcon size={14} />}
+              {obj.shapeType === 'cone' && <ConeIcon size={14} />}
+              {obj.shapeType === 'torus' && <TorusIcon size={14} />}
+              {obj.shapeType === 'prism' && <PrismIcon size={14} />}
+              {obj.shapeType === 'pyramid' && <PyramidIcon size={14} />}
+              {obj.shapeType === 'import_mesh' && <ImportIcon size={14} />}
+            </span>
+
             {/* Имя (двойной клик = редактирование) */}
             {isEd ? (
               <input
@@ -107,14 +126,14 @@ export default function ComponentTree({ objects, selectedIds, onSelect, onRename
               title={obj.visible ? 'Скрыть' : 'Показать'}
               onClick={e => { e.stopPropagation(); onToggleVis(obj.id) }}
             >
-              {obj.visible ? '👁' : '🚫'}
+              {obj.visible ? <EyeIcon size={14} /> : <EyeOffIcon size={14} />}
             </button>
             <button
               className="ct-btn ct-del"
               title="Удалить"
               onClick={e => { e.stopPropagation(); onDelete(obj.id) }}
             >
-              ✕
+              <DeleteIcon size={14} />
             </button>
           </div>
         )

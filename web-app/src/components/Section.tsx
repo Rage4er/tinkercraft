@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { ChevronUpIcon, ChevronDownIcon } from "./icons";
 
 // ---- Collapsible section ----
 export default function Section({
@@ -34,7 +35,7 @@ export default function Section({
         <span className="flex-row" style={{ marginLeft: "auto", marginRight: 4 }}>
           {badge !== undefined && <span className="badge">{badge}</span>}
           <span className="text-muted-sm">
-            {open ? "▲" : "▼"}
+            {open ? <ChevronUpIcon size={12} /> : <ChevronDownIcon size={12} />}
           </span>
         </span>
       </div>

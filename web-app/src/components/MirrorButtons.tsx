@@ -3,6 +3,8 @@
 // Used in both Toolbar (compact) and PropertiesPanel (full)
 // ============================================================
 
+import { MirrorYZIcon, MirrorXZIcon, MirrorXYIcon } from "./icons";
+
 type MirrorPlane = "XY" | "XZ" | "YZ";
 
 export default function MirrorButtons({
@@ -18,23 +20,27 @@ export default function MirrorButtons({
   onPreviewEnd?: () => void;
   variant?: "compact" | "full";
 }) {
-  const planes: MirrorPlane[] = ["YZ", "XZ", "XY"];
+  const planes: { plane: MirrorPlane; icon: React.ReactNode; label: string }[] = [
+    { plane: "YZ", icon: <MirrorYZIcon size={variant === "full" ? 16 : 14} />, label: "YZ" },
+    { plane: "XZ", icon: <MirrorXZIcon size={variant === "full" ? 16 : 14} />, label: "XZ" },
+    { plane: "XY", icon: <MirrorXYIcon size={variant === "full" ? 16 : 14} />, label: "XY" },
+  ];
 
   if (variant === "full") {
     return (
       <div className="csg-group">
         <div className="csg-group-title">Зеркало</div>
         <div className="flex-row">
-          {planes.map((p) => (
+          {planes.map(({ plane, icon, label }) => (
             <button
-              key={p}
+              key={plane}
               className="btn flex-1"
               disabled={disabled}
-              onClick={() => onMirror(p)}
-              onMouseEnter={() => onPreviewMirror?.(p)}
+              onClick={() => onMirror(plane)}
+              onMouseEnter={() => onPreviewMirror?.(plane)}
               onMouseLeave={() => onPreviewEnd?.()}
             >
-              {p}
+              {icon} {label}
             </button>
           ))}
         </div>
@@ -44,17 +50,17 @@ export default function MirrorButtons({
 
   return (
     <div className="toolbar-group">
-      {planes.map((p) => (
+      {planes.map(({ plane, icon, label }) => (
         <button
-          key={p}
+          key={plane}
           className="btn"
           disabled={disabled}
-          onClick={() => onMirror(p)}
-          onMouseEnter={() => onPreviewMirror?.(p)}
+          onClick={() => onMirror(plane)}
+          onMouseEnter={() => onPreviewMirror?.(plane)}
           onMouseLeave={() => onPreviewEnd?.()}
-          title={`Зеркало ${p}`}
+          title={`Зеркало ${label}`}
         >
-          ⟺{p}
+          {icon}
         </button>
       ))}
     </div>

@@ -3,6 +3,8 @@
 // Used in both Toolbar (compact) and PropertiesPanel (full)
 // ============================================================
 
+import { UnionIcon, SubtractIcon, IntersectIcon } from "./icons";
+
 type CsgOp = "union" | "subtract" | "intersect";
 
 const CSG_DISABLED_TITLE = "CSG операции с данным объектом невозможны (non-manifold геометрия)";
@@ -18,10 +20,10 @@ export default function CsgButtons({
   variant?: "compact" | "full";
   nonManifoldSelected?: boolean;
 }) {
-  const ops: { op: CsgOp; icon: string; label: string }[] = [
-    { op: "union", icon: "∪", label: "Объединение" },
-    { op: "subtract", icon: "−", label: "Вычитание" },
-    { op: "intersect", icon: "∩", label: "Пересечение" },
+  const ops: { op: CsgOp; icon: React.ReactNode; label: string }[] = [
+    { op: "union", icon: <UnionIcon size={variant === "full" ? 16 : 14} />, label: "Объединение" },
+    { op: "subtract", icon: <SubtractIcon size={variant === "full" ? 16 : 14} />, label: "Вычитание" },
+    { op: "intersect", icon: <IntersectIcon size={variant === "full" ? 16 : 14} />, label: "Пересечение" },
   ];
 
   const title = disabled && nonManifoldSelected ? CSG_DISABLED_TITLE : undefined;

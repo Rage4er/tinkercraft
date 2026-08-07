@@ -1,4 +1,5 @@
 import { Component, type ReactNode } from 'react'
+import { WarningIcon, RotateIcon } from './icons'
 
 interface Props { children: ReactNode; fallback?: ReactNode }
 interface State { error: Error | null }
@@ -21,13 +22,13 @@ export default class ErrorBoundary extends Component<Props, State> {
     if (this.state.error) {
       return this.props.fallback ?? (
         <div className="error-screen" style={{ height: '100%', padding: 24, display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center', justifyContent: 'center' }}>
-          <span className="error-icon">⚠️</span>
+          <WarningIcon size={32} />
           <strong className="error-title">Ошибка компонента</strong>
           <code className="error-detail">
             {this.state.error.message}
           </code>
           <button className="btn primary" onClick={this.handleRetry}>
-            ↻ Повторить
+            <RotateIcon size={16} /> Повторить
           </button>
         </div>
       )

@@ -5,7 +5,7 @@
 // ============================================================
 
 import { buildSRTMatrixAroundCenter, buildTransformMatrix } from './worker-matrix'
-import { FILLET_EPSILON, FILLET_MIN_RADIUS } from '../constants'
+import { FILLET_EPSILON, FILLET_MIN_RADIUS } from '../constants.ts'
 import type { RebuildTransform } from './rebuildOps'
 import { applyMoveDelta, applyMirrorToTransform, applyAlignToTransform } from './rebuildOps'
 import type { MirrorOperation } from './types'
