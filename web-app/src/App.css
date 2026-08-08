@@ -122,25 +122,22 @@ body {
   align-self: center;
 }
 
-/* ГРУППА — кнопки внутри переносятся */
+/* ГРУППА — grid с auto-fill для автоматического переноса кнопок */
 .toolbar-group {
-  display: flex;
-  flex-wrap: wrap;
-  /* кнопки переносятся ВНУТРИ группы */
-  flex-shrink: 0;
-  /* группа не сжимается — позиция фиксирована */
-  align-items: center;
-  align-content: center;
-  /* центрируем строки кнопок по вертикали */
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 34px);
   gap: 2px;
+  flex-shrink: 0;
+  align-content: center;
   padding: 2px 4px;
 }
 
-/* Кнопки в toolbar-группах могут сжиматься для переноса */
+/* Кнопка в grid-группе */
 .toolbar-group .btn {
-  flex-shrink: 1;
-  min-width: 0;
-  max-width: 200px;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  flex-shrink: 0;
 }
 
 /* РАЗДЕЛИТЕЛЬ — на всю высоту контейнера */
