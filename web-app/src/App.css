@@ -122,14 +122,25 @@ body {
   align-self: center;
 }
 
-/* ГРУППА — grid с auto-fill для автоматического переноса кнопок */
+/* ГРУППА — grid с auto-fit для равномерного распределения */
 .toolbar-group {
   display: grid;
-  grid-template-columns: repeat(auto-fill, 34px);
+  grid-template-columns: repeat(auto-fit, minmax(34px, 1fr));
   gap: 2px;
-  flex-shrink: 0;
+  flex: 1 1 0;
+  /* равномерно делит доступное пространство */
   align-content: center;
   padding: 2px 4px;
+  min-width: 0;
+}
+
+/* Кнопка в grid-группе — фиксированная, центрируется в ячейке */
+.toolbar-group .btn {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  margin: auto;
+  /* центрировать в ячейке grid */
 }
 
 /* Кнопка в grid-группе */
