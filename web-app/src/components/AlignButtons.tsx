@@ -3,6 +3,7 @@
 // Used in both Toolbar (compact) and PropertiesPanel (full)
 // ============================================================
 
+import IconButton from "./IconButton";
 import { AlignIcon } from "./icons";
 
 type AlignAxis = "X" | "Y" | "Z";
@@ -33,14 +34,14 @@ export default function AlignButtons({
         </div>
         <div className="flex-wrap">
           {buttons.map(({ axis, anchor, label }) => (
-            <button
+            <IconButton
               key={`${axis}-${anchor}`}
-              className="btn flex-1 min-w-36"
-              disabled={disabled}
+              icon={<AlignIcon size={16} />}
+              label={label}
               onClick={() => onAlign(axis, anchor)}
-            >
-              <AlignIcon size={16} /> {label}
-            </button>
+              disabled={disabled}
+              title={label}
+            />
           ))}
         </div>
       </>
@@ -58,15 +59,13 @@ export default function AlignButtons({
   return (
     <div className="toolbar-group">
       {buttons.map(({ axis, anchor, label }) => (
-        <button
+        <IconButton
           key={`${axis}-${anchor}`}
-          className="btn"
-          disabled={disabled}
+          icon={<AlignIcon size={14} />}
           onClick={() => onAlign(axis, anchor)}
+          disabled={disabled}
           title={label}
-        >
-          <AlignIcon size={14} />
-        </button>
+        />
       ))}
     </div>
   );

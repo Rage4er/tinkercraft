@@ -3,6 +3,7 @@
 // Used in both Toolbar (compact) and PropertiesPanel (full)
 // ============================================================
 
+import IconButton from "./IconButton";
 import { UnionIcon, SubtractIcon, IntersectIcon } from "./icons";
 
 type CsgOp = "union" | "subtract" | "intersect";
@@ -33,15 +34,15 @@ export default function CsgButtons({
       <div className="csg-group">
         <div className="csg-group-title">CSG операции</div>
         {ops.map(({ op, icon, label }) => (
-          <button
+          <IconButton
             key={op}
-            className="btn primary"
-            disabled={disabled}
-            title={title}
+            icon={icon}
+            label={label}
             onClick={() => onCsg(op)}
-          >
-            {icon} {label}
-          </button>
+            disabled={disabled}
+            title={title ?? label}
+            buttonVariant="primary"
+          />
         ))}
       </div>
     );
@@ -49,16 +50,15 @@ export default function CsgButtons({
 
   return (
     <div className="toolbar-group">
-      {ops.map(({ op, icon }) => (
-        <button
+      {ops.map(({ op, icon, label }) => (
+        <IconButton
           key={op}
-          className="btn primary"
-          disabled={disabled}
-          title={title}
+          icon={icon}
           onClick={() => onCsg(op)}
-        >
-          {icon}
-        </button>
+          disabled={disabled}
+          title={title ?? label}
+          buttonVariant="primary"
+        />
       ))}
     </div>
   );

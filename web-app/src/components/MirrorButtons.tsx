@@ -3,6 +3,7 @@
 // Used in both Toolbar (compact) and PropertiesPanel (full)
 // ============================================================
 
+import IconButton from "./IconButton";
 import { MirrorYZIcon, MirrorXZIcon, MirrorXYIcon } from "./icons";
 
 type MirrorPlane = "XY" | "XZ" | "YZ";
@@ -32,16 +33,16 @@ export default function MirrorButtons({
         <div className="csg-group-title">Зеркало</div>
         <div className="flex-row">
           {planes.map(({ plane, icon, label }) => (
-            <button
+            <IconButton
               key={plane}
-              className="btn flex-1"
-              disabled={disabled}
+              icon={icon}
+              label={label}
               onClick={() => onMirror(plane)}
+              disabled={disabled}
+              title={`Зеркало ${label}`}
               onMouseEnter={() => onPreviewMirror?.(plane)}
               onMouseLeave={() => onPreviewEnd?.()}
-            >
-              {icon} {label}
-            </button>
+            />
           ))}
         </div>
       </div>
@@ -51,17 +52,15 @@ export default function MirrorButtons({
   return (
     <div className="toolbar-group">
       {planes.map(({ plane, icon, label }) => (
-        <button
+        <IconButton
           key={plane}
-          className="btn"
-          disabled={disabled}
+          icon={icon}
           onClick={() => onMirror(plane)}
+          disabled={disabled}
+          title={`Зеркало ${label}`}
           onMouseEnter={() => onPreviewMirror?.(plane)}
           onMouseLeave={() => onPreviewEnd?.()}
-          title={`Зеркало ${label}`}
-        >
-          {icon}
-        </button>
+        />
       ))}
     </div>
   );

@@ -2,6 +2,7 @@ import type { GizmoMode } from "./Viewport3D";
 import MirrorButtons from "./MirrorButtons";
 import AlignButtons from "./AlignButtons";
 import CsgButtons from "./CsgButtons";
+import IconButton from "./IconButton";
 import {
   OpenIcon,
   SaveIcon,
@@ -111,51 +112,27 @@ export default function Toolbar({
       <span className="toolbar-logo"><CubeIcon size={16} /> TinkerCraft{titleSuffix}</span>
 
       <div className="toolbar-group">
-        <button className="btn" onClick={onOpen} title="Открыть .doodle (Ctrl+O)">
-          <OpenIcon size={16} /> Открыть
-        </button>
-        <button className="btn" onClick={onSave} title="Сохранить .doodle (Ctrl+S)">
-          <SaveIcon size={16} /> Сохранить
-        </button>
-        <button className="btn" onClick={onExportStl} disabled={objectCount === 0} title="Экспорт STL">
-          <ExportIcon size={16} /> STL
-        </button>
-        <button className="btn" onClick={onImportStl} disabled={busy} title="Импорт STL">
-          <ImportIcon size={16} /> Импорт
-        </button>
-        <button className="btn" onClick={onShowProjects} title="Менеджер проектов">
-          <FolderIcon size={16} /> Проекты
-        </button>
+        <IconButton icon={<OpenIcon size={16} />} label="Открыть" onClick={onOpen} title="Открыть .doodle (Ctrl+O)" />
+        <IconButton icon={<SaveIcon size={16} />} label="Сохранить" onClick={onSave} title="Сохранить .doodle (Ctrl+S)" />
+        <IconButton icon={<ExportIcon size={16} />} label="STL" onClick={onExportStl} disabled={objectCount === 0} title="Экспорт STL" />
+        <IconButton icon={<ImportIcon size={16} />} label="Импорт" onClick={onImportStl} disabled={busy} title="Импорт STL" />
+        <IconButton icon={<FolderIcon size={16} />} label="Проекты" onClick={onShowProjects} title="Менеджер проектов" />
       </div>
 
       <div className="toolbar-group">
-        <button className="btn" onClick={onUndo} disabled={!canUndo || busy} title="Отменить (Ctrl+Z)">
-          <UndoIcon size={16} /> Undo
-        </button>
-        <button className="btn" onClick={onRedo} disabled={!canRedo || busy} title="Повторить (Ctrl+Y)">
-          <RedoIcon size={16} /> Redo
-        </button>
+        <IconButton icon={<UndoIcon size={16} />} label="Undo" onClick={onUndo} disabled={!canUndo || busy} title="Отменить (Ctrl+Z)" />
+        <IconButton icon={<RedoIcon size={16} />} label="Redo" onClick={onRedo} disabled={!canRedo || busy} title="Повторить (Ctrl+Y)" />
       </div>
 
       <div className="toolbar-group">
-        <button className="btn" onClick={onCopy} disabled={selectedCount === 0} title="Копировать (Ctrl+C)">
-          <CopyIcon size={16} /> Copy
-        </button>
-        <button className="btn" onClick={onPaste} disabled={!hasCopied || busy} title="Вставить (Ctrl+V)">
-          <PasteIcon size={16} /> Paste
-        </button>
-        <button className="btn" onClick={onDelete} disabled={selectedCount === 0 || busy} title="Удалить (Del)">
-          <DeleteIcon size={16} /> Del
-        </button>
+        <IconButton icon={<CopyIcon size={16} />} label="Copy" onClick={onCopy} disabled={selectedCount === 0} title="Копировать (Ctrl+C)" />
+        <IconButton icon={<PasteIcon size={16} />} label="Paste" onClick={onPaste} disabled={!hasCopied || busy} title="Вставить (Ctrl+V)" />
+        <IconButton icon={<DeleteIcon size={16} />} label="Del" onClick={onDelete} disabled={selectedCount === 0 || busy} title="Удалить (Del)" />
       </div>
 
       <div className="toolbar-group">
-        <button className="btn" onClick={onFitView} title="Fit view (F)">
-          <FitViewIcon size={16} /> Fit
-        </button>
-        <button className="btn" onClick={onResetView} title="Сброс вида (H)">
-          <HomeIcon size={16} /> Home
-        </button>
+        <IconButton icon={<FitViewIcon size={16} />} label="Fit" onClick={onFitView} title="Fit view (F)" />
+        <IconButton icon={<HomeIcon size={16} />} label="Home" onClick={onResetView} title="Сброс вида (H)" />
         <button
           className={`btn${cameraMode === "orthographic" ? " active" : ""}`}
           onClick={onToggleCamera}
@@ -166,45 +143,39 @@ export default function Toolbar({
       </div>
 
       <div className="toolbar-group">
-        <button
-          className={`btn${gizmoMode === "translate" ? " active" : ""}`}
-          disabled={selectedCount === 0}
+        <IconButton
+          icon={<MoveIcon size={16} />} label="Move"
           onClick={() => onGizmo("translate")}
+          disabled={selectedCount === 0}
           title="Переместить (G)"
-        >
-          <MoveIcon size={16} /> Move
-        </button>
-        <button
-          className={`btn${gizmoMode === "rotate" ? " active" : ""}`}
-          disabled={selectedCount === 0}
+          buttonVariant={gizmoMode === "translate" ? "active" : "default"}
+        />
+        <IconButton
+          icon={<RotateIcon size={16} />} label="Rotate"
           onClick={() => onGizmo("rotate")}
-          title="Повернуть (R)"
-        >
-          <RotateIcon size={16} /> Rotate
-        </button>
-        <button
-          className={`btn${gizmoMode === "scale" ? " active" : ""}`}
           disabled={selectedCount === 0}
+          title="Повернуть (R)"
+          buttonVariant={gizmoMode === "rotate" ? "active" : "default"}
+        />
+        <IconButton
+          icon={<ScaleIcon size={16} />} label="Scale"
           onClick={() => onGizmo("scale")}
+          disabled={selectedCount === 0}
           title="Масштаб (S)"
-        >
-          <ScaleIcon size={16} /> Scale
-        </button>
+          buttonVariant={gizmoMode === "scale" ? "active" : "default"}
+        />
         {gizmoMode !== "none" && (
-          <button className="btn danger" onClick={() => onGizmo("none")} title="Выйти (Esc)">
-            <CloseIcon size={16} />
-          </button>
+          <IconButton icon={<CloseIcon size={16} />} onClick={() => onGizmo("none")} title="Выйти (Esc)" buttonVariant="danger" />
         )}
       </div>
 
       <div className="toolbar-group">
-        <button
-          className={`btn${rulerActive ? " active" : ""}`}
+        <IconButton
+          icon={<RulerIcon size={16} />} label="Линейка"
           onClick={onToggleRuler}
           title="Линейка — 2 клика для измерения расстояния"
-        >
-          <RulerIcon size={16} /> Линейка
-        </button>
+          buttonVariant={rulerActive ? "active" : "default"}
+        />
       </div>
 
       <MirrorButtons
@@ -219,15 +190,16 @@ export default function Toolbar({
       <CsgButtons disabled={!canCsg} onCsg={onCsg} nonManifoldSelected={nonManifoldSelected} />
 
       <div className="toolbar-group">
-        <button className="btn" onClick={onToggleTheme} title="Сменить тему">
-          {theme === "dark" ? "☀ Light" : "🌙 Dark"}
-        </button>
+        <IconButton
+          icon={theme === "dark" ? <span title="Сменить тему">☀</span> : <span title="Сменить тему">🌙</span>}
+          label={theme === "dark" ? "Light" : "Dark"}
+          onClick={onToggleTheme}
+          title="Сменить тему"
+        />
       </div>
 
       <div className="toolbar-group">
-        <button className="btn danger" onClick={onClearScene} disabled={busy} title="Очистить сцену">
-          <CloseIcon size={16} /> Clear
-        </button>
+        <IconButton icon={<CloseIcon size={16} />} label="Clear" onClick={onClearScene} disabled={busy} title="Очистить сцену" buttonVariant="danger" />
       </div>
     </div>
   );
