@@ -69,8 +69,8 @@ body {
 /* ---- Toolbar ---- */
 .toolbar {
   display: flex;
-  flex-wrap: nowrap;
-  /* группы НЕ переносятся */
+  flex-wrap: wrap;
+  /* разрешаем группам переноситься */
   align-items: stretch;
   /* все группы и разделители одной высоты */
   gap: 0;
@@ -79,9 +79,6 @@ body {
   border-bottom: 1px solid var(--border);
   min-height: 40px;
   flex-shrink: 0;
-  overflow-x: auto;
-  /* скролл если не влазит */
-  overflow-y: hidden;
 }
 
 .toolbar::-webkit-scrollbar {
@@ -119,8 +116,16 @@ body {
   /* центрируем строки по вертикали */
   gap: 2px;
   padding: 2px 4px;
-  flex-shrink: 0;
-  /* группа не сжимается */
+  flex: 0 1 auto;
+  /* группа может сжиматься чтобы кнопки переносились */
+  min-width: 0;
+  /* flexbox может сжимать группу меньше содержимого */
+}
+
+/* Кнопки внутри toolbar-групп могут сжиматься и переноситься */
+.toolbar-group .btn {
+  flex-shrink: 1;
+  min-width: 0;
 }
 
 /* РАЗДЕЛИТЕЛЬ — на всю высоту контейнера */
