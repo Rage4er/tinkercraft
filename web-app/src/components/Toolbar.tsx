@@ -119,17 +119,20 @@ export default function Toolbar({
         <IconButton icon={<ImportIcon size={16} />} label="Импорт" onClick={onImportStl} disabled={busy} tooltip={TOOLTIP_DATA.import_stl} />
         <IconButton icon={<FolderIcon size={16} />} label="Проекты" onClick={onShowProjects} tooltip={TOOLTIP_DATA.projects} />
       </div>
+      <div className="toolbar-separator" />
 
       <div className="toolbar-group">
         <IconButton icon={<UndoIcon size={16} />} label="Undo" onClick={onUndo} disabled={!canUndo || busy} tooltip={TOOLTIP_DATA.undo} />
         <IconButton icon={<RedoIcon size={16} />} label="Redo" onClick={onRedo} disabled={!canRedo || busy} tooltip={TOOLTIP_DATA.redo} />
       </div>
+      <div className="toolbar-separator" />
 
       <div className="toolbar-group">
         <IconButton icon={<CopyIcon size={16} />} label="Copy" onClick={onCopy} disabled={selectedCount === 0} tooltip={TOOLTIP_DATA.copy} />
         <IconButton icon={<PasteIcon size={16} />} label="Paste" onClick={onPaste} disabled={!hasCopied || busy} tooltip={TOOLTIP_DATA.paste} />
         <IconButton icon={<DeleteIcon size={16} />} label="Del" onClick={onDelete} disabled={selectedCount === 0 || busy} tooltip={TOOLTIP_DATA.delete} />
       </div>
+      <div className="toolbar-separator" />
 
       <div className="toolbar-group">
         <IconButton icon={<FitViewIcon size={16} />} label="Fit" onClick={onFitView} tooltip={TOOLTIP_DATA.fit_view} />
@@ -142,6 +145,7 @@ export default function Toolbar({
           {cameraMode === "perspective" ? "⬡ Persp" : "⬡ Ortho"}
         </button>
       </div>
+      <div className="toolbar-separator" />
 
       <div className="toolbar-group">
         <IconButton
@@ -169,6 +173,7 @@ export default function Toolbar({
           <IconButton icon={<CloseIcon size={16} />} onClick={() => onGizmo("none")} tooltip={TOOLTIP_DATA.gizmo_exit} buttonVariant="danger" />
         )}
       </div>
+      <div className="toolbar-separator" />
 
       <div className="toolbar-group">
         <IconButton
@@ -178,6 +183,7 @@ export default function Toolbar({
           buttonVariant={rulerActive ? "active" : "default"}
         />
       </div>
+      <div className="toolbar-separator" />
 
       <MirrorButtons
         disabled={!canMirror}
@@ -185,10 +191,13 @@ export default function Toolbar({
         onPreviewMirror={onPreviewMirror}
         onPreviewEnd={onPreviewMirrorEnd}
       />
+      <div className="toolbar-separator" />
 
       <AlignButtons disabled={!canAlign} onAlign={onAlign} />
+      <div className="toolbar-separator" />
 
       <CsgButtons disabled={!canCsg} onCsg={onCsg} nonManifoldSelected={nonManifoldSelected} />
+      <div className="toolbar-separator" />
 
       <div className="toolbar-group">
         <IconButton
@@ -198,6 +207,7 @@ export default function Toolbar({
           tooltip={TOOLTIP_DATA.theme_toggle}
         />
       </div>
+      <div className="toolbar-separator" />
 
       <div className="toolbar-group">
         <IconButton icon={<CloseIcon size={16} />} label="Clear" onClick={onClearScene} disabled={busy} tooltip={TOOLTIP_DATA.clear_scene} buttonVariant="danger" />

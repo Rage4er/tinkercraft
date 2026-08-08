@@ -69,14 +69,32 @@ body {
 /* ---- Toolbar ---- */
 .toolbar {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 2px 0;
+  flex-wrap: nowrap;
+  /* группы НЕ переносятся */
+  align-items: stretch;
+  /* все группы и разделители одной высоты */
+  gap: 0;
   padding: 2px 8px;
   background: var(--bg-panel);
   border-bottom: 1px solid var(--border);
   min-height: 40px;
   flex-shrink: 0;
+  overflow-x: auto;
+  /* скролл если не влазит */
+  overflow-y: hidden;
+}
+
+.toolbar::-webkit-scrollbar {
+  height: 4px;
+}
+
+.toolbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.toolbar::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 2px;
 }
 
 .toolbar-logo {
@@ -88,21 +106,31 @@ body {
   white-space: nowrap;
   flex-shrink: 0;
   padding: 4px 0;
+  align-self: center;
 }
 
-/* Each logical group of buttons — stays together as a unit */
+/* ГРУППА — кнопки внутри переносятся */
 .toolbar-group {
   display: flex;
+  flex-wrap: wrap;
+  /* кнопки переносятся ВНУТРИ группы */
   align-items: center;
+  align-content: center;
+  /* центрируем строки по вертикали */
   gap: 2px;
-  padding: 2px 6px;
-  border-left: 1px solid var(--border);
-  margin-left: 2px;
+  padding: 2px 4px;
+  flex-shrink: 0;
+  /* группа не сжимается */
 }
 
-.toolbar-group:first-child {
-  border-left: none;
-  margin-left: 0;
+/* РАЗДЕЛИТЕЛЬ — на всю высоту контейнера */
+.toolbar-separator {
+  width: 1px;
+  background: var(--border);
+  align-self: stretch;
+  /* растягивается на всю высоту */
+  margin: 2px 0;
+  flex-shrink: 0;
 }
 
 /* ---- Buttons ---- */
@@ -169,7 +197,7 @@ body {
   border-radius: 6px;
   font-size: 12px;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   max-width: 280px;
   transition: opacity 0.15s ease;
 }
@@ -186,7 +214,7 @@ body {
 
 .tk-tooltip-shortcut {
   font-size: 10px;
-  background: rgba(255,255,255,0.15);
+  background: rgba(255, 255, 255, 0.15);
   padding: 1px 6px;
   border-radius: 4px;
   font-family: 'Courier New', monospace;
@@ -196,7 +224,7 @@ body {
   margin-top: 6px;
   font-size: 11px;
   opacity: 0.8;
-  border-top: 1px solid rgba(255,255,255,0.1);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
   padding-top: 6px;
   line-height: 1.4;
 }
@@ -215,15 +243,15 @@ body {
 [data-theme="light"] .tk-tooltip {
   --tooltip-bg: #ffffff;
   --tooltip-text: #1e1e1e;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 [data-theme="light"] .tk-tooltip-shortcut {
-  background: rgba(0,0,0,0.08);
+  background: rgba(0, 0, 0, 0.08);
 }
 
 [data-theme="light"] .tk-tooltip-description {
-  border-top: 1px solid rgba(0,0,0,0.08);
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
 }
 
 [data-theme="light"] .tk-tooltip-arrow {
