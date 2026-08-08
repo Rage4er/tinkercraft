@@ -33,6 +33,20 @@
 
 ---
 
+### ✅ ЗАВЕРШЕНО — 7.5.4: Тесты цепочек операций (2026-08-08)
+
+**15 тестов в `build-chain.test.ts`, 5 групп:**
+
+1. **CSG цепочки** (3 теста): union/subtract/intersect, вложенный CSG (cube→union+cyl→union+sphere), parentId chain
+2. **Mirror + CSG** (2 теста): mirror YZ→union со сферой, multi-select mirror
+3. **Undo/Redo через CSG** (3 теста): undo удаляет boolean-ноду, redo воссоздаёт, глубокий 5-шаговый undo/redo
+4. **Jump to history** (4 теста): jump к середине цепочки, jump с delete после CSG, jump с delete child CSG, jump через delete→redo
+5. **Edge cases** (3 теста): пустая история, несколько CSG с разными types, CSG с move после
+
+**Результат:** 220/220 тестов проекта проходят. Build tree корректно восстанавливается из истории операций.
+
+**Файлы:** `src/store/build-chain.test.ts`
+
 ## 📊 Сводка по раундам
 
 | Раунд | Проблемы | Статус |
@@ -60,6 +74,7 @@
 | **Раунд 20 — CSG-PARAM** (2026-08-03) | CSG-PARAM-1/2/3 (createBakedNode→createBooleanNode, localTransform, дубликаты createPrimitiveNode) | ✅ **Все исправлены** |
 | **MIRROR-CSG-RS** (2026-08-07) | MIRROR-CSG-RS (потеря rotation/scale при булевых операциях над зеркальными CSG-результатами) | ✅ **Исправлено** |
 | **CYCLE-CSG** (2026-08-08) | CYCLE-CSG (Cannot create cycle in tree — дети CSG-операции отсутствуют при rebuildBuildTree) | ✅ **Исправлено** |
+| **7.5.4 — Тесты цепочек** (2026-08-08) | 15 тестов: CSG-цепочки, Mirror+CSG, Undo/Redo, Jump to history | ✅ **Завершено** |
 | **Фаза 7 — Завершение** (2026-08-05) | Все проблемы Раундов 16–20 верифицированы и закрыты. Фаза 7 официально завершена. | ✅ **Завершена** |
 | **Фаза 7.5 — Параметрический скелет** (2026-08-05) | Инфраструктура: createBooleanNode ✅, rebuild boolean ✅, mirror-store ✅, syncObjectsForOperation ✅. Нужно: тестирование цепочек, финальная полировка. | 🔄 **Не начата** |
 
