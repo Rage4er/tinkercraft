@@ -1,1 +1,0 @@
-- [Vite middleware compatibility](vite-middleware-compatibility.md) — custom Connect middleware entries must expose `handle`, not `handler`, for current Vite versions.
