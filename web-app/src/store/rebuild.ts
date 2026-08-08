@@ -297,12 +297,36 @@ export function rebuildBuildTree(
         transforms[op.resultId] = startT
         // Register boolean node in tree
         const treeOp = op.treeOperation ?? 'union'
+
+        // FIX (CYCLE-CSG): Verify children exist in tree before creating boolean node.
+        // During jumpToHistory / loadFromProject, children may have been deleted
+        // or never created — creating a boolean node with missing children causes
+        // "Cannot create cycle in tree" errors from isAncestor checks.
+        const childAId = op.ids[0]
+        const childBId = op.ids[1]
+        const childA = getNode(childAId)
+        const childB = getNode(childBId)
+
+        if (!childA || !childB) {
+          console.warn(
+            `[rebuildBuildTree] Skipping group ${op.resultId}: children not in tree. ` +
+            `childA=${childAId} (${childA ? 'found' : 'missing'}), ` +
+            `childB=${childBId} (${childB ? 'found' : 'missing'})`,
+          )
+          continue
+        }
+
         try {
           // Pass the transform to the boolean node creation
-          createBooleanNode(op.resultId, treeOp, op.ids[0], op.ids[1], startT)
+          createBooleanNode(op.resultId, treeOp, childAId, childBId, startT)
         } catch (e) {
-          // Tree creation failed (e.g., orphaned CSG) — notify user
-          console.warn('[rebuildBuildTree] Failed to create boolean node:', op.resultId, e)
+          // Tree creation failed (e.g., orphaned CSG, cycle detection) — skip
+          console.warn(
+            `[rebuildBuildTree] Failed to create boolean node ${op.resultId}:`,
+            e,
+            '\n  children:', { childA: childAId, childB: childBId },
+            '\n  operation:', treeOp,
+          )
           // FIX (MED-18-8): Notify user about boolean node creation failure
           try { notify('Ошибка создания булевой операции', 'error') } catch { /* notify not available */ }
         }

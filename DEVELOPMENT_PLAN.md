@@ -506,6 +506,7 @@ web-app/
 
 | # | Проблема | Приоритет | Статус |
 |---|----------|-----------|--------|
+| | **CYCLE-CSG** — `Cannot create cycle in tree` при `jumpToHistory`/`loadFromProject` (дети CSG отсутствуют в дереве при rebuildBuildTree) | **CRITICAL** | ✅ **ИСПРАВЛЕНО** (2026-08-08) |
 | | **MIRROR-CSG-RS** — Потеря rotation/scale при булевых операциях над зеркальными CSG-результатами | **CRITICAL** | ✅ **ИСПРАВЛЕНО** (2026-08-07) |
 | | **OPT (MIRROR-CACHE)** — Дублированная работа previewMirror и mirrorSelected | **PERFORMANCE** | ✅ **ИСПРАВЛЕНО** (2026-08-07) |
 | | ~~MIRROR-19-11: as unknown as в rebuild.ts~~ | **MEDIUM** | ✅ НЕ БАГ |
