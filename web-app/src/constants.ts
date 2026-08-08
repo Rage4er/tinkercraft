@@ -87,3 +87,70 @@ export const OBJECT_COLORS = [
   '#89b4fa', '#a6e3a1', '#f9e2af', '#cba6f7',
   '#f38ba8', '#94e2d5', '#fab387', '#74c7ec',
 ];
+
+// ============================================================
+// Tooltip data — two-level tooltips for all toolbar buttons
+// Level 1 (instant): label + shortcut
+// Level 2 (after 1.5s): description
+// ============================================================
+
+export interface TooltipData {
+  label: string
+  shortcut?: string
+  description?: string
+}
+
+export const TOOLTIP_DATA: Record<string, TooltipData> = {
+  // --- File operations ---
+  open: { label: 'Открыть', shortcut: 'Ctrl+O', description: 'Открывает проект из файла .doodle' },
+  save: { label: 'Сохранить', shortcut: 'Ctrl+S', description: 'Сохраняет проект в файл .doodle' },
+  export_stl: { label: 'Экспорт STL', description: 'Экспортирует сцену в бинарный STL-файл' },
+  import_stl: { label: 'Импорт STL', description: 'Импортирует 3D-модель из STL-файла' },
+  projects: { label: 'Проекты', description: 'Открывает менеджер проектов' },
+
+  // --- Edit operations ---
+  undo: { label: 'Отменить', shortcut: 'Ctrl+Z', description: 'Отменяет последнее действие' },
+  redo: { label: 'Повторить', shortcut: 'Ctrl+Y', description: 'Повторяет отменённое действие' },
+  copy: { label: 'Копировать', shortcut: 'Ctrl+C', description: 'Копирует выделенные объекты в буфер обмена' },
+  paste: { label: 'Вставить', shortcut: 'Ctrl+V', description: 'Вставляет объекты из буфера обмена' },
+  delete: { label: 'Удалить', shortcut: 'Del', description: 'Удаляет выделенные объекты' },
+
+  // --- View operations ---
+  fit_view: { label: 'Fit View', shortcut: 'F', description: 'Устанавливает вид на всю сцену' },
+  home_view: { label: 'Home View', shortcut: 'H', description: 'Сбрасывает камеру в исходную позицию' },
+  toggle_camera: { label: 'Перспектива ↔ Ортография', shortcut: 'Tab', description: 'Переключает тип камеры' },
+
+  // --- Gizmo operations ---
+  gizmo_translate: { label: 'Переместить', shortcut: 'G', description: 'Режим перемещения объектов' },
+  gizmo_rotate: { label: 'Повернуть', shortcut: 'R', description: 'Режим вращения объектов' },
+  gizmo_scale: { label: 'Масштаб', shortcut: 'S', description: 'Режим масштабирования объектов' },
+  gizmo_exit: { label: 'Выйти', shortcut: 'Esc', description: 'Выход из режима gizmo' },
+
+  // --- Ruler ---
+  ruler: { label: 'Линейка', shortcut: 'L', description: 'Инструмент измерения расстояний — 2 клика для измерения' },
+
+  // --- Mirror ---
+  mirror_yz: { label: 'Зеркало YZ', shortcut: 'M', description: 'Отражает объект относительно плоскости YZ' },
+  mirror_xz: { label: 'Зеркало XZ', shortcut: 'N', description: 'Отражает объект относительно плоскости XZ' },
+  mirror_xy: { label: 'Зеркало XY', shortcut: 'B', description: 'Отражает объект относительно плоскости XY' },
+
+  // --- Align ---
+  align_x_min: { label: 'X min', description: 'Выравнивание по минимальной координате X' },
+  align_x_center: { label: 'X center', description: 'Выравнивание по центру по оси X' },
+  align_x_max: { label: 'X max', description: 'Выравнивание по максимальной координате X' },
+  align_y_min: { label: 'Y min', description: 'Выравнивание по минимальной координате Y' },
+  align_y_center: { label: 'Y center', description: 'Выравнивание по центру по оси Y' },
+  align_y_max: { label: 'Y max', description: 'Выравнивание по максимальной координате Y' },
+  align_z_center: { label: 'Z center', description: 'Выравнивание по центру по оси Z' },
+
+  // --- CSG operations ---
+  csg_union: { label: 'Объединение', shortcut: 'U', description: 'Объединяет два объекта в один (union)' },
+  csg_subtract: { label: 'Вычитание', shortcut: 'X', description: 'Вычитает один объект из другого (subtract)' },
+  csg_intersect: { label: 'Пересечение', shortcut: 'I', description: 'Оставляет общую часть двух объектов (intersect)' },
+
+  // --- Theme ---
+  theme_toggle: { label: 'Сменить тему', description: 'Переключает между тёмной и светлой темой' },
+
+  // --- Clear ---
+  clear_scene: { label: 'Очистить сцену', description: 'Удаляет все объекты из сцены' },
+}

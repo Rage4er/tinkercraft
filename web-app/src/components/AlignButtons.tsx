@@ -4,6 +4,7 @@
 // ============================================================
 
 import IconButton from "./IconButton";
+import { TOOLTIP_DATA } from "../constants";
 import { AlignIcon } from "./icons";
 
 type AlignAxis = "X" | "Y" | "Z";
@@ -19,13 +20,13 @@ export default function AlignButtons({
   variant?: "compact" | "full";
 }) {
   if (variant === "full") {
-    const buttons: { axis: AlignAxis; anchor: AlignAnchor; label: string }[] = [
-      { axis: "X", anchor: "min", label: "X min" },
-      { axis: "X", anchor: "center", label: "X center" },
-      { axis: "X", anchor: "max", label: "X max" },
-      { axis: "Y", anchor: "min", label: "Y min" },
-      { axis: "Y", anchor: "center", label: "Y center" },
-      { axis: "Y", anchor: "max", label: "Y max" },
+    const buttons: { axis: AlignAxis; anchor: AlignAnchor; label: string; tooltipKey: string }[] = [
+      { axis: "X", anchor: "min", label: "X min", tooltipKey: "align_x_min" },
+      { axis: "X", anchor: "center", label: "X center", tooltipKey: "align_x_center" },
+      { axis: "X", anchor: "max", label: "X max", tooltipKey: "align_x_max" },
+      { axis: "Y", anchor: "min", label: "Y min", tooltipKey: "align_y_min" },
+      { axis: "Y", anchor: "center", label: "Y center", tooltipKey: "align_y_center" },
+      { axis: "Y", anchor: "max", label: "Y max", tooltipKey: "align_y_max" },
     ];
     return (
       <>
@@ -33,14 +34,14 @@ export default function AlignButtons({
           Выравнивание
         </div>
         <div className="flex-wrap">
-          {buttons.map(({ axis, anchor, label }) => (
+          {buttons.map(({ axis, anchor, label, tooltipKey }) => (
             <IconButton
               key={`${axis}-${anchor}`}
               icon={<AlignIcon size={16} />}
               label={label}
               onClick={() => onAlign(axis, anchor)}
               disabled={disabled}
-              title={label}
+              tooltip={TOOLTIP_DATA[tooltipKey]}
             />
           ))}
         </div>
@@ -49,22 +50,22 @@ export default function AlignButtons({
   }
 
   // Compact: X min/center/max + Y center + Z center
-  const buttons: { axis: AlignAxis; anchor: AlignAnchor; label: string }[] = [
-    { axis: "X", anchor: "min", label: "X min" },
-    { axis: "X", anchor: "center", label: "X center" },
-    { axis: "X", anchor: "max", label: "X max" },
-    { axis: "Y", anchor: "center", label: "Y center" },
-    { axis: "Z", anchor: "center", label: "Z center" },
+  const buttons: { axis: AlignAxis; anchor: AlignAnchor; label: string; tooltipKey: string }[] = [
+    { axis: "X", anchor: "min", label: "X min", tooltipKey: "align_x_min" },
+    { axis: "X", anchor: "center", label: "X center", tooltipKey: "align_x_center" },
+    { axis: "X", anchor: "max", label: "X max", tooltipKey: "align_x_max" },
+    { axis: "Y", anchor: "center", label: "Y center", tooltipKey: "align_y_center" },
+    { axis: "Z", anchor: "center", label: "Z center", tooltipKey: "align_z_center" },
   ];
   return (
     <div className="toolbar-group">
-      {buttons.map(({ axis, anchor, label }) => (
+      {buttons.map(({ axis, anchor, label, tooltipKey }) => (
         <IconButton
           key={`${axis}-${anchor}`}
           icon={<AlignIcon size={14} />}
           onClick={() => onAlign(axis, anchor)}
           disabled={disabled}
-          title={label}
+          tooltip={TOOLTIP_DATA[tooltipKey]}
         />
       ))}
     </div>

@@ -4,6 +4,7 @@
 // ============================================================
 
 import IconButton from "./IconButton";
+import { TOOLTIP_DATA } from "../constants";
 import { UnionIcon, SubtractIcon, IntersectIcon } from "./icons";
 
 type CsgOp = "union" | "subtract" | "intersect";
@@ -21,10 +22,10 @@ export default function CsgButtons({
   variant?: "compact" | "full";
   nonManifoldSelected?: boolean;
 }) {
-  const ops: { op: CsgOp; icon: React.ReactNode; label: string }[] = [
-    { op: "union", icon: <UnionIcon size={variant === "full" ? 16 : 14} />, label: "Объединение" },
-    { op: "subtract", icon: <SubtractIcon size={variant === "full" ? 16 : 14} />, label: "Вычитание" },
-    { op: "intersect", icon: <IntersectIcon size={variant === "full" ? 16 : 14} />, label: "Пересечение" },
+  const ops: { op: CsgOp; icon: React.ReactNode; label: string; tooltipKey: string }[] = [
+    { op: "union", icon: <UnionIcon size={variant === "full" ? 16 : 14} />, label: "Объединение", tooltipKey: "csg_union" },
+    { op: "subtract", icon: <SubtractIcon size={variant === "full" ? 16 : 14} />, label: "Вычитание", tooltipKey: "csg_subtract" },
+    { op: "intersect", icon: <IntersectIcon size={variant === "full" ? 16 : 14} />, label: "Пересечение", tooltipKey: "csg_intersect" },
   ];
 
   const title = disabled && nonManifoldSelected ? CSG_DISABLED_TITLE : undefined;
@@ -33,14 +34,14 @@ export default function CsgButtons({
     return (
       <div className="csg-group">
         <div className="csg-group-title">CSG операции</div>
-        {ops.map(({ op, icon, label }) => (
+        {ops.map(({ op, icon, label, tooltipKey }) => (
           <IconButton
             key={op}
             icon={icon}
             label={label}
             onClick={() => onCsg(op)}
             disabled={disabled}
-            title={title ?? label}
+            tooltip={TOOLTIP_DATA[tooltipKey]}
             buttonVariant="primary"
           />
         ))}
@@ -50,13 +51,13 @@ export default function CsgButtons({
 
   return (
     <div className="toolbar-group">
-      {ops.map(({ op, icon, label }) => (
+      {ops.map(({ op, icon, label, tooltipKey }) => (
         <IconButton
           key={op}
           icon={icon}
           onClick={() => onCsg(op)}
           disabled={disabled}
-          title={title ?? label}
+          tooltip={TOOLTIP_DATA[tooltipKey]}
           buttonVariant="primary"
         />
       ))}

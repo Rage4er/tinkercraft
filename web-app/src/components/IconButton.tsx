@@ -5,6 +5,7 @@
 // Поддерживает два варианта: compact (только иконка + tooltip) и full (иконка + текст).
 
 import React from 'react'
+import Tooltip, { type TooltipData } from './Tooltip'
 
 export type IconButtonVariant = 'compact' | 'full'
 export type ButtonVariant = 'default' | 'primary' | 'danger' | 'active'
@@ -24,6 +25,8 @@ export interface IconButtonProps {
   disabled?: boolean
   /** Тултип (показывается при наведении, для compact всегда, для full — опционально) */
   title?: string
+  /** Данные расширенного тултипа (двухуровневый) */
+  tooltip?: TooltipData
   /** Дополнительный CSS-класс */
   className?: string
   /** ARIA-label для доступности */
@@ -41,6 +44,7 @@ export default function IconButton({
   buttonVariant = 'default',
   disabled = false,
   title,
+  tooltip,
   className = '',
   ariaLabel,
   onMouseEnter,
@@ -48,7 +52,7 @@ export default function IconButton({
 }: IconButtonProps): React.ReactElement {
   const btnClass = `btn${variant === 'compact' ? ' btn-compact' : ''}${buttonVariant !== 'default' ? ` ${buttonVariant}` : ''}${className ? ` ${className}` : ''}`
 
-  return (
+  const content = (
     <button
       className={btnClass}
       onClick={onClick}
@@ -62,4 +66,13 @@ export default function IconButton({
       {variant === 'full' && label && <span className="label">{label}</span>}
     </button>
   )
+
+  // Если есть расширенный тултип — оборачиваем в Tooltip
+  if (tooltip) {
+    return (
+      <Tooltip tooltip={tooltip}>{content}</Tooltip>
+    )
+  }
+
+  return content
 }

@@ -3,6 +3,7 @@ import MirrorButtons from "./MirrorButtons";
 import AlignButtons from "./AlignButtons";
 import CsgButtons from "./CsgButtons";
 import IconButton from "./IconButton";
+import { TOOLTIP_DATA, type TooltipData } from "../constants";
 import {
   OpenIcon,
   SaveIcon,
@@ -112,31 +113,31 @@ export default function Toolbar({
       <span className="toolbar-logo"><CubeIcon size={16} /> TinkerCraft{titleSuffix}</span>
 
       <div className="toolbar-group">
-        <IconButton icon={<OpenIcon size={16} />} label="Открыть" onClick={onOpen} title="Открыть .doodle (Ctrl+O)" />
-        <IconButton icon={<SaveIcon size={16} />} label="Сохранить" onClick={onSave} title="Сохранить .doodle (Ctrl+S)" />
-        <IconButton icon={<ExportIcon size={16} />} label="STL" onClick={onExportStl} disabled={objectCount === 0} title="Экспорт STL" />
-        <IconButton icon={<ImportIcon size={16} />} label="Импорт" onClick={onImportStl} disabled={busy} title="Импорт STL" />
-        <IconButton icon={<FolderIcon size={16} />} label="Проекты" onClick={onShowProjects} title="Менеджер проектов" />
+        <IconButton icon={<OpenIcon size={16} />} label="Открыть" onClick={onOpen} tooltip={TOOLTIP_DATA.open} />
+        <IconButton icon={<SaveIcon size={16} />} label="Сохранить" onClick={onSave} tooltip={TOOLTIP_DATA.save} />
+        <IconButton icon={<ExportIcon size={16} />} label="STL" onClick={onExportStl} disabled={objectCount === 0} tooltip={TOOLTIP_DATA.export_stl} />
+        <IconButton icon={<ImportIcon size={16} />} label="Импорт" onClick={onImportStl} disabled={busy} tooltip={TOOLTIP_DATA.import_stl} />
+        <IconButton icon={<FolderIcon size={16} />} label="Проекты" onClick={onShowProjects} tooltip={TOOLTIP_DATA.projects} />
       </div>
 
       <div className="toolbar-group">
-        <IconButton icon={<UndoIcon size={16} />} label="Undo" onClick={onUndo} disabled={!canUndo || busy} title="Отменить (Ctrl+Z)" />
-        <IconButton icon={<RedoIcon size={16} />} label="Redo" onClick={onRedo} disabled={!canRedo || busy} title="Повторить (Ctrl+Y)" />
+        <IconButton icon={<UndoIcon size={16} />} label="Undo" onClick={onUndo} disabled={!canUndo || busy} tooltip={TOOLTIP_DATA.undo} />
+        <IconButton icon={<RedoIcon size={16} />} label="Redo" onClick={onRedo} disabled={!canRedo || busy} tooltip={TOOLTIP_DATA.redo} />
       </div>
 
       <div className="toolbar-group">
-        <IconButton icon={<CopyIcon size={16} />} label="Copy" onClick={onCopy} disabled={selectedCount === 0} title="Копировать (Ctrl+C)" />
-        <IconButton icon={<PasteIcon size={16} />} label="Paste" onClick={onPaste} disabled={!hasCopied || busy} title="Вставить (Ctrl+V)" />
-        <IconButton icon={<DeleteIcon size={16} />} label="Del" onClick={onDelete} disabled={selectedCount === 0 || busy} title="Удалить (Del)" />
+        <IconButton icon={<CopyIcon size={16} />} label="Copy" onClick={onCopy} disabled={selectedCount === 0} tooltip={TOOLTIP_DATA.copy} />
+        <IconButton icon={<PasteIcon size={16} />} label="Paste" onClick={onPaste} disabled={!hasCopied || busy} tooltip={TOOLTIP_DATA.paste} />
+        <IconButton icon={<DeleteIcon size={16} />} label="Del" onClick={onDelete} disabled={selectedCount === 0 || busy} tooltip={TOOLTIP_DATA.delete} />
       </div>
 
       <div className="toolbar-group">
-        <IconButton icon={<FitViewIcon size={16} />} label="Fit" onClick={onFitView} title="Fit view (F)" />
-        <IconButton icon={<HomeIcon size={16} />} label="Home" onClick={onResetView} title="Сброс вида (H)" />
+        <IconButton icon={<FitViewIcon size={16} />} label="Fit" onClick={onFitView} tooltip={TOOLTIP_DATA.fit_view} />
+        <IconButton icon={<HomeIcon size={16} />} label="Home" onClick={onResetView} tooltip={TOOLTIP_DATA.home_view} />
         <button
           className={`btn${cameraMode === "orthographic" ? " active" : ""}`}
           onClick={onToggleCamera}
-          title="Перспектива ↔ Ортография"
+          title={TOOLTIP_DATA.toggle_camera.label}
         >
           {cameraMode === "perspective" ? "⬡ Persp" : "⬡ Ortho"}
         </button>
@@ -147,25 +148,25 @@ export default function Toolbar({
           icon={<MoveIcon size={16} />} label="Move"
           onClick={() => onGizmo("translate")}
           disabled={selectedCount === 0}
-          title="Переместить (G)"
+          tooltip={TOOLTIP_DATA.gizmo_translate}
           buttonVariant={gizmoMode === "translate" ? "active" : "default"}
         />
         <IconButton
           icon={<RotateIcon size={16} />} label="Rotate"
           onClick={() => onGizmo("rotate")}
           disabled={selectedCount === 0}
-          title="Повернуть (R)"
+          tooltip={TOOLTIP_DATA.gizmo_rotate}
           buttonVariant={gizmoMode === "rotate" ? "active" : "default"}
         />
         <IconButton
           icon={<ScaleIcon size={16} />} label="Scale"
           onClick={() => onGizmo("scale")}
           disabled={selectedCount === 0}
-          title="Масштаб (S)"
+          tooltip={TOOLTIP_DATA.gizmo_scale}
           buttonVariant={gizmoMode === "scale" ? "active" : "default"}
         />
         {gizmoMode !== "none" && (
-          <IconButton icon={<CloseIcon size={16} />} onClick={() => onGizmo("none")} title="Выйти (Esc)" buttonVariant="danger" />
+          <IconButton icon={<CloseIcon size={16} />} onClick={() => onGizmo("none")} tooltip={TOOLTIP_DATA.gizmo_exit} buttonVariant="danger" />
         )}
       </div>
 
@@ -173,7 +174,7 @@ export default function Toolbar({
         <IconButton
           icon={<RulerIcon size={16} />} label="Линейка"
           onClick={onToggleRuler}
-          title="Линейка — 2 клика для измерения расстояния"
+          tooltip={TOOLTIP_DATA.ruler}
           buttonVariant={rulerActive ? "active" : "default"}
         />
       </div>
@@ -194,12 +195,12 @@ export default function Toolbar({
           icon={theme === "dark" ? <span title="Сменить тему">☀</span> : <span title="Сменить тему">🌙</span>}
           label={theme === "dark" ? "Light" : "Dark"}
           onClick={onToggleTheme}
-          title="Сменить тему"
+          tooltip={TOOLTIP_DATA.theme_toggle}
         />
       </div>
 
       <div className="toolbar-group">
-        <IconButton icon={<CloseIcon size={16} />} label="Clear" onClick={onClearScene} disabled={busy} title="Очистить сцену" buttonVariant="danger" />
+        <IconButton icon={<CloseIcon size={16} />} label="Clear" onClick={onClearScene} disabled={busy} tooltip={TOOLTIP_DATA.clear_scene} buttonVariant="danger" />
       </div>
     </div>
   );
