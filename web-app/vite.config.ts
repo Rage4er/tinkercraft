@@ -47,7 +47,9 @@ const stripReactRefresh = {
       }
 
       // Добавляем В НАЧАЛО chain — ДО встроенных middleware Vite
-      server.middlewares.stack.unshift({ route: '', handler })
+      // Connect expects middleware entries to expose `handle`; using `handler`
+      // makes the server crash on the first request in newer Vite versions.
+      server.middlewares.stack.unshift({ route: '', handle: handler })
     }
   },
 }

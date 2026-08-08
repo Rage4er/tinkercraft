@@ -2,8 +2,8 @@ import { useState } from "react";
 import Section from "./Section";
 import Timeline from "./Timeline";
 import ComponentTree from "./ComponentTree";
-import { ALL_SHAPES_DATA, OP_FILTER_LABELS } from "../constants";
-import { ALL_SHAPES_ICONS } from "../constants-react";
+import { OP_FILTER_LABELS } from "../constants";
+import { ALL_SHAPES } from "../constants.tsx";
 import type { ShapeType, TinkerCraftOperation, SceneObject } from "../csg/types";
 import { ChevronUpIcon, ChevronDownIcon } from "./icons";
 

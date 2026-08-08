@@ -4,15 +4,6 @@
 
 import type { CsgBooleanOp, ShapeType, ShapeParams, TransformNR } from './types'
 
-// FIX: Vite HMR type
-declare global {
-  interface ImportMeta {
-    hot?: {
-      on(event: 'vite:beforeFullReload', handler: () => void): void
-    }
-  }
-}
-
 export interface MeshResult {
   objId: string
   vertices: Float32Array
@@ -54,7 +45,7 @@ const _messageHandler = (e: MessageEvent) => {
   else resolve(msg)
 }
 
-const _errorListener = (_e: MessageEvent) => {
+const _errorListener = (_e: ErrorEvent) => {
   console.error('[Worker] Error occurred')
   // FIX (MED-18-14): Reject all pending with error context
   for (const [reqId, [, reject]] of _pending) {

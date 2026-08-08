@@ -9,8 +9,8 @@ import {
   PrismIcon,
   PyramidIcon,
   TextIcon,
-} from "./icons";
-import { ALL_SHAPES_DATA } from "../constants";
+} from "./components/icons";
+import { ALL_SHAPES_DATA } from "./constants";
 
 // ---- Shapes (React components) ----
 export const ALL_SHAPES_ICONS: {
