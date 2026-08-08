@@ -26,6 +26,7 @@ import {
 import { buildTransformMatrix } from './worker-matrix'
 import { workerRebuildNode } from './worker-client'
 import { treeStore } from './tree-store'
+import { devLog, devWarn } from '../utils/debug'
 
 // ---------------------------------------------------------------------------
 // Re-export treeStore for tests and external access
@@ -693,7 +694,7 @@ export function mirrorTreeNode(
 export function logMirrorTreeSnapshot(rootId: string, phase: string): void {
   const root = treeStore.getNode(rootId)
   if (!root) {
-    console.warn(`[MIRROR:TREE] phase=${phase} rootId=${rootId} missing`)
+    devWarn('MIRROR:TREE', `phase=${phase} rootId=${rootId} missing`)
     return
   }
 
@@ -730,14 +731,14 @@ export function logMirrorTreeSnapshot(rootId: string, phase: string): void {
 
   const visit = (nodeId: string, parentId: string | null, depth: number, path: string[]): void => {
     if (visited.has(nodeId)) {
-      console.warn(`[MIRROR:TREE] phase=${phase} cycle-or-shared-node=${nodeId} path=${path.join('>')}`)
+      devWarn('MIRROR:TREE', `phase=${phase} cycle-or-shared-node=${nodeId} path=${path.join('>')}`)
       return
     }
     visited.add(nodeId)
 
     const node = treeStore.getNode(nodeId)
     if (!node) {
-      console.warn(`[MIRROR:TREE] phase=${phase} missing-child=${nodeId} expectedParent=${parentId ?? 'none'} path=${path.join('>')}`)
+      devWarn('MIRROR:TREE', `phase=${phase} missing-child=${nodeId} expectedParent=${parentId ?? 'none'} path=${path.join('>')}`)
       return
     }
 
@@ -765,7 +766,7 @@ export function logMirrorTreeSnapshot(rootId: string, phase: string): void {
       },
     }
 
-    console.log(`[MIRROR:TREE] ${JSON.stringify(record)}`)
+    devLog('MIRROR:TREE', JSON.stringify(record))
 
     for (const childId of node.children ?? []) {
       visit(childId, node.id, depth + 1, [...path, node.id])
@@ -856,7 +857,7 @@ function mirrorNodeRecursive(
       scaleX: 1, scaleY: 1, scaleZ: 1,
     }
     if (!node.localTransform) {
-      console.warn(`[MIRROR:mirrorNodeRecursive] nodeId=${node.id} type=primitive: localTransform отсутствует, используется identity`)
+      devWarn('MIRROR:mirrorNodeRecursive', `nodeId=${node.id} type=primitive: localTransform отсутствует, используется identity`)
     }
 
     const mirroredPos = mirrorPoint({ x: t.x, y: t.y, z: t.z }, plane, center)
@@ -897,7 +898,7 @@ function mirrorNodeRecursive(
     }
     // FIX (MED-18-23): Use setNode for immutable update so React can detect changes
     setNode(node.id, { ...node, localTransform: node.localTransform })
-    console.log(`[MIRROR:mirrorNodeRecursive] nodeId=${node.id} type=primitive plane=${plane} center={x:${center.x}, y:${center.y}, z:${center.z}} localTransform={x:${node.localTransform.x}, y:${node.localTransform.y}, z:${node.localTransform.z}, rotX:${node.localTransform.rotX}, rotY:${node.localTransform.rotY}, rotZ:${node.localTransform.rotZ}, scaleX:${node.localTransform.scaleX}, scaleY:${node.localTransform.scaleY}, scaleZ:${node.localTransform.scaleZ}}`)
+    devLog('MIRROR:mirrorNodeRecursive', { nodeId: node.id, type: 'primitive', plane, center, localTransform: node.localTransform })
     return
   }
 
@@ -909,7 +910,7 @@ function mirrorNodeRecursive(
       scaleX: 1, scaleY: 1, scaleZ: 1,
     }
     if (!node.localTransform) {
-      console.warn(`[MIRROR:mirrorNodeRecursive] nodeId=${node.id} type=baked: localTransform отсутствует, используется identity`)
+      devWarn('MIRROR:mirrorNodeRecursive', `nodeId=${node.id} type=baked: localTransform отсутствует, используется identity`)
     }
     // FIX (MIRROR-BAKED-2): For baked nodes (CSG results, imports), rotation/scale
     // are applied by Viewport3D at render time (Three.js pivot transform), NOT by
@@ -967,14 +968,14 @@ function mirrorNodeRecursive(
     }
     // FIX (MED-18-23): Use setNode for immutable update so React can detect changes
     setNode(node.id, { ...node, localTransform: node.localTransform })
-    console.log(`[MIRROR:mirrorNodeRecursive] nodeId=${node.id} type=baked plane=${plane} center={x:${center.x}, y:${center.y}, z:${center.z}} localTransform={x:${node.localTransform.x}, y:${node.localTransform.y}, z:${node.localTransform.z}, rotX:${node.localTransform.rotX}, rotY:${node.localTransform.rotY}, rotZ:${node.localTransform.rotZ}, scaleX:${node.localTransform.scaleX}, scaleY:${node.localTransform.scaleY}, scaleZ:${node.localTransform.scaleZ}}`)
+    devLog('MIRROR:mirrorNodeRecursive', { nodeId: node.id, type: 'baked', plane, center, localTransform: node.localTransform })
     return
   }
 
   // FIX (MIRROR-19-8): boolean без children — логируем предупреждение
   if (node.type === 'boolean') {
     if (!node.children || node.children.length === 0) {
-      console.warn(`[MIRROR:mirrorNodeRecursive] nodeId=${node.id} type=boolean: children отсутствуют или пусты, нода пропущена`)
+      devWarn('MIRROR:mirrorNodeRecursive', `nodeId=${node.id} type=boolean: children отсутствуют или пусты, нода пропущена`)
       return
     }
 
@@ -1209,7 +1210,7 @@ export function cloneSubtree(
     else delete clonedNode.parentId
   }
 
-  console.log(`[MIRROR:CLONE] ${JSON.stringify({
+  devLog('MIRROR:CLONE', {
     sourceRootId: sourceId,
     cloneRootId: newRootId,
     idMap: Object.fromEntries(newIdMap),
@@ -1222,7 +1223,7 @@ export function cloneSubtree(
       parentId: clone.parentId ?? null,
       localTransform: clone.localTransform ?? null,
     },
-  })}`)
+  })
   return clone
 }
 

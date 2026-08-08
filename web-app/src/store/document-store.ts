@@ -55,6 +55,7 @@ import {
 } from '../csg/history-tree'
 import { getAllNodes } from '../csg/history-tree'
 import { previewMirror as mirrorPreviewFn, mirrorSelected as mirrorConfirmFn, invalidateMirrorCache } from './mirror-store'
+import { devLog, devWarn } from '../utils/debug'
 
 // ── Shared undo/redo/jumpToHistory helper — FIX (MED-18-1): eliminates ~90 lines of duplication ──
 
@@ -216,7 +217,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const newObjects = { ...objects, [id]: obj }
       // Register in build tree BEFORE caching snapshot
       createPrimitiveNode(id, shapeType, finalParams, transform)
-      console.log(`[MIRROR:addShape] id=${id} shapeType=${shapeType} params=${JSON.stringify(finalParams)} transform={x:${transform.x}, y:${transform.y}, z:${transform.z}, rotX:${transform.rotX}, rotY:${transform.rotY}, rotZ:${transform.rotZ}, scaleX:${transform.scaleX}, scaleY:${transform.scaleY}, scaleZ:${transform.scaleZ}}`)
+      devLog('MIRROR:addShape', { id, shapeType, params: finalParams, transform })
       set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true, busy: false, lastCsgMs: ms })
       cacheSnapshotWithTree(newOps.length, newObjects)
       invalidateMirrorCache()
@@ -610,7 +611,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
 
     // Sync the new transform to the tree node (for future CSG/mirror/align ops)
     syncNodeTransform(id, newTransform)
-    console.log(`[MIRROR:moveObject] id=${id} newTransform={x:${newTransform.x}, y:${newTransform.y}, z:${newTransform.z}, rotX:${newTransform.rotX}, rotY:${newTransform.rotY}, rotZ:${newTransform.rotZ}, scaleX:${newTransform.scaleX}, scaleY:${newTransform.scaleY}, scaleZ:${newTransform.scaleZ}}`)
+    devLog('MIRROR:moveObject', { id, newTransform })
 
     // Update SceneObject — vertices unchanged, only transform changes
     const newObj: SceneObject = { ...obj, transform: newTransform }
@@ -923,7 +924,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         const newObjects = { ...objects, [id]: newObj }
 
         set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true, busy: false, lastCsgMs: ms })
-        console.log(`[MIRROR:resizeObject] id=${id} newParams=${JSON.stringify(mergedParams)}`)
+        devLog('MIRROR:resizeObject', { id, newParams: mergedParams })
         cacheSnapshotWithTree(newOps.length, newObjects)
         invalidateMirrorCache()
       } catch (e) { set({ busy: false }); console.error('resizeObject:', e); notify('Ошибка изменения размера', 'error') }
@@ -973,7 +974,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         const newObjects = { ...objects, [id]: newObj }
 
         set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true, busy: false, lastCsgMs: 0 })
-        console.log(`[MIRROR:resizeObject] id=${id} newTransform={x:${newTransform.x}, y:${newTransform.y}, z:${newTransform.z}, rotX:${newTransform.rotX}, rotY:${newTransform.rotY}, rotZ:${newTransform.rotZ}, scaleX:${newTransform.scaleX}, scaleY:${newTransform.scaleY}, scaleZ:${newTransform.scaleZ}}`)
+        devLog('MIRROR:resizeObject', { id, newTransform })
         cacheSnapshotWithTree(newOps.length, newObjects)
         invalidateMirrorCache()
       } catch (e) { set({ busy: false }); console.error('resizeObject (CSG):', e); notify('Ошибка изменения размера CSG-объекта', 'error') }

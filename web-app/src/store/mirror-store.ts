@@ -44,6 +44,7 @@ import {
     logMirrorTreeSnapshot,
 } from '../csg/history-tree'
 import { workerSyncObjects, workerSyncMesh } from '../csg/worker-client'
+import { devLog, devWarn } from '../utils/debug'
 
 // ── Типы ──
 
@@ -316,9 +317,9 @@ export async function previewMirror(
     ids: string[],
     objects: Record<string, SceneObject>,
 ): Promise<SceneObject | null> {
-    console.log(`[MIRROR:previewMirror] plane=${plane} ids=${JSON.stringify(ids)}`)
+    devLog('MIRROR:previewMirror', { plane, ids })
     if (ids.length === 0) {
-        console.log('[MIRROR:previewMirror] no ids, returning null')
+        devLog('MIRROR:previewMirror', 'no ids, returning null')
         return null
     }
 
@@ -410,9 +411,9 @@ export async function mirrorSelected(
     ids: string[],
     objects: Record<string, SceneObject>,
 ): Promise<{ newObjects: Record<string, SceneObject>; newIds: string[]; operation: { type: 'mirror'; originalIds: string[]; ids: string[]; plane: 'XY' | 'XZ' | 'YZ' } } | null> {
-    console.log(`[MIRROR:mirrorSelected] plane=${plane} ids=${JSON.stringify(ids)}`)
+    devLog('MIRROR:mirrorSelected', { plane, ids })
     if (ids.length === 0) {
-        console.log('[MIRROR:mirrorSelected] no ids, returning null')
+        devLog('MIRROR:mirrorSelected', 'no ids, returning null')
         return null
     }
 
@@ -438,15 +439,15 @@ export async function mirrorSelected(
                     newObjects[cachedResult.id] = cachedResult.object
                     newIds.push(cachedResult.id)
                 } else {
-                    // Если кэш частично недоступен, откатываемся к полному вычислению
-                    console.log('[MIRROR:mirrorSelected] cache miss for id:', id)
+                    // Если кэш частично недоступим, откатываемся к полному вычислению
+                    devLog('MIRROR:mirrorSelected', 'cache miss for id:', id)
                     break
                 }
             }
 
             // Если все результаты были в кэше, используем их
             if (Object.keys(newObjects).length === ids.length) {
-                console.log('[MIRROR:mirrorSelected] using cached results')
+                devLog('MIRROR:mirrorSelected', 'using cached results')
             } else {
                 // Иначе, откатываемся к полному вычислению
                 newObjects = {}
