@@ -134,7 +134,13 @@ body {
   /* центрируем строки кнопок по вертикали */
   gap: 2px;
   padding: 2px 4px;
+}
+
+/* Кнопки в toolbar-группах могут сжиматься для переноса */
+.toolbar-group .btn {
+  flex-shrink: 1;
   min-width: 0;
+  max-width: 200px;
 }
 
 /* РАЗДЕЛИТЕЛЬ — на всю высоту контейнера */
@@ -162,7 +168,6 @@ body {
   font-size: 12px;
   transition: background 0.12s, border-color 0.12s;
   white-space: nowrap;
-  flex-shrink: 0;
 }
 
 .btn:hover:not(:disabled) {
