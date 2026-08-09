@@ -122,17 +122,16 @@ export default function Toolbar({
     { id: "clear", buttonCount: 1 },
   ]
 
-  const { containerRef, layout } = useToolbarLayout(groups)
+  const { toolbarRef, rowsMap } = useToolbarLayout(groups)
 
-  // Helper: получить rows для группы по индексу
-  const getRows = (index: number): number => {
-    if (index < 0 || index >= layout.length) return 1
-    return layout[index].rows
+  // Helper: получить rows для группы по id
+  const getRows = (groupId: string): number => {
+    return rowsMap[groupId] ?? 1
   }
 
   return (
     <div
-      ref={containerRef}
+      ref={toolbarRef}
       className="toolbar"
       role="toolbar"
       aria-label="Панель инструментов"
@@ -141,7 +140,7 @@ export default function Toolbar({
 
       {/* Group 0: File */}
       <ToolbarRowSplit
-        rows={getRows(0)}
+        rows={getRows("file")}
         buttons={[
           <IconButton key="open" icon={<OpenIcon size={16} />} label="Открыть" onClick={onOpen} tooltip={TOOLTIP_DATA.open} />,
           <IconButton key="save" icon={<SaveIcon size={16} />} label="Сохранить" onClick={onSave} tooltip={TOOLTIP_DATA.save} />,
@@ -154,7 +153,7 @@ export default function Toolbar({
 
       {/* Group 1: Undo/Redo */}
       <ToolbarRowSplit
-        rows={getRows(1)}
+        rows={getRows("edit1")}
         buttons={[
           <IconButton key="undo" icon={<UndoIcon size={16} />} label="Undo" onClick={onUndo} disabled={!canUndo || busy} tooltip={TOOLTIP_DATA.undo} />,
           <IconButton key="redo" icon={<RedoIcon size={16} />} label="Redo" onClick={onRedo} disabled={!canRedo || busy} tooltip={TOOLTIP_DATA.redo} />,
@@ -164,7 +163,7 @@ export default function Toolbar({
 
       {/* Group 2: Copy/Paste/Delete */}
       <ToolbarRowSplit
-        rows={getRows(2)}
+        rows={getRows("edit2")}
         buttons={[
           <IconButton key="copy" icon={<CopyIcon size={16} />} label="Copy" onClick={onCopy} disabled={selectedCount === 0} tooltip={TOOLTIP_DATA.copy} />,
           <IconButton key="paste" icon={<PasteIcon size={16} />} label="Paste" onClick={onPaste} disabled={!hasCopied || busy} tooltip={TOOLTIP_DATA.paste} />,
@@ -175,7 +174,7 @@ export default function Toolbar({
 
       {/* Group 3: View */}
       <ToolbarRowSplit
-        rows={getRows(3)}
+        rows={getRows("view")}
         buttons={[
           <IconButton key="fit" icon={<FitViewIcon size={16} />} label="Fit" onClick={onFitView} tooltip={TOOLTIP_DATA.fit_view} />,
           <IconButton key="home" icon={<HomeIcon size={16} />} label="Home" onClick={onResetView} tooltip={TOOLTIP_DATA.home_view} />,
@@ -188,7 +187,7 @@ export default function Toolbar({
 
       {/* Group 4: Gizmo */}
       <ToolbarRowSplit
-        rows={getRows(4)}
+        rows={getRows("gizmo")}
         buttons={[
           <IconButton key="move" icon={<MoveIcon size={16} />} label="Move" onClick={() => onGizmo("translate")} disabled={selectedCount === 0} tooltip={TOOLTIP_DATA.gizmo_translate} buttonVariant={gizmoMode === "translate" ? "active" : "default"} />,
           <IconButton key="rotate" icon={<RotateIcon size={16} />} label="Rotate" onClick={() => onGizmo("rotate")} disabled={selectedCount === 0} tooltip={TOOLTIP_DATA.gizmo_rotate} buttonVariant={gizmoMode === "rotate" ? "active" : "default"} />,
@@ -200,7 +199,7 @@ export default function Toolbar({
 
       {/* Group 5: Ruler */}
       <ToolbarRowSplit
-        rows={getRows(5)}
+        rows={getRows("ruler")}
         buttons={[
           <IconButton key="ruler" icon={<RulerIcon size={16} />} label="Линейка" onClick={onToggleRuler} tooltip={TOOLTIP_DATA.ruler} buttonVariant={rulerActive ? "active" : "default"} />,
         ]}
@@ -213,21 +212,21 @@ export default function Toolbar({
         onMirror={onMirror}
         onPreviewMirror={onPreviewMirror}
         onPreviewEnd={onPreviewMirrorEnd}
-        maxRows={getRows(6)}
+        maxRows={getRows("mirror")}
       />
       <div className="toolbar-separator" />
 
       {/* Group 7: Align */}
-      <AlignButtons disabled={!canAlign} onAlign={onAlign} maxRows={getRows(7)} />
+      <AlignButtons disabled={!canAlign} onAlign={onAlign} maxRows={getRows("align")} />
       <div className="toolbar-separator" />
 
       {/* Group 8: CSG */}
-      <CsgButtons disabled={!canCsg} onCsg={onCsg} nonManifoldSelected={nonManifoldSelected} maxRows={getRows(8)} />
+      <CsgButtons disabled={!canCsg} onCsg={onCsg} nonManifoldSelected={nonManifoldSelected} maxRows={getRows("csg")} />
       <div className="toolbar-separator" />
 
       {/* Group 9: Theme */}
       <ToolbarRowSplit
-        rows={getRows(9)}
+        rows={getRows("theme")}
         buttons={[
           <IconButton
             key="theme"
@@ -242,7 +241,7 @@ export default function Toolbar({
 
       {/* Group 10: Clear */}
       <ToolbarRowSplit
-        rows={getRows(10)}
+        rows={getRows("clear")}
         buttons={[
           <IconButton key="clear" icon={<CloseIcon size={16} />} label="Clear" onClick={onClearScene} disabled={busy} tooltip={TOOLTIP_DATA.clear_scene} buttonVariant="danger" />,
         ]}
