@@ -6,24 +6,25 @@ import { useState, useEffect, useCallback, useRef } from "react"
 import {
   calculateToolbarLayout,
   type ToolbarGroup,
+  type GroupLayout,
 } from "../utils/toolbar-layout"
 
 export function useToolbarLayout(groups: ToolbarGroup[]) {
-  const [firstRowCounts, setFirstRowCounts] = useState<number[]>([])
+  const [layout, setLayout] = useState<GroupLayout[]>([])
   const containerRef = useRef<HTMLDivElement>(null)
   const resizeObserver = useRef<ResizeObserver | null>(null)
 
   const recalc = useCallback(() => {
     if (!containerRef.current || groups.length === 0) {
-      setFirstRowCounts([])
+      setLayout([])
       return
     }
 
     const rect = containerRef.current.getBoundingClientRect()
-    const availableWidth = rect.width - 20
+    const availableWidth = rect.width
 
     const result = calculateToolbarLayout(groups, availableWidth)
-    setFirstRowCounts(result.firstRowCount)
+    setLayout(result)
   }, [groups])
 
   useEffect(() => {
@@ -39,5 +40,5 @@ export function useToolbarLayout(groups: ToolbarGroup[]) {
     }
   }, [recalc])
 
-  return { containerRef, firstRowCounts }
+  return { containerRef, layout }
 }

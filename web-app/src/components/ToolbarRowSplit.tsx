@@ -1,50 +1,41 @@
 // ============================================================
 // ToolbarRowSplit — split-ит кнопки группы на строки
 // ============================================================
-// Используется алгоритмом layout для распределения кнопок по строкам
-// firstRowCount — сколько кнопок в первой строке
-// totalButtons — общее количество кнопок в группе
+// Использует algorithm layout для распределения кнопок по строкам
+// rows — количество строк для группы
 
 import React from "react"
 
 interface ToolbarRowSplitProps {
+  /** Количество строк для группы (из алгоритма) */
+  rows: number
   /** Все кнопки группы */
   buttons: React.ReactNode[]
-  /** Сколько кнопок в первой строке (из алгоритма) */
-  firstRowCount: number
 }
 
 export default function ToolbarRowSplit({
+  rows,
   buttons,
-  firstRowCount,
 }: ToolbarRowSplitProps) {
-  // Если firstRowCount не задан или >= total — все в одну строку
-  if (firstRowCount === undefined || firstRowCount >= buttons.length) {
-    return (
-      <div className="toolbar-group">
-        {buttons.map((btn, i) => (
-          <div key={i} className="toolbar-group-row">{btn}</div>
-        ))}
-      </div>
-    )
-  }
+  // Распределяем кнопки по строкам
+  const buttonsPerRow = Math.ceil(buttons.length / rows)
 
-  // Split buttons into rows
-  const firstRow = buttons.slice(0, firstRowCount)
-  const rest = buttons.slice(firstRowCount)
+  const resultRows: React.ReactNode[][] = []
+  for (let i = 0; i < rows; i++) {
+    const start = i * buttonsPerRow
+    const end = Math.min(start + buttonsPerRow, buttons.length)
+    if (start < buttons.length) {
+      resultRows.push(buttons.slice(start, end))
+    }
+  }
 
   return (
     <div className="toolbar-group">
-      {/* Первая строка */}
-      <div className="toolbar-group-row">
-        {firstRow.map((btn, i) => (
-          <React.Fragment key={i}>{btn}</React.Fragment>
-        ))}
-      </div>
-      {/* Дополнительные строки */}
-      {rest.map((btn, i) => (
-        <div key={i + firstRowCount} className="toolbar-group-row">
-          {btn}
+      {resultRows.map((rowButtons, rowIndex) => (
+        <div key={rowIndex} className="toolbar-group-row">
+          {rowButtons.map((btn, btnIndex) => (
+            <React.Fragment key={btnIndex}>{btn}</React.Fragment>
+          ))}
         </div>
       ))}
     </div>

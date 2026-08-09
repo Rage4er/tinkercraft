@@ -15,15 +15,15 @@ export default function MirrorButtons({
   onPreviewMirror,
   onPreviewEnd,
   variant = "compact",
-  maxFirstRow,
+  maxRows,
 }: {
   disabled: boolean;
   onMirror: (plane: MirrorPlane) => void;
   onPreviewMirror?: (plane: MirrorPlane) => void;
   onPreviewEnd?: () => void;
   variant?: "compact" | "full";
-  /** Сколько кнопок показать в первой строке (из алгоритма layout) */
-  maxFirstRow?: number;
+  /** Количество строк для группы (из алгоритма layout) */
+  maxRows?: number;
 }) {
   const planes: { plane: MirrorPlane; icon: React.ReactNode; label: string; tooltipKey: string }[] = [
     { plane: "YZ", icon: <MirrorYZIcon size={variant === "full" ? 16 : 14} />, label: "YZ", tooltipKey: "mirror_yz" },
@@ -31,39 +31,36 @@ export default function MirrorButtons({
     { plane: "XY", icon: <MirrorXYIcon size={variant === "full" ? 16 : 14} />, label: "XY", tooltipKey: "mirror_xy" },
   ];
 
-  // Split planes into rows based on maxFirstRow
-  const firstRow = maxFirstRow !== undefined ? planes.slice(0, maxFirstRow) : planes;
-  const restRows = maxFirstRow !== undefined && maxFirstRow < planes.length ? planes.slice(maxFirstRow) : [];
+  // Распределяем кнопки по строкам
+  const rows = maxRows ?? 1;
+  const buttonsPerRow = Math.ceil(planes.length / rows);
+  const resultRows: typeof planes[] = [];
+  for (let i = 0; i < rows; i++) {
+    const start = i * buttonsPerRow;
+    const end = Math.min(start + buttonsPerRow, planes.length);
+    if (start < planes.length) {
+      resultRows.push(planes.slice(start, end) as typeof planes);
+    }
+  }
 
   if (variant === "full") {
     return (
       <div className="csg-group">
         <div className="csg-group-title">Зеркало</div>
-        <div className="flex-row">
-          {firstRow.map(({ plane, icon, label, tooltipKey }) => (
-            <IconButton
-              key={plane}
-              icon={icon}
-              label={label}
-              onClick={() => onMirror(plane)}
-              disabled={disabled}
-              tooltip={TOOLTIP_DATA[tooltipKey]}
-              onMouseEnter={() => onPreviewMirror?.(plane)}
-              onMouseLeave={() => onPreviewEnd?.()}
-            />
-          ))}
-        </div>
-        {restRows.map(({ plane, icon, label, tooltipKey }) => (
-          <div key={plane} className="flex-row mt-1">
-            <IconButton
-              icon={icon}
-              label={label}
-              onClick={() => onMirror(plane)}
-              disabled={disabled}
-              tooltip={TOOLTIP_DATA[tooltipKey]}
-              onMouseEnter={() => onPreviewMirror?.(plane)}
-              onMouseLeave={() => onPreviewEnd?.()}
-            />
+        {resultRows.map((row, rowIndex) => (
+          <div key={rowIndex} className={rowIndex === 0 ? "flex-row" : "flex-row mt-1"}>
+            {row.map((btn) => (
+              <IconButton
+                key={btn.plane}
+                icon={btn.icon}
+                label={btn.label}
+                onClick={() => onMirror(btn.plane)}
+                disabled={disabled}
+                tooltip={TOOLTIP_DATA[btn.tooltipKey]}
+                onMouseEnter={() => onPreviewMirror?.(btn.plane)}
+                onMouseLeave={() => onPreviewEnd?.()}
+              />
+            ))}
           </div>
         ))}
       </div>
@@ -72,31 +69,19 @@ export default function MirrorButtons({
 
   return (
     <div className="toolbar-group">
-      {/* First row */}
-      <div className="toolbar-group-row">
-        {firstRow.map(({ plane, icon, label, tooltipKey }) => (
-          <IconButton
-            key={plane}
-            icon={icon}
-            onClick={() => onMirror(plane)}
-            disabled={disabled}
-            tooltip={TOOLTIP_DATA[tooltipKey]}
-            onMouseEnter={() => onPreviewMirror?.(plane)}
-            onMouseLeave={() => onPreviewEnd?.()}
-          />
-        ))}
-      </div>
-      {/* Additional rows */}
-      {restRows.map(({ plane, icon, label, tooltipKey }) => (
-        <div key={plane} className="toolbar-group-row">
-          <IconButton
-            icon={icon}
-            onClick={() => onMirror(plane)}
-            disabled={disabled}
-            tooltip={TOOLTIP_DATA[tooltipKey]}
-            onMouseEnter={() => onPreviewMirror?.(plane)}
-            onMouseLeave={() => onPreviewEnd?.()}
-          />
+      {resultRows.map((row, rowIndex) => (
+        <div key={rowIndex} className="toolbar-group-row">
+          {row.map((btn) => (
+            <IconButton
+              key={btn.plane}
+              icon={btn.icon}
+              onClick={() => onMirror(btn.plane)}
+              disabled={disabled}
+              tooltip={TOOLTIP_DATA[btn.tooltipKey]}
+              onMouseEnter={() => onPreviewMirror?.(btn.plane)}
+              onMouseLeave={() => onPreviewEnd?.()}
+            />
+          ))}
         </div>
       ))}
     </div>

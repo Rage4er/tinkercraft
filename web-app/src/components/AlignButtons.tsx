@@ -15,13 +15,13 @@ export default function AlignButtons({
   disabled,
   onAlign,
   variant = "compact",
-  maxFirstRow,
+  maxRows,
 }: {
   disabled: boolean;
   onAlign: (axis: AlignAxis, anchor: AlignAnchor) => void;
   variant?: "compact" | "full";
-  /** Сколько кнопок показать в первой строке (из алгоритма layout) */
-  maxFirstRow?: number;
+  /** Количество строк для группы (из алгоритма layout) */
+  maxRows?: number;
 }) {
   const allButtons: { axis: AlignAxis; anchor: AlignAnchor; label: string; tooltipKey: string }[] = [
     { axis: "X", anchor: "min", label: "X min", tooltipKey: "align_x_min" },
@@ -32,69 +32,57 @@ export default function AlignButtons({
     { axis: "Y", anchor: "max", label: "Y max", tooltipKey: "align_y_max" },
   ];
 
-  // Split buttons into rows based on maxFirstRow
-  const firstRow = maxFirstRow !== undefined ? allButtons.slice(0, maxFirstRow) : allButtons;
-  const restButtons = maxFirstRow !== undefined && maxFirstRow < allButtons.length ? allButtons.slice(maxFirstRow) : [];
+  // Распределяем кнопки по строкам
+  const rows = maxRows ?? 1;
+  const buttonsPerRow = Math.ceil(allButtons.length / rows);
+  const resultRows: typeof allButtons[] = [];
+  for (let i = 0; i < rows; i++) {
+    const start = i * buttonsPerRow;
+    const end = Math.min(start + buttonsPerRow, allButtons.length);
+    if (start < allButtons.length) {
+      resultRows.push(allButtons.slice(start, end) as typeof allButtons);
+    }
+  }
 
   if (variant === "full") {
-    const renderButtons = (buttons: typeof allButtons) => (
-      <>
-        <div className="csg-group-title mt-4">
-          Выравнивание
-        </div>
-        <div className="flex-wrap">
-          {buttons.map(({ axis, anchor, label, tooltipKey }) => (
-            <IconButton
-              key={`${axis}-${anchor}`}
-              icon={<AlignIcon size={16} />}
-              label={label}
-              onClick={() => onAlign(axis, anchor)}
-              disabled={disabled}
-              tooltip={TOOLTIP_DATA[tooltipKey]}
-            />
-          ))}
-        </div>
-      </>
-    );
-
     return (
       <>
-        {renderButtons(firstRow)}
-        {restButtons.length > 0 && (
-          <div className="mt-1">{renderButtons(restButtons)}</div>
-        )}
+        {resultRows.map((row, rowIndex) => (
+          <div key={rowIndex}>
+            {rowIndex === 0 && <div className="csg-group-title mt-4">Выравнивание</div>}
+            <div className={rowIndex === 0 ? "flex-wrap" : "flex-wrap mt-1"}>
+              {row.map((btn) => (
+                <IconButton
+                  key={`${btn.axis}-${btn.anchor}`}
+                  icon={<AlignIcon size={16} />}
+                  label={btn.label}
+                  onClick={() => onAlign(btn.axis, btn.anchor)}
+                  disabled={disabled}
+                  tooltip={TOOLTIP_DATA[btn.tooltipKey]}
+                />
+              ))}
+            </div>
+          </div>
+        ))}
       </>
     );
   }
 
   return (
     <div className="toolbar-group">
-      {/* First row */}
-      <div className="toolbar-group-row">
-        {firstRow.map(({ axis, anchor, label, tooltipKey }) => (
-          <IconButton
-            key={`${axis}-${anchor}`}
-            icon={<AlignIcon size={14} />}
-            onClick={() => onAlign(axis, anchor)}
-            disabled={disabled}
-            tooltip={TOOLTIP_DATA[tooltipKey]}
-          />
-        ))}
-      </div>
-      {/* Additional row with remaining buttons */}
-      {restButtons.length > 0 && (
-        <div className="toolbar-group-row">
-          {restButtons.map(({ axis, anchor, label, tooltipKey }) => (
+      {resultRows.map((row, rowIndex) => (
+        <div key={rowIndex} className="toolbar-group-row">
+          {row.map((btn) => (
             <IconButton
-              key={`${axis}-${anchor}`}
+              key={`${btn.axis}-${btn.anchor}`}
               icon={<AlignIcon size={14} />}
-              onClick={() => onAlign(axis, anchor)}
+              onClick={() => onAlign(btn.axis, btn.anchor)}
               disabled={disabled}
-              tooltip={TOOLTIP_DATA[tooltipKey]}
+              tooltip={TOOLTIP_DATA[btn.tooltipKey]}
             />
           ))}
         </div>
-      )}
+      ))}
     </div>
   );
 }
