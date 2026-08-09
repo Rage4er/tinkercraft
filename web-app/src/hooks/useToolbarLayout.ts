@@ -73,6 +73,23 @@ export function useToolbarLayout(groups: ToolbarGroup[]): UseToolbarLayoutResult
     const btnWidth = measureButtonWidth()
     calculateAndSetLayout(initialWidth, btnWidth)
 
+    // DEBUG: логирование layout
+    if (import.meta.env.DEV) {
+      console.log('[ToolbarLayout]', {
+        toolbarWidth: initialWidth,
+        btnWidth,
+        rowsMap,
+        groupCount: groupsRef.current.length,
+      })
+
+      const groups = toolbarRef.current.querySelectorAll('.toolbar-group')
+      groups.forEach((g, i) => {
+        const rect = g.getBoundingClientRect()
+        const btns = g.querySelectorAll('.btn')
+        console.log(`  Group ${i} (${groupsRef.current[i]?.id}): width=${rect.width.toFixed(1)}px, rows=${rowsMap[groupsRef.current[i]?.id ?? ''] ?? 1}, buttons=${btns.length}`)
+      })
+    }
+
     // ResizeObserver — БЕЗ бесконечных циклов
     // Зависимости: только measureButtonWidth (стабильна)
     const observer = new ResizeObserver((entries) => {
@@ -82,6 +99,15 @@ export function useToolbarLayout(groups: ToolbarGroup[]): UseToolbarLayoutResult
       const width = entry.contentRect.width
       const btnWidth = measureButtonWidth()
       calculateAndSetLayout(width, btnWidth)
+
+      // DEBUG: логирование при resize
+      if (import.meta.env.DEV) {
+        console.log('[ToolbarLayout Resize]', {
+          width,
+          btnWidth,
+          rowsMap,
+        })
+      }
     })
 
     observer.observe(toolbarRef.current)

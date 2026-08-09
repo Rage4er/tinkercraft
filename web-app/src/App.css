@@ -122,15 +122,15 @@ body {
   align-self: center;
 }
 
-/* ГРУППА — flex column с явными строками */
+/* ГРУППА — компактная, не растягивается равномерно */
 .toolbar-group {
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: stretch;
   gap: 0;
-  flex: 1 1 0;
-  /* равномерно делит доступное пространство */
+  flex: 0 0 auto;
+  /* НЕ растягиваться! Ширина под свои кнопки */
   min-width: 0;
   padding: 2px 4px;
 }
@@ -142,24 +142,32 @@ body {
   justify-content: center;
   gap: 2px;
   flex-shrink: 0;
-  /* НЕ растягиваться, высота по содержимому */
+  height: 36px;
+  /* Фиксированная высота строки */
+  flex-wrap: wrap;
+  /* ← КНОПКИ ПЕРЕНОСЯТСЯ! */
 }
 
-/* Кнопка в grid-группе — фиксированная, центрируется в ячейке */
+/* КНОПКА — фиксированный размер, не сжимается */
 .toolbar-group .btn {
   width: 34px;
   height: 34px;
   padding: 0;
-  margin: auto;
-  /* центрировать в ячейке grid */
+  flex: 0 0 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-color);
+  cursor: pointer;
+  transition: background 0.15s;
+  font-size: 14px;
 }
 
-/* Кнопка в grid-группе */
-.toolbar-group .btn {
-  width: 34px;
-  height: 34px;
-  padding: 0;
-  flex-shrink: 0;
+.toolbar-group .btn:hover {
+  background: var(--hover-bg);
 }
 
 /* РАЗДЕЛИТЕЛЬ — на всю высоту контейнера */
