@@ -1,4 +1,5 @@
 // ============================================================
+// ============================================================
 // AlignButtons — reusable alignment buttons (WARN-3)
 // Used in both Toolbar (compact) and PropertiesPanel (full)
 // ============================================================
@@ -14,21 +15,29 @@ export default function AlignButtons({
   disabled,
   onAlign,
   variant = "compact",
+  maxFirstRow,
 }: {
   disabled: boolean;
   onAlign: (axis: AlignAxis, anchor: AlignAnchor) => void;
   variant?: "compact" | "full";
+  /** Сколько кнопок показать в первой строке (из алгоритма layout) */
+  maxFirstRow?: number;
 }) {
+  const allButtons: { axis: AlignAxis; anchor: AlignAnchor; label: string; tooltipKey: string }[] = [
+    { axis: "X", anchor: "min", label: "X min", tooltipKey: "align_x_min" },
+    { axis: "X", anchor: "center", label: "X center", tooltipKey: "align_x_center" },
+    { axis: "X", anchor: "max", label: "X max", tooltipKey: "align_x_max" },
+    { axis: "Y", anchor: "min", label: "Y min", tooltipKey: "align_y_min" },
+    { axis: "Y", anchor: "center", label: "Y center", tooltipKey: "align_y_center" },
+    { axis: "Y", anchor: "max", label: "Y max", tooltipKey: "align_y_max" },
+  ];
+
+  // Split buttons into rows based on maxFirstRow
+  const firstRow = maxFirstRow !== undefined ? allButtons.slice(0, maxFirstRow) : allButtons;
+  const restButtons = maxFirstRow !== undefined && maxFirstRow < allButtons.length ? allButtons.slice(maxFirstRow) : [];
+
   if (variant === "full") {
-    const buttons: { axis: AlignAxis; anchor: AlignAnchor; label: string; tooltipKey: string }[] = [
-      { axis: "X", anchor: "min", label: "X min", tooltipKey: "align_x_min" },
-      { axis: "X", anchor: "center", label: "X center", tooltipKey: "align_x_center" },
-      { axis: "X", anchor: "max", label: "X max", tooltipKey: "align_x_max" },
-      { axis: "Y", anchor: "min", label: "Y min", tooltipKey: "align_y_min" },
-      { axis: "Y", anchor: "center", label: "Y center", tooltipKey: "align_y_center" },
-      { axis: "Y", anchor: "max", label: "Y max", tooltipKey: "align_y_max" },
-    ];
-    return (
+    const renderButtons = (buttons: typeof allButtons) => (
       <>
         <div className="csg-group-title mt-4">
           Выравнивание
@@ -47,27 +56,45 @@ export default function AlignButtons({
         </div>
       </>
     );
+
+    return (
+      <>
+        {renderButtons(firstRow)}
+        {restButtons.length > 0 && (
+          <div className="mt-1">{renderButtons(restButtons)}</div>
+        )}
+      </>
+    );
   }
 
-  // Compact: X min/center/max + Y center + Z center
-  const buttons: { axis: AlignAxis; anchor: AlignAnchor; label: string; tooltipKey: string }[] = [
-    { axis: "X", anchor: "min", label: "X min", tooltipKey: "align_x_min" },
-    { axis: "X", anchor: "center", label: "X center", tooltipKey: "align_x_center" },
-    { axis: "X", anchor: "max", label: "X max", tooltipKey: "align_x_max" },
-    { axis: "Y", anchor: "center", label: "Y center", tooltipKey: "align_y_center" },
-    { axis: "Z", anchor: "center", label: "Z center", tooltipKey: "align_z_center" },
-  ];
   return (
     <div className="toolbar-group">
-      {buttons.map(({ axis, anchor, label, tooltipKey }) => (
-        <IconButton
-          key={`${axis}-${anchor}`}
-          icon={<AlignIcon size={14} />}
-          onClick={() => onAlign(axis, anchor)}
-          disabled={disabled}
-          tooltip={TOOLTIP_DATA[tooltipKey]}
-        />
-      ))}
+      {/* First row */}
+      <div className="toolbar-group-row">
+        {firstRow.map(({ axis, anchor, label, tooltipKey }) => (
+          <IconButton
+            key={`${axis}-${anchor}`}
+            icon={<AlignIcon size={14} />}
+            onClick={() => onAlign(axis, anchor)}
+            disabled={disabled}
+            tooltip={TOOLTIP_DATA[tooltipKey]}
+          />
+        ))}
+      </div>
+      {/* Additional row with remaining buttons */}
+      {restButtons.length > 0 && (
+        <div className="toolbar-group-row">
+          {restButtons.map(({ axis, anchor, label, tooltipKey }) => (
+            <IconButton
+              key={`${axis}-${anchor}`}
+              icon={<AlignIcon size={14} />}
+              onClick={() => onAlign(axis, anchor)}
+              disabled={disabled}
+              tooltip={TOOLTIP_DATA[tooltipKey]}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

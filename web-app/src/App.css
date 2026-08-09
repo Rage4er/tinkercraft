@@ -122,16 +122,26 @@ body {
   align-self: center;
 }
 
-/* ГРУППА — grid с auto-fit для равномерного распределения */
+/* ГРУППА — flex column с явными строками */
 .toolbar-group {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(34px, 1fr));
-  gap: 2px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: stretch;
+  gap: 0;
   flex: 1 1 0;
   /* равномерно делит доступное пространство */
-  align-content: center;
-  padding: 2px 4px;
   min-width: 0;
+  padding: 2px 4px;
+}
+
+/* Строка кнопок внутри группы */
+.toolbar-group-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  flex: 1;
 }
 
 /* Кнопка в grid-группе — фиксированная, центрируется в ячейке */
