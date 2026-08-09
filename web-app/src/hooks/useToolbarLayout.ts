@@ -5,6 +5,7 @@
 // - useLayoutEffect: синхронное обновление до рендера (без flickering)
 // - Измерение реальной ширины кнопки (не фиксированное)
 // - rowsMap: Record<string, number> — чистое состояние
+// - useRef для groups — избегает бесконечных циклов
 // - ResizeObserver без бесконечных циклов
 // - Алгоритм чистый, отделён от React
 
@@ -25,6 +26,11 @@ interface UseToolbarLayoutResult {
 export function useToolbarLayout(groups: ToolbarGroup[]): UseToolbarLayoutResult {
   const toolbarRef = useRef<HTMLDivElement>(null)
 
+  // ✅ useRef для groups — избегает бесконечных циклов при перерисовках
+  // groups из props может пересоздаваться, но мы всегда используем актуальное значение
+  const groupsRef = useRef(groups)
+  groupsRef.current = groups
+
   // Состояние: rows по каждой группе (Record, не массив!)
   const [rowsMap, setRowsMap] = useState<Record<string, number>>(() =>
     Object.fromEntries(groups.map((g) => [g.id, 1]))
@@ -39,25 +45,24 @@ export function useToolbarLayout(groups: ToolbarGroup[]): UseToolbarLayoutResult
     return btn.getBoundingClientRect().width + 4
   }, [])
 
-  // Чистая функция расчёта layout (без React зависимостей)
-  const calculateAndSetLayout = useCallback(
-    (width: number, btnWidth: number) => {
-      if (groups.length === 0) {
-        setRowsMap({})
-        return
-      }
+  // ✅ Стабильная функция расчёта layout (не зависит от groups в deps!)
+  // Использует groupsRef.current для доступа к актуальным данным
+  const calculateAndSetLayout = useCallback((width: number, btnWidth: number) => {
+    const currentGroups = groupsRef.current
+    if (currentGroups.length === 0) {
+      setRowsMap({})
+      return
+    }
 
-      const result = calculateToolbarLayout(groups, width)
+    const result = calculateToolbarLayout(currentGroups, width)
 
-      // Преобразуем GroupLayout[] → Record<string, number>
-      const newRowsMap: Record<string, number> = {}
-      for (const g of result) {
-        newRowsMap[g.id] = g.rows
-      }
-      setRowsMap(newRowsMap)
-    },
-    [groups],
-  )
+    // Преобразуем GroupLayout[] → Record<string, number>
+    const newRowsMap: Record<string, number> = {}
+    for (const g of result) {
+      newRowsMap[g.id] = g.rows
+    }
+    setRowsMap(newRowsMap)
+  }, []) // ✅ Пустые зависимости — функция стабильна!
 
   // useLayoutEffect: выполняется синхронно ДО рендера
   useLayoutEffect(() => {
@@ -69,7 +74,7 @@ export function useToolbarLayout(groups: ToolbarGroup[]): UseToolbarLayoutResult
     calculateAndSetLayout(initialWidth, btnWidth)
 
     // ResizeObserver — БЕЗ бесконечных циклов
-    // Зависимости: только calculateAndSetLayout и measureButtonWidth
+    // Зависимости: только measureButtonWidth (стабильна)
     const observer = new ResizeObserver((entries) => {
       const entry = entries[0]
       if (!entry) return
@@ -82,7 +87,7 @@ export function useToolbarLayout(groups: ToolbarGroup[]): UseToolbarLayoutResult
     observer.observe(toolbarRef.current)
 
     return () => observer.disconnect()
-  }, [calculateAndSetLayout, measureButtonWidth]) // ← правильные зависимости!
+  }, [calculateAndSetLayout, measureButtonWidth]) // ✅ ТОЛЬКО стабильные функции!
 
   return { toolbarRef, rowsMap }
 }
