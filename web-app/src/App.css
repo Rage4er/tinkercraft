@@ -141,7 +141,8 @@ body {
   align-items: center;
   justify-content: center;
   gap: 2px;
-  flex: 1;
+  flex-shrink: 0;
+  /* НЕ растягиваться, высота по содержимому */
 }
 
 /* Кнопка в grid-группе — фиксированная, центрируется в ячейке */
