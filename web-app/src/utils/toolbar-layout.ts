@@ -174,14 +174,19 @@ function expand(layout: GroupLayout[], availableWidth: number): GroupLayout[] {
 
 /**
  * Считает необходимую ширину для layout.
- * Width = max(ceil(buttonCount / rows)) * BTN_SIZE
+ * Width = SUM(ceil(buttonCount / rows)) * BTN_SIZE для КАЖДОЙ группы
  */
 function calcWidth(layout: GroupLayout[]): number {
   if (layout.length === 0) {
     return 0
   }
-  const maxPerRow = Math.max(...layout.map((g) => ceilDiv(g.buttonCount, g.rows)))
-  return maxPerRow * BTN_SIZE
+  // Каждая группа имеет свою ширину = maxInRow * BTN_SIZE
+  // Общая ширина = сумма ширин всех групп
+  const totalWidth = layout.reduce((sum, g) => {
+    const perRow = ceilDiv(g.buttonCount, g.rows)
+    return sum + perRow * BTN_SIZE
+  }, 0)
+  return totalWidth
 }
 
 /**
