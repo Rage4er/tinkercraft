@@ -2,14 +2,16 @@
 // toolbar-layout.ts — Алгоритм распределения кнопок по строкам
 // ============================================================
 // Профессиональный алгоритм ленточного интерфейса (AutoCAD, MS Office):
-// - Сужение: увеличиваем rows у самых широких групп
-// - Расширение: уменьшаем rows с гистерезисом
-// - Ширина = max(ceil(buttonCount / rows)) для каждой группы
+// - Сужение: перенос у самых широких групп
+// - Расширение: подъём у самых высоких групп (с гистерезисом)
+// - MAX_ROWS = 3 — максимум строк в группе
+// - Гистерезис = 1W — защитная подушка 1 кнопка
 
-const BTN_SIZE = 34 // px — ширина кнопки
-const GAP = 2 // px — gap между кнопками
+const BUTTON_WIDTH = 34 // px — ширина кнопки (32px + 2px gap)
 const SEPARATOR_WIDTH = 2 // px — ширина разделителя
-const PADDING = 20 // px — отступы слева/справа в toolbar
+const PADDING = 16 // px — горизонтальные отступы тулбара
+const MAX_ROWS = 3 // максимум строк в группе
+const HYSTERESIS = 1 // защита от дребезга (1 кнопка)
 
 export interface ToolbarGroup {
   id: string
@@ -27,12 +29,12 @@ export interface GroupLayout {
 /**
  * Рассчитывает оптимальное количество строк для каждой группы.
  * @param groups — массив конфигураций групп
- * @param availableWidth — полная ширина toolbar (включая padding)
+ * @param toolbarWidth — полная ширина toolbar
  * @returns layout с количеством строк для каждой группы
  */
 export function calculateToolbarLayout(
   groups: ToolbarGroup[],
-  availableWidth: number,
+  toolbarWidth: number,
 ): GroupLayout[] {
   if (groups.length === 0) {
     return []
@@ -43,98 +45,132 @@ export function calculateToolbarLayout(
     id: g.id,
     rows: 1,
     buttonCount: g.buttonCount,
-    maxRows: g.maxRows ?? 3,
+    maxRows: g.maxRows ?? MAX_ROWS,
   }))
 
-  // Фаза 1: Сужение (push down)
-  layout = contract(layout, availableWidth)
-
-  // Фаза 2: Расширение (pull up) с гистерезисом
-  layout = expand(layout, availableWidth)
+  // Единый расчёт: сужение + расширение
+  layout = calculateLayout(layout, toolbarWidth)
 
   return layout
 }
 
 /**
+ * Единый расчёт: сужение (если места мало) или расширение (если много).
+ * С гистерезисом для защиты от дребезга.
+ */
+function calculateLayout(layout: GroupLayout[], toolbarWidth: number): GroupLayout[] {
+  const totalSeparators = (layout.length - 1) * SEPARATOR_WIDTH
+  const available = toolbarWidth - totalSeparators - PADDING
+
+  // Считаем общую ширину всех групп (SUM по всем группам)
+  const totalButtonsWidth = layout.reduce((sum, g) => {
+    const perRow = ceilDiv(g.buttonCount, g.rows)
+    return sum + perRow * BUTTON_WIDTH
+  }, 0)
+
+  // === ФАЗА 1: ЕСЛИ ВСЕ В 1 СТРОКУ — выходим ===
+  if (layout.every((g) => g.rows === 1)) {
+    // Если места достаточно — все в 1 строку
+    if (available >= totalButtonsWidth) {
+      return layout
+    }
+    // Места мало — начинаем сужение
+    return contract(layout, toolbarWidth, totalSeparators, available)
+  }
+
+  // === ФАЗА 2: ЕСТЬ МНОГО СТРОК — пробуем расширение ===
+  return expand(layout, toolbarWidth, totalSeparators, available)
+}
+
+/**
  * Сужение: пока места мало, увеличиваем rows у самых широких групп.
  */
-function contract(layout: GroupLayout[], availableWidth: number): GroupLayout[] {
-  const totalSeparators = (layout.length - 1) * SEPARATOR_WIDTH
-  let maxIterations = 100 // защита от бесконечного цикла
+function contract(
+  layout: GroupLayout[],
+  toolbarWidth: number,
+  totalSeparators: number,
+  _available: number,
+): GroupLayout[] {
+  let rowsMap: Record<string, number> = {}
+  for (const g of layout) {
+    rowsMap[g.id] = g.rows
+  }
+
+  let maxIterations = 100
 
   while (maxIterations-- > 0) {
-    // Считаем текущую ширину
-    const currentWidth = calcWidth(layout) + totalSeparators + PADDING
-
-    // Если места хватает — выходим
-    if (currentWidth <= availableWidth) {
-      break
-    }
-
-    // Проверяем, есть ли группы которые могут принять ещё строку
-    const canExpand = layout.some((g) => g.rows < g.maxRows)
-    if (!canExpand) {
-      break // Все группы достигли MAX_ROWS
-    }
-
-    // Находим самую большую первую строку
-    const firstRowLengths = layout.map((g) => ceilDiv(g.buttonCount, g.rows))
+    // 1. Находим самую широкую группу (по кнопкам в первой строке)
+    const firstRowLengths = layout.map((g) => ceilDiv(g.buttonCount, rowsMap[g.id]))
     const maxLen = Math.max(...firstRowLengths)
 
-    // Находим кандидатов (самые широкие + могут расшириться)
+    // 2. Кандидаты (самые широкие, не достигли MAX_ROWS)
     const candidates = layout.filter(
-      (g, i) => firstRowLengths[i] === maxLen && g.rows < g.maxRows,
+      (g, i) => firstRowLengths[i] === maxLen && rowsMap[g.id] < MAX_ROWS,
     )
 
     if (candidates.length === 0) {
-      break
+      break // некуда переносить
     }
 
-    // Создаём новую layout с увеличенными rows у кандидатов
-    const newLayout = layout.map((g) => {
-      const isCandidate = candidates.some((c) => c.id === g.id)
-      if (isCandidate) {
-        return { ...g, rows: Math.min(g.rows + 1, g.maxRows) }
-      }
-      return g
-    })
+    // 3. Переносим по 1 кнопке у всех кандидатов
+    const newRowsMap = { ...rowsMap }
+    for (const g of candidates) {
+      newRowsMap[g.id] = (newRowsMap[g.id] || 1) + 1
+    }
 
-    // Проверяем, хватило ли места
-    const newWidth = calcWidth(newLayout) + totalSeparators + PADDING
-    if (newWidth <= availableWidth) {
+    // 4. Проверяем, хватило ли места (нужен запас в 1W)
+    const newTotalWidth = layout.reduce((sum, g) => {
+      const perRow = ceilDiv(g.buttonCount, newRowsMap[g.id])
+      return sum + perRow * BUTTON_WIDTH
+    }, 0) + totalSeparators + PADDING
+
+    const newEmptySpace = toolbarWidth - newTotalWidth
+    if (newEmptySpace >= BUTTON_WIDTH) {
+      // ✅ Места хватило с запасом 1W!
+      const newLayout: GroupLayout[] = layout.map((g) => ({
+        ...g,
+        rows: newRowsMap[g.id],
+      }))
       return newLayout
     }
 
-    layout = newLayout
+    rowsMap = newRowsMap
   }
 
-  return layout
+  // Вернулись к GroupLayout[]
+  return layout.map((g) => ({ ...g, rows: rowsMap[g.id] }))
 }
 
 /**
  * Расширение: когда места много, уменьшаем rows у самых высоких групп.
  * С гистерезисом для защиты от дребезга.
  */
-function expand(layout: GroupLayout[], availableWidth: number): GroupLayout[] {
-  const totalSeparators = (layout.length - 1) * SEPARATOR_WIDTH
+function expand(
+  layout: GroupLayout[],
+  toolbarWidth: number,
+  totalSeparators: number,
+  _available: number,
+): GroupLayout[] {
+  let rowsMap: Record<string, number> = {}
+  for (const g of layout) {
+    rowsMap[g.id] = g.rows
+  }
+
+  // Если все уже в 1 строке — ничего не делаем
+  const allOne = layout.every((g) => rowsMap[g.id] === 1)
+  if (allOne) {
+    return layout
+  }
+
   let maxIterations = 100
 
   while (maxIterations-- > 0) {
-    // Считаем текущую ширину и пустое место
-    const currentWidth = calcWidth(layout) + totalSeparators + PADDING
-    const emptySpace = availableWidth - currentWidth
+    // 1. Находим максимальное количество строк
+    const maxRows = Math.max(...layout.map((g) => rowsMap[g.id]))
 
-    // Находим максимальное количество строк
-    const maxRows = Math.max(...layout.map((g) => g.rows))
-
-    // Если все группы в 1 строку — выходим
-    if (maxRows <= 1) {
-      break
-    }
-
-    // Находим всех кандидатов (группы с макс. rows > 1)
+    // 2. Кандидаты (группы с макс. rows > 1)
     const candidates = layout.filter(
-      (g) => g.rows === maxRows && g.rows > 1,
+      (g) => rowsMap[g.id] === maxRows && rowsMap[g.id] > 1,
     )
 
     if (candidates.length === 0) {
@@ -143,50 +179,44 @@ function expand(layout: GroupLayout[], availableWidth: number): GroupLayout[] {
 
     const N = candidates.length
 
-    // Рассчитываем порог с гистерезисом
-    // Нужно место для N кнопок + защитная подушка 1W
-    const threshold = N * BTN_SIZE + BTN_SIZE
+    // 3. Считаем порог для подъёма (с гистерезисом)
+    const neededSpace = N * BUTTON_WIDTH
+    const threshold = neededSpace + HYSTERESIS * BUTTON_WIDTH
 
-    // Если места хватает с запасом — уменьшаем rows
-    if (emptySpace >= threshold) {
-      const newLayout = layout.map((g) => {
-        const isCandidate = candidates.some((c) => c.id === g.id)
-        if (isCandidate) {
-          return { ...g, rows: Math.max(g.rows - 1, 1) }
-        }
-        return g
-      })
+    // 4. Считаем текущую ширину и пустое место
+    const currentWidth = layout.reduce((sum, g) => {
+      const perRow = ceilDiv(g.buttonCount, rowsMap[g.id])
+      return sum + perRow * BUTTON_WIDTH
+    }, 0) + totalSeparators + PADDING
 
-      // Проверяем, что новая ширина не превышает доступную
-      const newWidth = calcWidth(newLayout) + totalSeparators + PADDING
-      if (newWidth <= availableWidth) {
-        layout = newLayout
-      } else {
-        break // Место не позволяет уменьшить rows
-      }
+    const emptySpace = toolbarWidth - currentWidth
+
+    // 5. Проверяем, можно ли поднять
+    if (emptySpace < threshold) {
+      return layout // недостаточно места — гистерезис сработал
+    }
+
+    // 6. Поднимаем всех кандидатов
+    const newRowsMap = { ...rowsMap }
+    for (const g of candidates) {
+      newRowsMap[g.id] = Math.max(1, (newRowsMap[g.id] || 1) - 1)
+    }
+
+    // 7. Проверяем новую ширину
+    const newWidth = layout.reduce((sum, g) => {
+      const perRow = ceilDiv(g.buttonCount, newRowsMap[g.id])
+      return sum + perRow * BUTTON_WIDTH
+    }, 0) + totalSeparators + PADDING
+
+    if (newWidth <= toolbarWidth) {
+      rowsMap = newRowsMap
     } else {
-      break // Гистерезис сработал — не дергаемся
+      break // место не позволяет уменьшить rows
     }
   }
 
-  return layout
-}
-
-/**
- * Считает необходимую ширину для layout.
- * Width = SUM(ceil(buttonCount / rows)) * BTN_SIZE для КАЖДОЙ группы
- */
-function calcWidth(layout: GroupLayout[]): number {
-  if (layout.length === 0) {
-    return 0
-  }
-  // Каждая группа имеет свою ширину = maxInRow * BTN_SIZE
-  // Общая ширина = сумма ширин всех групп
-  const totalWidth = layout.reduce((sum, g) => {
-    const perRow = ceilDiv(g.buttonCount, g.rows)
-    return sum + perRow * BTN_SIZE
-  }, 0)
-  return totalWidth
+  // Вернулись к GroupLayout[]
+  return layout.map((g) => ({ ...g, rows: rowsMap[g.id] }))
 }
 
 /**
