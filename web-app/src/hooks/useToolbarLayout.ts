@@ -54,7 +54,7 @@ export function useToolbarLayout(groups: ToolbarGroup[]): UseToolbarLayoutResult
       return
     }
 
-    const result = calculateToolbarLayout(currentGroups, width)
+    const result = calculateToolbarLayout(currentGroups, width, btnWidth)
 
     // Преобразуем GroupLayout[] → Record<string, number>
     const newRowsMap: Record<string, number> = {}

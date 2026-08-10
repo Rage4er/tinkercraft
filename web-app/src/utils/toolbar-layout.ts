@@ -2,12 +2,11 @@
 // toolbar-layout.ts — Алгоритм распределения кнопок по строкам
 // ============================================================
 // Профессиональный алгоритм ленточного интерфейса (AutoCAD, MS Office):
-// - Сужение: перенос у самых широких групп
+// - Сужение: перенос у самых широких групп когда width > toolbarWidth
 // - Расширение: подъём у самых высоких групп (с гистерезисом)
 // - MAX_ROWS = 3 — максимум строк в группе
 // - Гистерезис = 1W — защитная подушка 1 кнопка
 
-const BUTTON_WIDTH = 34 // px — ширина кнопки (32px + 2px gap)
 const SEPARATOR_WIDTH = 2 // px — ширина разделителя
 const PADDING = 16 // px — горизонтальные отступы тулбара
 const MAX_ROWS = 3 // максимум строк в группе
@@ -30,11 +29,13 @@ export interface GroupLayout {
  * Рассчитывает оптимальное количество строк для каждой группы.
  * @param groups — массив конфигураций групп
  * @param toolbarWidth — полная ширина toolbar
+ * @param btnWidth — реальная ширина кнопки (из DOM)
  * @returns layout с количеством строк для каждой группы
  */
 export function calculateToolbarLayout(
   groups: ToolbarGroup[],
   toolbarWidth: number,
+  btnWidth: number,
 ): GroupLayout[] {
   if (groups.length === 0) {
     return []
@@ -49,7 +50,7 @@ export function calculateToolbarLayout(
   }))
 
   // Единый расчёт: сужение + расширение
-  layout = calculateLayout(layout, toolbarWidth)
+  layout = calculateLayout(layout, toolbarWidth, btnWidth)
 
   return layout
 }
@@ -58,38 +59,42 @@ export function calculateToolbarLayout(
  * Единый расчёт: сужение (если места мало) или расширение (если много).
  * С гистерезисом для защиты от дребезга.
  */
-function calculateLayout(layout: GroupLayout[], toolbarWidth: number): GroupLayout[] {
+function calculateLayout(
+  layout: GroupLayout[],
+  toolbarWidth: number,
+  btnWidth: number,
+): GroupLayout[] {
   const totalSeparators = (layout.length - 1) * SEPARATOR_WIDTH
-  const available = toolbarWidth - totalSeparators - PADDING
 
   // Считаем общую ширину всех групп (SUM по всем группам)
   const totalButtonsWidth = layout.reduce((sum, g) => {
     const perRow = ceilDiv(g.buttonCount, g.rows)
-    return sum + perRow * BUTTON_WIDTH
-  }, 0)
+    return sum + perRow * btnWidth
+  }, 0) + totalSeparators + PADDING
 
-  // === ФАЗА 1: ЕСЛИ ВСЕ В 1 СТРОКУ — выходим ===
+  // === ФАЗА 1: ЕСЛИ ВСЕ В 1 СТРОКУ — проверяем влезает ли ===
   if (layout.every((g) => g.rows === 1)) {
-    // Если места достаточно — все в 1 строку
-    if (available >= totalButtonsWidth) {
+    // Если места достаточно — все в 1 строку (без требования запаса!)
+    if (totalButtonsWidth <= toolbarWidth) {
       return layout
     }
     // Места мало — начинаем сужение
-    return contract(layout, toolbarWidth, totalSeparators, available)
+    return contract(layout, toolbarWidth, totalSeparators, btnWidth)
   }
 
   // === ФАЗА 2: ЕСТЬ МНОГО СТРОК — пробуем расширение ===
-  return expand(layout, toolbarWidth, totalSeparators, available)
+  return expand(layout, toolbarWidth, totalSeparators, btnWidth)
 }
 
 /**
- * Сужение: пока места мало, увеличиваем rows у самых широких групп.
+ * Сужение: пока totalWidth > toolbarWidth, увеличиваем rows у самых широких групп.
+ * БЕЗ требования запаса — переносим сразу когда не влезает.
  */
 function contract(
   layout: GroupLayout[],
   toolbarWidth: number,
   totalSeparators: number,
-  _available: number,
+  btnWidth: number,
 ): GroupLayout[] {
   let rowsMap: Record<string, number> = {}
   for (const g of layout) {
@@ -99,6 +104,17 @@ function contract(
   let maxIterations = 100
 
   while (maxIterations-- > 0) {
+    // Считаем текущую ширину
+    const currentWidth = layout.reduce((sum, g) => {
+      const perRow = ceilDiv(g.buttonCount, rowsMap[g.id])
+      return sum + perRow * btnWidth
+    }, 0) + totalSeparators + PADDING
+
+    // Если влезает — выходим
+    if (currentWidth <= toolbarWidth) {
+      return layout.map((g) => ({ ...g, rows: rowsMap[g.id] }))
+    }
+
     // 1. Находим самую широкую группу (по кнопкам в первой строке)
     const firstRowLengths = layout.map((g) => ceilDiv(g.buttonCount, rowsMap[g.id]))
     const maxLen = Math.max(...firstRowLengths)
@@ -118,22 +134,6 @@ function contract(
       newRowsMap[g.id] = (newRowsMap[g.id] || 1) + 1
     }
 
-    // 4. Проверяем, хватило ли места (нужен запас в 1W)
-    const newTotalWidth = layout.reduce((sum, g) => {
-      const perRow = ceilDiv(g.buttonCount, newRowsMap[g.id])
-      return sum + perRow * BUTTON_WIDTH
-    }, 0) + totalSeparators + PADDING
-
-    const newEmptySpace = toolbarWidth - newTotalWidth
-    if (newEmptySpace >= BUTTON_WIDTH) {
-      // ✅ Места хватило с запасом 1W!
-      const newLayout: GroupLayout[] = layout.map((g) => ({
-        ...g,
-        rows: newRowsMap[g.id],
-      }))
-      return newLayout
-    }
-
     rowsMap = newRowsMap
   }
 
@@ -149,7 +149,7 @@ function expand(
   layout: GroupLayout[],
   toolbarWidth: number,
   totalSeparators: number,
-  _available: number,
+  btnWidth: number,
 ): GroupLayout[] {
   let rowsMap: Record<string, number> = {}
   for (const g of layout) {
@@ -180,13 +180,13 @@ function expand(
     const N = candidates.length
 
     // 3. Считаем порог для подъёма (с гистерезисом)
-    const neededSpace = N * BUTTON_WIDTH
-    const threshold = neededSpace + HYSTERESIS * BUTTON_WIDTH
+    const neededSpace = N * btnWidth
+    const threshold = neededSpace + HYSTERESIS * btnWidth
 
     // 4. Считаем текущую ширину и пустое место
     const currentWidth = layout.reduce((sum, g) => {
       const perRow = ceilDiv(g.buttonCount, rowsMap[g.id])
-      return sum + perRow * BUTTON_WIDTH
+      return sum + perRow * btnWidth
     }, 0) + totalSeparators + PADDING
 
     const emptySpace = toolbarWidth - currentWidth
@@ -205,7 +205,7 @@ function expand(
     // 7. Проверяем новую ширину
     const newWidth = layout.reduce((sum, g) => {
       const perRow = ceilDiv(g.buttonCount, newRowsMap[g.id])
-      return sum + perRow * BUTTON_WIDTH
+      return sum + perRow * btnWidth
     }, 0) + totalSeparators + PADDING
 
     if (newWidth <= toolbarWidth) {
