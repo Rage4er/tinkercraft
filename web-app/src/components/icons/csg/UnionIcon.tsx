@@ -10,7 +10,7 @@ export default function UnionIcon({ size, className }: { size?: number; classNam
         {/* Круг (пересекает одной вершиной) */}
         <circle cx="14" cy="14" r="8" />
         {/* Залитая область пересечения (бледнее) */}
-        <path d="M14 4v10a6 6 0 0 0 6 6H4V4h10z" fill="currentColor" fillOpacity={0.15} />
+        <path d="M14 4v10a6 6 0 0 0 6 6H4V4h10z" fill="currentColor" style={{ fillOpacity: 0.15 }} />
       </g>
     </IconBase>
   );

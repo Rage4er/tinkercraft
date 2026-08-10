@@ -10,7 +10,7 @@ export default function IntersectIcon({ size, className }: { size?: number; clas
         {/* Круг (только контур) */}
         <circle cx="14" cy="14" r="8" />
         {/* Залита только общая область пересечения (бледнее) */}
-        <path d="M14 4v10a6 6 0 0 0 6 6H4V4h10z" fill="currentColor" fillOpacity={0.2} />
+        <path d="M14 4v10a6 6 0 0 0 6 6H4V4h10z" fill="currentColor" style={{ fillOpacity: 0.2 }} />
       </g>
     </IconBase>
   );
