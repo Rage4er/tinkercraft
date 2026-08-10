@@ -45,6 +45,7 @@ export { default as FolderIcon } from "./file/FolderIcon";
 export { default as FitViewIcon } from "./navigation/FitViewIcon";
 export { default as HomeIcon } from "./navigation/HomeIcon";
 export { default as RulerIcon } from "./navigation/RulerIcon";
+export { default as PerspectiveIcon } from "./navigation/PerspectiveIcon";
 
 // Extra
 export { default as FilletIcon } from "./extra/FilletIcon";

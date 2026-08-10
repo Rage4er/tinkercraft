@@ -24,6 +24,7 @@ import {
   CloseIcon,
   RulerIcon,
   CubeIcon,
+  PerspectiveIcon,
 } from "./icons";
 import { useToolbarLayout } from "../hooks/useToolbarLayout";
 import type { ToolbarGroup } from "../utils/toolbar-layout";
@@ -178,9 +179,7 @@ export default function Toolbar({
         buttons={[
           <IconButton key="fit" icon={<FitViewIcon size={16} />} label="Fit" onClick={onFitView} tooltip={TOOLTIP_DATA.fit_view} />,
           <IconButton key="home" icon={<HomeIcon size={16} />} label="Home" onClick={onResetView} tooltip={TOOLTIP_DATA.home_view} />,
-          <button key="camera" className={`btn${cameraMode === "orthographic" ? " active" : ""}`} onClick={onToggleCamera} title={TOOLTIP_DATA.toggle_camera.label}>
-            {cameraMode === "perspective" ? "⬡ Persp" : "⬡ Ortho"}
-          </button>,
+          <IconButton key="camera" icon={<PerspectiveIcon size={16} />} label={cameraMode === "perspective" ? "Persp" : "Ortho"} onClick={onToggleCamera} tooltip={TOOLTIP_DATA.toggle_camera} buttonVariant={cameraMode === "orthographic" ? "active" : "default"} />,
         ]}
       />
       <div className="toolbar-separator" />
