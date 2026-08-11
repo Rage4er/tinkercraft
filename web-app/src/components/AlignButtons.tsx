@@ -58,7 +58,7 @@ export default function AlignButtons({
               {row.map((btn) => (
                 <IconButton
                   key={`${btn.axis}-${btn.anchor}`}
-                  icon={<AlignIcon size={24} />}
+                  icon={<AlignIcon size={32} />}
                   label={btn.label}
                   onClick={() => onAlign(btn.axis, btn.anchor)}
                   disabled={disabled}

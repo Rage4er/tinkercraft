@@ -35,7 +35,7 @@ export default function Section({
         <span className="flex-row" style={{ marginLeft: "auto", marginRight: 4 }}>
           {badge !== undefined && <span className="badge">{badge}</span>}
           <span className="text-muted-sm">
-            {open ? <ChevronUpIcon size={12} /> : <ChevronDownIcon size={12} />}
+            {open ? <ChevronUpIcon size={32} /> : <ChevronDownIcon size={32} />}
           </span>
         </span>
       </div>

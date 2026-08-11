@@ -36,7 +36,7 @@ export default function TextModal({
         aria-labelledby="text-modal-title"
       >
         <div className="text-modal-title" id="text-modal-title">
-          <PlusIcon size={16} /> 3D Текст
+          <PlusIcon size={32} /> 3D Текст
         </div>
         <input
           className="text-modal-input"
@@ -91,7 +91,7 @@ export default function TextModal({
             disabled={busy || !workerOk}
             onClick={handleAdd}
           >
-            <PlusIcon size={16} /> Добавить
+            <PlusIcon size={32} /> Добавить
           </button>
           <button className="btn" onClick={onClose}>
             Отмена

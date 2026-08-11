@@ -28,7 +28,7 @@ export default class ErrorBoundary extends Component<Props, State> {
             {this.state.error.message}
           </code>
           <button className="btn primary" onClick={this.handleRetry}>
-            <RotateIcon size={16} /> Повторить
+            <RotateIcon size={32} /> Повторить
           </button>
         </div>
       )

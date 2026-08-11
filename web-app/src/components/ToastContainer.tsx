@@ -6,9 +6,9 @@ import { useNotifications, type NotificationType } from "../store/notifications"
 import { CloseIcon, WarningIcon, InfoIcon } from "./icons";
 
 const STYLES: Record<NotificationType, { bg: string; icon: React.ReactNode }> = {
-  error: { bg: "#f38ba8", icon: <CloseIcon size={16} /> },
-  warning: { bg: "#f9e2af", icon: <WarningIcon size={16} /> },
-  info: { bg: "#89b4fa", icon: <InfoIcon size={16} /> },
+  error: { bg: "#f38ba8", icon: <CloseIcon size={32} /> },
+  warning: { bg: "#f9e2af", icon: <WarningIcon size={32} /> },
+  info: { bg: "#89b4fa", icon: <InfoIcon size={32} /> },
 };
 
 export default function ToastContainer() {

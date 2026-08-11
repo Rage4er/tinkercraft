@@ -60,8 +60,8 @@ export default function ProjectManagerModal({ onClose, onLoad, onSave, currentPr
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal-box" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
-          <span><FolderIcon size={18} /> Менеджер проектов</span>
-          <button className="btn" onClick={onClose} title="Закрыть"><CloseIcon size={16} /></button>
+          <span><FolderIcon size={32} /> Менеджер проектов</span>
+          <button className="btn" onClick={onClose} title="Закрыть"><CloseIcon size={32} /></button>
         </div>
 
         {/* Сохранить текущий */}
@@ -77,7 +77,7 @@ export default function ProjectManagerModal({ onClose, onLoad, onSave, currentPr
               onKeyDown={e => { if (e.key === 'Enter') handleSave() }}
             />
             <button className="btn primary" onClick={handleSave} disabled={saving || !newName.trim()}>
-              {saving ? '…' : <><SaveIcon size={16} /> Сохранить</>}
+              {saving ? '…' : <><SaveIcon size={32} /> Сохранить</>}
             </button>
           </div>
         </div>
@@ -106,7 +106,7 @@ export default function ProjectManagerModal({ onClose, onLoad, onSave, currentPr
                   </div>
                   <div className="proj-actions">
                     <button className="btn" onClick={() => handleLoad(p.id)}>
-                      <OpenIcon size={16} /> Открыть
+                      <OpenIcon size={32} /> Открыть
                     </button>
                     <button
                       className="btn danger"
@@ -114,7 +114,7 @@ export default function ProjectManagerModal({ onClose, onLoad, onSave, currentPr
                       onClick={() => handleDelete(p.id)}
                       title="Удалить проект"
                     >
-                      {deleting === p.id ? '…' : <DeleteIcon size={16} />}
+                      {deleting === p.id ? '…' : <DeleteIcon size={32} />}
                     </button>
                   </div>
                 </div>

@@ -89,7 +89,7 @@ export default function LeftPanel({
                   : onAddShape(s.type as ShapeType)
               }
             >
-              <span className="shape-icon">{s.icon({ size: 16 })}</span>
+              <span className="shape-icon">{s.icon({ size: 32 })}</span>
               <span className="shape-lbl">{s.label}</span>
             </button>
           ))}
@@ -164,7 +164,7 @@ export default function LeftPanel({
             className="btn btn-compact tl-filter-toggle"
             onClick={() => setFiltersOpen(!filtersOpen)}
           >
-            {filtersOpen ? <ChevronUpIcon size={14} /> : <ChevronDownIcon size={14} />} Фильтр
+            {filtersOpen ? <ChevronUpIcon size={32} /> : <ChevronDownIcon size={32} />} Фильтр
           </button>
           {filtersOpen && (
             <div className="tl-filter-panel">

@@ -83,14 +83,14 @@ export default function ComponentTree({ objects, selectedIds, onSelect, onRename
 
             {/* Иконка фигуры */}
             <span className="ct-icon">
-              {obj.shapeType === 'cube' && <CubeIcon size={14} />}
-              {obj.shapeType === 'sphere' && <SphereIcon size={14} />}
-              {obj.shapeType === 'cylinder' && <CylinderIcon size={14} />}
-              {obj.shapeType === 'cone' && <ConeIcon size={14} />}
-              {obj.shapeType === 'torus' && <TorusIcon size={14} />}
-              {obj.shapeType === 'prism' && <PrismIcon size={14} />}
-              {obj.shapeType === 'pyramid' && <PyramidIcon size={14} />}
-              {obj.shapeType === 'import_mesh' && <ImportIcon size={14} />}
+              {obj.shapeType === 'cube' && <CubeIcon size={32} />}
+              {obj.shapeType === 'sphere' && <SphereIcon size={32} />}
+              {obj.shapeType === 'cylinder' && <CylinderIcon size={32} />}
+              {obj.shapeType === 'cone' && <ConeIcon size={32} />}
+              {obj.shapeType === 'torus' && <TorusIcon size={32} />}
+              {obj.shapeType === 'prism' && <PrismIcon size={32} />}
+              {obj.shapeType === 'pyramid' && <PyramidIcon size={32} />}
+              {obj.shapeType === 'import_mesh' && <ImportIcon size={32} />}
             </span>
 
             {/* Имя (двойной клик = редактирование) */}
@@ -126,14 +126,14 @@ export default function ComponentTree({ objects, selectedIds, onSelect, onRename
               title={obj.visible ? 'Скрыть' : 'Показать'}
               onClick={e => { e.stopPropagation(); onToggleVis(obj.id) }}
             >
-              {obj.visible ? <EyeIcon size={14} /> : <EyeOffIcon size={14} />}
+              {obj.visible ? <EyeIcon size={32} /> : <EyeOffIcon size={32} />}
             </button>
             <button
               className="ct-btn ct-del"
               title="Удалить"
               onClick={e => { e.stopPropagation(); onDelete(obj.id) }}
             >
-              <DeleteIcon size={14} />
+              <DeleteIcon size={32} />
             </button>
           </div>
         )

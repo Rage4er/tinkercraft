@@ -30,44 +30,44 @@ export function opIcon(op: TinkerCraftOperation): React.ReactNode {
     case "add_shape":
       // Используем конкретную иконку для каждой фигуры
       switch (op.shapeType) {
-        case "cube": return <CubeIcon size={14} />;
-        case "sphere": return <SphereIcon size={14} />;
-        case "cylinder": return <CylinderIcon size={14} />;
-        case "cone": return <ConeIcon size={14} />;
-        case "torus": return <TorusIcon size={14} />;
-        case "prism": return <PrismIcon size={14} />;
-        case "pyramid": return <PyramidIcon size={14} />;
-        default: return <CubeIcon size={14} />;
+        case "cube": return <CubeIcon size={32} />;
+        case "sphere": return <SphereIcon size={32} />;
+        case "cylinder": return <CylinderIcon size={32} />;
+        case "cone": return <ConeIcon size={32} />;
+        case "torus": return <TorusIcon size={32} />;
+        case "prism": return <PrismIcon size={32} />;
+        case "pyramid": return <PyramidIcon size={32} />;
+        default: return <CubeIcon size={32} />;
       }
     case "import_mesh":
-      return <ImportIcon size={14} />;
+      return <ImportIcon size={32} />;
     case "move": {
       const k = (op as { kind?: string }).kind;
-      return k === "scale" ? <ScaleIcon size={14} /> : k === "rotate" ? <RotateIcon size={14} /> : <MoveIcon size={14} />;
+      return k === "scale" ? <ScaleIcon size={32} /> : k === "rotate" ? <RotateIcon size={32} /> : <MoveIcon size={32} />;
     }
     case "resize":
     case "resize_dims":
-      return <ScaleIcon size={14} />;
+      return <ScaleIcon size={32} />;
     case "fillet":
-      return <FilletIcon size={14} />;
+      return <FilletIcon size={32} />;
     case "mirror":
-      return <MirrorYZIcon size={14} />;
+      return <MirrorYZIcon size={32} />;
     case "align":
-      return <AlignIcon size={14} />;
+      return <AlignIcon size={32} />;
     case "group":
       return (op as { isIntersect?: boolean; subtractOp?: boolean }).isIntersect
-        ? <IntersectIcon size={14} />
+        ? <IntersectIcon size={32} />
         : (op as { subtractOp?: boolean }).subtractOp
-          ? <SubtractIcon size={14} />
-          : <UnionIcon size={14} />;
+          ? <SubtractIcon size={32} />
+          : <UnionIcon size={32} />;
     case "delete":
-      return <DeleteIcon size={14} />;
+      return <DeleteIcon size={32} />;
     case "visibility":
-      return <EyeIcon size={14} />;
+      return <EyeIcon size={32} />;
     case "color":
-      return <ColorIcon size={14} />;
+      return <ColorIcon size={32} />;
     case "rename":
-      return <TextIcon size={14} />;
+      return <TextIcon size={32} />;
     default:
       return "?";
   }
