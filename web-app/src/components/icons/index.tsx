@@ -230,6 +230,8 @@ export const MirrorXYIcon = (p: any) => (
 )
 
 /* ===== Группа 8 · Выравнивание ===== */
+/* ===== Группа 8 · Выравнивание (Z-up: X/Y горизонтальные, Z вертикальная) ===== */
+// X — горизонтальная ось экрана: вертикальная планка
 export const AlignXMinIcon = (p: any) => (
   <Icon {...p}>
     <path {...line} d="M14 10v44" />
@@ -242,7 +244,7 @@ export const AlignXCenterIcon = (p: any) => (
   <Icon {...p}>
     <path {...line} strokeDasharray="5 6" d="M32 10v44" />
     <Shape d="M17 16h30v10H17Z" />
-    <Shape d="M23 36h18v10H23Z" />
+    <Shape d="M22 36h20v10H22Z" />
   </Icon>
 )
 
@@ -254,20 +256,53 @@ export const AlignXMaxIcon = (p: any) => (
   </Icon>
 )
 
+// Y — горизонтальная ось глубины: диагональная планка, объекты касаются углом
+export const AlignYMinIcon = (p: any) => (
+  <Icon {...p}>
+    <path {...line} d="M17 23 43 49" />
+    <Shape d="M26 18h14v14H26Z" />
+    <Shape d="M36 33h9v9h-9Z" />
+  </Icon>
+)
+
 export const AlignYCenterIcon = (p: any) => (
   <Icon {...p}>
-    <path {...line} strokeDasharray="5 6" d="M10 32h44" />
-    <Shape d="M14 22h14v20H14Z" />
-    <Shape d="M36 26h14v12H36Z" />
+    <path {...line} strokeDasharray="5 6" d="M14 14 50 50" />
+    <Shape d="M19 19h14v14H19Z" />
+    <Shape d="M35.5 35.5h9v9h-9Z" />
+  </Icon>
+)
+
+export const AlignYMaxIcon = (p: any) => (
+  <Icon {...p}>
+    <path {...line} d="M21 15 47 41" />
+    <Shape d="M24 32h14v14H24Z" />
+    <Shape d="M19 22h9v9h-9Z" />
+  </Icon>
+)
+
+// Z — вертикальная ось: горизонтальная планка
+export const AlignZMinIcon = (p: any) => (
+  <Icon {...p}>
+    <path {...line} d="M10 50h44" />
+    <Shape d="M16 20h10v30H16Z" />
+    <Shape d="M36 30h10v20H36Z" />
   </Icon>
 )
 
 export const AlignZCenterIcon = (p: any) => (
   <Icon {...p}>
-    <path {...line} strokeDasharray="5 6" d="M32 8v48M8 32h48" />
-    <path d="M32 24l9 5-9 5-9-5Z" {...face(0.4)} />
-    <path d="M23 29l9 5v10l-9-5Z" {...face(0.25)} />
-    <path d="M41 29l-9 5v10l9-5Z" {...face(0.12)} />
+    <path {...line} strokeDasharray="5 6" d="M10 32h44" />
+    <Shape d="M16 17h10v30H16Z" />
+    <Shape d="M36 22h10v20H36Z" />
+  </Icon>
+)
+
+export const AlignZMaxIcon = (p: any) => (
+  <Icon {...p}>
+    <path {...line} d="M10 14h44" />
+    <Shape d="M16 14h10v30H16Z" />
+    <Shape d="M36 14h10v20H36Z" />
   </Icon>
 )
 
@@ -346,15 +381,6 @@ export const FilletIcon = (p: any) => (
   <Icon {...p}>
     <rect {...line} x="10" y="10" width="44" height="44" rx="6" />
     <path d="M10 26a16 16 0 0 1 16-16v16Z" {...face(0.22)} />
-  </Icon>
-)
-
-export const AlignIcon = (p: any) => (
-  <Icon {...p}>
-    <path {...line} d="M10 20h44M10 32h44M10 44h44" />
-    <rect x="18" y="16" width="8" height="8" {...face(0.22)} />
-    <rect x="38" y="28" width="8" height="8" {...face(0.22)} />
-    <rect x="28" y="40" width="8" height="8" {...face(0.22)} />
   </Icon>
 )
 

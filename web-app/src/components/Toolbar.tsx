@@ -25,6 +25,7 @@ import {
   RulerIcon,
   TCLogoIcon,
   PerspectiveIcon,
+  ThemeIcon,
 } from "./icons";
 import { useToolbarLayout } from "../hooks/useToolbarLayout";
 import type { ToolbarGroup } from "../utils/toolbar-layout";
@@ -229,7 +230,7 @@ export default function Toolbar({
         buttons={[
           <IconButton
             key="theme"
-            icon={theme === "dark" ? <span title="Сменить тему">☀</span> : <span title="Сменить тему">🌙</span>}
+            icon={<ThemeIcon size={32} />}
             label={theme === "dark" ? "Light" : "Dark"}
             onClick={onToggleTheme}
             tooltip={TOOLTIP_DATA.theme_toggle}

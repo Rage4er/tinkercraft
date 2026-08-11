@@ -6,7 +6,17 @@
 
 import IconButton from "./IconButton";
 import { TOOLTIP_DATA } from "../constants";
-import { AlignIcon } from "./icons";
+import {
+  AlignXMinIcon,
+  AlignXCenterIcon,
+  AlignXMaxIcon,
+  AlignYMinIcon,
+  AlignYCenterIcon,
+  AlignYMaxIcon,
+  AlignZMinIcon,
+  AlignZCenterIcon,
+  AlignZMaxIcon,
+} from "./icons";
 
 type AlignAxis = "X" | "Y" | "Z";
 type AlignAnchor = "min" | "center" | "max";
@@ -36,6 +46,22 @@ export default function AlignButtons({
     { axis: "Z", anchor: "max", label: "Z max", tooltipKey: "align_z_max" },
   ];
 
+  // Маппинг иконок по оси
+  const alignIcons: Record<string, React.ReactNode> = {
+    "X-min": <AlignXMinIcon size={32} />,
+    "X-center": <AlignXCenterIcon size={32} />,
+    "X-max": <AlignXMaxIcon size={32} />,
+    "Y-min": <AlignYMinIcon size={32} />,
+    "Y-center": <AlignYCenterIcon size={32} />,
+    "Y-max": <AlignYMaxIcon size={32} />,
+    "Z-min": <AlignZMinIcon size={32} />,
+    "Z-center": <AlignZCenterIcon size={32} />,
+    "Z-max": <AlignZMaxIcon size={32} />,
+  };
+
+  const getIcon = (axis: string, anchor: string) =>
+    alignIcons[`${axis}-${anchor}`] ?? <AlignXMinIcon size={32} />;
+
   // Распределяем кнопки по строкам
   const rows = maxRows ?? 1;
   const buttonsPerRow = Math.ceil(allButtons.length / rows);
@@ -58,7 +84,7 @@ export default function AlignButtons({
               {row.map((btn) => (
                 <IconButton
                   key={`${btn.axis}-${btn.anchor}`}
-                  icon={<AlignIcon size={32} />}
+                  icon={getIcon(btn.axis, btn.anchor)}
                   label={btn.label}
                   onClick={() => onAlign(btn.axis, btn.anchor)}
                   disabled={disabled}
@@ -79,7 +105,7 @@ export default function AlignButtons({
           {row.map((btn) => (
             <IconButton
               key={`${btn.axis}-${btn.anchor}`}
-              icon={<AlignIcon size={24} />}
+              icon={getIcon(btn.axis, btn.anchor)}
               onClick={() => onAlign(btn.axis, btn.anchor)}
               disabled={disabled}
               tooltip={TOOLTIP_DATA[btn.tooltipKey]}

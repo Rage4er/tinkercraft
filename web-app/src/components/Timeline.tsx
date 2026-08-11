@@ -14,7 +14,7 @@ import {
   RotateIcon,
   FilletIcon,
   MirrorYZIcon,
-  AlignIcon,
+  AlignXMinIcon,
   UnionIcon,
   SubtractIcon,
   IntersectIcon,
@@ -53,7 +53,7 @@ export function opIcon(op: TinkerCraftOperation): React.ReactNode {
     case "mirror":
       return <MirrorYZIcon size={32} />;
     case "align":
-      return <AlignIcon size={32} />;
+      return <AlignXMinIcon size={32} />;
     case "group":
       return (op as { isIntersect?: boolean; subtractOp?: boolean }).isIntersect
         ? <IntersectIcon size={32} />
