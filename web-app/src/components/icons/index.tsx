@@ -404,6 +404,20 @@ export const CubeIcon = (p: any) => (
   </Icon>
 )
 
+/* ===== Логотип: куб с T (левая грань) и C (правая грань) ===== */
+export const TCLogoIcon = (p: any) => (
+  <Icon {...p}>
+    <path d="M32 12 50 21l-18 9-18-9Z" {...face(0.4)} />
+    <path d="M14 21l18 9v22l-18-9Z" {...face(0.25)} />
+    <path d="M50 21l-18 9v22l18-9Z" {...face(0.12)} />
+    <g fill="none" stroke="currentColor" strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17 27.5 29 33.5" />        {/* T: перекладина */}
+      <path d="M23 30.5v13" />             {/* T: стойка */}
+      <path d="M44.7 38.9C42.4 42.4 38.6 44.3 36.3 43.1 33.9 41.9 33.9 38.1 36.3 34.6 38.6 31.1 42.4 29.2 44.7 30.4" /> {/* C */}
+    </g>
+  </Icon>
+)
+
 export const SphereIcon = (p: any) => (
   <Icon {...p}>
     <circle cx="32" cy="32" r="20" {...face(0.22)} />

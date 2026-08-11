@@ -23,7 +23,7 @@ import {
   ScaleIcon,
   CloseIcon,
   RulerIcon,
-  CubeIcon,
+  TCLogoIcon,
   PerspectiveIcon,
 } from "./icons";
 import { useToolbarLayout } from "../hooks/useToolbarLayout";
@@ -137,7 +137,7 @@ export default function Toolbar({
       role="toolbar"
       aria-label="Панель инструментов"
     >
-      <span className="toolbar-logo"><CubeIcon size={16} /> TinkerCraft{titleSuffix}</span>
+      <span className="toolbar-logo"><TCLogoIcon size={16} /> TinkerCraft{titleSuffix}</span>
 
       {/* Group 0: File */}
       <ToolbarRowSplit
