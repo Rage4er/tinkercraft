@@ -134,13 +134,11 @@ export const TOOLTIP_DATA: Record<string, TooltipData> = {
   mirror_xz: { label: 'Зеркало XZ', shortcut: 'N', description: 'Отражает объект относительно плоскости XZ' },
   mirror_xy: { label: 'Зеркало XY', shortcut: 'B', description: 'Отражает объект относительно плоскости XY' },
 
-  // --- Align ---
+  // --- Align (5 кнопок: X min/center/max, Y center, Z center) ---
   align_x_min: { label: 'X min', description: 'Выравнивание по минимальной координате X' },
   align_x_center: { label: 'X center', description: 'Выравнивание по центру по оси X' },
   align_x_max: { label: 'X max', description: 'Выравнивание по максимальной координате X' },
-  align_y_min: { label: 'Y min', description: 'Выравнивание по минимальной координате Y' },
   align_y_center: { label: 'Y center', description: 'Выравнивание по центру по оси Y' },
-  align_y_max: { label: 'Y max', description: 'Выравнивание по максимальной координате Y' },
   align_z_center: { label: 'Z center', description: 'Выравнивание по центру по оси Z' },
 
   // --- CSG operations ---

@@ -117,7 +117,7 @@ export default function Toolbar({
     { id: "gizmo", buttonCount: 4 },
     { id: "ruler", buttonCount: 1 },
     { id: "mirror", buttonCount: 3 },
-    { id: "align", buttonCount: 6 },
+    { id: "align", buttonCount: 5 },
     { id: "csg", buttonCount: 3 },
     { id: "theme", buttonCount: 1 },
     { id: "clear", buttonCount: 1 },

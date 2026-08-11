@@ -23,13 +23,13 @@ export default function AlignButtons({
   /** Количество строк для группы (из алгоритма layout) */
   maxRows?: number;
 }) {
+  // 5 кнопок выравнивания (X: min/center/max, Y: center, Z: center)
   const allButtons: { axis: AlignAxis; anchor: AlignAnchor; label: string; tooltipKey: string }[] = [
     { axis: "X", anchor: "min", label: "X min", tooltipKey: "align_x_min" },
     { axis: "X", anchor: "center", label: "X center", tooltipKey: "align_x_center" },
     { axis: "X", anchor: "max", label: "X max", tooltipKey: "align_x_max" },
-    { axis: "Y", anchor: "min", label: "Y min", tooltipKey: "align_y_min" },
     { axis: "Y", anchor: "center", label: "Y center", tooltipKey: "align_y_center" },
-    { axis: "Y", anchor: "max", label: "Y max", tooltipKey: "align_y_max" },
+    { axis: "Z", anchor: "center", label: "Z center", tooltipKey: "align_z_center" },
   ];
 
   // Распределяем кнопки по строкам
