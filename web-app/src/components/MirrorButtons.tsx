@@ -26,9 +26,9 @@ export default function MirrorButtons({
   maxRows?: number;
 }) {
   const planes: { plane: MirrorPlane; icon: React.ReactNode; label: string; tooltipKey: string }[] = [
-    { plane: "YZ", icon: <MirrorYZIcon size={variant === "full" ? 16 : 14} />, label: "YZ", tooltipKey: "mirror_yz" },
-    { plane: "XZ", icon: <MirrorXZIcon size={variant === "full" ? 16 : 14} />, label: "XZ", tooltipKey: "mirror_xz" },
-    { plane: "XY", icon: <MirrorXYIcon size={variant === "full" ? 16 : 14} />, label: "XY", tooltipKey: "mirror_xy" },
+    { plane: "YZ", icon: <MirrorYZIcon size={24} />, label: "YZ", tooltipKey: "mirror_yz" },
+    { plane: "XZ", icon: <MirrorXZIcon size={24} />, label: "XZ", tooltipKey: "mirror_xz" },
+    { plane: "XY", icon: <MirrorXYIcon size={24} />, label: "XY", tooltipKey: "mirror_xy" },
   ];
 
   // Распределяем кнопки по строкам

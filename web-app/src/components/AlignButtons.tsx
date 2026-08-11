@@ -54,7 +54,7 @@ export default function AlignButtons({
               {row.map((btn) => (
                 <IconButton
                   key={`${btn.axis}-${btn.anchor}`}
-                  icon={<AlignIcon size={16} />}
+                  icon={<AlignIcon size={24} />}
                   label={btn.label}
                   onClick={() => onAlign(btn.axis, btn.anchor)}
                   disabled={disabled}
@@ -75,7 +75,7 @@ export default function AlignButtons({
           {row.map((btn) => (
             <IconButton
               key={`${btn.axis}-${btn.anchor}`}
-              icon={<AlignIcon size={14} />}
+              icon={<AlignIcon size={24} />}
               onClick={() => onAlign(btn.axis, btn.anchor)}
               disabled={disabled}
               tooltip={TOOLTIP_DATA[btn.tooltipKey]}

@@ -26,9 +26,9 @@ export default function CsgButtons({
   maxRows?: number;
 }) {
   const ops: { op: CsgOp; icon: React.ReactNode; label: string; tooltipKey: string }[] = [
-    { op: "union", icon: <UnionIcon size={variant === "full" ? 16 : 14} />, label: "Объединение", tooltipKey: "csg_union" },
-    { op: "subtract", icon: <SubtractIcon size={variant === "full" ? 16 : 14} />, label: "Вычитание", tooltipKey: "csg_subtract" },
-    { op: "intersect", icon: <IntersectIcon size={variant === "full" ? 16 : 14} />, label: "Пересечение", tooltipKey: "csg_intersect" },
+    { op: "union", icon: <UnionIcon size={24} />, label: "Объединение", tooltipKey: "csg_union" },
+    { op: "subtract", icon: <SubtractIcon size={24} />, label: "Вычитание", tooltipKey: "csg_subtract" },
+    { op: "intersect", icon: <IntersectIcon size={24} />, label: "Пересечение", tooltipKey: "csg_intersect" },
   ];
 
   // Распределяем кнопки по строкам
