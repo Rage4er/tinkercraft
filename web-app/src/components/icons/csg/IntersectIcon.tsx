@@ -4,13 +4,16 @@ import { IconBase } from '../IconBase';
 export default function IntersectIcon({ size, className }: { size?: number; className?: string }) {
   return (
     <IconBase size={size} className={className}>
-      <g stroke="currentColor" strokeWidth={1.5} fill="none">
-        {/* Квадрат (только контур) */}
-        <rect x="4" y="4" width="14" height="14" />
-        {/* Круг (только контур) */}
-        <circle cx="14" cy="14" r="8" />
-        {/* Залита только общая область пересечения (бледнее) */}
-        <path d="M14 4v10a6 6 0 0 0 6 6H4V4h10z" fill="currentColor" style={{ fillOpacity: 0.2 }} />
+      {/* Залито только пересечение */}
+      <path
+        fill="currentColor"
+        style={{ fillOpacity: 0.22 }}
+        d="M24 24H40V40A16 16 0 0 1 24 24Z"
+      />
+      {/* Контуры квадрата и круга */}
+      <g fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
+        <rect x="8" y="24" width="32" height="32" />
+        <circle cx="40" cy="24" r="16" />
       </g>
     </IconBase>
   );
