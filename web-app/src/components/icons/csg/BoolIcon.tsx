@@ -1,9 +1,10 @@
 import React from 'react'
 
+// Координаты пересчитаны для viewBox 0 0 24 24 (масштаб 0.375 от 64x64)
 const SHAPES = {
-  union: 'M8 24H24A16 16 0 1 1 40 40V56H8Z',
-  subtract: 'M8 24H24A16 16 0 0 0 40 40V56H8Z',
-  intersect: 'M24 24H40V40A16 16 0 0 1 24 24Z',
+  union: 'M3 9H9A6 6 0 1 1 15 15V21H3Z',
+  subtract: 'M3 9H9A6 6 0 0 0 15 15V21H3Z',
+  intersect: 'M9 9H15V15A6 6 0 0 1 9 9Z',
 }
 
 export type BoolKind = keyof typeof SHAPES
@@ -21,7 +22,7 @@ interface BoolIconProps {
 export const BoolIcon: React.FC<BoolIconProps> = ({
   kind,
   size = 24,
-  strokeWidth = 3,
+  strokeWidth = 1.5,
   fillOpacity = 0.22,
   color = 'currentColor',
   className = '',
@@ -32,7 +33,7 @@ export const BoolIcon: React.FC<BoolIconProps> = ({
     xmlns="http://www.w3.org/2000/svg"
     width={size}
     height={size}
-    viewBox="0 0 64 64"
+    viewBox="0 0 24 24"
     color={color}
     className={className}
     aria-hidden="true"
@@ -47,8 +48,8 @@ export const BoolIcon: React.FC<BoolIconProps> = ({
       strokeLinecap="round"
       strokeLinejoin="round"
     >
-      <rect x={8} y={24} width={32} height={32} />
-      <circle cx={40} cy={24} r={16} />
+      <rect x={3} y={9} width={12} height={12} />
+      <circle cx={15} cy={9} r={6} />
     </g>
   </svg>
 )

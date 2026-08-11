@@ -5,15 +5,15 @@ export default function ScaleIcon({ size, className }: { size?: number; classNam
   return (
     <IconBase size={size} className={className}>
       <g fill="none" stroke="currentColor" strokeWidth={1.5}>
-        {/* Внешний квадрат — пунктир */}
-        <rect x="3" y="3" width="18" height="18" strokeDasharray="3,3" />
+        {/* Внешний квадрат — пунктир от края до края */}
+        <rect x="2" y="2" width="20" height="20" strokeDasharray="3,3" />
         {/* Внутренний квадрат — сплошной (в 2 раза меньше) */}
         <rect x="7" y="7" width="10" height="10" />
         {/* Стрелки по углам */}
-        <polyline points="3,12 7,12 7,8 12,8" />
-        <polyline points="12,8 17,8 17,13" />
+        <polyline points="2,12 7,12 7,7 12,7" />
+        <polyline points="12,7 17,7 17,12" />
         <polyline points="17,12 17,17 12,17" />
-        <polyline points="12,17 8,17 8,12" />
+        <polyline points="12,17 7,17 7,12" />
       </g>
     </IconBase>
   );
