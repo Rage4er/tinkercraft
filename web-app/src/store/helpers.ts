@@ -22,19 +22,12 @@ export function computeAABB(vertices: Float32Array): { min: Vec3; max: Vec3 } {
 
 /**
  * Вычисляет мировую ограничивающую рамку (AABB) объекта.
- * Для примитивов использует кэшированный локальный bbox + transform.position.
- * Для CSG/импорта — тоже локальный bbox + позиция (вершины уже центрированы).
  *
- * Важно: SceneObject.aabb хранит локальный bbox (вершины относительно центра фигуры).
- * Мировой bbox = локальный bbox + transform.position.
+ * SceneObject.aabb хранит мировой bbox (вершины уже содержат transform.position
+ * при создании через workerBuildShape; при moveObject aabb сдвигается на delta).
  */
 export function computeWorldAABB(obj: SceneObject): { min: Vec3; max: Vec3 } {
-  const local = obj.aabb ?? computeAABB(obj.vertices)
-  const p = obj.transform
-  return {
-    min: { x: local.min.x + p.x, y: local.min.y + p.y, z: local.min.z + p.z },
-    max: { x: local.max.x + p.x, y: local.max.y + p.y, z: local.max.z + p.z },
-  }
+  return obj.aabb ?? computeAABB(obj.vertices)
 }
 
 /** Returns bbox center for a vertex buffer (no mutation). */

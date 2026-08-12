@@ -614,7 +614,22 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     devLog('MIRROR:moveObject', { id, newTransform })
 
     // Update SceneObject — vertices unchanged, only transform changes
-    const newObj: SceneObject = { ...obj, transform: newTransform }
+    // IMPORTANT: Also update cached AABB — it was computed from vertices (world-space)
+    // at object creation time, but after move the bbox needs to shift by the same delta.
+    const oldWorldAabb = obj.aabb ?? computeAABB(obj.vertices)
+    const newWorldAabb = {
+      min: {
+        x: oldWorldAabb.min.x + dx,
+        y: oldWorldAabb.min.y + dy,
+        z: oldWorldAabb.min.z + dz,
+      },
+      max: {
+        x: oldWorldAabb.max.x + dx,
+        y: oldWorldAabb.max.y + dy,
+        z: oldWorldAabb.max.z + dz,
+      },
+    }
+    const newObj: SceneObject = { ...obj, transform: newTransform, aabb: newWorldAabb }
     const newObjects = { ...objects, [id]: newObj }
     const delta: Vec3 = {
       x: newTransform.x - obj.transform.x,
