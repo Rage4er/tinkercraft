@@ -19,6 +19,13 @@
 
 - **ALIGN — полное логирование**: Добавлено `devLog` во все этапы работы выравнивания: 1) `document-store.ts` — begin/filtered/bboxes/deltas/apply/workerSyncMesh/workerSyncObjects/op/done; 2) `rebuildOps.ts` — `applyAlignToTransform` выводит до/после; 3) `rebuild.ts` — `buildRebuildMeta` выводит операцию при undo/redo; 4) `worker-handlers.ts` — `rebuildScene` выводит применение дельты к каждому объекту. Префикс логов: `ALIGN:*`. Логи работают только в dev-режиме (`devLog` из `src/utils/debug.ts`).
 
+- **ALIGN — иконки в Timeline**: `opIcon` теперь маппит `axis` + `anchor` к конкретной иконке через `ALIGN_ICON_MAP` (9 иконок вместо одной `AlignXMinIcon`). `opLabel` показывает формат `Выровнять X → min`. (`Timeline.tsx`)
+
+### Changed
+
+- **ALIGN — якорь = последний выделенный (FIX ALIGN-3)**: Раньше якорь был `selectedIds[0]` — первый выделенный объект. Теперь якорь = `selectedIds[selectedIds.length - 1]` — последний выделенный (активный), как в Blender/Tinkercad. Якорный объект не двигается, остальные подстраиваются под него. `AlignOperation` теперь хранит `anchorId`. (`document-store.ts`, `types.ts`)
+- **ALIGN — deltas обязательный, anchorId добавлен (FIX ALIGN-5)**: `deltas` в `AlignOperation` больше не опциональный (`?`) — всегда вычисляется и сохраняется. Добавлено поле `anchorId` для идентификации якорного объекта. (`types.ts`)
+
 - **7.5.4 — Тесты цепочек операций (15 тестов)**: Создан `build-chain.test.ts` — тесты параметрического build tree из истории операций. 5 групп: 1) CSG-цепочки (union/subtract/intersect, вложенный CSG: куб → union с цилиндром → union со сферой); 2) Mirror + CSG (зеркало YZ/XZ → union со сферой, multi-select mirror); 3) Undo/Redo через CSG (откат через CSG удаляет boolean-ноду, redo воссоздаёт, глубокий undo/redo 5 шагов); 4) Jump to history (переход к середине цепочки, jump с delete объекта-child CSG, jump через delete → redo); 5) Edge cases (пустая история, несколько CSG с разными operation types, parentId chain, CSG с move). 220/220 тестов проекта проходят. (`build-chain.test.ts`)
 
 - **7.5.5 — Условные логи (devLog/devWarn)**: Создан `src/utils/debug.ts` — хелперы `devLog` и `devWarn` для условного логирования. Все `console.log('[MIRROR:*'` заменены на `devLog` — логи работают в dev (`pnpm dev`), отсутствуют в production (`pnpm build`). Заменено ~20 строк логов в 4 файлах: `history-tree.ts`, `rebuildOps.ts`, `document-store.ts`, `mirror-store.ts`. Формат изменён с конкатенации строк на object-логирование для лучшей читаемости.

@@ -912,35 +912,33 @@ export async function handleRebuildScene(msg: RebuildSceneMessage): Promise<void
           }
         }
       } else if (op.type === 'align') {
-        const deltas = op.deltas as Record<string, number> | undefined
-        devLog('ALIGN:worker', { opType: 'align', axis: op.axis, deltas, ids: op.ids })
-        if (deltas) {
-          const axis = (op.axis as string).toLowerCase() as 'x' | 'y' | 'z'
-          for (const [id, delta] of Object.entries(deltas)) {
-            devLog('ALIGN:worker:apply', { id, axis, delta })
-            const info = shapeInfos.get(id)
-            const t = currentTransforms.get(id)
-            if (t) {
-              const nt = applyAlignToTransform(t, axis, delta)
-              currentTransforms.set(id, nt)
-              if (info) {
-                const m = applyTransform(buildPrimitiveWithFillet(info.shapeType, info.params, info.filletRadius), nt)
-                setCached(id, m)
-              } else {
-                const dx = axis === 'x' ? delta : 0
-                const dy = axis === 'y' ? delta : 0
-                const dz = axis === 'z' ? delta : 0
-                const cm = cache.get(id)
-                if (cm) setCached(id, cm.transform([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, dx, dy, dz, 1]))
-              }
+        const deltas = op.deltas as Record<string, number>
+        devLog('ALIGN:worker', { opType: 'align', axis: op.axis, deltas, ids: op.ids, anchorId: (op as { anchorId?: string }).anchorId })
+        const axis = (op.axis as string).toLowerCase() as 'x' | 'y' | 'z'
+        for (const [id, delta] of Object.entries(deltas) as [string, number][]) {
+          devLog('ALIGN:worker:apply', { id, axis, delta })
+          const info = shapeInfos.get(id)
+          const t = currentTransforms.get(id)
+          if (t) {
+            const nt = applyAlignToTransform(t, axis, delta)
+            currentTransforms.set(id, nt)
+            if (info) {
+              const m = applyTransform(buildPrimitiveWithFillet(info.shapeType, info.params, info.filletRadius), nt)
+              setCached(id, m)
             } else {
+              const dx = axis === 'x' ? delta : 0
+              const dy = axis === 'y' ? delta : 0
+              const dz = axis === 'z' ? delta : 0
               const cm = cache.get(id)
-              if (cm) {
-                const dx = axis === 'x' ? delta : 0
-                const dy = axis === 'y' ? delta : 0
-                const dz = axis === 'z' ? delta : 0
-                setCached(id, cm.transform([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, dx, dy, dz, 1]))
-              }
+              if (cm) setCached(id, cm.transform([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, dx, dy, dz, 1]))
+            }
+          } else {
+            const cm = cache.get(id)
+            if (cm) {
+              const dx = axis === 'x' ? delta : 0
+              const dy = axis === 'y' ? delta : 0
+              const dz = axis === 'z' ? delta : 0
+              setCached(id, cm.transform([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, dx, dy, dz, 1]))
             }
           }
         }

@@ -15,6 +15,14 @@ import {
   FilletIcon,
   MirrorYZIcon,
   AlignXMinIcon,
+  AlignXCenterIcon,
+  AlignXMaxIcon,
+  AlignYMinIcon,
+  AlignYCenterIcon,
+  AlignYMaxIcon,
+  AlignZMinIcon,
+  AlignZCenterIcon,
+  AlignZMaxIcon,
   UnionIcon,
   SubtractIcon,
   IntersectIcon,
@@ -23,6 +31,16 @@ import {
   ColorIcon,
   TextIcon,
 } from "./icons";
+
+// ---- Icon map for align operations ----
+type AlignAxis = 'X' | 'Y' | 'Z';
+type AlignAnchor = 'min' | 'center' | 'max';
+
+const ALIGN_ICON_MAP: Record<AlignAxis, Record<AlignAnchor, React.ComponentType<{ size?: number }>>> = {
+  X: { min: AlignXMinIcon, center: AlignXCenterIcon, max: AlignXMaxIcon },
+  Y: { min: AlignYMinIcon, center: AlignYCenterIcon, max: AlignYMaxIcon },
+  Z: { min: AlignZMinIcon, center: AlignZCenterIcon, max: AlignZMaxIcon },
+};
 
 // ---- Operation icon ----
 export function opIcon(op: TinkerCraftOperation): React.ReactNode {
@@ -52,8 +70,12 @@ export function opIcon(op: TinkerCraftOperation): React.ReactNode {
       return <FilletIcon size={32} />;
     case "mirror":
       return <MirrorYZIcon size={32} />;
-    case "align":
-      return <AlignXMinIcon size={32} />;
+    case "align": {
+      const axis = (op as { axis?: AlignAxis }).axis ?? 'X' as AlignAxis;
+      const anchor = (op as { anchor?: AlignAnchor }).anchor ?? 'min' as AlignAnchor;
+      const Icon = ALIGN_ICON_MAP[axis]?.[anchor] ?? AlignXMinIcon;
+      return <Icon size={32} />;
+    }
     case "group":
       return (op as { isIntersect?: boolean; subtractOp?: boolean }).isIntersect
         ? <IntersectIcon size={32} />
@@ -91,7 +113,7 @@ export function opLabel(op: TinkerCraftOperation): string {
     case "mirror":
       return `Зеркало ${op.plane}`;
     case "align":
-      return `Выровнять ${op.axis}`;
+      return `Выровнять ${op.axis} → ${op.anchor}`;
     case "group":
       return (op as { isIntersect?: boolean; subtractOp?: boolean }).isIntersect
         ? "Пересечение"

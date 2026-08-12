@@ -50,8 +50,8 @@ function makeMirror(originalIds: string[], newIds: string[], plane: MirrorOperat
   return { type: 'mirror', originalIds, ids: newIds, plane }
 }
 
-function makeAlign(ids: string[], axis: AlignOperation['axis'], deltas: Record<string, number>): AlignOperation {
-  return { type: 'align', ids, axis, anchor: 'center', deltas }
+function makeAlign(ids: string[], axis: AlignOperation['axis'], deltas: Record<string, number>, anchorId?: string): AlignOperation {
+  return { type: 'align', ids, axis, anchor: 'center', deltas, anchorId: anchorId ?? ids[0] }
 }
 
 function makeDelete(ids: string[]): DeleteOperation {

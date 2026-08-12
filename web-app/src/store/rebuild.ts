@@ -96,16 +96,14 @@ export function buildRebuildMeta(ops: TinkerCraftOperation[]): {
 
     } else if (op.type === 'align') {
       const axis = op.axis.toLowerCase() as 'x' | 'y' | 'z'
-      const deltas = (op as AlignOperation & { deltas?: Record<string, number> }).deltas
+      const deltas = op.deltas
       devLog('ALIGN:rebuildMeta', { opId: op, axis, deltas, ids: op.ids })
-      if (deltas) {
-        for (const [id, delta] of Object.entries(deltas)) {
-          const t = transforms[id]
-          if (t && meta[id]) {
-            const nt = applyAlignToTransform(t as unknown as RebuildTransform, axis, delta) as TransformNR
-            transforms[id] = nt
-            meta[id] = { ...meta[id], transform: nt }
-          }
+      for (const [id, delta] of Object.entries(deltas)) {
+        const t = transforms[id]
+        if (t && meta[id]) {
+          const nt = applyAlignToTransform(t as unknown as RebuildTransform, axis, delta) as TransformNR
+          transforms[id] = nt
+          meta[id] = { ...meta[id], transform: nt }
         }
       }
 

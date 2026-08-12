@@ -78,7 +78,8 @@ export interface AlignOperation {
   ids: string[]
   axis: 'X' | 'Y' | 'Z'
   anchor: 'min' | 'center' | 'max'
-  deltas?: Record<string, number>
+  anchorId: string  // ID of the anchor object (last selected, the one others align to)
+  deltas: Record<string, number>  // { targetId: delta } — movement for each non-anchor object
 }
 
 export interface GroupOperation {

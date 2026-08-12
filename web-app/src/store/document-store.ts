@@ -747,17 +747,31 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const ids = selectedIds.filter(id => objects[id])
     devLog('ALIGN:filtered', { ids, totalSelected: selectedIds.length })
     if (ids.length < 2) { devLog('ALIGN:skip', 'less than 2 objects'); return }
+
+    // FIX (ALIGN-3): Anchor = last selected object (most recent click), not first.
+    // Matches Blender/Tinkercad UX: the last clicked object is the "active" anchor.
+    const anchorId = ids[ids.length - 1]
+    const targetIds = ids.filter(id => id !== anchorId)
+    devLog('ALIGN:anchor', { anchorId, targetIds })
+
     const ax = axis.toLowerCase() as 'x' | 'y' | 'z'
-    const bboxes = ids.map(id => ({ id, bbox: objects[id].aabb ?? computeAABB(objects[id].vertices) }))
+    const anchorObj = objects[anchorId]
+    const anchorAabb = anchorObj.aabb ?? computeAABB(anchorObj.vertices)
+
+    // Target value from anchor object only
     let targetValue: number
     switch (anchor) {
-      case 'min': targetValue = Math.min(...bboxes.map(b => b.bbox.min[ax])); break
-      case 'max': targetValue = Math.max(...bboxes.map(b => b.bbox.max[ax])); break
-      default: { const all = bboxes.flatMap(b => [b.bbox.min[ax], b.bbox.max[ax]]); targetValue = (Math.min(...all) + Math.max(...all)) / 2 }
+      case 'min': targetValue = anchorAabb.min[ax]; break
+      case 'max': targetValue = anchorAabb.max[ax]; break
+      default: targetValue = (anchorAabb.min[ax] + anchorAabb.max[ax]) / 2; break
     }
-    devLog('ALIGN:bboxes', { ax, targetValue, bboxes: bboxes.map(b => ({ id: b.id, min: b.bbox.min, max: b.bbox.max })) })
+    devLog('ALIGN:bboxes', { ax, targetValue, anchorId, anchorAabb })
+
+    // Compute deltas for all OTHER objects (move them toward the anchor)
     const deltas: Record<string, number> = {}
-    for (const { id, bbox } of bboxes) {
+    for (const id of targetIds) {
+      const obj = objects[id]
+      const bbox = obj.aabb ?? computeAABB(obj.vertices)
       const cur = anchor === 'min' ? bbox.min[ax] : anchor === 'max' ? bbox.max[ax] : (bbox.min[ax] + bbox.max[ax]) / 2
       deltas[id] = targetValue - cur
     }
@@ -766,7 +780,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     try {
       const t0 = performance.now()
       const newObjects = { ...objects }
-      for (const { id } of bboxes) {
+      for (const id of targetIds) {
         const delta = deltas[id]
         if (Math.abs(delta) < 0.001) { devLog('ALIGN:skip-zero', { id, delta }); continue }
         const obj = newObjects[id]
@@ -793,13 +807,13 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
           newObjects[id] = { ...obj, transform: nt }
         }
       }
-      const op: AlignOperation & { deltas: Record<string, number> } = { type: 'align', ids, axis, anchor, deltas }
+      const op: AlignOperation = { type: 'align', ids: targetIds, axis, anchor, deltas, anchorId }
       devLog('ALIGN:op', { op })
       const newOps = [...operations.slice(0, historyIndex), op]
       set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true, busy: false, lastCsgMs: performance.now() - t0 })
       cacheSnapshotWithTree(newOps.length, newObjects)
       invalidateMirrorCache()
-      devLog('ALIGN:done', { durationMs: performance.now() - t0, alignedIds: ids })
+      devLog('ALIGN:done', { durationMs: performance.now() - t0, anchorId, targetIds })
     } catch (e) { set({ busy: false }); console.error('alignSelected:', e); notify('Ошибка выравнивания', 'error') }
   },
 
