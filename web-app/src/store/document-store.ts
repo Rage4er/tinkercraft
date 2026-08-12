@@ -757,22 +757,33 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const ax = axis.toLowerCase() as 'x' | 'y' | 'z'
     const anchorObj = objects[anchorId]
     const anchorAabb = anchorObj.aabb ?? computeAABB(anchorObj.vertices)
+    const anchorT = anchorObj.transform
 
-    // Target value from anchor object only
+    // World-space bbox of anchor (local bbox + transform.position)
+    const anchorWorldMin = { x: anchorAabb.min.x + anchorT.x, y: anchorAabb.min.y + anchorT.y, z: anchorAabb.min.z + anchorT.z }
+    const anchorWorldMax = { x: anchorAabb.max.x + anchorT.x, y: anchorAabb.max.y + anchorT.y, z: anchorAabb.max.z + anchorT.z }
+
+    // Target value from anchor object only (world space)
     let targetValue: number
     switch (anchor) {
-      case 'min': targetValue = anchorAabb.min[ax]; break
-      case 'max': targetValue = anchorAabb.max[ax]; break
-      default: targetValue = (anchorAabb.min[ax] + anchorAabb.max[ax]) / 2; break
+      case 'min': targetValue = anchorWorldMin[ax]; break
+      case 'max': targetValue = anchorWorldMax[ax]; break
+      default: targetValue = (anchorWorldMin[ax] + anchorWorldMax[ax]) / 2; break
     }
-    devLog('ALIGN:bboxes', { ax, targetValue, anchorId, anchorAabb })
+    devLog('ALIGN:bboxes', { ax, targetValue, anchorId, anchorWorldMin, anchorWorldMax })
 
     // Compute deltas for all OTHER objects (move them toward the anchor)
     const deltas: Record<string, number> = {}
     for (const id of targetIds) {
       const obj = objects[id]
       const bbox = obj.aabb ?? computeAABB(obj.vertices)
-      const cur = anchor === 'min' ? bbox.min[ax] : anchor === 'max' ? bbox.max[ax] : (bbox.min[ax] + bbox.max[ax]) / 2
+      const t = obj.transform
+
+      // World-space current coordinate (local bbox + transform.position)
+      const curMin = bbox.min[ax] + t[ax]
+      const curMax = bbox.max[ax] + t[ax]
+      const cur = anchor === 'min' ? curMin : anchor === 'max' ? curMax : (curMin + curMax) / 2
+
       deltas[id] = targetValue - cur
     }
     devLog('ALIGN:deltas', { deltas })
