@@ -742,9 +742,11 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   alignSelected: async (axis, anchor) => {
     if (get().busy) return
     const { selectedIds, objects, operations, historyIndex } = get()
+    devLog('ALIGN:begin', { axis, anchor, selectedIds })
     if (selectedIds.length === 0) { notify('No objects selected', 'warning'); return }
     const ids = selectedIds.filter(id => objects[id])
-    if (ids.length < 2) return
+    devLog('ALIGN:filtered', { ids, totalSelected: selectedIds.length })
+    if (ids.length < 2) { devLog('ALIGN:skip', 'less than 2 objects'); return }
     const ax = axis.toLowerCase() as 'x' | 'y' | 'z'
     const bboxes = ids.map(id => ({ id, bbox: objects[id].aabb ?? computeAABB(objects[id].vertices) }))
     let targetValue: number
@@ -753,34 +755,35 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       case 'max': targetValue = Math.max(...bboxes.map(b => b.bbox.max[ax])); break
       default: { const all = bboxes.flatMap(b => [b.bbox.min[ax], b.bbox.max[ax]]); targetValue = (Math.min(...all) + Math.max(...all)) / 2 }
     }
+    devLog('ALIGN:bboxes', { ax, targetValue, bboxes: bboxes.map(b => ({ id: b.id, min: b.bbox.min, max: b.bbox.max })) })
     const deltas: Record<string, number> = {}
     for (const { id, bbox } of bboxes) {
       const cur = anchor === 'min' ? bbox.min[ax] : anchor === 'max' ? bbox.max[ax] : (bbox.min[ax] + bbox.max[ax]) / 2
       deltas[id] = targetValue - cur
     }
+    devLog('ALIGN:deltas', { deltas })
     set({ busy: true })
     try {
       const t0 = performance.now()
       const newObjects = { ...objects }
       for (const { id } of bboxes) {
         const delta = deltas[id]
-        if (Math.abs(delta) < 0.001) continue
+        if (Math.abs(delta) < 0.001) { devLog('ALIGN:skip-zero', { id, delta }); continue }
         const obj = newObjects[id]
         const dx = axis === 'X' ? delta : 0, dy = axis === 'Y' ? delta : 0, dz = axis === 'Z' ? delta : 0
         const nt: TransformNR = { ...obj.transform, x: obj.transform.x + dx, y: obj.transform.y + dy, z: obj.transform.z + dz }
+        devLog('ALIGN:apply', { id, axis, delta, oldPos: obj.transform, newPos: nt })
         // FIX (CRIT-CSG-3): For CSG results and imported meshes, sync via workerSyncMesh.
         // For regular primitives, use workerSyncObjects (updates only transform in cache,
         // avoids full geometry rebuild via workerBuildShape).
         const isImport = obj.shapeType === 'import_mesh'
         const isCsgResult = !isImport && (!obj.params || Object.keys(obj.params).length === 0)
         if (isCsgResult || isImport) {
+          devLog('ALIGN:workerSyncMesh', { id })
           await workerSyncMesh(id, obj.vertices, obj.indices, nt).catch(() => { })
-          // Update the SceneObject with new transform (mesh geometry unchanged, only position shifted)
           newObjects[id] = { ...obj, transform: nt }
         } else {
-          // PERF: Use workerSyncObjects instead of workerBuildShape — align only changes position,
-          // geometry stays the same. workerSyncObjects rebuilds the primitive in worker cache
-          // with the new transform without extracting mesh data.
+          devLog('ALIGN:workerSyncObjects', { id })
           await workerSyncObjects([{
             objId: id,
             shapeType: obj.shapeType,
@@ -791,10 +794,12 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         }
       }
       const op: AlignOperation & { deltas: Record<string, number> } = { type: 'align', ids, axis, anchor, deltas }
+      devLog('ALIGN:op', { op })
       const newOps = [...operations.slice(0, historyIndex), op]
       set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true, busy: false, lastCsgMs: performance.now() - t0 })
       cacheSnapshotWithTree(newOps.length, newObjects)
       invalidateMirrorCache()
+      devLog('ALIGN:done', { durationMs: performance.now() - t0, alignedIds: ids })
     } catch (e) { set({ busy: false }); console.error('alignSelected:', e); notify('Ошибка выравнивания', 'error') }
   },
 

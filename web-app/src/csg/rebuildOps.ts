@@ -119,6 +119,7 @@ export function applyAlignToTransform(
   axis: 'x' | 'y' | 'z',
   delta: number,
 ): RebuildTransform {
+  devLog('ALIGN:applyAlignToTransform', { axis, delta, before: t, after: { ...t, [axis]: t[axis] + delta } })
   return { ...t, [axis]: t[axis] + delta }
 }
 

@@ -23,6 +23,7 @@ import {
   getNode,
 } from '../csg/history-tree'
 import { notify } from './notifications'
+import { devLog } from '../utils/debug'
 
 /** Metadata accumulated over the operation chain. Exported for testing. */
 export interface RebuildMeta {
@@ -96,6 +97,7 @@ export function buildRebuildMeta(ops: TinkerCraftOperation[]): {
     } else if (op.type === 'align') {
       const axis = op.axis.toLowerCase() as 'x' | 'y' | 'z'
       const deltas = (op as AlignOperation & { deltas?: Record<string, number> }).deltas
+      devLog('ALIGN:rebuildMeta', { opId: op, axis, deltas, ids: op.ids })
       if (deltas) {
         for (const [id, delta] of Object.entries(deltas)) {
           const t = transforms[id]

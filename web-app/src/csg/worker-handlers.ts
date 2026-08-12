@@ -9,6 +9,7 @@ import { FILLET_EPSILON, FILLET_MIN_RADIUS } from '../constants.ts'
 import type { RebuildTransform } from './rebuildOps'
 import { applyMoveDelta, applyMirrorToTransform, applyAlignToTransform } from './rebuildOps'
 import type { MirrorOperation } from './types'
+import { devLog } from '../utils/debug'
 
 // --- Type definitions (moved from worker.ts to avoid circular deps) ---
 
@@ -912,9 +913,11 @@ export async function handleRebuildScene(msg: RebuildSceneMessage): Promise<void
         }
       } else if (op.type === 'align') {
         const deltas = op.deltas as Record<string, number> | undefined
+        devLog('ALIGN:worker', { opType: 'align', axis: op.axis, deltas, ids: op.ids })
         if (deltas) {
           const axis = (op.axis as string).toLowerCase() as 'x' | 'y' | 'z'
           for (const [id, delta] of Object.entries(deltas)) {
+            devLog('ALIGN:worker:apply', { id, axis, delta })
             const info = shapeInfos.get(id)
             const t = currentTransforms.get(id)
             if (t) {
