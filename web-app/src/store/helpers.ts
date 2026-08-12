@@ -23,10 +23,34 @@ export function computeAABB(vertices: Float32Array): { min: Vec3; max: Vec3 } {
 /**
  * Вычисляет мировую ограничивающую рамку (AABB) объекта.
  *
- * SceneObject.aabb хранит мировой bbox (вершины уже содержат transform.position
- * при создании через workerBuildShape; при moveObject aabb сдвигается на delta).
+ * Для примитивов — из params + transform.position (надёжно, не зависит от вершин).
+ * Для CSG/import — из кэшированного aabb (вершины уже содержат translate).
+ *
+ * Важно: obj.aabb кэшируется при создании, но НЕ обновляется при moveObject.
+ * Поэтому для примитивов считаем bbox заново из params.
  */
 export function computeWorldAABB(obj: SceneObject): { min: Vec3; max: Vec3 } {
+  // 1. Примитивы — считаем из params + transform (надёжно)
+  if (obj.params && obj.params.width !== undefined && obj.params.height !== undefined && obj.params.depth !== undefined) {
+    const w = obj.params.width / 2
+    const h = obj.params.height / 2
+    const d = obj.params.depth / 2
+    const p = obj.transform
+    return {
+      min: { x: p.x - w, y: p.y - h, z: p.z - d },
+      max: { x: p.x + w, y: p.y + h, z: p.z + d },
+    }
+  }
+  // 2. Сфера
+  if (obj.params && obj.params.radius !== undefined) {
+    const r = obj.params.radius
+    const p = obj.transform
+    return {
+      min: { x: p.x - r, y: p.y - r, z: p.z - r },
+      max: { x: p.x + r, y: p.y + r, z: p.z + r },
+    }
+  }
+  // 3. CSG / import — используем кэшированный aabb (вершины уже содержат translate)
   return obj.aabb ?? computeAABB(obj.vertices)
 }
 
