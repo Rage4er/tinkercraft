@@ -31,8 +31,8 @@ import { downloadStl } from '../io/stl-export'
 import { openStlFilePicker, parseStlFile } from '../io/stl-import'
 import { autosaveSession, restoreSession } from '../io/autosave'
 
-export { computeAABB, extractAndCenterInPlace, extractAndCenterGetAABB } from './helpers'
-import { computeAABB, extractAndCenterInPlace, extractAndCenterGetAABB, makeObject, nextId, colorForIndex } from './helpers'
+export { computeAABB, extractAndCenterInPlace, extractAndCenterGetAABB, computeWorldAABB } from './helpers'
+import { computeAABB, extractAndCenterInPlace, extractAndCenterGetAABB, computeWorldAABB, makeObject, nextId, colorForIndex } from './helpers'
 import type { ClipEntry } from './helpers'
 import type { DocumentStore } from './types'
 import { rebuildFromHistory, rebuildBuildTree } from './rebuild'
@@ -756,35 +756,45 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
 
     const ax = axis.toLowerCase() as 'x' | 'y' | 'z'
     const anchorObj = objects[anchorId]
-    const anchorAabb = anchorObj.aabb ?? computeAABB(anchorObj.vertices)
-    const anchorT = anchorObj.transform
-
-    // World-space bbox of anchor (local bbox + transform.position)
-    const anchorWorldMin = { x: anchorAabb.min.x + anchorT.x, y: anchorAabb.min.y + anchorT.y, z: anchorAabb.min.z + anchorT.z }
-    const anchorWorldMax = { x: anchorAabb.max.x + anchorT.x, y: anchorAabb.max.y + anchorT.y, z: anchorAabb.max.z + anchorT.z }
+    const anchorWorldAabb = computeWorldAABB(anchorObj)
 
     // Target value from anchor object only (world space)
     let targetValue: number
     switch (anchor) {
-      case 'min': targetValue = anchorWorldMin[ax]; break
-      case 'max': targetValue = anchorWorldMax[ax]; break
-      default: targetValue = (anchorWorldMin[ax] + anchorWorldMax[ax]) / 2; break
+      case 'min': targetValue = anchorWorldAabb.min[ax]; break
+      case 'max': targetValue = anchorWorldAabb.max[ax]; break
+      default: targetValue = (anchorWorldAabb.min[ax] + anchorWorldAabb.max[ax]) / 2; break
     }
-    devLog('ALIGN:bboxes', { ax, targetValue, anchorId, anchorWorldMin, anchorWorldMax })
+    devLog('ALIGN:bboxes', {
+      ax,
+      targetValue,
+      anchorId,
+      anchorWorldAabb,
+    })
 
     // Compute deltas for all OTHER objects (move them toward the anchor)
     const deltas: Record<string, number> = {}
     for (const id of targetIds) {
       const obj = objects[id]
-      const bbox = obj.aabb ?? computeAABB(obj.vertices)
-      const t = obj.transform
+      const worldAabb = computeWorldAABB(obj)
 
-      // World-space current coordinate (local bbox + transform.position)
-      const curMin = bbox.min[ax] + t[ax]
-      const curMax = bbox.max[ax] + t[ax]
+      // World-space current coordinate
+      const curMin = worldAabb.min[ax]
+      const curMax = worldAabb.max[ax]
       const cur = anchor === 'min' ? curMin : anchor === 'max' ? curMax : (curMin + curMax) / 2
 
-      deltas[id] = targetValue - cur
+      const delta = targetValue - cur
+      deltas[id] = delta
+
+      devLog('ALIGN:bboxes', {
+        ax,
+        targetValue,
+        anchorId,
+        anchorWorldAabb,
+        targetAabb: worldAabb,
+        cur,
+        delta,
+      })
     }
     devLog('ALIGN:deltas', { deltas })
     set({ busy: true })

@@ -11,6 +11,8 @@
 
 ### Fixed
 
+- **ALIGNS: AABB мировые координаты (FIX ALIGN-8)**: Создана `computeWorldAABB(obj)` в `helpers.ts` — возвращает мировой bbox (локальный + transform.position). Старая `computeAABB(vertices)` оставлена для CSG (вершины уже центрированы). `alignSelected` теперь использует `computeWorldAABB` вместо ручного сложения. Добавлен подробный лог: `anchorWorldAabb`, `targetAabb`, `cur`, `delta`. (`helpers.ts`, `document-store.ts`)
+
 - **DUPLICATE KEYS (Timeline)**: Исправлен дублирующийся ключ `resize_dims_obj_1` в `Timeline.tsx`. Ключ генерировался как `${op.type}_${op.id}`, что приводило к коллизиям при нескольких операциях одного типа над одним объектом. Добавлен индекс `i` в ключ: `${op.type}_${op.id}_${i}`. (`Timeline.tsx`)
 
 - **CYCLE-CSG (Cannot create cycle in tree)**: Добавлена проверка существования детей перед созданием boolean-узла в `rebuildBuildTree` (`rebuild.ts`). При `jumpToHistory` / `loadFromProject` / `undo/redo` дети CSG-операции (`op.ids[0]`, `op.ids[1]`) могут быть удалены из истории, но остаться в операции `group`. Раньше `createBooleanNode` создавался с отсутствующими детьми → ошибка `Cannot create cycle in tree` из `isAncestor` проверки. Теперь: 1) проверяется `getNode(childAId)` и `getNode(childBId)` — если один из детей отсутствует, операция пропускается с `console.warn`; 2) улучшено логирование ошибки при создании boolean-узла — выводится childA/childB и операция; 3) цикл `for` использует `continue` вместо `break` для корректной обработки оставшихся операций. (`rebuild.ts`)
