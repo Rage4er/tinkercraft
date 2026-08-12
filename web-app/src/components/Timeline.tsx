@@ -146,8 +146,8 @@ export default function Timeline({
     <div className="tl-list" ref={listRef}>
       {visible.map(({ op, i }) => {
         const idx = i + 1;
-        // FIX (MED-18-35): Use composite key (type+index) — most ops have id, others fall back to index
-        const key = 'id' in op ? `${op.type}_${(op as { id?: string }).id}` : `${op.type}_${i}`
+        // FIXED: Include index in key to prevent duplicates when same op type targets same object
+        const key = 'id' in op ? `${op.type}_${(op as { id?: string }).id}_${i}` : `${op.type}_${i}`
         return (
           <div
             key={key}
