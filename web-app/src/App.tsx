@@ -416,12 +416,6 @@ export default function App() {
     [firstSelected, resizeObject],
   );
 
-  const titleSuffix = fileName
-    ? ` — ${fileName}${modified ? " •" : ""}`
-    : modified
-      ? " — без имени •"
-      : "";
-
   return (
     <div className="app">
       <ToastContainer />
@@ -464,7 +458,6 @@ export default function App() {
 
       {/* ── TOOLBAR ── */}
       <Toolbar
-        titleSuffix={titleSuffix}
         objectCount={objectList.length}
         selectedCount={selectedIds.length}
         canUndo={canUndo}
@@ -620,6 +613,7 @@ export default function App() {
             filletRadius={filletRadius}
             objectList={objectList}
             operationsLength={operations.length}
+            fileName={fileName}
             onSetFilletRadius={setFilletRadius}
             onMoveAxis={handleMoveAxis}
             onRotAxis={handleRotAxis}

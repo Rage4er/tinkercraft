@@ -17,6 +17,7 @@ export default function PropertiesPanel({
   filletRadius,
   objectList,
   operationsLength,
+  fileName,
   onSetFilletRadius,
   onMoveAxis,
   onRotAxis,
@@ -42,6 +43,7 @@ export default function PropertiesPanel({
   filletRadius: number;
   objectList: SceneObject[];
   operationsLength: number;
+  fileName: string | null;
   onSetFilletRadius: (v: number) => void;
   onMoveAxis: (axis: "x" | "y" | "z", val: number) => void;
   onRotAxis: (axis: "rotX" | "rotY" | "rotZ", val: number) => void;
@@ -101,6 +103,15 @@ export default function PropertiesPanel({
         {/* Проект */}
         <div className="csg-group margin-8-0">
           <div className="csg-group-title">Проект</div>
+          {fileName ? (
+            <div className="text-sm text-muted" style={{ padding: "4px 12px 8px" }}>
+              📄 <strong>{fileName}</strong>
+            </div>
+          ) : (
+            <div className="text-sm text-muted" style={{ padding: "4px 12px 8px" }}>
+              ⚠ Несохранённый проект
+            </div>
+          )}
           <button
             className="btn btn-full"
             onClick={onShowProjects}

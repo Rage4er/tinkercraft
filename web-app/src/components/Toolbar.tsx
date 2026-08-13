@@ -31,7 +31,6 @@ import { useToolbarLayout } from "../hooks/useToolbarLayout";
 import type { ToolbarGroup } from "../utils/toolbar-layout";
 
 export default function Toolbar({
-  titleSuffix,
   objectCount,
   selectedCount,
   canUndo,
@@ -70,7 +69,6 @@ export default function Toolbar({
   onToggleTheme,
   onClearScene,
 }: {
-  titleSuffix: string;
   objectCount: number;
   selectedCount: number;
   canUndo: boolean;
@@ -79,12 +77,12 @@ export default function Toolbar({
   busy: boolean;
   workerOk: boolean;
   cameraMode: "perspective" | "orthographic";
-  gizmoMode: GizmoMode;
+  gizmoMode: "translate" | "rotate" | "scale" | "none";
   rulerActive: boolean;
   canMirror: boolean;
   canAlign: boolean;
   canCsg: boolean;
-  nonManifoldSelected?: boolean;
+  nonManifoldSelected: boolean;
   theme: "dark" | "light";
   onOpen: () => void;
   onSave: () => void;
@@ -99,11 +97,11 @@ export default function Toolbar({
   onFitView: () => void;
   onResetView: () => void;
   onToggleCamera: () => void;
-  onGizmo: (mode: GizmoMode) => void;
+  onGizmo: (mode: "translate" | "rotate" | "scale" | "none") => void;
   onToggleRuler: () => void;
   onMirror: (plane: "XY" | "XZ" | "YZ") => void;
-  onPreviewMirror?: (plane: "XY" | "XZ" | "YZ") => void;
-  onPreviewMirrorEnd?: () => void;
+  onPreviewMirror: (plane: "XY" | "XZ" | "YZ", ids: string[]) => void;
+  onPreviewMirrorEnd: () => void;
   onAlign: (axis: "X" | "Y" | "Z", anchor: "min" | "center" | "max") => void;
   onCsg: (op: "union" | "subtract" | "intersect") => void;
   onToggleTheme: () => void;
@@ -138,7 +136,7 @@ export default function Toolbar({
       role="toolbar"
       aria-label="Панель инструментов"
     >
-      <span className="toolbar-logo"><TCLogoIcon size={34} /> TinkerCraft{titleSuffix}</span>
+      <span className="toolbar-logo"><TCLogoIcon size={34} /> TinkerCraft</span>
 
       {/* Group 0: File */}
       <ToolbarRowSplit
