@@ -322,7 +322,7 @@ web-app/src/components/icons/
 - ✅ `ErrorBoundary.tsx` — экран ошибки
 - ✅ `WebGLFallback.tsx` — WebGL fallback
 
-##### 🔲 Остаточные задачи
+##### ✅ Остаточные задачи
 
 | Задача | Статус |
 |--------|--------|
