@@ -11,6 +11,8 @@
 
 ### Fixed
 
+- **DIAG:* логи → dev mode**: Все `console.log` с префиксом `[DIAG:*]` в `worker-handlers.ts` и `document-store.ts` переключены на условное логирование через `import.meta.env?.DEV`. Логи работают только в dev-режиме (`pnpm dev`), отсутствуют в production (`pnpm build`). Не удалены — пригодятся для отладки. (`worker-handlers.ts`, `document-store.ts`)
+
 - **ALIGN: aabb не обновлялся при moveObject (CRITICAL FIX)**: При перемещении объекта gizmo'ом `moveObject` обновлял `transform`, но не `aabb`. `aabb` оставался от момента создания (мировой bbox на позиции 0,0,0). `ALIGN` брал этот старый bbox → delta считалась неправильно → объекты улетали. Исправление: 1) `moveObject` теперь сдвигает `aabb` на тот же delta; 2) `computeWorldAABB` возвращает `obj.aabb` напрямую (он уже мировой, вершины содержат translate от `handleBuildShape`). (`document-store.ts`, `helpers.ts`)
 
 - **ALIGNS: AABB мировые координаты (FIX ALIGN-8)**: Создана `computeWorldAABB(obj)` в `helpers.ts` — возвращает мировой bbox (локальный + transform.position). Старая `computeAABB(vertices)` оставлена для CSG (вершины уже центрированы). `alignSelected` теперь использует `computeWorldAABB` вместо ручного сложения. Добавлен подробный лог: `anchorWorldAabb`, `targetAabb`, `cur`, `delta`. (`helpers.ts`, `document-store.ts`)
@@ -27,7 +29,11 @@
 
 ### Changed
 
-- **ALIGN — якорь = последний выделенный (FIX ALIGN-3)**: Раньше якорь был `selectedIds[0]` — первый выделенный объект. Теперь якорь = `selectedIds[selectedIds.length - 1]` — последний выделенный (активный), как в Blender/Tinkercad. Якорный объект не двигается, остальные подстраиваются под него. `AlignOperation` теперь хранит `anchorId`. (`document-store.ts`, `types.ts`)
+- **UX: имя проекта перенесено в PropertiesPanel**: Убран `titleSuffix` ("— без имени •") из Toolbar. Имя проекта теперь показывается в PropertiesPanel (когда ничего не выделено): `📄 проект.doodle` или `⚠ Несохранённый проект`. Кнопки "Менеджер проектов" и "Быстрое сохранение" всегда видны в панели свойств. (`App.tsx`, `Toolbar.tsx`, `PropertiesPanel.tsx`)
+
+- **Timeline: иконки 32px больше не накладываются на текст**: `.tl-icon` width 14px→32px, `font-size` 11px→24px. `.tl-label` добавлен `padding-left: 8px`. (`App.css`)
+
+- **ALIGN: подробные тултипы для всех 9 кнопок**: Каждая кнопка показывает направление (⬅⟷➡), порядок действий, ожидаемый результат. Явно указано: первая выделенная фигура двигается, вторая — якорь. (`constants.ts`)
 - **ALIGN — deltas обязательный, anchorId добавлен (FIX ALIGN-5)**: `deltas` в `AlignOperation` больше не опциональный (`?`) — всегда вычисляется и сохраняется. Добавлено поле `anchorId` для идентификации якорного объекта. (`types.ts`)
 
 - **7.5.4 — Тесты цепочек операций (15 тестов)**: Создан `build-chain.test.ts` — тесты параметрического build tree из истории операций. 5 групп: 1) CSG-цепочки (union/subtract/intersect, вложенный CSG: куб → union с цилиндром → union со сферой); 2) Mirror + CSG (зеркало YZ/XZ → union со сферой, multi-select mirror); 3) Undo/Redo через CSG (откат через CSG удаляет boolean-ноду, redo воссоздаёт, глубокий undo/redo 5 шагов); 4) Jump to history (переход к середине цепочки, jump с delete объекта-child CSG, jump через delete → redo); 5) Edge cases (пустая история, несколько CSG с разными operation types, parentId chain, CSG с move). 220/220 тестов проекта проходят. (`build-chain.test.ts`)

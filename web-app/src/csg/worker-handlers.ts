@@ -572,14 +572,14 @@ export async function handleBuildImportedMesh(msg: BuildImportedMeshMessage): Pr
   const t0 = performance.now()
   const verts = new Float32Array(msg.vertices)
   const tris = new Uint32Array(msg.indices)
-  console.log(`[DIAG:handleBuildImportedMesh] objId=${msg.objId} verts=${verts.length} tris=${tris.length}`)
+  if (import.meta.env.DEV) console.log(`[DIAG:handleBuildImportedMesh] objId=${msg.objId} verts=${verts.length} tris=${tris.length}`)
   try {
     const m = new wasm.Manifold({
       numProp: 3,
       vertProperties: verts,
       triVerts: tris,
     })
-    console.log(`[DIAG:handleBuildImportedMesh] Manifold created successfully for ${msg.objId}`)
+    if (import.meta.env.DEV) console.log(`[DIAG:handleBuildImportedMesh] Manifold created successfully for ${msg.objId}`)
     setCached(msg.objId, m)
     const mesh = extractMesh(m)
     safePostMessage(
@@ -1414,14 +1414,14 @@ export async function handleSyncMesh(msg: SyncMeshMessage): Promise<void> {
   const verts = new Float32Array(msg.vertices)
   const tris = new Uint32Array(msg.indices)
   const hasRotationOrScale = hasSR(msg.transform)
-  console.log(`[DIAG:handleSyncMesh] objId=${msg.objId} verts=${verts.length} tris=${tris.length} transform=(${msg.transform.x}, ${msg.transform.y}, ${msg.transform.z}) hasSR=${hasRotationOrScale}`)
+  if (import.meta.env.DEV) console.log(`[DIAG:handleSyncMesh] objId=${msg.objId} verts=${verts.length} tris=${tris.length} transform=(${msg.transform.x}, ${msg.transform.y}, ${msg.transform.z}) hasSR=${hasRotationOrScale}`)
   try {
     let m = new wasm.Manifold({
       numProp: 3,
       vertProperties: verts,
       triVerts: tris,
     })
-    console.log(`[DIAG:handleSyncMesh] Manifold created successfully for ${msg.objId}`)
+    if (import.meta.env.DEV) console.log(`[DIAG:handleSyncMesh] Manifold created successfully for ${msg.objId}`)
     // Geometry is centered at origin. Apply the object's world transform so the
     // cached manifold is at the correct world position with rotation/scale.
     let matrix: number[]
@@ -1438,11 +1438,11 @@ export async function handleSyncMesh(msg: SyncMeshMessage): Promise<void> {
     }
     m = m.transform(matrix)
     setCached(msg.objId, m)
-    console.log(`[DIAG:handleSyncMesh] Cached ${msg.objId} as ManifoldObject`)
+    if (import.meta.env.DEV) console.log(`[DIAG:handleSyncMesh] Cached ${msg.objId} as ManifoldObject`)
     safePostMessage({ reqId: msg.reqId, type: 'ok' })
   } catch (me) {
     // Non-manifold — cache as null (CSG not supported for this object)
-    console.warn(`[DIAG:handleSyncMesh] Non-manifold for ${msg.objId}:`, me)
+    if (import.meta.env.DEV) console.warn(`[DIAG:handleSyncMesh] Non-manifold for ${msg.objId}:`, me)
     setCached(msg.objId, null)
     safePostMessage({ reqId: msg.reqId, type: 'ok' })
   }

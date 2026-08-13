@@ -144,7 +144,7 @@ async function syncObjectsForOperation(
     // слишком узкая — CSG-результат может иметь любой shapeType-заглушку.
     // Надёжный признак CSG/baked: нет params или params пустой объект.
     const isCsgResult = !isImport && (!obj.params || Object.keys(obj.params).length === 0)
-    console.log(`[DIAG:syncObjectsForOperation] id=${id} shapeType=${obj.shapeType} params=${JSON.stringify(obj.params)} isCsgResult=${isCsgResult} isImport=${isImport} route=${isCsgResult || isImport ? 'workerSyncMesh' : 'workerSyncObjects'}`)
+    if (import.meta.env?.DEV) console.log(`[DIAG:syncObjectsForOperation] id=${id} shapeType=${obj.shapeType} params=${JSON.stringify(obj.params)} isCsgResult=${isCsgResult} isImport=${isImport} route=${isCsgResult || isImport ? 'workerSyncMesh' : 'workerSyncObjects'}`)
     if (isCsgResult || isImport) {
       // CSG result or imported mesh — sync mesh data with current transform
       meshSyncs.push(
@@ -166,7 +166,7 @@ async function syncObjectsForOperation(
 
   // Sync regular primitives in batch
   if (regularEntries.length > 0) {
-    console.log(`[DIAG:syncObjectsForOperation] syncing regular primitives: ${regularEntries.map(e => e.objId).join(', ')}`)
+    if (import.meta.env?.DEV) console.log(`[DIAG:syncObjectsForOperation] syncing regular primitives: ${regularEntries.map(e => e.objId).join(', ')}`)
     await workerSyncObjects(regularEntries).catch(e => console.warn('[syncObjectsForOperation] sync failed:', e))
   }
 
