@@ -56,11 +56,14 @@ const FILL_POS = new THREE.Vector3(-100, 80, 50);
 const FILL_COLOR = 0x8888ff;
 
 // Scene
-const BG_COLOR = 0x1e1e2e;
+const BG_COLOR_DARK = 0x1e1e2e;
+const BG_COLOR_LIGHT = 0xf0f0f5;
 const GRID_SIZE = 400;
 const GRID_DIVISIONS = 40;
-const GRID_COLOR_MAJOR = 0x3a3a5c;
-const GRID_COLOR_MINOR = 0x2a2a4a;
+const GRID_COLOR_MAJOR_DARK = 0x3a3a5c;
+const GRID_COLOR_MINOR_DARK = 0x2a2a4a;
+const GRID_COLOR_MAJOR_LIGHT = 0x999999;
+const GRID_COLOR_MINOR_LIGHT = 0xcccccc;
 const GROUND_Z = -0.5;
 const GROUND_OPACITY = 0.25;
 const AXES_SIZE = 20;
@@ -118,6 +121,7 @@ export interface ThreeInitResult {
     fitTargetRef: React.MutableRefObject<FitTarget | null>;
     cubeCamera: THREE.PerspectiveCamera | null;
     cubeCtrl: OrbitControls | null;
+    gridRef: React.MutableRefObject<THREE.GridHelper | null>;
 }
 
 // ============================================================
@@ -137,6 +141,7 @@ export function useThreeInit(
     const initRanRef = useRef(false);
     const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
     const sceneRef = useRef<THREE.Scene | null>(null);
+    const gridRef = useRef<THREE.GridHelper | null>(null);
     const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
     const orthoCameraRef = useRef<THREE.OrthographicCamera | null>(null);
     const cameraModeRef = useRef<'perspective' | 'orthographic'>(cameraMode);
@@ -179,7 +184,7 @@ export function useThreeInit(
         renderer.setSize(w, h);
         renderer.shadowMap.enabled = true;
         renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-        renderer.setClearColor(BG_COLOR);
+        renderer.setClearColor(BG_COLOR_DARK);
         container.appendChild(renderer.domElement);
         rendererRef.current = renderer;
 
@@ -217,10 +222,11 @@ export function useThreeInit(
         scene.add(fill);
 
         // Grid in XY plane (Z=0)
-        const grid = new THREE.GridHelper(GRID_SIZE, GRID_DIVISIONS, GRID_COLOR_MAJOR, GRID_COLOR_MINOR);
+        const grid = new THREE.GridHelper(GRID_SIZE, GRID_DIVISIONS, GRID_COLOR_MAJOR_DARK, GRID_COLOR_MINOR_DARK);
         grid.rotation.x = Math.PI / 2;
         grid.position.z = GROUND_Z;
         scene.add(grid);
+        gridRef.current = grid;
 
         // Shadow receiver
         const groundGeo = new THREE.PlaneGeometry(GRID_SIZE, GRID_SIZE);
@@ -353,7 +359,20 @@ export function useThreeInit(
         fitTargetRef,
         cubeCamera,
         cubeCtrl,
+        gridRef,
     };
+}
+
+// ---- Тема: смена цвета грида ----
+export function setGridColor(grid: THREE.GridHelper | null, theme: 'dark' | 'light') {
+    if (!grid) return;
+    const major = theme === 'dark' ? GRID_COLOR_MAJOR_DARK : GRID_COLOR_MAJOR_LIGHT;
+    const minor = theme === 'dark' ? GRID_COLOR_MINOR_DARK : GRID_COLOR_MINOR_LIGHT;
+    grid.material = new THREE.LineBasicMaterial({
+        color: minor,
+        transparent: true,
+        opacity: 0.5,
+    });
 }
 
 // ============================================================

@@ -13,6 +13,7 @@ import {
   useRulerMode,
   useMirrorPreview,
   type GizmoMode,
+  setGridColor,
 } from "./viewport-hooks";
 
 export type { GizmoMode } from "./viewport-hooks";
@@ -45,6 +46,7 @@ interface Props {
   previewObject?: (SceneObject & { isMirrorPreview: boolean }) | null;
   mirrorPreviewPlane?: 'XY' | 'XZ' | 'YZ' | null;
   busy?: boolean;
+  theme?: 'dark' | 'light';
 }
 
 function checkWebGL(): boolean {
@@ -73,6 +75,8 @@ export default function Viewport3D({
   cameraMode = 'perspective',
   previewObject = null,
   mirrorPreviewPlane = null,
+  busy = false,
+  theme = 'dark',
 }: Props) {
   const [webglOk] = useState<boolean>(() => checkWebGL());
 
@@ -81,6 +85,7 @@ export default function Viewport3D({
     sceneReady,
     containerRef,
     sceneRef,
+    gridRef,
     cameraRef,
     activeCameraRef,
     controlsRef,
@@ -111,6 +116,15 @@ export default function Viewport3D({
   useEffect(() => {
     objectsRef.current = objects;
   }, [objects]);
+
+  // ---- Смена фона и грида при смене темы ----
+  useEffect(() => {
+    if (!sceneRef.current) return;
+    sceneRef.current.background = theme === 'dark'
+      ? new THREE.Color(0x1e1e2e)
+      : new THREE.Color(0xf0f0f5);
+    setGridColor(gridRef.current, theme);
+  }, [theme, sceneRef, gridRef]);
 
   // ---- Хук 2: Синхронизация mesh ----
   useMeshSync(objects, sceneReady, sceneRef, meshMapRef, selectedIds);

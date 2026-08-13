@@ -571,6 +571,7 @@ export default function App() {
               cameraMode={cameraMode}
               previewObject={previewObject}
               mirrorPreviewPlane={mirrorPreviewPlane}
+              theme={theme}
             />
           </ErrorBoundary>
 
