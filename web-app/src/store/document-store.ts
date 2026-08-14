@@ -217,7 +217,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const newObjects = { ...objects, [id]: obj }
       // Register in build tree BEFORE caching snapshot
       createPrimitiveNode(id, shapeType, finalParams, transform)
-      devLog('MIRROR:addShape', { id, shapeType, params: finalParams, transform })
+      devLog('addShape', { id, shapeType, params: finalParams, transform })
       set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true, busy: false, lastCsgMs: ms })
       cacheSnapshotWithTree(newOps.length, newObjects)
       invalidateMirrorCache()
@@ -611,7 +611,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
 
     // Sync the new transform to the tree node (for future CSG/mirror/align ops)
     syncNodeTransform(id, newTransform)
-    devLog('MIRROR:moveObject', { id, newTransform })
+    devLog('moveObject', { id, newTransform })
 
     // Update SceneObject — vertices unchanged, only transform changes
     // IMPORTANT: Also update cached AABB — it was computed from vertices (world-space)
@@ -979,7 +979,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         const newObjects = { ...objects, [id]: newObj }
 
         set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true, busy: false, lastCsgMs: ms })
-        devLog('MIRROR:resizeObject', { id, newParams: mergedParams })
+        devLog('resizeObject', { id, newParams: mergedParams })
         cacheSnapshotWithTree(newOps.length, newObjects)
         invalidateMirrorCache()
       } catch (e) { set({ busy: false }); console.error('resizeObject:', e); notify('Ошибка изменения размера', 'error') }
@@ -1029,7 +1029,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         const newObjects = { ...objects, [id]: newObj }
 
         set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true, busy: false, lastCsgMs: 0 })
-        devLog('MIRROR:resizeObject', { id, newTransform })
+        devLog('resizeObject', { id, newTransform })
         cacheSnapshotWithTree(newOps.length, newObjects)
         invalidateMirrorCache()
       } catch (e) { set({ busy: false }); console.error('resizeObject (CSG):', e); notify('Ошибка изменения размера CSG-объекта', 'error') }

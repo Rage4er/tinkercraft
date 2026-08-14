@@ -317,9 +317,9 @@ export async function previewMirror(
     ids: string[],
     objects: Record<string, SceneObject>,
 ): Promise<SceneObject | null> {
-    devLog('MIRROR:previewMirror', { plane, ids })
+    devLog('previewMirror', { plane, ids })
     if (ids.length === 0) {
-        devLog('MIRROR:previewMirror', 'no ids, returning null')
+        devLog('previewMirror', 'no ids, returning null')
         return null
     }
 
@@ -411,9 +411,9 @@ export async function mirrorSelected(
     ids: string[],
     objects: Record<string, SceneObject>,
 ): Promise<{ newObjects: Record<string, SceneObject>; newIds: string[]; operation: { type: 'mirror'; originalIds: string[]; ids: string[]; plane: 'XY' | 'XZ' | 'YZ' } } | null> {
-    devLog('MIRROR:mirrorSelected', { plane, ids })
+    devLog('mirrorSelected', { plane, ids })
     if (ids.length === 0) {
-        devLog('MIRROR:mirrorSelected', 'no ids, returning null')
+        devLog('mirrorSelected', 'no ids, returning null')
         return null
     }
 
@@ -440,14 +440,14 @@ export async function mirrorSelected(
                     newIds.push(cachedResult.id)
                 } else {
                     // Если кэш частично недоступим, откатываемся к полному вычислению
-                    devLog('MIRROR:mirrorSelected', 'cache miss for id:', id)
+                    devLog('mirrorSelected', 'cache miss for id:', id)
                     break
                 }
             }
 
             // Если все результаты были в кэше, используем их
             if (Object.keys(newObjects).length === ids.length) {
-                devLog('MIRROR:mirrorSelected', 'using cached results')
+                devLog('mirrorSelected', 'using cached results')
             } else {
                 // Иначе, откатываемся к полному вычислению
                 newObjects = {}

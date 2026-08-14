@@ -694,7 +694,7 @@ export function mirrorTreeNode(
 export function logMirrorTreeSnapshot(rootId: string, phase: string): void {
   const root = treeStore.getNode(rootId)
   if (!root) {
-    devWarn('MIRROR:TREE', `phase=${phase} rootId=${rootId} missing`)
+    devWarn('TREE', `phase=${phase} rootId=${rootId} missing`)
     return
   }
 
@@ -731,14 +731,14 @@ export function logMirrorTreeSnapshot(rootId: string, phase: string): void {
 
   const visit = (nodeId: string, parentId: string | null, depth: number, path: string[]): void => {
     if (visited.has(nodeId)) {
-      devWarn('MIRROR:TREE', `phase=${phase} cycle-or-shared-node=${nodeId} path=${path.join('>')}`)
+      devWarn('TREE', `phase=${phase} cycle-or-shared-node=${nodeId} path=${path.join('>')}`)
       return
     }
     visited.add(nodeId)
 
     const node = treeStore.getNode(nodeId)
     if (!node) {
-      devWarn('MIRROR:TREE', `phase=${phase} missing-child=${nodeId} expectedParent=${parentId ?? 'none'} path=${path.join('>')}`)
+      devWarn('TREE', `phase=${phase} missing-child=${nodeId} expectedParent=${parentId ?? 'none'} path=${path.join('>')}`)
       return
     }
 
@@ -766,7 +766,7 @@ export function logMirrorTreeSnapshot(rootId: string, phase: string): void {
       },
     }
 
-    devLog('MIRROR:TREE', JSON.stringify(record))
+    devLog('TREE', JSON.stringify(record))
 
     for (const childId of node.children ?? []) {
       visit(childId, node.id, depth + 1, [...path, node.id])
@@ -857,7 +857,7 @@ function mirrorNodeRecursive(
       scaleX: 1, scaleY: 1, scaleZ: 1,
     }
     if (!node.localTransform) {
-      devWarn('MIRROR:mirrorNodeRecursive', `nodeId=${node.id} type=primitive: localTransform отсутствует, используется identity`)
+      devWarn('mirrorNodeRecursive', `nodeId=${node.id} type=primitive: localTransform отсутствует, используется identity`)
     }
 
     const mirroredPos = mirrorPoint({ x: t.x, y: t.y, z: t.z }, plane, center)
@@ -898,7 +898,7 @@ function mirrorNodeRecursive(
     }
     // FIX (MED-18-23): Use setNode for immutable update so React can detect changes
     setNode(node.id, { ...node, localTransform: node.localTransform })
-    devLog('MIRROR:mirrorNodeRecursive', { nodeId: node.id, type: 'primitive', plane, center, localTransform: node.localTransform })
+    devLog('mirrorNodeRecursive', { nodeId: node.id, type: 'primitive', plane, center, localTransform: node.localTransform })
     return
   }
 
@@ -910,7 +910,7 @@ function mirrorNodeRecursive(
       scaleX: 1, scaleY: 1, scaleZ: 1,
     }
     if (!node.localTransform) {
-      devWarn('MIRROR:mirrorNodeRecursive', `nodeId=${node.id} type=baked: localTransform отсутствует, используется identity`)
+      devWarn('mirrorNodeRecursive', `nodeId=${node.id} type=baked: localTransform отсутствует, используется identity`)
     }
     // FIX (MIRROR-BAKED-2): For baked nodes (CSG results, imports), rotation/scale
     // are applied by Viewport3D at render time (Three.js pivot transform), NOT by
@@ -968,14 +968,14 @@ function mirrorNodeRecursive(
     }
     // FIX (MED-18-23): Use setNode for immutable update so React can detect changes
     setNode(node.id, { ...node, localTransform: node.localTransform })
-    devLog('MIRROR:mirrorNodeRecursive', { nodeId: node.id, type: 'baked', plane, center, localTransform: node.localTransform })
+    devLog('mirrorNodeRecursive', { nodeId: node.id, type: 'baked', plane, center, localTransform: node.localTransform })
     return
   }
 
   // FIX (MIRROR-19-8): boolean без children — логируем предупреждение
   if (node.type === 'boolean') {
     if (!node.children || node.children.length === 0) {
-      devWarn('MIRROR:mirrorNodeRecursive', `nodeId=${node.id} type=boolean: children отсутствуют или пусты, нода пропущена`)
+      devWarn('mirrorNodeRecursive', `nodeId=${node.id} type=boolean: children отсутствуют или пусты, нода пропущена`)
       return
     }
 
@@ -1210,7 +1210,7 @@ export function cloneSubtree(
     else delete clonedNode.parentId
   }
 
-  devLog('MIRROR:CLONE', {
+  devLog('CLONE', {
     sourceRootId: sourceId,
     cloneRootId: newRootId,
     idMap: Object.fromEntries(newIdMap),

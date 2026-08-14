@@ -79,7 +79,7 @@ export function applyMirrorToTransform(
   plane: 'XY' | 'XZ' | 'YZ',
 ): RebuildTransform {
   const nt = { ...t }
-  devLog('MIRROR:applyMirrorToTransform', `plane=${plane} BEFORE={x:${t.x}, y:${t.y}, z:${t.z}, rotX:${t.rotX}, rotY:${t.rotY}, rotZ:${t.rotZ}, scaleX:${t.scaleX}, scaleY:${t.scaleY}, scaleZ:${t.scaleZ}}`)
+  devLog('applyMirrorToTransform', `plane=${plane} BEFORE={x:${t.x}, y:${t.y}, z:${t.z}, rotX:${t.rotX}, rotY:${t.rotY}, rotZ:${t.rotZ}, scaleX:${t.scaleX}, scaleY:${t.scaleY}, scaleZ:${t.scaleZ}}`)
   if (plane === 'YZ') {
     nt.x = -nt.x
     // X is perpendicular to YZ → rotX and scaleX UNCHANGED
@@ -107,7 +107,7 @@ export function applyMirrorToTransform(
     nt.scaleX = Math.abs(nt.scaleX)
     nt.scaleY = Math.abs(nt.scaleY)
   }
-  devLog('MIRROR:applyMirrorToTransform', `plane=${plane} AFTER={x:${nt.x}, y:${nt.y}, z:${nt.z}, rotX:${nt.rotX}, rotY:${nt.rotY}, rotZ:${nt.rotZ}, scaleX:${nt.scaleX}, scaleY:${nt.scaleY}, scaleZ:${nt.scaleZ}}`)
+  devLog('applyMirrorToTransform', `plane=${plane} AFTER={x:${nt.x}, y:${nt.y}, z:${nt.z}, rotX:${nt.rotX}, rotY:${nt.rotY}, rotZ:${nt.rotZ}, scaleX:${nt.scaleX}, scaleY:${nt.scaleY}, scaleZ:${nt.scaleZ}}`)
   return nt
 }
 

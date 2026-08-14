@@ -558,41 +558,45 @@ export function useMeshSync(
 
                 if (isFlat) {
                     // Разворачиваем: 3 уникальные вершины на треугольник
+                    // Для flat-shading нормали вычисляются по ГРАНИ (cross product
+                    // рёбер треугольника), а не берутся по вершине — иначе CSG
+                    // без normals даёт (0,1,0) на всех гранях → однотонное пятно.
                     const numTris = obj.indices.length / 3;
                     const flatVerts = new Float32Array(numTris * 9);
                     const flatNormals = new Float32Array(numTris * 9);
                     const flatIndices = new Uint32Array(numTris * 3);
 
                     for (let t = 0; t < numTris; t++) {
+                        const i0 = obj.indices[t * 3];
+                        const i1 = obj.indices[t * 3 + 1];
+                        const i2 = obj.indices[t * 3 + 2];
+
+                        // Векторы рёбер треугольника
+                        const v0x = obj.vertices[i0 * 3], v0y = obj.vertices[i0 * 3 + 1], v0z = obj.vertices[i0 * 3 + 2];
+                        const v1x = obj.vertices[i1 * 3], v1y = obj.vertices[i1 * 3 + 1], v1z = obj.vertices[i1 * 3 + 2];
+                        const v2x = obj.vertices[i2 * 3], v2y = obj.vertices[i2 * 3 + 1], v2z = obj.vertices[i2 * 3 + 2];
+                        const e1x = v1x - v0x, e1y = v1y - v0y, e1z = v1z - v0z;
+                        const e2x = v2x - v0x, e2y = v2y - v0y, e2z = v2z - v0z;
+
+                        // Нормаль грани (cross product)
+                        let nx = e1y * e2z - e1z * e2y;
+                        let ny = e1z * e2x - e1x * e2z;
+                        let nz = e1x * e2y - e1y * e2x;
+                        const len = Math.sqrt(nx * nx + ny * ny + nz * nz);
+                        if (len > 0.0001) { nx /= len; ny /= len; nz /= len; }
+                        else { nx = 0; ny = 1; nz = 0; }
+
+                        // Копируем вершины и нормаль грани для всех 3 вершин треугольника
                         for (let v = 0; v < 3; v++) {
+                            const dstOff = (t * 3 + v) * 3;
                             const srcIdx = obj.indices[t * 3 + v];
-                            const dstIdx = t * 3 + v;
-                            const srcOff = srcIdx * 3;
-                            const dstOff = dstIdx * 3;
-                            flatVerts[dstOff] = obj.vertices[srcOff];
-                            flatVerts[dstOff + 1] = obj.vertices[srcOff + 1];
-                            flatVerts[dstOff + 2] = obj.vertices[srcOff + 2];
-                            // Нормаль из воркера (по вершине) или fallback
-                            if (obj.normals && obj.normals.length > 0) {
-                                const nx = obj.normals[srcOff];
-                                const ny = obj.normals[srcOff + 1];
-                                const nz = obj.normals[srcOff + 2];
-                                const len = Math.sqrt(nx * nx + ny * ny + nz * nz);
-                                if (len > 0.0001) {
-                                    flatNormals[dstOff] = nx / len;
-                                    flatNormals[dstOff + 1] = ny / len;
-                                    flatNormals[dstOff + 2] = nz / len;
-                                } else {
-                                    flatNormals[dstOff] = 0;
-                                    flatNormals[dstOff + 1] = 1;
-                                    flatNormals[dstOff + 2] = 0;
-                                }
-                            } else {
-                                flatNormals[dstOff] = 0;
-                                flatNormals[dstOff + 1] = 1;
-                                flatNormals[dstOff + 2] = 0;
-                            }
-                            flatIndices[dstIdx] = dstIdx;
+                            flatVerts[dstOff] = obj.vertices[srcIdx * 3];
+                            flatVerts[dstOff + 1] = obj.vertices[srcIdx * 3 + 1];
+                            flatVerts[dstOff + 2] = obj.vertices[srcIdx * 3 + 2];
+                            flatNormals[dstOff] = nx;
+                            flatNormals[dstOff + 1] = ny;
+                            flatNormals[dstOff + 2] = nz;
+                            flatIndices[t * 3 + v] = t * 3 + v;
                         }
                     }
 
