@@ -100,7 +100,7 @@ export default function Toolbar({
   onGizmo: (mode: "translate" | "rotate" | "scale" | "none") => void;
   onToggleRuler: () => void;
   onMirror: (plane: "XY" | "XZ" | "YZ") => void;
-  onPreviewMirror: (plane: "XY" | "XZ" | "YZ", ids: string[]) => void;
+  onPreviewMirror: (plane: "XY" | "XZ" | "YZ") => void;
   onPreviewMirrorEnd: () => void;
   onAlign: (axis: "X" | "Y" | "Z", anchor: "min" | "center" | "max") => void;
   onCsg: (op: "union" | "subtract" | "intersect") => void;

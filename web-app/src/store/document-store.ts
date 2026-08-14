@@ -449,11 +449,17 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         return { x: t.x, y: t.y, z: t.z, rotX: t.rotX, rotY: t.rotY, rotZ: t.rotZ, scaleX: t.scaleX, scaleY: t.scaleY, scaleZ: t.scaleZ }
       }
       // FIX (CRIT-CSG-4): Only send shapeType/params for regular primitives.
-      // For CSG results (shapeType='cube', params={}) and imported meshes,
+      // For CSG results (shapeType='csg', params={}) and imported meshes,
       // shapeType/params would be misinterpreted as default cube/build params.
       // These objects are already synced via syncObjectsForOperation → workerSyncMesh.
-      const isOperandA_Primitive = objects[idA].shapeType !== 'cube' || objects[idA].params.width
-      const isOperandB_Primitive = objects[idB].shapeType !== 'cube' || objects[idB].params.width
+      // FIX (CSG-NESTED-SHAPETYPE): Предыдущая проверка `shapeType !== 'cube' || params.width`
+      // была завязана на старый shapeType='cube' для CSG-результатов. После введения
+      // отдельного shapeType='csg' эта проверка возвращала true → воркер вызывал
+      // buildPrimitive('csg', {}) → дефолтный куб 20×20×20 вместо реальной геометрии CSG.
+      // import_mesh уже исключён ранним return выше.
+      const hasRealParams = (obj: SceneObject) => !!obj.params && Object.keys(obj.params).length > 0
+      const isOperandA_Primitive = hasRealParams(objects[idA])
+      const isOperandB_Primitive = hasRealParams(objects[idB])
       const mesh = await workerCsgBooleanWithSync(
         idA, idB, op, resultId, srOf(idA), srOf(idB),
         isOperandA_Primitive ? { shapeType: objects[idA].shapeType, params: objects[idA].params } : undefined,
