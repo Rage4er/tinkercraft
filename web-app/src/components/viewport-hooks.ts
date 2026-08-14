@@ -549,40 +549,86 @@ export function useMeshSync(
                     new THREE.Float32BufferAttribute(obj.vertices, 3),
                 );
                 geometry.setIndex(new THREE.BufferAttribute(obj.indices, 1));
-                // FIX: Use normals from worker instead of recomputing (which averages them)
-                if (obj.normals && obj.normals.length > 0) {
-                    // Нормализация нормалей — защита от немасштабированных данных
-                    const normalizedNormals = new Float32Array(obj.normals.length);
-                    for (let i = 0; i < obj.normals.length; i += 3) {
-                        const nx = obj.normals[i];
-                        const ny = obj.normals[i + 1];
-                        const nz = obj.normals[i + 2];
-                        const length = Math.sqrt(nx * nx + ny * ny + nz * nz);
-                        if (length > 0.0001) {
-                            normalizedNormals[i] = nx / length;
-                            normalizedNormals[i + 1] = ny / length;
-                            normalizedNormals[i + 2] = nz / length;
-                        } else {
-                            normalizedNormals[i] = 0;
-                            normalizedNormals[i + 1] = 1;
-                            normalizedNormals[i + 2] = 0;
-                        }
-                    }
-                    geometry.setAttribute("normal", new THREE.Float32BufferAttribute(normalizedNormals, 3));
-                } else {
-                    geometry.computeVertexNormals();
-                }
 
-                // FIX: flatShading для плоских фигур (куб, призма, пирамида, CSG)
+                // FIX: Для flat-фигур (куб, призма, пирамида, CSG) разворачиваем
+                // индексированную геометрию в неиндексированную — каждая грань
+                // получает уникальные вершины с нормалью по нормали грани.
                 const flatShapes = ['cube', 'prism', 'pyramid'];
                 const isFlat = flatShapes.includes(obj.shapeType) || !obj.params || Object.keys(obj.params).length === 0;
+
+                if (isFlat) {
+                    // Разворачиваем: 3 уникальные вершины на треугольник
+                    const numTris = obj.indices.length / 3;
+                    const flatVerts = new Float32Array(numTris * 9);
+                    const flatNormals = new Float32Array(numTris * 9);
+                    const flatIndices = new Uint32Array(numTris * 3);
+
+                    for (let t = 0; t < numTris; t++) {
+                        for (let v = 0; v < 3; v++) {
+                            const srcIdx = obj.indices[t * 3 + v];
+                            const dstIdx = t * 3 + v;
+                            const srcOff = srcIdx * 3;
+                            const dstOff = dstIdx * 3;
+                            flatVerts[dstOff] = obj.vertices[srcOff];
+                            flatVerts[dstOff + 1] = obj.vertices[srcOff + 1];
+                            flatVerts[dstOff + 2] = obj.vertices[srcOff + 2];
+                            // Нормаль из воркера (по вершине) или fallback
+                            if (obj.normals && obj.normals.length > 0) {
+                                const nx = obj.normals[srcOff];
+                                const ny = obj.normals[srcOff + 1];
+                                const nz = obj.normals[srcOff + 2];
+                                const len = Math.sqrt(nx * nx + ny * ny + nz * nz);
+                                if (len > 0.0001) {
+                                    flatNormals[dstOff] = nx / len;
+                                    flatNormals[dstOff + 1] = ny / len;
+                                    flatNormals[dstOff + 2] = nz / len;
+                                } else {
+                                    flatNormals[dstOff] = 0;
+                                    flatNormals[dstOff + 1] = 1;
+                                    flatNormals[dstOff + 2] = 0;
+                                }
+                            } else {
+                                flatNormals[dstOff] = 0;
+                                flatNormals[dstOff + 1] = 1;
+                                flatNormals[dstOff + 2] = 0;
+                            }
+                            flatIndices[dstIdx] = dstIdx;
+                        }
+                    }
+
+                    geometry.setAttribute("position", new THREE.Float32BufferAttribute(flatVerts, 3));
+                    geometry.setAttribute("normal", new THREE.Float32BufferAttribute(flatNormals, 3));
+                    geometry.setIndex(new THREE.BufferAttribute(flatIndices, 1));
+                } else {
+                    // Smooth shading: используем нормали из воркера (или пересчитываем)
+                    if (obj.normals && obj.normals.length > 0) {
+                        const normalizedNormals = new Float32Array(obj.normals.length);
+                        for (let i = 0; i < obj.normals.length; i += 3) {
+                            const nx = obj.normals[i];
+                            const ny = obj.normals[i + 1];
+                            const nz = obj.normals[i + 2];
+                            const length = Math.sqrt(nx * nx + ny * ny + nz * nz);
+                            if (length > 0.0001) {
+                                normalizedNormals[i] = nx / length;
+                                normalizedNormals[i + 1] = ny / length;
+                                normalizedNormals[i + 2] = nz / length;
+                            } else {
+                                normalizedNormals[i] = 0;
+                                normalizedNormals[i + 1] = 1;
+                                normalizedNormals[i + 2] = 0;
+                            }
+                        }
+                        geometry.setAttribute("normal", new THREE.Float32BufferAttribute(normalizedNormals, 3));
+                    } else {
+                        geometry.computeVertexNormals();
+                    }
+                }
 
                 const material = new THREE.MeshStandardMaterial({
                     color: obj.color,
                     roughness: MATERIAL_ROUGHNESS,
                     metalness: MATERIAL_METALNESS,
                     side: THREE.DoubleSide,
-                    flatShading: isFlat,
                 });
                 const rawMesh = new THREE.Mesh(geometry, material);
                 rawMesh.castShadow = true;

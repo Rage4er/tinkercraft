@@ -373,8 +373,8 @@ export interface MeshResult {
 }
 
 /** Extract mesh data from manifold object.
- *  Unrolls indexed geometry into non-indexed so each triangle has unique
- *  vertices with its own normals — eliminates "striped" shading artifacts.
+ *  Returns indexed geometry — manifold-3d CSG operations require indexed verts.
+ *  Flat shading is handled in viewport via flatShading material property.
  */
 export function extractMesh(manifold: ManifoldObject): MeshResult {
   const mesh = manifold.getMesh()
@@ -384,36 +384,32 @@ export function extractMesh(manifold: ManifoldObject): MeshResult {
     mesh.triVerts instanceof Uint32Array
       ? mesh.triVerts
       : new Uint32Array(mesh.triVerts)
-  const numTri = triVerts.length / 3
-  const numOutVerts = numTri * 3 // non-indexed: 3 unique vertices per triangle
 
-  const vertices = new Float32Array(numOutVerts * 3)
+  const count = raw.length / numProp
+  const vertices = new Float32Array(count * 3)
   let normals: Float32Array | null = null
-  const hasNormals = numProp >= 6
-  if (hasNormals) normals = new Float32Array(numOutVerts * 3)
 
-  for (let t = 0; t < numTri; t++) {
-    for (let v = 0; v < 3; v++) {
-      const srcIdx = triVerts[t * 3 + v]
-      const dstIdx = t * 3 + v
-      const srcOff = srcIdx * numProp
-      const dstOff = dstIdx * 3
-      vertices[dstOff] = raw[srcOff]
-      vertices[dstOff + 1] = raw[srcOff + 1]
-      vertices[dstOff + 2] = raw[srcOff + 2]
-      if (hasNormals && normals) {
-        normals[dstOff] = raw[srcOff + 3]
-        normals[dstOff + 1] = raw[srcOff + 4]
-        normals[dstOff + 2] = raw[srcOff + 5]
-      }
+  if (numProp >= 6) {
+    normals = new Float32Array(count * 3)
+    for (let i = 0; i < count; i++) {
+      vertices[i * 3] = raw[i * numProp]
+      vertices[i * 3 + 1] = raw[i * numProp + 1]
+      vertices[i * 3 + 2] = raw[i * numProp + 2]
+      normals[i * 3] = raw[i * numProp + 3]
+      normals[i * 3 + 1] = raw[i * numProp + 4]
+      normals[i * 3 + 2] = raw[i * numProp + 5]
+    }
+  } else {
+    for (let i = 0; i < count; i++) {
+      vertices[i * 3] = raw[i * numProp]
+      vertices[i * 3 + 1] = raw[i * numProp + 1]
+      vertices[i * 3 + 2] = raw[i * numProp + 2]
     }
   }
 
-  // Sequential indices 0,1,2,3,4,5,...
-  const indices = new Uint32Array(numOutVerts)
-  for (let i = 0; i < numOutVerts; i++) indices[i] = i
-
-  return { vertices, indices, normals, tris: numTri }
+  // Keep original indices — manifold-3d CSG operations need indexed geometry
+  const indices = new Uint32Array(triVerts)
+  return { vertices, indices, normals, tris: indices.length / 3 }
 }
 
 // --- Transfer list builder ---
