@@ -142,7 +142,7 @@ export async function mirrorObject(
 
     // FIX (MIRROR-CSG-KEEPTYPE): CSG-результат определяется так же, как в
     // syncObjectsForOperation — не import и пустые params. Зеркальная копия
-    // CSG-результата должна ОСТАВАТЬСЯ CSG-результатом (shapeType='cube',
+    // CSG-результата должна ОСТАВАТЬСЯ CSG-результатом (shapeType='csg',
     // params={}), а не превращаться в import_mesh. Иначе булевы операции
     // блокируются проверкой `shapeType === 'import_mesh'` в csgBoolean.
     const isCSGResult = obj.shapeType !== 'import_mesh' && (!obj.params || Object.keys(obj.params).length === 0)
@@ -254,7 +254,7 @@ export async function mirrorObject(
         id: newId,
         // FIX (MIRROR-CSG-KEEPTYPE): CSG-результат → остаётся CSG-результатом,
         // примитив → примитив, только import → import_mesh.
-        shapeType: (isPrimitive ? obj.shapeType : isCSGResult ? 'cube' : 'import_mesh') as ShapeType,
+        shapeType: (isPrimitive ? obj.shapeType : isCSGResult ? 'csg' : 'import_mesh') as ShapeType,
         params: (isPrimitive ? { ...obj.params } : {}) as ShapeParams,
         transform: {
             x: Math.round(mirroredPos.x * 1e6) / 1e6,

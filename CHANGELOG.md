@@ -18,6 +18,7 @@
 - **CSG: flat shading через нормаль по грани**: Для flat-фигур (куб/призма/пирамида/CSG) нормали теперь вычисляются как cross product рёбер треугольника, а не берутся по вершине. Это решает проблему "однотонного пятна" после CSG-операций, когда normals из воркера null → fallback (0,1,0) на всех вершинах.
 - **LOGS: переименованы в нормальные имена**: Все логи `[MIRROR:...]` переименованы в `[moveObject]`, `[addShape]`, `[resizeObject]`, `[previewMirror]`, `[mirrorSelected]`, `[applyMirrorToTransform]`, `[TREE]`, `[mirrorNodeRecursive]`, `[CLONE]`. Логи остаются в dev mode.
 - **CSG отображение**: CSG-результаты теперь имеют `shapeType: 'csg'` вместо `'cube'`. В списке объектов отображается "CSG результат" вместо "куб", в PropertiesPanel скругление не показывается для CSG. В ComponentTree и Timeline добавлена иконка UnionIcon для CSG.
+- **MIRROR-CSG-SHAPE: зеркало CSG-результата теперь shapeType='csg'**: При зеркале CSG-результата (boolean tree) зеркальная копия теперь получает `shapeType: 'csg'` вместо `'cube'`. Это решает проблему "куб вместо CSG" при зеркале вложенных CSG-цепочек (CSG из CSG). (`mirror-store.ts`)
 
 - **NORMALS: использование нормалей из воркера + flat shading**: `viewport-hooks.ts` использует нормали из manifold-3d вместо `computeVertexNormals()` для smooth-shading фигур. Для flat-shading фигур (куб/призма/пирамида/CSG) геометрия разворачивается в viewport — каждая грань получает уникальные вершины с нормалью по нормали грани. Сегменты увеличены: sphere/cylinder/cone 32→48, torus 32→48, tubeSegs 16→24.
 
