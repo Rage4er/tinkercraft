@@ -11,6 +11,14 @@
 
 ### Fixed
 
+- **SHADOW ACNE (полосатые грани фигур)**: Вертикальные и наклонные грани куба/сферы/конуса были покрыты полосами от самозатенения. Причины: 1) `shadow.bias` отсутствовал — добавлены `bias = -0.002` и `normalBias = 0.05`; 2) карта теней 2048px была мала для области ±200 — увеличена до 4096px. Горизонтальные грани были чистыми, вертикальные требовали большего bias из-за угла падения света. (`viewport-hooks.ts`)
+
+- **VITE DEV-SERVER CRASH (ERR_HTTP_HEADERS_SENT)**: Dev-сервер падал при запросе JS-файлов из-за middleware `stripReactRefresh` — он вызывал `res.setHeader('Content-Length', ...)` после того, как Vite 6.4 уже отправил заголовки (повторный вызов `res.end`). Добавлена защита: проверка `res.writableEnded`/`res.headersSent` и try/catch вокруг setHeader. (`vite.config.ts`)
+
+- **MESH: развёрнутая неиндексированная геометрия**: `extractMesh` в воркере разворачивал индексированные вершины manifold-3d в неиндексированные — каждый треугольник получил уникальные вершины со своими нормалями. Устраняет «полосы» от усреднённых нормалей на плоских гранях CSG-результатов. Нормали нормализуются в `viewport-hooks.ts` (защита от немасштабированных данных). (`worker-handlers.ts`, `viewport-hooks.ts`)
+
+- **NORMALS: использование нормалей из воркера**: `viewport-hooks.ts` игнорировал `obj.normals` и всегда вызывал `computeVertexNormals()` — усреднение ломало рендеринг. Теперь нормали из manifold-3d используются напрямую, `computeVertexNormals()` — только fallback. Добавлен `flatShading: true` для куба/призмы/пирамиды/CSG. Сегменты увеличены: sphere/cylinder/cone 32→48, torus 32→48, tubeSegs 16→24. (`viewport-hooks.ts`, `worker-handlers.ts`)
+
 - **DIAG:* логи → dev mode**: Все `console.log` с префиксом `[DIAG:*]` в `worker-handlers.ts` и `document-store.ts` переключены на условное логирование через `import.meta.env?.DEV`. Логи работают только в dev-режиме (`pnpm dev`), отсутствуют в production (`pnpm build`). Не удалены — пригодятся для отладки. (`worker-handlers.ts`, `document-store.ts`)
 
 - **ALIGN: aabb не обновлялся при moveObject (CRITICAL FIX)**: При перемещении объекта gizmo'ом `moveObject` обновлял `transform`, но не `aabb`. `aabb` оставался от момента создания (мировой bbox на позиции 0,0,0). `ALIGN` брал этот старый bbox → delta считалась неправильно → объекты улетали. Исправление: 1) `moveObject` теперь сдвигает `aabb` на тот же delta; 2) `computeWorldAABB` возвращает `obj.aabb` напрямую (он уже мировой, вершины содержат translate от `handleBuildShape`). (`document-store.ts`, `helpers.ts`)

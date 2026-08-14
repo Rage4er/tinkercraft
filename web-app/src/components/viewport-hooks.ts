@@ -47,10 +47,15 @@ const TRANSFORM_SIZE = 0.8;
 const AMBIENT_INTENSITY = 0.45;
 const SUN_INTENSITY = 1.2;
 const SUN_POS = new THREE.Vector3(100, -80, 200);
-const SUN_SHADOW_SIZE = 2048;
+const SUN_SHADOW_SIZE = 4096;
 const SUN_SHADOW_RANGE = 200;
 const SUN_SHADOW_NEAR = 0.1;
 const SUN_SHADOW_FAR = 1000;
+// FIX: shadow acne — PCFSoftShadowMap без bias даёт полосатые треугольники на гранях.
+// Вертикальные грани (угол падения света ≈ 90°) требуют БОЛЬШЕГО сдвига, чем
+// горизонтальные — для них -0.0005 было недостаточно.
+const SUN_SHADOW_BIAS = -0.002;
+const SUN_SHADOW_NORMAL_BIAS = 0.05;
 const FILL_INTENSITY = 0.4;
 const FILL_POS = new THREE.Vector3(-100, 80, 50);
 const FILL_COLOR = 0x8888ff;
@@ -215,6 +220,9 @@ export function useThreeInit(
         sun.shadow.camera.right = sun.shadow.camera.top = SUN_SHADOW_RANGE;
         sun.shadow.camera.near = SUN_SHADOW_NEAR;
         sun.shadow.camera.far = SUN_SHADOW_FAR;
+        // FIX: bias убирает полосатые артефакты самозатенения на плоских гранях
+        sun.shadow.bias = SUN_SHADOW_BIAS;
+        sun.shadow.normalBias = SUN_SHADOW_NORMAL_BIAS;
         scene.add(sun);
 
         const fill = new THREE.DirectionalLight(FILL_COLOR, FILL_INTENSITY);

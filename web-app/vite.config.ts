@@ -27,6 +27,9 @@ const stripReactRefresh = {
         }
 
         res.end = (chunk) => {
+          // FIX: Защита от ERR_HTTP_HEADERS_SENT — Vite 6.4 может вызвать
+          // res.end() повторно (например, после ошибки или для 404).
+          if (res.writableEnded || res.headersSent) return
           if (chunk) chunks.push(Buffer.from(typeof chunk === 'string' ? chunk : chunk))
           let body = Buffer.concat(chunks).toString('utf-8')
 
@@ -38,9 +41,13 @@ const stripReactRefresh = {
             body = body.replace(/.*@react-refresh.*\n/g, '')
           }
 
-          res.setHeader('Content-Length', Buffer.byteLength(body))
-          originalWrite(body)
-          originalEnd()
+          try {
+            res.setHeader('Content-Length', Buffer.byteLength(body))
+            originalWrite(body)
+            originalEnd()
+          } catch {
+            // Заголовки уже отправлены — игнорируем, Vite сам завершит ответ
+          }
         }
 
         return next()
