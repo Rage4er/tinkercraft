@@ -543,7 +543,24 @@ export function useMeshSync(
                 geometry.setIndex(new THREE.BufferAttribute(obj.indices, 1));
                 // FIX: Use normals from worker instead of recomputing (which averages them)
                 if (obj.normals && obj.normals.length > 0) {
-                    geometry.setAttribute("normal", new THREE.Float32BufferAttribute(obj.normals, 3));
+                    // Нормализация нормалей — защита от немасштабированных данных
+                    const normalizedNormals = new Float32Array(obj.normals.length);
+                    for (let i = 0; i < obj.normals.length; i += 3) {
+                        const nx = obj.normals[i];
+                        const ny = obj.normals[i + 1];
+                        const nz = obj.normals[i + 2];
+                        const length = Math.sqrt(nx * nx + ny * ny + nz * nz);
+                        if (length > 0.0001) {
+                            normalizedNormals[i] = nx / length;
+                            normalizedNormals[i + 1] = ny / length;
+                            normalizedNormals[i + 2] = nz / length;
+                        } else {
+                            normalizedNormals[i] = 0;
+                            normalizedNormals[i + 1] = 1;
+                            normalizedNormals[i + 2] = 0;
+                        }
+                    }
+                    geometry.setAttribute("normal", new THREE.Float32BufferAttribute(normalizedNormals, 3));
                 } else {
                     geometry.computeVertexNormals();
                 }
