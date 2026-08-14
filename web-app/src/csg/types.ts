@@ -96,6 +96,8 @@ export interface GroupOperation {
   resultCenter?: { x: number; y: number; z: number }
   /** Original bbox size of the CSG result — used to compute scale relative to original dimensions */
   originalBboxSize?: { x: number; y: number; z: number }
+  /** Shape type of CSG result — 'csg' for boolean operations */
+  shapeType?: ShapeType
   // ── BuildTree: tree structure for this CSG operation ──
   /** Operation type for tree (union/subtract/intersect) */
   treeOperation?: 'union' | 'subtract' | 'intersect'
@@ -125,7 +127,7 @@ export type AnchorPoint =
 
 export type ShapeType =
   | 'cube' | 'sphere' | 'cylinder' | 'cone'
-  | 'torus' | 'prism' | 'pyramid' | 'import_mesh'
+  | 'torus' | 'prism' | 'pyramid' | 'import_mesh' | 'csg'
 
 export interface ShapeParams {
   width?: number

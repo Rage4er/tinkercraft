@@ -7,6 +7,14 @@ import { ALL_SHAPES } from "../constants.tsx";
 import type { ShapeType, TinkerCraftOperation, SceneObject } from "../csg/types";
 import { ChevronUpIcon, ChevronDownIcon } from "./icons";
 
+// Отображаемое имя фигуры для списка объектов
+function getShapeLabel(obj: SceneObject): string {
+  if (obj.name) return obj.name
+  if (obj.shapeType === 'csg') return 'CSG результат'
+  if (obj.shapeType === 'import_mesh') return 'Импорт'
+  return obj.shapeType
+}
+
 export default function LeftPanel({
   shapeSearch,
   onShapeSearchChange,
@@ -135,7 +143,7 @@ export default function LeftPanel({
                   }}
                 />
                 <span className="object-list-label">
-                  {obj.name ?? obj.shapeType}
+                  {getShapeLabel(obj)}
                 </span>
                 {!obj.visible && <span className="obj-hidden">скрыт</span>}
               </div>

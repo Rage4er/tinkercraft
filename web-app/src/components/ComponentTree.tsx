@@ -17,6 +17,7 @@ import {
   EyeIcon,
   EyeOffIcon,
   DeleteIcon,
+  UnionIcon,
 } from './icons'
 
 interface Props {
@@ -33,6 +34,8 @@ const INPUT_SELECT_DELAY_MS = 30
 
 function displayName(obj: SceneObject): string {
   if (obj.name) return obj.name
+  if (obj.shapeType === 'csg') return `CSG ${obj.id.split('_')[1] ?? ''}`
+  if (obj.shapeType === 'import_mesh') return `Импорт ${obj.id.split('_')[1] ?? ''}`
   return `${obj.shapeType} ${obj.id.split('_')[1] ?? ''}`
 }
 
@@ -91,6 +94,7 @@ export default function ComponentTree({ objects, selectedIds, onSelect, onRename
               {obj.shapeType === 'prism' && <PrismIcon size={32} />}
               {obj.shapeType === 'pyramid' && <PyramidIcon size={32} />}
               {obj.shapeType === 'import_mesh' && <ImportIcon size={32} />}
+              {obj.shapeType === 'csg' && <UnionIcon size={32} />}
             </span>
 
             {/* Имя (двойной клик = редактирование) */}

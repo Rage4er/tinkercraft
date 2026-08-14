@@ -403,8 +403,8 @@ export default function PropertiesPanel({
         </div>
       )}
 
-      {/* Fillet — только для кубов */}
-      {canFillet && (
+      {/* Fillet — только для кубов (не для CSG результатов) */}
+      {canFillet && firstSelected.shapeType === 'cube' && (
         <div className="csg-group">
           <div className="csg-group-title">Скругление (Fillet)</div>
           <NumInput

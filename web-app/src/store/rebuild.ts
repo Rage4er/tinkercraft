@@ -139,7 +139,7 @@ export function buildRebuildMeta(ops: TinkerCraftOperation[]): {
         const startT: TransformNR = op.resultCenter
           ? { x: op.resultCenter.x, y: op.resultCenter.y, z: op.resultCenter.z, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
           : makeDefaultTransform() as TransformNR
-        meta[op.resultId] = { color: srcColor, shapeType: 'cube', params: {}, transform: startT, visible: true }
+        meta[op.resultId] = { color: srcColor, shapeType: op.shapeType ?? 'csg', params: {}, transform: startT, visible: true }
         transforms[op.resultId] = startT
         csgResultIds.add(op.resultId)
         // Store result mesh data for rebuild (FIX CRIT-CSG-2)

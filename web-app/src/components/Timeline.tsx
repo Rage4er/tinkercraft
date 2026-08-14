@@ -55,6 +55,7 @@ export function opIcon(op: TinkerCraftOperation): React.ReactNode {
         case "torus": return <TorusIcon size={32} />;
         case "prism": return <PrismIcon size={32} />;
         case "pyramid": return <PyramidIcon size={32} />;
+        case "csg": return <UnionIcon size={32} />;
         default: return <CubeIcon size={32} />;
       }
     case "import_mesh":
@@ -99,6 +100,7 @@ export function opIcon(op: TinkerCraftOperation): React.ReactNode {
 export function opLabel(op: TinkerCraftOperation): string {
   switch (op.type) {
     case "add_shape":
+      if (op.shapeType === 'csg') return 'CSG результат'
       return `Добавить ${op.shapeType}`;
     case "import_mesh":
       return `Импорт ${(op as { name?: string }).name ?? "STL"}`;
