@@ -203,14 +203,14 @@ export function buildPrimitive(shapeType: string, params: Record<string, number>
     }
     case 'sphere': {
       const r = params.radius ?? 12
-      const seg = params.segments ?? 32
+      const seg = params.segments ?? 48
       if (r <= 0) return Manifold.cube([20, 20, 20], true)
       return Manifold.sphere(r, seg)
     }
     case 'cylinder': {
       const h = params.height ?? 30
       const r = params.radius ?? 10
-      const seg = params.segments ?? 32
+      const seg = params.segments ?? 48
       if (h <= 0 || r <= 0) return Manifold.cube([20, 20, 20], true)
       return Manifold.cylinder(h, r, r, seg, true)
     }
@@ -219,14 +219,14 @@ export function buildPrimitive(shapeType: string, params: Record<string, number>
         params.height ?? 30,
         params.radius ?? 10,
         0,
-        params.segments ?? 32,
+        params.segments ?? 48,
         true,
       )
     case 'torus': {
       const torusRadius = params.torusRadius ?? 15
       const tubeRadius = params.tubeRadius ?? 4
-      const segments = Math.max(8, Math.round(params.segments ?? 32))
-      const tubeSegs = Math.max(4, Math.round(params.tubeSegments ?? 16))
+      const segments = Math.max(16, Math.round(params.segments ?? 48))
+      const tubeSegs = Math.max(8, Math.round(params.tubeSegments ?? 24))
       const { CrossSection } = wasm
       const circle = CrossSection.circle(tubeRadius, tubeSegs)
       const translated = circle.translate([torusRadius, 0])

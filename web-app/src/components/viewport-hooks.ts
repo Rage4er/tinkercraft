@@ -541,13 +541,23 @@ export function useMeshSync(
                     new THREE.Float32BufferAttribute(obj.vertices, 3),
                 );
                 geometry.setIndex(new THREE.BufferAttribute(obj.indices, 1));
-                geometry.computeVertexNormals();
+                // FIX: Use normals from worker instead of recomputing (which averages them)
+                if (obj.normals && obj.normals.length > 0) {
+                    geometry.setAttribute("normal", new THREE.Float32BufferAttribute(obj.normals, 3));
+                } else {
+                    geometry.computeVertexNormals();
+                }
+
+                // FIX: flatShading для плоских фигур (куб, призма, пирамида, CSG)
+                const flatShapes = ['cube', 'prism', 'pyramid'];
+                const isFlat = flatShapes.includes(obj.shapeType) || !obj.params || Object.keys(obj.params).length === 0;
 
                 const material = new THREE.MeshStandardMaterial({
                     color: obj.color,
                     roughness: MATERIAL_ROUGHNESS,
                     metalness: MATERIAL_METALNESS,
                     side: THREE.DoubleSide,
+                    flatShading: isFlat,
                 });
                 const rawMesh = new THREE.Mesh(geometry, material);
                 rawMesh.castShadow = true;
