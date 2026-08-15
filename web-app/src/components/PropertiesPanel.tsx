@@ -150,7 +150,11 @@ export default function PropertiesPanel({
     <>
       <div className="props-row">
         <span className="props-label">{t("properties.type")}</span>
-        <span className="props-value">{firstSelected.shapeType}</span>
+        <span className="props-value">
+          {firstSelected.shapeType === 'csg' ? t("csg.result") :
+            firstSelected.shapeType === 'import_mesh' ? t("actions.import") :
+              t(`shapes.${firstSelected.shapeType}`)}
+        </span>
       </div>
 
       <div className="props-row">
