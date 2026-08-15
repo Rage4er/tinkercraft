@@ -32,6 +32,7 @@
 
 ### Fixed
 
+- **CYCLE-CSG-RELOAD (CSG не отображается при загрузке проекта)**: Корневая проблема — `jumpToHistoryInner` вызывал `restoreTreeFromSnapshot` **всегда**, даже при cache hit. Кэш дерева сохранялся ДО фикса CYCLE-CSG, когда boolean-узлы пропускались из-за ошибки цикла. `restoreTreeFromSnapshot` очищал дерево и восстанавливал из кэша → boolean-узлы удалялись → CSG не рендерился. Исправлено: `rebuildBuildTree` вызывается **всегда** (не только при cache miss), `restoreTreeFromSnapshot` убран. Дерево всегда синхронизировано с историей операций. (`document-store.ts`)
 - **CYCLE-CSG (циклическая зависимость при загрузке проекта)**: При `jumpToHistory` / `loadFromProject` дети CSG-операции (`obj_1`, `obj_2`) уже имеют `parentId`, указывающий на существующий узел. `isAncestor()` возвращает `true`, `createBooleanNode` выбрасывает `Cannot create cycle in tree`. Исправлено: сброс `parentId = undefined` у детей перед созданием boolean-узла. (`rebuild.ts`)
 - **SHADOW ACNE (полосатые грани фигур)**: Вертикальные и наклонные грани куба/сферы/конуса были покрыты полосами от самозатенения. Причины: 1) `shadow.bias` отсутствовал — добавлены `bias = -0.002` и `normalBias = 0.05`; 2) карта теней 2048px была мала для области ±200 — увеличена до 4096px. Горизонтальные грани были чистыми, вертикальные требовали большего bias из-за угла падения света. (`viewport-hooks.ts`)
 

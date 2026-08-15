@@ -69,11 +69,14 @@ async function jumpToHistoryInner(newIdx: number, actionName: string): Promise<v
     const t0 = performance.now()
     const cached = getCachedSnapshot(newIdx)
     const newObjects = cached ?? await rebuildFromHistory(getState().operations.slice(0, newIdx))
+    // FIX (CYCLE-CSG-RELOAD): Always rebuild the build tree from operations.
+    // The cached tree snapshot may be stale (saved before CYCLE-CSG fix),
+    // missing boolean nodes that were skipped due to cycle errors.
+    // Rebuild ensures the tree always matches the current operation history.
+    rebuildBuildTree(getState().operations.slice(0, newIdx), newObjects)
     if (!cached) {
       cacheSnapshotWithTree(newIdx, newObjects)
-      rebuildBuildTree(getState().operations.slice(0, newIdx), newObjects)
     }
-    restoreTreeFromSnapshot(newIdx)
     setState({ historyIndex: newIdx, objects: newObjects, selectedIds: [], busy: false, lastCsgMs: performance.now() - t0 })
     invalidateMirrorCache()
   } catch (e) { setState({ busy: false }); console.error(actionName + ':', e); notify(i18n.t('errors.operationFailed', { name: actionName.toLowerCase() }), 'error') }
