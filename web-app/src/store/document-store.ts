@@ -26,7 +26,7 @@ import {
 import type { MeshResult } from '../csg/worker-handlers'
 import { parseDoodle, serializeDoodle, openDoodleFilePicker, downloadBlob } from '../io/doodle-io'
 import { notify } from './notifications'
-import { saveProject as pmSave, updateProject as pmUpdate, loadProject as pmLoad } from '../io/project-manager'
+import { saveProject as pmSave, updateProject as pmUpdate, loadProject as pmLoad, listProjects as pmList } from '../io/project-manager'
 import { downloadStl } from '../io/stl-export'
 import { openStlFilePicker, parseStlFile } from '../io/stl-import'
 import { autosaveSession, restoreSession } from '../io/autosave'
@@ -186,6 +186,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   busy: false,
   lastCsgMs: null,
   currentProjectId: null,
+  currentProjectName: null,
 
   // ── Добавить фигуру ──
   addShape: async (shapeType, params) => {
@@ -874,7 +875,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     await workerClearAll()
     clearSnapshots()
     clearTree()
-    set({ operations: [], historyIndex: 0, objects: {}, selectedIds: [], modified: false, fileName: null, lastCsgMs: null })
+    set({ operations: [], historyIndex: 0, objects: {}, selectedIds: [], modified: false, fileName: null, lastCsgMs: null, currentProjectId: null, currentProjectName: null })
     invalidateMirrorCache()
   },
 
@@ -893,7 +894,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       // FIX (R17-7): Rebuild build tree after loading from file to ensure
       // CSG/mirror/align operations have the correct tree structure.
       rebuildBuildTree(doc.operations, newObjects)
-      set({ operations: doc.operations, historyIndex: doc.operations.length, objects: newObjects, selectedIds: [], fileName: picked.file.name, modified: false, busy: false, lastCsgMs: performance.now() - t0 })
+      set({ operations: doc.operations, historyIndex: doc.operations.length, objects: newObjects, selectedIds: [], fileName: picked.file.name, modified: false, busy: false, lastCsgMs: performance.now() - t0, currentProjectId: null, currentProjectName: null })
       cacheSnapshotWithTree(doc.operations.length, newObjects)
       invalidateMirrorCache()
     } catch (e) { set({ busy: false }); notify(`Ошибка открытия: ${e}`, 'error') }
@@ -1124,17 +1125,30 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
 
   // ── Project Manager ──
   saveToProject: async (name) => {
-    const { operations, historyIndex, objects, currentProjectId } = get()
+    const { operations, historyIndex, objects, currentProjectId, currentProjectName } = get()
     const ops = operations.slice(0, historyIndex)
     const count = Object.keys(objects).length
-    if (currentProjectId) {
-      await pmUpdate(currentProjectId, name, ops, count)
-    } else {
-      const meta = await pmSave(name, ops, count)
-      set({ currentProjectId: meta.id })
+    // If project already has an ID, update it. Use existing name if name is empty.
+    const effectiveName = name || currentProjectName || 'Без названия'
+    try {
+      // Check for name conflicts with other projects
+      const all = await pmList()
+      const conflict = all.find(p => p.name === effectiveName && p.id !== currentProjectId)
+      if (conflict) {
+        notify(`Проект с именем "${effectiveName}" уже существует`, 'error')
+        return
+      }
+      if (currentProjectId) {
+        await pmUpdate(currentProjectId, effectiveName, ops, count)
+      } else {
+        const meta = await pmSave(effectiveName, ops, count)
+        set({ currentProjectId: meta.id })
+      }
+      set({ modified: false, currentProjectName: effectiveName })
+    } catch (e) {
+      console.error('saveToProject:', e)
+      notify(e instanceof Error ? e.message : 'Ошибка сохранения проекта', 'error')
     }
-    // BUG-R8-2: Сбрасываем modified flag после успешного сохранения
-    set({ modified: false })
   },
 
   loadFromProject: async (id) => {
@@ -1148,8 +1162,17 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const t0 = performance.now()
       const newObjects = await rebuildFromHistory(record.operations)
       rebuildBuildTree(record.operations, newObjects)
-      set({ operations: record.operations, historyIndex: record.operations.length, objects: newObjects, selectedIds: [], fileName: null, modified: false, busy: false, lastCsgMs: performance.now() - t0, currentProjectId: id })
+      set({ operations: record.operations, historyIndex: record.operations.length, objects: newObjects, selectedIds: [], fileName: null, modified: false, busy: false, lastCsgMs: performance.now() - t0, currentProjectId: id, currentProjectName: record.name })
       cacheSnapshotWithTree(record.operations.length, newObjects)
     } catch (e) { set({ busy: false }); console.error('loadFromProject:', e); notify('Ошибка загрузки проекта', 'error') }
+  },
+
+  // ── Set current project (for ProjectManagerModal) ──
+  setCurrentProject: (id, name) => {
+    if (id) {
+      set({ currentProjectId: id, currentProjectName: name ?? null })
+    } else {
+      set({ currentProjectId: null, currentProjectName: null })
+    }
   },
 }))

@@ -20,6 +20,7 @@ export interface DocumentStore {
   lastCsgMs: null | number
 
   currentProjectId: string | null
+  currentProjectName: string | null
 
   // Actions
   addShape: (shapeType: ShapeType, params?: ShapeParams) => Promise<void>
@@ -52,4 +53,5 @@ export interface DocumentStore {
   restoreAutosave: () => Promise<boolean>
   saveToProject: (name: string) => Promise<void>
   loadFromProject: (id: string) => Promise<void>
+  setCurrentProject: (id: string | null, name?: string | null) => void
 }

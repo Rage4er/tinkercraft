@@ -28,6 +28,17 @@
 
 - **DIAG:* логи → dev mode**: Все `console.log` с префиксом `[DIAG:*]` в `worker-handlers.ts` и `document-store.ts` переключены на условное логирование через `import.meta.env?.DEV`. Логи работают только в dev-режиме (`pnpm dev`), отсутствуют в production (`pnpm build`). Не удалены — пригодятся для отладки. (`worker-handlers.ts`, `document-store.ts`)
 
+### Fixed (проекты и STL)
+
+- **PROJECT-STATUS: "Несохранённый проект" после сохранения в менеджере**: PropertiesPanel проверял только `fileName`, который никогда не устанавливался при сохранении через менеджер проектов (`saveToProject`). Теперь отображается `currentProjectName`, добавлены поля `currentProjectId`/`currentProjectName` в store. Также добавлен индикатор несохранённых изменений (•) рядом с именем проекта. (`PropertiesPanel.tsx`, `document-store.ts`, `types.ts`)
+- **QUICK-SAVE-NAME: быстрое сохранение больше не переименовывает проект**: Раньше кнопка "Быстрое сохранение" всегда вызывала `onSaveToProject("Проект HH:MM:SS")`, перезаписывая имя уже сохранённого проекта. Теперь при наличии текущего проекта имя сохраняется (кнопка меняется на "Сохранить"). (`PropertiesPanel.tsx`, `document-store.ts`)
+- **PROJECT-DELETE-SYNC: сброс currentProjectId при удалении проекта**: `setCurrentProjectId={() => {}}` в App.tsx был пустышкой — после удаления текущего проекта store продолжал ссылаться на удалённый ID. Добавлен action `setCurrentProject` в store. (`App.tsx`, `document-store.ts`, `types.ts`)
+- **PROJECT-NAME-CONFLICT: конфликт имён проектов обрабатывается**: `saveToProject` теперь проверяет конфликты имён через `pmList` и показывает toast вместо молчаливого падения. (`document-store.ts`)
+- **STL-ROT-XYZ: STL экспорт использует корректную матрицу поворота**: `applyTransformToVertices`/`applyTransformToNormals` использовали дублированную матрицу `Rz × Ry × Rx`, расходящуюся с Three.js `Euler 'XYZ'` при многоосевом повороте. Теперь используют общий `computeRSMatrix` из `worker-matrix.ts`. (`stl-export.ts`)
+- **STL-NORMAL-TYPO: опечатка в усреднении нормалей**: `nz = (normals[i0*3+2] + normals[i2*3+2] + normals[i2*3+2]) / 3` — второй индекс был `i2` вместо `i1`. (`stl-export.ts`)
+- **STL-NORMAL-SCALE: нормали больше не масштабируются**: Нормали — это векторы направления, они не должны умножаться на `Sx, Sy, Sz` при экспорте. Для неравномерного масштаба это давало неверные нормали. Теперь применяется только поворот (масштаб не влияет). (`stl-export.ts`)
+- **STL-TESTS**: Добавлены тесты: многоосевой поворот в STL экспорте соответствует Three.js XYZ, неединичный масштаб применяется по осям. (`stl-export.test.ts`)
+
 - **ALIGN: aabb не обновлялся при moveObject (CRITICAL FIX)**: При перемещении объекта gizmo'ом `moveObject` обновлял `transform`, но не `aabb`. `aabb` оставался от момента создания (мировой bbox на позиции 0,0,0). `ALIGN` брал этот старый bbox → delta считалась неправильно → объекты улетали. Исправление: 1) `moveObject` теперь сдвигает `aabb` на тот же delta; 2) `computeWorldAABB` возвращает `obj.aabb` напрямую (он уже мировой, вершины содержат translate от `handleBuildShape`). (`document-store.ts`, `helpers.ts`)
 
 - **ALIGNS: AABB мировые координаты (FIX ALIGN-8)**: Создана `computeWorldAABB(obj)` в `helpers.ts` — возвращает мировой bbox (локальный + transform.position). Старая `computeAABB(vertices)` оставлена для CSG (вершины уже центрированы). `alignSelected` теперь использует `computeWorldAABB` вместо ручного сложения. Добавлен подробный лог: `anchorWorldAabb`, `targetAabb`, `cur`, `delta`. (`helpers.ts`, `document-store.ts`)

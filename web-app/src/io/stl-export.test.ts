@@ -120,4 +120,45 @@ describe('exportToStl', () => {
     const blob2 = await exportToStl([obj2]).arrayBuffer()
     expect(new Uint8Array(blob1)).toEqual(new Uint8Array(blob2))
   })
+
+  it('multi-axis rotation matches Three.js XYZ Euler order', async () => {
+    // FIX (ROT-XYZ-STL): exportToStl now uses computeRSMatrix (Three.js XYZ).
+    // Rotate vertex (1,0,0) by rotX=30, rotY=45, rotZ=0.
+    // Expected: (0.7071, 0.3536, -0.6124) — verified via Three.js.
+    const obj = makeObj({
+      vertices: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]),
+      indices: new Uint32Array([0, 1, 2]),
+      transform: { ...T, rotX: 30, rotY: 45, rotZ: 0 },
+    })
+    const blob = exportToStl([obj])
+    const buf = new ArrayBuffer(blob.size)
+    new Uint8Array(buf).set(new Uint8Array(await blob.arrayBuffer()))
+    const dv = new DataView(buf)
+    // Vertex B at: header(84) + normal(12) + vertexA(12) = 108
+    const bx = dv.getFloat32(84 + 12 + 12, true)
+    const by = dv.getFloat32(84 + 12 + 12 + 4, true)
+    const bz = dv.getFloat32(84 + 12 + 12 + 8, true)
+    expect(bx).toBeCloseTo(0.7071, 3)
+    expect(by).toBeCloseTo(0.3536, 3)
+    expect(bz).toBeCloseTo(-0.6124, 3)
+  })
+
+  it('non-uniform scale applies per-axis', async () => {
+    // Vertex (1,1,1) scaled X=2, Y=3, Z=4 → (2,3,4)
+    const obj = makeObj({
+      vertices: new Float32Array([0, 0, 0, 1, 1, 1, 0, 1, 0]),
+      indices: new Uint32Array([0, 1, 2]),
+      transform: { ...T, scaleX: 2, scaleY: 3, scaleZ: 4 },
+    })
+    const blob = exportToStl([obj])
+    const buf = new ArrayBuffer(blob.size)
+    new Uint8Array(buf).set(new Uint8Array(await blob.arrayBuffer()))
+    const dv = new DataView(buf)
+    const bx = dv.getFloat32(84 + 12 + 12, true)
+    const by = dv.getFloat32(84 + 12 + 12 + 4, true)
+    const bz = dv.getFloat32(84 + 12 + 12 + 8, true)
+    expect(bx).toBeCloseTo(2, 5)
+    expect(by).toBeCloseTo(3, 5)
+    expect(bz).toBeCloseTo(4, 5)
+  })
 })

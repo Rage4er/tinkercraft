@@ -3,12 +3,16 @@
 // Compatible with TinkerCraft Java ExportManager.java
 // ============================================================
 
-import * as THREE from 'three'
 import type { SceneObject, TransformNR } from '../csg/types'
+import { computeRSMatrix } from '../csg/worker-matrix'
 
 /**
  * Применить трансформацию (position, rotation, scale) к вершинам.
  * FIX (WARN-R3-8): STL экспорт теперь учитывает obj.transform.
+ * FIX (ROT-XYZ-STL): Использует computeRSMatrix из worker-matrix.ts для
+ * совместимости с Three.js Euler 'XYZ' (Rx · Ry · Rz). Раньше была
+ * дублированная матрица Rz × Ry × Rx, которая расходилась с рендером
+ * при многоосевом повороте.
  */
 function applyTransformToVertices(
   vertices: Float32Array,
@@ -23,30 +27,11 @@ function applyTransformToVertices(
     return vertices;
   }
 
-  // Build transformation matrix: Translation × Rotation × Scale
-  // Euler XYZ (Three.js default): R = Rz × Ry × Rx
-  const rx = transform.rotX * (Math.PI / 180);
-  const ry = transform.rotY * (Math.PI / 180);
-  const rz = transform.rotZ * (Math.PI / 180);
-
-  const cx = Math.cos(rx), sx = Math.sin(rx);
-  const cy = Math.cos(ry), sy = Math.sin(ry);
-  const cz = Math.cos(rz), sz = Math.sin(rz);
-
-  // Scale matrix
-  const Sx = transform.scaleX, Sy = transform.scaleY, Sz = transform.scaleZ;
-
-  // Rotation matrix (row-major for direct multiplication)
-  // R = Rz × Ry × Rx
-  const r00 = cz * cy;
-  const r01 = cz * sy * sx - sz * cx;
-  const r02 = cz * sy * cx + sz * sx;
-  const r10 = sz * cy;
-  const r11 = sz * sy * sx + cz * cx;
-  const r12 = sz * sy * cx - cz * sx;
-  const r20 = -sy;
-  const r21 = cy * sx;
-  const r22 = cy * cx;
+  // Use shared computeRSMatrix (Three.js XYZ Euler order: Rx · Ry · Rz)
+  const [r00, r01, r02, r10, r11, r12, r20, r21, r22] = computeRSMatrix(
+    { rotX: transform.rotX, rotY: transform.rotY, rotZ: transform.rotZ },
+    { scaleX: transform.scaleX, scaleY: transform.scaleY, scaleZ: transform.scaleZ },
+  )
 
   // Apply rotation + scale then translation
   const count = vertices.length / 3;
@@ -57,27 +42,22 @@ function applyTransformToVertices(
     const vy = vertices[i * 3 + 1];
     const vz = vertices[i * 3 + 2];
 
-    // Rotate + Scale
-    let nx = r00 * vx * Sx + r01 * vy * Sy + r02 * vz * Sz;
-    let ny = r10 * vx * Sx + r11 * vy * Sy + r12 * vz * Sz;
-    let nz = r20 * vx * Sx + r21 * vy * Sy + r22 * vz * Sz;
-
-    // Translate
-    nx += transform.x;
-    ny += transform.y;
-    nz += transform.z;
-
-    transformed[i * 3] = nx;
-    transformed[i * 3 + 1] = ny;
-    transformed[i * 3 + 2] = nz;
+    // RS × v + pos (column-major matrix multiplication)
+    transformed[i * 3] = r00 * vx + r01 * vy + r02 * vz + transform.x;
+    transformed[i * 3 + 1] = r10 * vx + r11 * vy + r12 * vz + transform.y;
+    transformed[i * 3 + 2] = r20 * vx + r21 * vy + r22 * vz + transform.z;
   }
 
   return transformed;
 }
 
 /**
- * Transform normals by rotation+scale (NO translation — normals are direction vectors).
+ * Transform normals by rotation (NO scale, NO translation — normals are direction vectors).
  * FIX (MED-18-43): Enables correct normals for rotated objects in STL export.
+ * FIX (ROT-XYZ-STL): Uses computeRSMatrix for Three.js XYZ Euler order.
+ * FIX (NORMAL-SCALE): Normals are NOT scaled — only rotation is applied.
+ * For non-uniform scale, correct normals require inverse-transpose, but
+ * averaging + normalization is sufficient for STL export.
  */
 function applyTransformToNormals(
   normals: Float32Array,
@@ -88,20 +68,12 @@ function applyTransformToNormals(
     return normals
   }
 
-  const rx = THREE.MathUtils.degToRad(transform.rotX)
-  const ry = THREE.MathUtils.degToRad(transform.rotY)
-  const rz = THREE.MathUtils.degToRad(transform.rotZ)
+  // Use computeRSMatrix with identity scale (normals are direction, not position)
+  const [r00, r01, r02, r10, r11, r12, r20, r21, r22] = computeRSMatrix(
+    { rotX: transform.rotX, rotY: transform.rotY, rotZ: transform.rotZ },
+    { scaleX: 1, scaleY: 1, scaleZ: 1 },
+  )
 
-  const cx = Math.cos(rx), sx = Math.sin(rx)
-  const cy = Math.cos(ry), sy = Math.sin(ry)
-  const cz = Math.cos(rz), sz = Math.sin(rz)
-
-  // Rotation matrix (same order as applyTransformToVertices: Rz × Ry × Rx)
-  const r00 = cz * cy, r01 = cz * sy * sx - sz * cx, r02 = cz * sy * cx + sz * sx
-  const r10 = sz * cy, r11 = sz * sy * sx + cz * cx, r12 = sz * sy * cx - cz * sx
-  const r20 = -sy, r21 = cy * sx, r22 = cy * cx
-
-  const Sx = transform.scaleX, Sy = transform.scaleY, Sz = transform.scaleZ
   const count = normals.length / 3
   const transformed = new Float32Array(count * 3)
 
@@ -110,9 +82,9 @@ function applyTransformToNormals(
     const ny = normals[i * 3 + 1]
     const nz = normals[i * 3 + 2]
 
-    transformed[i * 3] = (r00 * nx + r01 * ny + r02 * nz) * Sx
-    transformed[i * 3 + 1] = (r10 * nx + r11 * ny + r12 * nz) * Sy
-    transformed[i * 3 + 2] = (r20 * nx + r21 * ny + r22 * nz) * Sz
+    transformed[i * 3] = r00 * nx + r01 * ny + r02 * nz
+    transformed[i * 3 + 1] = r10 * nx + r11 * ny + r12 * nz
+    transformed[i * 3 + 2] = r20 * nx + r21 * ny + r22 * nz
   }
 
   return transformed
@@ -187,7 +159,7 @@ export function exportToStl(objects: SceneObject[]): Blob {
         // Average the three vertex normals for a smoother face normal
         nx = (normals[i0 * 3] + normals[i1 * 3] + normals[i2 * 3]) / 3
         ny = (normals[i0 * 3 + 1] + normals[i1 * 3 + 1] + normals[i2 * 3 + 1]) / 3
-        nz = (normals[i0 * 3 + 2] + normals[i2 * 3 + 2] + normals[i2 * 3 + 2]) / 3
+        nz = (normals[i0 * 3 + 2] + normals[i1 * 3 + 2] + normals[i2 * 3 + 2]) / 3
         const len = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1
         nx /= len; ny /= len; nz /= len
       } else {

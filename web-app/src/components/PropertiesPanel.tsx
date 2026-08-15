@@ -31,6 +31,9 @@ export default function PropertiesPanel({
   onToggleVisible,
   onShowProjects,
   onSaveToProject,
+  currentProjectId,
+  currentProjectName,
+  modified,
 }: {
   firstSelected: SceneObject | null;
   busy: boolean;
@@ -44,6 +47,9 @@ export default function PropertiesPanel({
   objectList: SceneObject[];
   operationsLength: number;
   fileName: string | null;
+  currentProjectId: string | null;
+  currentProjectName: string | null;
+  modified: boolean;
   onSetFilletRadius: (v: number) => void;
   onMoveAxis: (axis: "x" | "y" | "z", val: number) => void;
   onRotAxis: (axis: "rotX" | "rotY" | "rotZ", val: number) => void;
@@ -103,9 +109,15 @@ export default function PropertiesPanel({
         {/* Проект */}
         <div className="csg-group margin-8-0">
           <div className="csg-group-title">Проект</div>
-          {fileName ? (
+          {currentProjectName ? (
+            <div className="text-sm text-muted" style={{ padding: "4px 12px 8px" }}>
+              📁 <strong>{currentProjectName}</strong>
+              {modified && <span className="text-warning"> •</span>}
+            </div>
+          ) : fileName ? (
             <div className="text-sm text-muted" style={{ padding: "4px 12px 8px" }}>
               📄 <strong>{fileName}</strong>
+              {modified && <span className="text-warning"> •</span>}
             </div>
           ) : (
             <div className="text-sm text-muted" style={{ padding: "4px 12px 8px" }}>
@@ -122,12 +134,10 @@ export default function PropertiesPanel({
             className="btn primary btn-full mt-2"
             disabled={operationsLength === 0}
             onClick={() =>
-              onSaveToProject(
-                "Проект " + new Date().toLocaleTimeString("ru"),
-              )
+              onSaveToProject(currentProjectName ?? "")
             }
           >
-            <SaveIcon size={32} /> Быстрое сохранение
+            <SaveIcon size={32} /> {currentProjectId ? "Сохранить" : "Быстрое сохранение"}
           </button>
         </div>
       </>

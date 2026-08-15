@@ -88,6 +88,7 @@ export default function App() {
       modified: s.modified,
       clipboard: s.clipboard,
       currentProjectId: s.currentProjectId,
+      currentProjectName: s.currentProjectName,
       addShape: s.addShape,
       addRawMesh: s.addRawMesh,
       importStl: s.importStl,
@@ -118,6 +119,7 @@ export default function App() {
       restoreAutosave: s.restoreAutosave,
       saveToProject: s.saveToProject,
       loadFromProject: s.loadFromProject,
+      setCurrentProject: s.setCurrentProject,
     })),
   );
   const {
@@ -131,6 +133,7 @@ export default function App() {
     modified,
     clipboard,
     currentProjectId,
+    currentProjectName,
     addShape,
     addRawMesh,
     importStl,
@@ -161,6 +164,7 @@ export default function App() {
     restoreAutosave,
     saveToProject,
     loadFromProject,
+    setCurrentProject,
   } = docStore;
 
   useEffect(() => {
@@ -452,7 +456,7 @@ export default function App() {
           }}
           onSave={saveToProject}
           currentProjectId={currentProjectId ?? undefined}
-          setCurrentProjectId={() => { }}
+          setCurrentProjectId={(id) => { setCurrentProject(id ?? null) }}
         />
       )}
 
@@ -615,6 +619,9 @@ export default function App() {
             objectList={objectList}
             operationsLength={operations.length}
             fileName={fileName}
+            currentProjectId={currentProjectId}
+            currentProjectName={currentProjectName}
+            modified={modified}
             onSetFilletRadius={setFilletRadius}
             onMoveAxis={handleMoveAxis}
             onRotAxis={handleRotAxis}
