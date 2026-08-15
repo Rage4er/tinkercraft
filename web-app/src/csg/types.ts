@@ -159,7 +159,10 @@ export interface SceneObject {
   normals?: Float32Array | null
   aabb?: { min: Vec3; max: Vec3 }
   originalBboxSize?: { x: number; y: number; z: number }
-  isCsgResult?: boolean
+  /** CSG operation type — only for shapeType='csg' */
+  operation?: CsgBooleanOp
+  /** IDs of source objects — only for shapeType='csg' */
+  children?: string[]
 }
 
 export type CsgBooleanOp = 'union' | 'subtract' | 'intersect'

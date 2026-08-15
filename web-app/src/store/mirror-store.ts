@@ -67,12 +67,8 @@ async function syncObjectsForOperation(
         if (!obj) continue
 
         const isImport = obj.shapeType === 'import_mesh'
-        // FIX (MIRROR-CSG-DETECT): прежняя проверка `shapeType==='cube' && !params.width`
-        // слишком узкая — CSG-результат может иметь любой shapeType-заглушку.
-        // Надёжный признак CSG/baked: нет params или params пустой объект.
-        const isCsgResult = !isImport && (!obj.params || Object.keys(obj.params).length === 0)
-
-        if (isCsgResult || isImport) {
+        const isCSG = obj.shapeType === 'csg'
+        if (isCSG || isImport) {
             meshSyncs.push(
                 workerSyncMesh(id, obj.vertices, obj.indices, obj.transform)
                     .catch(e => console.warn('[Mirror] workerSyncMesh failed:', e)),
@@ -100,15 +96,9 @@ async function syncObjectsForOperation(
 function ensureInTree(id: string, obj: SceneObject): void {
     if (getNode(id) !== undefined) return
 
-    // FIX (MIRROR-CSG-KEEPTYPE): CSG-результаты (shapeType='cube', params={})
-    // и import_mesh должны регистрироваться как BAKED-ноды (у них есть готовый
-    // меш), а не как primitive cube с пустыми params (это построило бы дефолтный
-    // куб 20×20×20 вместо реальной геометрии).
-    const isPrimitive =
-        obj.shapeType &&
-        obj.shapeType !== 'import_mesh' &&
-        obj.params &&
-        Object.keys(obj.params).length > 0
+    // CSG results (shapeType='csg') and import_mesh are registered as BAKED nodes
+    // (they have a ready mesh). Primitives are registered with shapeType + params.
+    const isPrimitive = obj.shapeType !== 'csg' && obj.shapeType !== 'import_mesh'
 
     if (isPrimitive && obj.shapeType && obj.params) {
         createPrimitiveNode(id, obj.shapeType, obj.params, obj.transform)
@@ -132,20 +122,10 @@ export async function mirrorObject(
     const id = obj.id
     const newId = nextId()
 
-    // isPrimitive: непустые params — объект можно перестроить из параметров
-    // Для CSG-результатов params = {} → не примитив
-    const isPrimitive =
-        obj.shapeType &&
-        obj.shapeType !== 'import_mesh' &&
-        obj.params &&
-        Object.keys(obj.params).length > 0
-
-    // FIX (MIRROR-CSG-KEEPTYPE): CSG-результат определяется так же, как в
-    // syncObjectsForOperation — не import и пустые params. Зеркальная копия
-    // CSG-результата должна ОСТАВАТЬСЯ CSG-результатом (shapeType='csg',
-    // params={}), а не превращаться в import_mesh. Иначе булевы операции
-    // блокируются проверкой `shapeType === 'import_mesh'` в csgBoolean.
-    const isCSGResult = obj.shapeType !== 'import_mesh' && (!obj.params || Object.keys(obj.params).length === 0)
+    // Primitives have real params and can be rebuilt from shapeType + params.
+    // CSG results (shapeType='csg') and import_mesh have baked geometry.
+    const isPrimitive = obj.shapeType !== 'csg' && obj.shapeType !== 'import_mesh'
+    const isCSGResult = obj.shapeType === 'csg'
 
     let vertices: Float32Array
     let indices: Uint32Array

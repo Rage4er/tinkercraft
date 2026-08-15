@@ -140,12 +140,9 @@ async function syncObjectsForOperation(
     const obj = objects[id]
     if (!obj) continue
     const isImport = obj.shapeType === 'import_mesh'
-    // FIX (MIRROR-CSG-DETECT): прежняя проверка `shapeType==='cube' && !params.width`
-    // слишком узкая — CSG-результат может иметь любой shapeType-заглушку.
-    // Надёжный признак CSG/baked: нет params или params пустой объект.
-    const isCsgResult = !isImport && (!obj.params || Object.keys(obj.params).length === 0)
-    if (import.meta.env?.DEV) console.log(`[DIAG:syncObjectsForOperation] id=${id} shapeType=${obj.shapeType} params=${JSON.stringify(obj.params)} isCsgResult=${isCsgResult} isImport=${isImport} route=${isCsgResult || isImport ? 'workerSyncMesh' : 'workerSyncObjects'}`)
-    if (isCsgResult || isImport) {
+    const isCSG = obj.shapeType === 'csg'
+    if (import.meta.env?.DEV) console.log(`[DIAG:syncObjectsForOperation] id=${id} shapeType=${obj.shapeType} params=${JSON.stringify(obj.params)} isCSG=${isCSG} isImport=${isImport} route=${isCSG || isImport ? 'workerSyncMesh' : 'workerSyncObjects'}`)
+    if (isCSG || isImport) {
       // CSG result or imported mesh — sync mesh data with current transform
       meshSyncs.push(
         workerSyncMesh(id, obj.vertices, obj.indices, obj.transform).catch(e => console.warn('[syncObjectsForOperation] sync failed:', e)),
@@ -448,18 +445,11 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         const t = objects[id].transform
         return { x: t.x, y: t.y, z: t.z, rotX: t.rotX, rotY: t.rotY, rotZ: t.rotZ, scaleX: t.scaleX, scaleY: t.scaleY, scaleZ: t.scaleZ }
       }
-      // FIX (CRIT-CSG-4): Only send shapeType/params for regular primitives.
-      // For CSG results (shapeType='csg', params={}) and imported meshes,
-      // shapeType/params would be misinterpreted as default cube/build params.
-      // These objects are already synced via syncObjectsForOperation → workerSyncMesh.
-      // FIX (CSG-NESTED-SHAPETYPE): Предыдущая проверка `shapeType !== 'cube' || params.width`
-      // была завязана на старый shapeType='cube' для CSG-результатов. После введения
-      // отдельного shapeType='csg' эта проверка возвращала true → воркер вызывал
-      // buildPrimitive('csg', {}) → дефолтный куб 20×20×20 вместо реальной геометрии CSG.
-      // import_mesh уже исключён ранним return выше.
-      const hasRealParams = (obj: SceneObject) => !!obj.params && Object.keys(obj.params).length > 0
-      const isOperandA_Primitive = hasRealParams(objects[idA])
-      const isOperandB_Primitive = hasRealParams(objects[idB])
+      // Only send shapeType/params for regular primitives (not 'csg', not 'import_mesh').
+      // CSG results and imports are already synced via syncObjectsForOperation → workerSyncMesh.
+      // import_mesh already excluded by early return above.
+      const isOperandA_Primitive = objects[idA].shapeType !== 'csg'
+      const isOperandB_Primitive = objects[idB].shapeType !== 'csg'
       const mesh = await workerCsgBooleanWithSync(
         idA, idB, op, resultId, srOf(idA), srOf(idB),
         isOperandA_Primitive ? { shapeType: objects[idA].shapeType, params: objects[idA].params } : undefined,
@@ -482,27 +472,21 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         scaleX: 1, scaleY: 1, scaleZ: 1,
       }
 
-      const newObj: SceneObject = { id: resultId, shapeType: 'csg', params: {}, color: objects[idA].color, transform: resultTransform, visible: true, locked: false, vertices: mesh.vertices, indices: mesh.indices, normals: mesh.normals, aabb, originalBboxSize }
+      const newObj: SceneObject = { id: resultId, shapeType: 'csg', params: {}, operation: op, children: [idA, idB], color: objects[idA].color, transform: resultTransform, visible: true, locked: false, vertices: mesh.vertices, indices: mesh.indices, normals: mesh.normals, aabb, originalBboxSize }
       const newObjects = { ...objects }; delete newObjects[idA]; delete newObjects[idB]; newObjects[resultId] = newObj
       // Store result vertices/indices AND center position in GroupOperation
       // so rebuildFromHistory can reconstruct the CSG result geometry at the correct position.
       const histOp: GroupOperation = { type: 'group', ids: [idA, idB], resultId, resultVertices: mesh.vertices, resultIndices: mesh.indices, resultNormals: mesh.normals ?? undefined, resultCenter: { x: cx, y: cy, z: cz }, originalBboxSize: originalBboxSize, treeOperation: op as 'union' | 'subtract' | 'intersect', shapeType: 'csg' }
       const newOps = [...operations.slice(0, historyIndex), histOp]
       // Ensure children are registered in build tree.
-      // FIX (MIRROR-CSG-KEEPTYPE): CSG results (empty params) must be registered
-      // as BAKED nodes (carrying their actual mesh + transform), NOT as primitive
-      // cubes with empty params. Registering a placeholder cube would poison the
-      // tree: subsequent mirror/boolean rebuilds would build a default 20×20×20
-      // cube instead of the real CSG geometry ("параметры детей обнуляются").
+      // CSG results (shapeType='csg') and import_mesh are registered as BAKED nodes
+      // (carrying their actual mesh + transform). Primitives are registered with
+      // their shapeType + params for parametric rebuild.
       const ensureInTree = (id: string) => {
         if (!getNode(id)) {
           const obj = objects[id]
           if (obj) {
-            const isPrimitive =
-              obj.shapeType &&
-              obj.shapeType !== 'import_mesh' &&
-              obj.params &&
-              Object.keys(obj.params).length > 0
+            const isPrimitive = obj.shapeType !== 'csg' && obj.shapeType !== 'import_mesh'
             if (isPrimitive && obj.shapeType && obj.params) {
               createPrimitiveNode(id, obj.shapeType, obj.params, obj.transform)
             } else {
@@ -584,9 +568,9 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     // Ensure node exists in tree (may be missing after undo/redo tree restore)
     const treeExists = getNode(id) !== undefined
     if (!treeExists) {
-      // FIX (MIRROR-CSG-KEEPTYPE): CSG-результаты (shapeType='cube', params={})
-      // регистрируются как baked-ноды (готовый меш), а не как primitive cube.
-      const isPrimitive = obj.shapeType && obj.shapeType !== 'import_mesh' && obj.params && Object.keys(obj.params).length > 0
+      // FIX (MIRROR-CSG-KEEPTYPE): CSG-результаты (shapeType='csg') и import_mesh
+      // регистрируются как baked-ноды (готовый меш), а не как primitive.
+      const isPrimitive = obj.shapeType !== 'csg' && obj.shapeType !== 'import_mesh'
       if (isPrimitive && obj.shapeType && obj.params) {
         createPrimitiveNode(id, obj.shapeType, obj.params, obj.transform)
       } else {
@@ -833,8 +817,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         // For regular primitives, use workerSyncObjects (updates only transform in cache,
         // avoids full geometry rebuild via workerBuildShape).
         const isImport = obj.shapeType === 'import_mesh'
-        const isCsgResult = !isImport && (!obj.params || Object.keys(obj.params).length === 0)
-        if (isCsgResult || isImport) {
+        const isCSG = obj.shapeType === 'csg'
+        if (isCSG || isImport) {
           devLog('ALIGN:workerSyncMesh', { id })
           await workerSyncMesh(id, obj.vertices, obj.indices, nt).catch(() => { })
           newObjects[id] = { ...obj, transform: nt }
@@ -944,9 +928,9 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     syncNodeTransform(id, obj.transform)
 
     if (!treeExists) {
-      // FIX (MIRROR-CSG-KEEPTYPE): CSG-результаты (пустые params) → baked нода.
-      // import_mesh уже отфильтрован ранним return выше — сужение типа TS.
-      const isPrimitive = obj.shapeType && obj.params && Object.keys(obj.params).length > 0
+      // FIX (MIRROR-CSG-KEEPTYPE): CSG-результаты (shapeType='csg') → baked нода.
+      // import_mesh уже отфильтрован ранним return выше.
+      const isPrimitive = obj.shapeType !== 'csg'
       if (isPrimitive && obj.shapeType && obj.params) {
         createPrimitiveNode(id, obj.shapeType, obj.params, obj.transform)
       } else {
