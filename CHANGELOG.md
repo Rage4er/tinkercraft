@@ -32,6 +32,7 @@
 
 ### Fixed
 
+- **CYCLE-CSG (циклическая зависимость при загрузке проекта)**: При `jumpToHistory` / `loadFromProject` дети CSG-операции (`obj_1`, `obj_2`) уже имеют `parentId`, указывающий на существующий узел. `isAncestor()` возвращает `true`, `createBooleanNode` выбрасывает `Cannot create cycle in tree`. Исправлено: сброс `parentId = undefined` у детей перед созданием boolean-узла. (`rebuild.ts`)
 - **SHADOW ACNE (полосатые грани фигур)**: Вертикальные и наклонные грани куба/сферы/конуса были покрыты полосами от самозатенения. Причины: 1) `shadow.bias` отсутствовал — добавлены `bias = -0.002` и `normalBias = 0.05`; 2) карта теней 2048px была мала для области ±200 — увеличена до 4096px. Горизонтальные грани были чистыми, вертикальные требовали большего bias из-за угла падения света. (`viewport-hooks.ts`)
 
 - **VITE DEV-SERVER CRASH (ERR_HTTP_HEADERS_SENT)**: Dev-сервер падал при запросе JS-файлов из-за middleware `stripReactRefresh` — он вызывал `res.setHeader('Content-Length', ...)` после того, как Vite 6.4 уже отправил заголовки (повторный вызов `res.end`). Добавлена защита: проверка `res.writableEnded`/`res.headersSent` и try/catch вокруг setHeader. (`vite.config.ts`)

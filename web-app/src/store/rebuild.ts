@@ -317,6 +317,13 @@ export function rebuildBuildTree(
           continue
         }
 
+        // FIX (CYCLE-CSG): Reset parentId on children before creating boolean node.
+        // During jumpToHistory / loadFromProject, children may already have parentId
+        // pointing to a previous tree node. Without reset, isAncestor() returns true
+        // and createBooleanNode throws "Cannot create cycle in tree".
+        childA.parentId = undefined
+        childB.parentId = undefined
+
         try {
           // Pass the transform to the boolean node creation
           createBooleanNode(op.resultId, treeOp, childAId, childBId, startT)
