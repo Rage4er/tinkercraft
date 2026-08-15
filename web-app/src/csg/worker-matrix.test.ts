@@ -224,4 +224,45 @@ describe('buildTransformMatrix', () => {
     expect(applyMatrix4ToVec3(m1, v).x).toBeCloseTo(0)
     expect(applyMatrix4ToVec3(m2, v).x).toBeCloseTo(30)
   })
+
+  it('multi-axis rotation matches Three.js XYZ Euler order', () => {
+    // FIX (ROT-XYZ): verify that computeRSMatrix matches Three.js Euler 'XYZ'.
+    // Three.js 'XYZ' = intrinsic X→Y→Z = R = Rx · Ry · Rz.
+    // Previous code computed Rz · Ry · Rx which diverges for multi-axis rotation.
+    //
+    // Test: rotate (1,0,0) by rotX=30, rotY=45, rotZ=0.
+    // Expected result computed via Three.js Matrix4.makeRotationFromEuler('XYZ').
+    const m = buildTransformMatrix(
+      { x: 0, y: 0, z: 0 },
+      { rotX: 30, rotY: 45, rotZ: 0 },
+      { scaleX: 1, scaleY: 1, scaleZ: 1 },
+    )
+    const v = { x: 1, y: 0, z: 0 }
+    const result = applyMatrix4ToVec3(m, v)
+
+    // Three.js XYZ Euler with rotX=30, rotY=45, rotZ=0:
+    // R[0][0] = cos(45)*cos(0) = cos(45) ≈ 0.7071
+    // R[1][0] = cos(30)*sin(0) + sin(30)*sin(45)*cos(0) = 0 + 0.5*0.7071 ≈ 0.3536
+    // R[2][0] = -cos(30)*sin(45)*cos(0) + sin(30)*sin(0) = -0.866*0.7071 ≈ -0.6124
+    expect(result.x).toBeCloseTo(0.7071, 3)
+    expect(result.y).toBeCloseTo(0.3536, 3)
+    expect(result.z).toBeCloseTo(-0.6124, 3)
+  })
+
+  it('multi-axis rotation with all three axes', () => {
+    // rotX=30, rotY=40, rotZ=50 — verify against Three.js XYZ Euler.
+    const m = buildTransformMatrix(
+      { x: 0, y: 0, z: 0 },
+      { rotX: 30, rotY: 40, rotZ: 50 },
+      { scaleX: 1, scaleY: 1, scaleZ: 1 },
+    )
+    const v = { x: 1, y: 0, z: 0 }
+    const result = applyMatrix4ToVec3(m, v)
+
+    // Verified via Three.js Matrix4.makeRotationFromEuler('XYZ'):
+    // (1,0,0) → (0.4924, 0.8700, 0.0252)
+    expect(result.x).toBeCloseTo(0.4924, 3)
+    expect(result.y).toBeCloseTo(0.8700, 3)
+    expect(result.z).toBeCloseTo(0.0252, 3)
+  })
 })

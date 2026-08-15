@@ -8,12 +8,13 @@
  * FIX (CODE-R16-1): Extracted shared logic to eliminate duplication between
  * rebuild.ts and worker-matrix.ts. Returns row-indexed elements r<row><col>.
  *
- * FIX (MED-18-27): Euler order is fixed as XYZ (Rz × Ry × Rx) and documented.
- * All code in the project uses this same order — Three.js Euler 'XYZ' default
- * and manifold-3d transforms are consistent with this convention.
- * If a different Euler order is needed in the future, add an `order` param.
+ * FIX (ROT-XYZ): Matrix now matches Three.js Euler 'XYZ' order exactly.
+ * Three.js 'XYZ' means intrinsic rotations applied X→Y→Z, which in matrix
+ * form is R = Rx · Ry · Rz. The previous code computed Rz · Ry · Rx, which
+ * only matches for single-axis rotations but diverges for multi-axis
+ * (e.g. rotX=30 + rotY=45 → distorted geometry in CSG operations).
  *
- * @param rot   Rotation in degrees (rotX, rotY, rotZ), applied as Rz × Ry × Rx
+ * @param rot   Rotation in degrees (rotX, rotY, rotZ), Three.js Euler 'XYZ'
  * @param scale Scale factors (scaleX, scaleY, scaleZ)
  * @returns 9 elements: [r00, r01, r02, r10, r11, r12, r20, r21, r22]
  */
@@ -30,16 +31,18 @@ export function computeRSMatrix(
   const cy = Math.cos(ry), sy_ = Math.sin(ry)
   const cz = Math.cos(rz), sz_ = Math.sin(rz)
 
+  // R = Rx · Ry · Rz  (Three.js Euler 'XYZ' intrinsic order)
+  // Scale applied per-column (S = diag(Sx, Sy, Sz), RS = R·S)
   return [
-    cz * cy * Sx,
-    (cz * sy_ * sx_ - sz_ * cx) * Sy,
-    (cz * sy_ * cx + sz_ * sx_) * Sz,
-    sz_ * cy * Sx,
-    (sz_ * sy_ * sx_ + cz * cx) * Sy,
-    (sz_ * sy_ * sx_ - cz * sx_) * Sz,
-    -sy_ * Sx,
-    cy * sx_ * Sy,
-    cy * cx * Sz,
+    cy * cz * Sx,                           // r00
+    -cy * sz_ * Sy,                          // r01
+    sy_ * Sz,                               // r02
+    (cx * sz_ + sx_ * sy_ * cz) * Sx,       // r10
+    (cx * cz - sx_ * sy_ * sz_) * Sy,       // r11
+    -sx_ * cy * Sz,                         // r12
+    (-cx * sy_ * cz + sx_ * sz_) * Sx,      // r20
+    (cx * sy_ * sz_ + sx_ * cz) * Sy,       // r21
+    cx * cy * Sz,                           // r22
   ]
 }
 
