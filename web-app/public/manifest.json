@@ -1,6 +1,6 @@
 {
-  "name": "TinkerCraft Web",
-  "short_name": "TinkerCraft",
+  "name": "TC — Tinker Craft",
+  "short_name": "TC",
   "description": "Browser-based 3D CAD powered by manifold-3d",
   "start_url": "/",
   "display": "standalone",

@@ -91,7 +91,7 @@ export default function StatusBar({
       </button>
       <span className="status-item text-muted-xs">
         {/* FIX (LOW-18-42): Remove debug phase info from production status bar */}
-        TinkerCraft Web
+        {t("app.webLabel")}
       </span>
     </div>
   );

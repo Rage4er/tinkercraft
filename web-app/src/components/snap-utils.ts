@@ -13,6 +13,7 @@
 
 import * as THREE from "three";
 import type { SceneObject } from "../csg/types";
+import i18n from "../i18n";
 
 // ---- Константы ----
 
@@ -463,17 +464,18 @@ export function removeSnapIndicators(scene: THREE.Scene | null): void {
 
 /**
  * Получить текстовую метку типа привязки.
+ * i18n: Uses i18n.t() directly (non-React module).
  */
 export function snapLabel(type: SnapType): string {
   switch (type) {
     case "vertex":
-      return "Точка";
+      return i18n.t("snap.vertex");
     case "edge":
-      return "Ребро";
+      return i18n.t("snap.edge");
     case "face":
-      return "Грань";
+      return i18n.t("snap.face");
     case "circle":
-      return "Центр";
+      return i18n.t("snap.circle");
     default:
       return "";
   }

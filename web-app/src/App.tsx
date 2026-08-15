@@ -584,14 +584,14 @@ export default function App() {
 
           {/* Snap selector */}
           <div className="snap-selector">
-            <span className="snap-label">Snap:</span>
+            <span className="snap-label">{t("snap.label")}</span>
             {SNAP_VALUES.map((sv) => (
               <button
                 key={sv.value}
                 className={`snap-btn${snapValue === sv.value ? " active" : ""}`}
                 onClick={() => setSnapValue(sv.value)}
                 title={
-                  sv.value === 0 ? t("snap.off") : t("snap.0.1")
+                  sv.value === 0 ? t("snap.offTitle") : t("snap.valueTitle", { value: sv.value })
                 }
               >
                 {t(sv.labelKey)}
@@ -600,14 +600,13 @@ export default function App() {
           </div>
 
           <div className="viewport-hint">
-            ЛКМ — выбор · Shift — мульти · Drag — рамка · ПКМ — вид · F — Fit ·
-            H — Home · G/R/S — гизмо
+            {t("viewport.hint")}
           </div>
         </div>
 
         {/* ── Правая панель ── */}
         <div className="panel-right">
-          <div className="props-header">Свойства</div>
+          <div className="props-header">{t("properties.header")}</div>
 
           <PropertiesPanel
             firstSelected={firstSelected}

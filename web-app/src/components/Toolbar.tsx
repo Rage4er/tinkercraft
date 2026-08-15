@@ -138,7 +138,7 @@ export default function Toolbar({
       role="toolbar"
       aria-label={t("toolbar.label")}
     >
-      <span className="toolbar-logo"><TCLogoIcon size={34} /> TinkerCraft</span>
+      <span className="toolbar-logo"><TCLogoIcon size={34} /> {t("app.name")}</span>
 
       {/* Group 0: File */}
       <ToolbarRowSplit

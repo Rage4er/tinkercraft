@@ -5,6 +5,7 @@
 // ============================================================
 
 import { useEffect, useRef, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import * as THREE from 'three'
 
 interface Props {
@@ -16,13 +17,14 @@ interface Props {
 //   X = right, Y = depth (forward), Z = up (height)
 // normal = direction FROM WHICH the camera looks at origin
 // up     = camera.up at that view
-const FACES: { label: string; normal: [number, number, number]; up: [number, number, number]; color: string }[] = [
-  { label: 'Перед', normal: [0, 1, 0], up: [0, 0, 1], color: '#4a9eff' },
-  { label: 'Зад', normal: [0, -1, 0], up: [0, 0, 1], color: '#3a8eef' },
-  { label: 'Лево', normal: [-1, 0, 0], up: [0, 0, 1], color: '#5ba8ff' },
-  { label: 'Право', normal: [1, 0, 0], up: [0, 0, 1], color: '#5ba8ff' },
-  { label: 'Верх', normal: [0, 0, 1], up: [0, 1, 0], color: '#6abcff' },
-  { label: 'Низ', normal: [0, 0, -1], up: [0, 1, 0], color: '#3a8eef' },
+// Labels are i18n keys — resolved via t() at render time.
+const FACES: { labelKey: string; normal: [number, number, number]; up: [number, number, number]; color: string }[] = [
+  { labelKey: 'viewCube.front', normal: [0, 1, 0], up: [0, 0, 1], color: '#4a9eff' },
+  { labelKey: 'viewCube.back', normal: [0, -1, 0], up: [0, 0, 1], color: '#3a8eef' },
+  { labelKey: 'viewCube.left', normal: [-1, 0, 0], up: [0, 0, 1], color: '#5ba8ff' },
+  { labelKey: 'viewCube.right', normal: [1, 0, 0], up: [0, 0, 1], color: '#5ba8ff' },
+  { labelKey: 'viewCube.top', normal: [0, 0, 1], up: [0, 1, 0], color: '#6abcff' },
+  { labelKey: 'viewCube.bottom', normal: [0, 0, -1], up: [0, 1, 0], color: '#3a8eef' },
 ]
 
 // Global animation generation counter — prevents stale closure issues
@@ -58,6 +60,7 @@ function animateTo(
 }
 
 export default function ViewCube({ mainCamera, mainControls }: Props) {
+  const { t } = useTranslation()
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const rendRef = useRef<THREE.WebGLRenderer | null>(null)
   const sceneRef = useRef<THREE.Scene | null>(null)
@@ -313,7 +316,7 @@ export default function ViewCube({ mainCamera, mainControls }: Props) {
         onPointerUp={handlePointerUp}
         onPointerLeave={handlePointerLeave}
       />
-      <div className="viewcube-label">ViewCube</div>
+      <div className="viewcube-label">{t("viewCube.label")}</div>
     </div>
   )
 }

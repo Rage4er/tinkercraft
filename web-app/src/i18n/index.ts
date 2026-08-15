@@ -29,4 +29,13 @@ i18n
     },
   })
 
+// Update document title with localized app name: "TC — Tinker Craft" / "TC — Творческая студия"
+function updateDocumentTitle(): void {
+  const name = i18n.t('app.name')
+  document.title = `TC — ${name}`
+}
+
+i18n.on('languageChanged', updateDocumentTitle)
+updateDocumentTitle()
+
 export default i18n

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import * as THREE from 'three'
+import i18n from '../i18n'
 import {
   closestVertex,
   closestEdge,
@@ -124,23 +125,28 @@ describe('closestEdge', () => {
 })
 
 describe('snapLabel', () => {
-  it('returns correct label for vertex', () => {
+  it('returns correct label for vertex', async () => {
+    await i18n.changeLanguage('ru')
     expect(snapLabel('vertex')).toBe('Точка')
   })
 
-  it('returns correct label for edge', () => {
+  it('returns correct label for edge', async () => {
+    await i18n.changeLanguage('ru')
     expect(snapLabel('edge')).toBe('Ребро')
   })
 
-  it('returns correct label for face', () => {
+  it('returns correct label for face', async () => {
+    await i18n.changeLanguage('ru')
     expect(snapLabel('face')).toBe('Грань')
   })
 
-  it('returns correct label for circle', () => {
+  it('returns correct label for circle', async () => {
+    await i18n.changeLanguage('ru')
     expect(snapLabel('circle')).toBe('Центр')
   })
 
-  it('returns empty string for null', () => {
+  it('returns empty string for null', async () => {
+    await i18n.changeLanguage('ru')
     expect(snapLabel(null)).toBe('')
   })
 })

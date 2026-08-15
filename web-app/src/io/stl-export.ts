@@ -5,6 +5,7 @@
 
 import type { SceneObject, TransformNR } from '../csg/types'
 import { computeRSMatrix } from '../csg/worker-matrix'
+import i18n from '../i18n'
 
 /**
  * Применить трансформацию (position, rotation, scale) к вершинам.
@@ -113,7 +114,7 @@ export function exportToStl(objects: SceneObject[]): Blob {
   const header = new Uint8Array(buf, 0, 80)
 
   // Header — ASCII текст
-  const title = 'TinkerCraft Web STL Export'
+  const title = i18n.t('app.stlHeader')
   for (let i = 0; i < title.length && i < 80; i++) {
     header[i] = title.charCodeAt(i)
   }
@@ -197,7 +198,7 @@ export function exportToStl(objects: SceneObject[]): Blob {
   return new Blob([buf], { type: 'application/octet-stream' })
 }
 
-export function downloadStl(objects: SceneObject[], fileName = 'tinkercraft-export.stl'): void {
+export function downloadStl(objects: SceneObject[], fileName = i18n.t('app.stlDefaultName')): void {
   const blob = exportToStl(objects)
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')

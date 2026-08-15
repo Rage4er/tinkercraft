@@ -91,6 +91,7 @@
     "fps": "FPS:"
   },
   "properties": {
+    "header": "Properties",
     "type": "Type",
     "color": "Color",
     "visible": "Visible",
@@ -177,12 +178,37 @@
     "rename": "Rename"
   },
   "snap": {
+    "label": "Snap:",
     "off": "Off",
+    "offTitle": "No snap",
+    "valueTitle": "Snap {{value}} mm",
     "0.1": "0.1",
     "0.5": "0.5",
     "1": "1",
     "5": "5",
-    "10": "10"
+    "10": "10",
+    "vertex": "Vertex",
+    "edge": "Edge",
+    "face": "Face",
+    "circle": "Center"
+  },
+  "viewCube": {
+    "label": "ViewCube",
+    "front": "Front",
+    "back": "Back",
+    "left": "Left",
+    "right": "Right",
+    "top": "Top",
+    "bottom": "Bottom"
+  },
+  "app": {
+    "name": "Tinker Craft",
+    "stlHeader": "Tinker Craft STL Export",
+    "stlDefaultName": "tinker-craft-export.stl",
+    "webLabel": "Tinker Craft Web"
+  },
+  "viewport": {
+    "hint": "LMB — select · Shift — multi · Drag — box · RMB — orbit · F — Fit · H — Home · G/R/S — gizmo"
   },
   "projectManager": {
     "title": "Project Manager",

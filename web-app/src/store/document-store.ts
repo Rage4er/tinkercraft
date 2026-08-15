@@ -913,7 +913,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   // ── Export STL ──
   exportStl: () => {
     const { objects, fileName } = get()
-    downloadStl(Object.values(objects), (fileName?.replace(/\.doodle$/, '') ?? 'tinkercraft') + '.stl')
+    downloadStl(Object.values(objects), (fileName?.replace(/\.doodle$/, '') ?? i18n.t('app.name')) + '.stl')
   },
 
   // ── Resize dims ──

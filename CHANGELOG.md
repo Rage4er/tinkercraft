@@ -13,6 +13,11 @@
 
 - **i18n локализация (Фаза 7.7)**: Полная локализация приложения на английский и русский языки через i18next + react-i18next. Автоопределение языка браузера, переключатель в StatusBar. Переведены все UI-элементы (~150 фраз): названия фигур, инструменты, CSG операции, тултипы, ошибки, уведомления, модалки. Создана структура `src/i18n/` с файлами переводов `locales/en/translation.json` и `locales/ru/translation.json`. (`i18n/index.ts`, все компоненты)
 - **LanguageSwitcher**: Кнопка переключения языка (🇬🇧 EN / 🇷🇺 RU) в StatusBar с сохранением выбора в localStorage. (`StatusBar.tsx`)
+- **Snap локализация**: "Snap:" → "Привязка:" (RU) / "Snap:" (EN), тайтлы кнопок привязки локализованы. (`App.tsx`)
+- **ViewCube локализация**: Названия граней (Перед/Front, Зад/Back, Лево/Left, Право/Right, Верх/Top, Низ/Bottom) и label "Куб вида"/"ViewCube". (`ViewCube.tsx`)
+- **snapLabel локализация**: Метки типов привязки (Точка/Vertex, Ребро/Edge, Грань/Face, Центр/Center) через i18n.t(). (`snap-utils.ts`)
+- **Название приложения**: Аббревиатура **TC** как единая эмблема. EN: "Tinker Craft", RU: "Творческая студия". Title страницы динамически обновляется при переключении языка: "TC — Tinker Craft" / "TC — Творческая студия". Обновлены Toolbar, StatusBar, STL header, manifest.json, index.html. (`i18n/index.ts`, `Toolbar.tsx`, `StatusBar.tsx`, `stl-export.ts`, `manifest.json`, `index.html`)
+- **Viewport hint локализация**: Подсказка управления вьюпортом переведена. (`App.tsx`)
 
 ### Changed
 
