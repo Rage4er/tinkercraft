@@ -65,8 +65,8 @@
     "scale": "Масштаб",
     "exit": "Выйти",
     "ruler": "Линейка",
-    "fitView": "Fit View",
-    "homeView": "Home View",
+    "fitView": "Вписать в экран",
+    "homeView": "Обзор",
     "persp": "Персп",
     "ortho": "Орто",
     "toggleCamera": "Перспектива ↔ Ортография"
