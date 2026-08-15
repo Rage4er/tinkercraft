@@ -4,6 +4,7 @@
 // ============================================================
 
 import IconButton from "./IconButton";
+import { useTranslation } from "react-i18next";
 import { TOOLTIP_DATA } from "../constants";
 import { MirrorYZIcon, MirrorXZIcon, MirrorXYIcon } from "./icons";
 
@@ -25,10 +26,11 @@ export default function MirrorButtons({
   /** Количество строк для группы (из алгоритма layout) */
   maxRows?: number;
 }) {
-  const planes: { plane: MirrorPlane; icon: React.ReactNode; label: string; tooltipKey: string }[] = [
-    { plane: "YZ", icon: <MirrorYZIcon size={32} />, label: "YZ", tooltipKey: "mirror_yz" },
-    { plane: "XZ", icon: <MirrorXZIcon size={32} />, label: "XZ", tooltipKey: "mirror_xz" },
-    { plane: "XY", icon: <MirrorXYIcon size={32} />, label: "XY", tooltipKey: "mirror_xy" },
+  const { t } = useTranslation();
+  const planes: { plane: MirrorPlane; icon: React.ReactNode; labelKey: string; tooltipKey: string }[] = [
+    { plane: "YZ", icon: <MirrorYZIcon size={32} />, labelKey: "mirror.yz", tooltipKey: "mirror_yz" },
+    { plane: "XZ", icon: <MirrorXZIcon size={32} />, labelKey: "mirror.xz", tooltipKey: "mirror_xz" },
+    { plane: "XY", icon: <MirrorXYIcon size={32} />, labelKey: "mirror.xy", tooltipKey: "mirror_xy" },
   ];
 
   // Распределяем кнопки по строкам
@@ -46,14 +48,14 @@ export default function MirrorButtons({
   if (variant === "full") {
     return (
       <div className="csg-group">
-        <div className="csg-group-title">Зеркало</div>
+        <div className="csg-group-title">{t("mirror.title")}</div>
         {resultRows.map((row, rowIndex) => (
           <div key={rowIndex} className={rowIndex === 0 ? "flex-row" : "flex-row mt-1"}>
             {row.map((btn) => (
               <IconButton
                 key={btn.plane}
                 icon={btn.icon}
-                label={btn.label}
+                label={t(btn.labelKey)}
                 onClick={() => onMirror(btn.plane)}
                 disabled={disabled}
                 tooltip={TOOLTIP_DATA[btn.tooltipKey]}

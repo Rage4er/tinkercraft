@@ -1,4 +1,6 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
+import { useTranslation } from "react-i18next";
+import "./i18n";
 import Viewport3D, { type GizmoMode } from "./components/Viewport3D";
 import ErrorBoundary from "./components/ErrorBoundary";
 import WebGLFallback from "./components/WebGLFallback";
@@ -21,6 +23,7 @@ import type {
 
 // ---- App ----
 export default function App() {
+  const { t } = useTranslation();
   // UI state — moved to ui-store (Q-R6-1)
   // FIX (MED-UI-4): Single useShallow selector to reduce re-renders
   const {
@@ -588,10 +591,10 @@ export default function App() {
                 className={`snap-btn${snapValue === sv.value ? " active" : ""}`}
                 onClick={() => setSnapValue(sv.value)}
                 title={
-                  sv.value === 0 ? "Без привязки" : `Привязка ${sv.value} мм`
+                  sv.value === 0 ? t("snap.off") : t("snap.0.1")
                 }
               >
-                {sv.label}
+                {t(sv.labelKey)}
               </button>
             ))}
           </div>

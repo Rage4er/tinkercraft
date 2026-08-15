@@ -9,6 +9,22 @@
 
 ## [Unreleased]
 
+### Added
+
+- **i18n локализация (Фаза 7.7)**: Полная локализация приложения на английский и русский языки через i18next + react-i18next. Автоопределение языка браузера, переключатель в StatusBar. Переведены все UI-элементы (~150 фраз): названия фигур, инструменты, CSG операции, тултипы, ошибки, уведомления, модалки. Создана структура `src/i18n/` с файлами переводов `locales/en/translation.json` и `locales/ru/translation.json`. (`i18n/index.ts`, все компоненты)
+- **LanguageSwitcher**: Кнопка переключения языка (🇬🇧 EN / 🇷🇺 RU) в StatusBar с сохранением выбора в localStorage. (`StatusBar.tsx`)
+
+### Changed
+
+- **TOOLTIP_DATA**: Структура изменена с `label`/`description` на `labelKey`/`descriptionKey` — теперь использует i18n-ключи вместо хардкод-текстов. (`constants.ts`, `Tooltip.tsx`)
+- **ALL_SHAPES_DATA**: Поле `label` → `labelKey`, `category` → `categoryKey` — i18n-ключи вместо хардкод-текста. (`constants.ts`, `constants.tsx`, `constants-react.tsx`)
+- **OP_FILTER_LABELS**: Значения изменены на i18n-ключи. (`constants.ts`)
+- **SNAP_VALUES**: Поле `label` → `labelKey`. (`constants.ts`)
+- **opLabel**: Функция принимает параметр `t` для перевода. (`Timeline.tsx`)
+- **getShapeLabel**: Функция принимает параметр `t` для перевода. (`LeftPanel.tsx`)
+- **displayName**: Функция принимает параметр `t` для перевода. (`ComponentTree.tsx`)
+- **Store notify**: Все `notify('Русский текст')` заменены на `notify(i18n.t('key'))`. (`document-store.ts`, `mirror-store.ts`, `rebuild.ts`)
+
 ### Fixed
 
 - **SHADOW ACNE (полосатые грани фигур)**: Вертикальные и наклонные грани куба/сферы/конуса были покрыты полосами от самозатенения. Причины: 1) `shadow.bias` отсутствовал — добавлены `bias = -0.002` и `normalBias = 0.05`; 2) карта теней 2048px была мала для области ±200 — увеличена до 4096px. Горизонтальные грани были чистыми, вертикальные требовали большего bias из-за угла падения света. (`viewport-hooks.ts`)

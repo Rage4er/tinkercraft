@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import Section from "./Section";
 import Timeline from "./Timeline";
 import ComponentTree from "./ComponentTree";
@@ -8,11 +9,11 @@ import type { ShapeType, TinkerCraftOperation, SceneObject } from "../csg/types"
 import { ChevronUpIcon, ChevronDownIcon } from "./icons";
 
 // Отображаемое имя фигуры для списка объектов
-function getShapeLabel(obj: SceneObject): string {
+function getShapeLabel(obj: SceneObject, t: (key: string) => string): string {
   if (obj.name) return obj.name
-  if (obj.shapeType === 'csg') return 'CSG результат'
-  if (obj.shapeType === 'import_mesh') return 'Импорт'
-  return obj.shapeType
+  if (obj.shapeType === 'csg') return t('csg.result')
+  if (obj.shapeType === 'import_mesh') return t('actions.import')
+  return t(`shapes.${obj.shapeType}`)
 }
 
 export default function LeftPanel({
@@ -56,10 +57,12 @@ export default function LeftPanel({
   onFilterChange: (key: string, checked: boolean) => void;
   onJumpHistory: (index: number) => void;
 }) {
+  const { t } = useTranslation();
+
   // FIX (LOW-18-31): Remove useMemo — ALL_SHAPES has only 8 elements, memo overhead > benefit
   const filteredShapes = shapeSearch.trim()
     ? ALL_SHAPES.filter((s) =>
-      s.label.toLowerCase().includes(shapeSearch.toLowerCase()),
+      t(s.labelKey).toLowerCase().includes(shapeSearch.toLowerCase()),
     )
     : ALL_SHAPES;
 
@@ -69,12 +72,12 @@ export default function LeftPanel({
   return (
     <div className="panel-left">
       {/* Фигуры с поиском */}
-      <Section title="Фигуры">
+      <Section title={t("leftPanel.shapes")}>
         <div className="search-wrap">
           <input
             className="search-input"
             type="text"
-            placeholder="🔍 Поиск фигуры…"
+            placeholder={t("leftPanel.searchPlaceholder")}
             value={shapeSearch}
             onChange={(e) => onShapeSearchChange(e.target.value)}
           />
@@ -82,14 +85,14 @@ export default function LeftPanel({
         <div className="shape-grid">
           {filteredShapes.length === 0 && (
             <div className="ct-empty" style={{ gridColumn: "1/-1" }}>
-              Не найдено
+              {t("leftPanel.notFound")}
             </div>
           )}
           {filteredShapes.map((s) => (
             <button
               key={s.type}
               className="shape-btn"
-              title={`Добавить ${s.label}`}
+              title={t('leftPanel.addShape', { label: t(s.labelKey) })}
               disabled={!workerOk || busy}
               onClick={() =>
                 s.type === "text"
@@ -98,33 +101,33 @@ export default function LeftPanel({
               }
             >
               <span className="shape-icon">{s.icon({ size: 32 })}</span>
-              <span className="shape-lbl">{s.label}</span>
+              <span className="shape-lbl">{t(s.labelKey)}</span>
             </button>
           ))}
         </div>
       </Section>
 
       {/* Объекты / ComponentTree — переключатель вкладок */}
-      <Section title="Объекты" badge={objectList.length}>
+      <Section title={t("leftPanel.objects")} badge={objectList.length}>
         <div className="tab-bar">
           <button
             className={`tab-btn${activeTab === "objects" ? " active" : ""}`}
             onClick={() => onTabChange("objects")}
           >
-            Список
+            {t("leftPanel.list")}
           </button>
           <button
             className={`tab-btn${activeTab === "tree" ? " active" : ""}`}
             onClick={() => onTabChange("tree")}
           >
-            Дерево
+            {t("leftPanel.tree")}
           </button>
         </div>
 
         {activeTab === "objects" ? (
           <div className="object-list">
             {objectList.length === 0 && (
-              <div className="object-list-empty">Сцена пуста</div>
+              <div className="object-list-empty">{t("leftPanel.sceneEmpty")}</div>
             )}
             {objectList.map((obj) => (
               <div
@@ -143,9 +146,9 @@ export default function LeftPanel({
                   }}
                 />
                 <span className="object-list-label">
-                  {getShapeLabel(obj)}
+                  {getShapeLabel(obj, t)}
                 </span>
-                {!obj.visible && <span className="obj-hidden">скрыт</span>}
+                {!obj.visible && <span className="obj-hidden">{t("leftPanel.hidden")}</span>}
               </div>
             ))}
           </div>
@@ -163,7 +166,7 @@ export default function LeftPanel({
 
       {/* История */}
       <Section
-        title={`История ${historyIndex}/${operations.length}`}
+        title={`${t("leftPanel.history")} ${historyIndex}/${operations.length}`}
         defaultOpen={true}
       >
         {/* Filter dropdown */}
@@ -172,18 +175,18 @@ export default function LeftPanel({
             className="btn btn-compact tl-filter-toggle"
             onClick={() => setFiltersOpen(!filtersOpen)}
           >
-            {filtersOpen ? <ChevronUpIcon size={32} /> : <ChevronDownIcon size={32} />} Фильтр
+            {filtersOpen ? <ChevronUpIcon size={32} /> : <ChevronDownIcon size={32} />} {t("leftPanel.filter")}
           </button>
           {filtersOpen && (
             <div className="tl-filter-panel">
-              {Object.entries(OP_FILTER_LABELS).map(([key, label]) => (
+              {Object.entries(OP_FILTER_LABELS).map(([key, labelKey]) => (
                 <label key={key} className="tl-filter-row">
                   <input
                     type="checkbox"
                     checked={tlFilters[key] !== false}
                     onChange={(e) => onFilterChange(key, e.target.checked)}
                   />
-                  {label}
+                  {t(labelKey)}
                 </label>
               ))}
             </div>

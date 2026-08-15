@@ -5,6 +5,7 @@
 // ============================================================
 
 import IconButton from "./IconButton";
+import { useTranslation } from "react-i18next";
 import { TOOLTIP_DATA } from "../constants";
 import {
   AlignXMinIcon,
@@ -33,17 +34,18 @@ export default function AlignButtons({
   /** Количество строк для группы (из алгоритма layout) */
   maxRows?: number;
 }) {
+  const { t } = useTranslation();
   // 9 кнопок выравнивания — полная охват всех осей и anchor-точек
-  const allButtons: { axis: AlignAxis; anchor: AlignAnchor; label: string; tooltipKey: string }[] = [
-    { axis: "X", anchor: "min", label: "X min", tooltipKey: "align_x_min" },
-    { axis: "X", anchor: "center", label: "X center", tooltipKey: "align_x_center" },
-    { axis: "X", anchor: "max", label: "X max", tooltipKey: "align_x_max" },
-    { axis: "Y", anchor: "min", label: "Y min", tooltipKey: "align_y_min" },
-    { axis: "Y", anchor: "center", label: "Y center", tooltipKey: "align_y_center" },
-    { axis: "Y", anchor: "max", label: "Y max", tooltipKey: "align_y_max" },
-    { axis: "Z", anchor: "min", label: "Z min", tooltipKey: "align_z_min" },
-    { axis: "Z", anchor: "center", label: "Z center", tooltipKey: "align_z_center" },
-    { axis: "Z", anchor: "max", label: "Z max", tooltipKey: "align_z_max" },
+  const allButtons: { axis: AlignAxis; anchor: AlignAnchor; labelKey: string; tooltipKey: string }[] = [
+    { axis: "X", anchor: "min", labelKey: "align.x_min", tooltipKey: "align_x_min" },
+    { axis: "X", anchor: "center", labelKey: "align.x_center", tooltipKey: "align_x_center" },
+    { axis: "X", anchor: "max", labelKey: "align.x_max", tooltipKey: "align_x_max" },
+    { axis: "Y", anchor: "min", labelKey: "align.y_min", tooltipKey: "align_y_min" },
+    { axis: "Y", anchor: "center", labelKey: "align.y_center", tooltipKey: "align_y_center" },
+    { axis: "Y", anchor: "max", labelKey: "align.y_max", tooltipKey: "align_y_max" },
+    { axis: "Z", anchor: "min", labelKey: "align.z_min", tooltipKey: "align_z_min" },
+    { axis: "Z", anchor: "center", labelKey: "align.z_center", tooltipKey: "align_z_center" },
+    { axis: "Z", anchor: "max", labelKey: "align.z_max", tooltipKey: "align_z_max" },
   ];
 
   // Маппинг иконок по оси
@@ -79,13 +81,13 @@ export default function AlignButtons({
       <>
         {resultRows.map((row, rowIndex) => (
           <div key={rowIndex}>
-            {rowIndex === 0 && <div className="csg-group-title mt-4">Выравнивание</div>}
+            {rowIndex === 0 && <div className="csg-group-title mt-4">{t("align.title")}</div>}
             <div className={rowIndex === 0 ? "flex-wrap" : "flex-wrap mt-1"}>
               {row.map((btn) => (
                 <IconButton
                   key={`${btn.axis}-${btn.anchor}`}
                   icon={getIcon(btn.axis, btn.anchor)}
-                  label={btn.label}
+                  label={t(btn.labelKey)}
                   onClick={() => onAlign(btn.axis, btn.anchor)}
                   disabled={disabled}
                   tooltip={TOOLTIP_DATA[btn.tooltipKey]}

@@ -30,6 +30,7 @@ import { saveProject as pmSave, updateProject as pmUpdate, loadProject as pmLoad
 import { downloadStl } from '../io/stl-export'
 import { openStlFilePicker, parseStlFile } from '../io/stl-import'
 import { autosaveSession, restoreSession } from '../io/autosave'
+import i18n from '../i18n'
 
 export { computeAABB, extractAndCenterInPlace, extractAndCenterGetAABB, computeWorldAABB } from './helpers'
 import { computeAABB, extractAndCenterInPlace, extractAndCenterGetAABB, computeWorldAABB, makeObject, nextId, colorForIndex } from './helpers'
@@ -75,7 +76,7 @@ async function jumpToHistoryInner(newIdx: number, actionName: string): Promise<v
     restoreTreeFromSnapshot(newIdx)
     setState({ historyIndex: newIdx, objects: newObjects, selectedIds: [], busy: false, lastCsgMs: performance.now() - t0 })
     invalidateMirrorCache()
-  } catch (e) { setState({ busy: false }); console.error(actionName + ':', e); notify(`Ошибка ${actionName.toLowerCase()}`, 'error') }
+  } catch (e) { setState({ busy: false }); console.error(actionName + ':', e); notify(i18n.t('errors.operationFailed', { name: actionName.toLowerCase() }), 'error') }
 }
 
 // ── Type guard ──
@@ -219,7 +220,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true, busy: false, lastCsgMs: ms })
       cacheSnapshotWithTree(newOps.length, newObjects)
       invalidateMirrorCache()
-    } catch (e) { set({ busy: false }); console.error('addShape:', e); notify('Ошибка создания фигуры', 'error') }
+    } catch (e) { set({ busy: false }); console.error('addShape:', e); notify(i18n.t('errors.createShapeFailed'), 'error') }
   },
 
   // ── Добавить произвольный меш (текст, и т.д.) ──
@@ -243,7 +244,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, selectedIds: [id], modified: true, busy: false, lastCsgMs: ms })
       cacheSnapshotWithTree(newOps.length, newObjects)
       invalidateMirrorCache()
-    } catch (e) { set({ busy: false }); console.error('addRawMesh:', e); notify('Ошибка импорта меша', 'error') }
+    } catch (e) { set({ busy: false }); console.error('addRawMesh:', e); notify(i18n.t('errors.importMeshFailed'), 'error') }
   },
 
   // ── Импорт STL ──
@@ -273,7 +274,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, selectedIds: [id], modified: true, busy: false, lastCsgMs: ms })
       cacheSnapshotWithTree(newOps.length, newObjects)
       invalidateMirrorCache()
-    } catch (e) { set({ busy: false }); notify(`Ошибка импорта STL: ${e}`, 'error') }
+    } catch (e) { set({ busy: false }); notify(i18n.t('errors.stlImportFailed') + ': ' + e, 'error') }
   },
 
   // ── Fillet ──
@@ -307,7 +308,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       })
       cacheSnapshotWithTree(newOps.length, newObjects)
       invalidateMirrorCache()
-    } catch (e) { set({ busy: false }); console.error('applyFillet:', e); notify('Ошибка скругления', 'error') }
+    } catch (e) { set({ busy: false }); console.error('applyFillet:', e); notify(i18n.t('errors.filletFailed'), 'error') }
   },
 
   // ── Copy ──
@@ -374,7 +375,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         workerDeleteObjects(pastedIds).catch(() => { })
       }
       console.error('paste:', e)
-      notify('Ошибка вставки', 'error')
+      notify(i18n.t('errors.pasteFailed'), 'error')
     }
   },
 
@@ -395,7 +396,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       await workerDeleteObjects(ids)
     } catch (e) {
       console.error('deleteSelected:', e)
-      notify('Ошибка удаления объектов', 'error')
+      notify(i18n.t('errors.deleteFailed'), 'error')
       return // do not update store if worker is out of sync
     }
     const newOps = [...operations.slice(0, historyIndex), op]
@@ -509,7 +510,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       invalidateMirrorCache()
       // Rebuild tree node to cache the mesh in history-tree
       rebuildNode(resultId).catch(e => console.error('[csgBoolean] rebuildNode failed:', e))
-    } catch (e) { set({ busy: false }); console.error('csgBoolean:', e); notify('Ошибка CSG-операции', 'error') }
+    } catch (e) { set({ busy: false }); console.error('csgBoolean:', e); notify(i18n.t('errors.csgFailed'), 'error') }
   },
 
   // ── Move ──
@@ -743,7 +744,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         lastCsgMs: performance.now() - t0,
       })
       cacheSnapshotWithTree(newOps.length, { ...objects, ...newObjects })
-    } catch (e) { set({ busy: false }); console.error('mirrorSelected:', e); notify('Ошибка зеркального отражения', 'error') }
+    } catch (e) { set({ busy: false }); console.error('mirrorSelected:', e); notify(i18n.t('errors.mirrorFailed'), 'error') }
   },
   alignSelected: async (axis, anchor) => {
     if (get().busy) return
@@ -841,7 +842,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       cacheSnapshotWithTree(newOps.length, newObjects)
       invalidateMirrorCache()
       devLog('ALIGN:done', { durationMs: performance.now() - t0, anchorId, targetIds })
-    } catch (e) { set({ busy: false }); console.error('alignSelected:', e); notify('Ошибка выравнивания', 'error') }
+    } catch (e) { set({ busy: false }); console.error('alignSelected:', e); notify(i18n.t('errors.alignFailed'), 'error') }
   },
 
   // ── Undo ──
@@ -897,7 +898,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       set({ operations: doc.operations, historyIndex: doc.operations.length, objects: newObjects, selectedIds: [], fileName: picked.file.name, modified: false, busy: false, lastCsgMs: performance.now() - t0, currentProjectId: null, currentProjectName: null })
       cacheSnapshotWithTree(doc.operations.length, newObjects)
       invalidateMirrorCache()
-    } catch (e) { set({ busy: false }); notify(`Ошибка открытия: ${e}`, 'error') }
+    } catch (e) { set({ busy: false }); notify(i18n.t('errors.openFailed', { error: e }), 'error') }
   },
 
   // ── Save .doodle ──
@@ -973,7 +974,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         devLog('resizeObject', { id, newParams: mergedParams })
         cacheSnapshotWithTree(newOps.length, newObjects)
         invalidateMirrorCache()
-      } catch (e) { set({ busy: false }); console.error('resizeObject:', e); notify('Ошибка изменения размера', 'error') }
+      } catch (e) { set({ busy: false }); console.error('resizeObject:', e); notify(i18n.t('errors.resizeFailed'), 'error') }
     }
     // Для CSG результатов: используем scale трансформацию
     else {
@@ -1023,7 +1024,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         devLog('resizeObject', { id, newTransform })
         cacheSnapshotWithTree(newOps.length, newObjects)
         invalidateMirrorCache()
-      } catch (e) { set({ busy: false }); console.error('resizeObject (CSG):', e); notify('Ошибка изменения размера CSG-объекта', 'error') }
+      } catch (e) { set({ busy: false }); console.error('resizeObject (CSG):', e); notify(i18n.t('errors.resizeCsgFailed'), 'error') }
     }
   },
 
@@ -1082,7 +1083,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, selectedIds: [resultId], modified: true, busy: false, lastCsgMs: ms })
       cacheSnapshotWithTree(newOps.length, newObjects)
       invalidateMirrorCache()
-    } catch (e) { set({ busy: false }); console.error('extrudeSelected:', e); notify('Ошибка экструзии', 'error') }
+    } catch (e) { set({ busy: false }); console.error('extrudeSelected:', e); notify(i18n.t('errors.extrudeFailed'), 'error') }
   },
 
   // ── Rename ──
@@ -1135,7 +1136,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const all = await pmList()
       const conflict = all.find(p => p.name === effectiveName && p.id !== currentProjectId)
       if (conflict) {
-        notify(`Проект с именем "${effectiveName}" уже существует`, 'error')
+        notify(i18n.t('errors.projectNameExists', { name: effectiveName }), 'error')
         return
       }
       if (currentProjectId) {
@@ -1147,7 +1148,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       set({ modified: false, currentProjectName: effectiveName })
     } catch (e) {
       console.error('saveToProject:', e)
-      notify(e instanceof Error ? e.message : 'Ошибка сохранения проекта', 'error')
+      notify(e instanceof Error ? e.message : i18n.t('errors.saveFailed'), 'error')
     }
   },
 
@@ -1164,7 +1165,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       rebuildBuildTree(record.operations, newObjects)
       set({ operations: record.operations, historyIndex: record.operations.length, objects: newObjects, selectedIds: [], fileName: null, modified: false, busy: false, lastCsgMs: performance.now() - t0, currentProjectId: id, currentProjectName: record.name })
       cacheSnapshotWithTree(record.operations.length, newObjects)
-    } catch (e) { set({ busy: false }); console.error('loadFromProject:', e); notify('Ошибка загрузки проекта', 'error') }
+    } catch (e) { set({ busy: false }); console.error('loadFromProject:', e); notify(i18n.t('errors.loadProjectFailed'), 'error') }
   },
 
   // ── Set current project (for ProjectManagerModal) ──

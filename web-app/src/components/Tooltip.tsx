@@ -10,14 +10,15 @@
 // - Не отвлекает, если не задерживаться
 
 import React, { useState, useRef, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 
 export interface TooltipData {
-  /** Краткое название (показывается мгновенно) */
-  label: string
-  /** Горячая клавиша (опционально) */
+  /** i18n key for the label (shown instantly) */
+  labelKey: string
+  /** Hotkey (optional) */
   shortcut?: string
-  /** Расширенное описание (показывается через delay) */
-  description?: string
+  /** i18n key for the extended description (shown after delay) */
+  descriptionKey?: string
 }
 
 export type TooltipPosition = 'top' | 'bottom' | 'left' | 'right'
@@ -38,6 +39,7 @@ export default function Tooltip({
   position = 'bottom',
   children,
 }: TooltipProps): React.ReactElement {
+  const { t } = useTranslation()
   const [isVisible, setIsVisible] = useState(false)
   const [showExtended, setShowExtended] = useState(false)
   const timerRef = useRef<number | null>(null)
@@ -137,15 +139,15 @@ export default function Tooltip({
         >
           {/* Уровень 1: Быстрая подсказка */}
           <div className="tk-tooltip-header">
-            <span className="tk-tooltip-label">{tooltip.label}</span>
+            <span className="tk-tooltip-label">{t(tooltip.labelKey)}</span>
             {tooltip.shortcut && (
               <span className="tk-tooltip-shortcut">{tooltip.shortcut}</span>
             )}
           </div>
           {/* Уровень 2: Расширенная подсказка */}
-          {showExtended && tooltip.description && (
+          {showExtended && tooltip.descriptionKey && (
             <div className="tk-tooltip-description">
-              {tooltip.description}
+              {t(tooltip.descriptionKey)}
             </div>
           )}
           {/* Стрелка */}

@@ -27,9 +27,9 @@ const ICON_MAP: Record<string, React.FC<{ size?: number; className?: string }>> 
 // ---- Shapes (React version with icon components) ----
 export const ALL_SHAPES: {
   type: ShapeType | "text";
-  label: string;
+  labelKey: string;
   icon: (props: { size?: number; className?: string }) => React.ReactNode;
-  category: string;
+  categoryKey: string;
 }[] = ALL_SHAPES_DATA.map((s) => ({
   ...s,
   icon: (props) => {

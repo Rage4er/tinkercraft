@@ -28,6 +28,7 @@
 import type { TransformNR, SceneObject, ShapeType, ShapeParams } from '../csg/types'
 import { nextId } from './helpers'
 import { notify } from './notifications'
+import i18n from '../i18n'
 import {
     getNode,
     createPrimitiveNode,
@@ -465,7 +466,7 @@ export async function mirrorSelected(
         console.error('[Mirror] mirrorSelected error:', e)
         // Инвалидируем кэш при ошибке
         invalidateMirrorCache()
-        notify('Ошибка зеркального отражения', 'error')
+        notify(i18n.t('errors.mirrorFailed'), 'error')
         return null
     }
 }

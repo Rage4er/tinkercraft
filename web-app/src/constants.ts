@@ -12,44 +12,46 @@ import type { ShapeType } from "./csg/types";
 // UI-слой подставляет реальные иконки из constants.tsx.
 export const ALL_SHAPES_DATA: {
   type: ShapeType | "text";
-  label: string;
+  labelKey: string;
   iconKey: string;
-  category: string;
+  categoryKey: string;
 }[] = [
-    { type: "cube", label: "Куб", iconKey: "cube", category: "Основные" },
-    { type: "sphere", label: "Сфера", iconKey: "sphere", category: "Основные" },
-    { type: "cylinder", label: "Цилиндр", iconKey: "cylinder", category: "Основные" },
-    { type: "cone", label: "Конус", iconKey: "cone", category: "Основные" },
-    { type: "torus", label: "Тор", iconKey: "torus", category: "Основные" },
-    { type: "prism", label: "Призма", iconKey: "prism", category: "Основные" },
-    { type: "pyramid", label: "Пирамида", iconKey: "pyramid", category: "Основные" },
-    { type: "text", label: "Текст", iconKey: "text", category: "Особые" },
+    { type: "cube", labelKey: "shapes.cube", iconKey: "cube", categoryKey: "shapesCategory.basic" },
+    { type: "sphere", labelKey: "shapes.sphere", iconKey: "sphere", categoryKey: "shapesCategory.basic" },
+    { type: "cylinder", labelKey: "shapes.cylinder", iconKey: "cylinder", categoryKey: "shapesCategory.basic" },
+    { type: "cone", labelKey: "shapes.cone", iconKey: "cone", categoryKey: "shapesCategory.basic" },
+    { type: "torus", labelKey: "shapes.torus", iconKey: "torus", categoryKey: "shapesCategory.basic" },
+    { type: "prism", labelKey: "shapes.prism", iconKey: "prism", categoryKey: "shapesCategory.basic" },
+    { type: "pyramid", labelKey: "shapes.pyramid", iconKey: "pyramid", categoryKey: "shapesCategory.basic" },
+    { type: "text", labelKey: "shapes.text", iconKey: "text", categoryKey: "shapesCategory.special" },
   ];
 
 // ---- Snap values ----
-export const SNAP_VALUES: { label: string; value: number }[] = [
-  { label: "Откл", value: 0 },
-  { label: "0.1", value: 0.1 },
-  { label: "0.5", value: 0.5 },
-  { label: "1", value: 1 },
-  { label: "5", value: 5 },
-  { label: "10", value: 10 },
+// i18n: labels resolved at render time via t('snap.off'), t('snap.0.1'), etc.
+export const SNAP_VALUES: { labelKey: string; value: number }[] = [
+  { labelKey: "snap.off", value: 0 },
+  { labelKey: "snap.0.1", value: 0.1 },
+  { labelKey: "snap.0.5", value: 0.5 },
+  { labelKey: "snap.1", value: 1 },
+  { labelKey: "snap.5", value: 5 },
+  { labelKey: "snap.10", value: 10 },
 ];
 
 // ---- Timeline filter labels ----
+// i18n: labels resolved at render time via t('filters.add_shape'), etc.
 export const OP_FILTER_LABELS: Record<string, string> = {
-  add_shape: "Добавить",
-  import_mesh: "Импорт",
-  move: "Переместить",
-  resize_dims: "Размер",
-  fillet: "Скругление",
-  mirror: "Зеркало",
-  align: "Выровнять",
-  group: "CSG",
-  delete: "Удалить",
-  visibility: "Видимость",
-  color: "Цвет",
-  rename: "Имя",
+  add_shape: "filters.add_shape",
+  import_mesh: "filters.import_mesh",
+  move: "filters.move",
+  resize_dims: "filters.resize_dims",
+  fillet: "filters.fillet",
+  mirror: "filters.mirror",
+  align: "filters.align",
+  group: "filters.group",
+  delete: "filters.delete",
+  visibility: "filters.visibility",
+  color: "filters.color",
+  rename: "filters.rename",
 };
 
 // ---- Default filters (all enabled) ----
@@ -95,97 +97,64 @@ export const OBJECT_COLORS = [
 // ============================================================
 
 export interface TooltipData {
-  label: string
+  labelKey: string
   shortcut?: string
-  description?: string
+  descriptionKey?: string
 }
 
 export const TOOLTIP_DATA: Record<string, TooltipData> = {
   // --- File operations ---
-  open: { label: 'Открыть', shortcut: 'Ctrl+O', description: 'Открывает проект из файла .doodle' },
-  save: { label: 'Сохранить', shortcut: 'Ctrl+S', description: 'Сохраняет проект в файл .doodle' },
-  export_stl: { label: 'Экспорт STL', description: 'Экспортирует сцену в бинарный STL-файл' },
-  import_stl: { label: 'Импорт STL', description: 'Импортирует 3D-модель из STL-файла' },
-  projects: { label: 'Проекты', description: 'Открывает менеджер проектов' },
+  open: { labelKey: 'actions.open', shortcut: 'Ctrl+O', descriptionKey: 'tooltips.open' },
+  save: { labelKey: 'actions.save', shortcut: 'Ctrl+S', descriptionKey: 'tooltips.save' },
+  export_stl: { labelKey: 'actions.export', descriptionKey: 'tooltips.exportStl' },
+  import_stl: { labelKey: 'actions.import', descriptionKey: 'tooltips.importStl' },
+  projects: { labelKey: 'properties.projectManager', descriptionKey: 'tooltips.projects' },
 
   // --- Edit operations ---
-  undo: { label: 'Отменить', shortcut: 'Ctrl+Z', description: 'Отменяет последнее действие' },
-  redo: { label: 'Повторить', shortcut: 'Ctrl+Y', description: 'Повторяет отменённое действие' },
-  copy: { label: 'Копировать', shortcut: 'Ctrl+C', description: 'Копирует выделенные объекты в буфер обмена' },
-  paste: { label: 'Вставить', shortcut: 'Ctrl+V', description: 'Вставляет объекты из буфера обмена' },
-  delete: { label: 'Удалить', shortcut: 'Del', description: 'Удаляет выделенные объекты' },
+  undo: { labelKey: 'actions.undo', shortcut: 'Ctrl+Z', descriptionKey: 'tooltips.undo' },
+  redo: { labelKey: 'actions.redo', shortcut: 'Ctrl+Y', descriptionKey: 'tooltips.redo' },
+  copy: { labelKey: 'actions.copy', shortcut: 'Ctrl+C', descriptionKey: 'tooltips.copy' },
+  paste: { labelKey: 'actions.paste', shortcut: 'Ctrl+V', descriptionKey: 'tooltips.paste' },
+  delete: { labelKey: 'actions.delete', shortcut: 'Del', descriptionKey: 'tooltips.delete' },
 
   // --- View operations ---
-  fit_view: { label: 'Fit View', shortcut: 'F', description: 'Устанавливает вид на всю сцену' },
-  home_view: { label: 'Home View', shortcut: 'H', description: 'Сбрасывает камеру в исходную позицию' },
-  toggle_camera: { label: 'Перспектива ↔ Ортография', shortcut: 'Tab', description: 'Переключает тип камеры' },
+  fit_view: { labelKey: 'tools.fitView', shortcut: 'F', descriptionKey: 'tooltips.fitView' },
+  home_view: { labelKey: 'tools.homeView', shortcut: 'H', descriptionKey: 'tooltips.homeView' },
+  toggle_camera: { labelKey: 'tools.toggleCamera', shortcut: 'Tab', descriptionKey: 'tooltips.toggleCamera' },
 
   // --- Gizmo operations ---
-  gizmo_translate: { label: 'Переместить', shortcut: 'G', description: 'Режим перемещения объектов' },
-  gizmo_rotate: { label: 'Повернуть', shortcut: 'R', description: 'Режим вращения объектов' },
-  gizmo_scale: { label: 'Масштаб', shortcut: 'S', description: 'Режим масштабирования объектов' },
-  gizmo_exit: { label: 'Выйти', shortcut: 'Esc', description: 'Выход из режима gizmo' },
+  gizmo_translate: { labelKey: 'tools.move', shortcut: 'G', descriptionKey: 'tooltips.gizmoTranslate' },
+  gizmo_rotate: { labelKey: 'tools.rotate', shortcut: 'R', descriptionKey: 'tooltips.gizmoRotate' },
+  gizmo_scale: { labelKey: 'tools.scale', shortcut: 'S', descriptionKey: 'tooltips.gizmoScale' },
+  gizmo_exit: { labelKey: 'tools.exit', shortcut: 'Esc', descriptionKey: 'tooltips.gizmoExit' },
 
   // --- Ruler ---
-  ruler: { label: 'Линейка', shortcut: 'L', description: 'Инструмент измерения расстояний — 2 клика для измерения' },
+  ruler: { labelKey: 'tools.ruler', shortcut: 'L', descriptionKey: 'tooltips.ruler' },
 
   // --- Mirror ---
-  mirror_yz: { label: 'Зеркало YZ', shortcut: 'M', description: 'Отражает объект относительно плоскости YZ' },
-  mirror_xz: { label: 'Зеркало XZ', shortcut: 'N', description: 'Отражает объект относительно плоскости XZ' },
-  mirror_xy: { label: 'Зеркало XY', shortcut: 'B', description: 'Отражает объект относительно плоскости XY' },
+  mirror_yz: { labelKey: 'mirror.yz', shortcut: 'M', descriptionKey: 'tooltips.mirrorYz' },
+  mirror_xz: { labelKey: 'mirror.xz', shortcut: 'N', descriptionKey: 'tooltips.mirrorXz' },
+  mirror_xy: { labelKey: 'mirror.xy', shortcut: 'B', descriptionKey: 'tooltips.mirrorXy' },
 
   // --- Align (9 кнопок: X/Y/Z × min/center/max) ---
-  // Порядок действий:
-  // 1. Выбери первую фигуру — она будет двигатьься
-  // 2. Зажми Shift и выбери вторую фигуру — она станет якорем (останется на месте)
-  // 3. Нажми кнопку выравнивания — первая фигура подвинется к якорю
-  //
-  // Если выделено 3+ фигур: последняя выделенная = якорь, все остальные двигаются.
-  align_x_min: {
-    label: 'X min',
-    description: '⬅ Выровнять по левой грани якоря (по оси X). Все выбранные фигуры (кроме якоря) сдвинутся, чтобы их левая грань совпала с левой гранью якоря. Якорь — вторая выделенная фигура — остаётся на месте.',
-  },
-  align_x_center: {
-    label: 'X center',
-    description: '⟷ Выровнять по центру якоря (по оси X). Все выбранные фигуры сдвинутся, чтобы их центр по X совпал с центром якоря по X. Якорь — вторая выделенная фигура — остаётся на месте.',
-  },
-  align_x_max: {
-    label: 'X max',
-    description: '➡ Выровнять по правой грани якоря (по оси X). Все выбранные фигуры сдвинутся, чтобы их правая грань совпала с правой гранью якоря. Якорь — вторая выделенная фигура — остаётся на месте.',
-  },
-  align_y_min: {
-    label: 'Y min',
-    description: '⬇ Выровнять по нижней грани якоря (по оси Y). Все выбранные фигуры сдвинутся, чтобы их нижняя грань совпала с нижней гранью якоря. Якорь — вторая выделенная фигура — остаётся на месте.',
-  },
-  align_y_center: {
-    label: 'Y center',
-    description: '↕ Выровнять по центру якоря (по оси Y). Все выбранные фигуры сдвинутся, чтобы их центр по Y совпал с центром якоря по Y. Якорь — вторая выделенная фигура — остаётся на месте.',
-  },
-  align_y_max: {
-    label: 'Y max',
-    description: '⬆ Выровнять по верхней грани якоря (по оси Y). Все выбранные фигуры сдвинутся, чтобы их верхняя грань совпала с верхней гранью якоря. Якорь — вторая выделенная фигура — остаётся на месте.',
-  },
-  align_z_min: {
-    label: 'Z min',
-    description: '◧ Выровнять по ближней грани якоря (по оси Z). Все выбранные фигуры сдвинутся, чтобы их ближняя грань совпала с ближней гранью якоря. Якорь — вторая выделенная фигура — остаётся на месте.',
-  },
-  align_z_center: {
-    label: 'Z center',
-    description: '⦿ Выровнять по центру якоря (по оси Z). Все выбранные фигуры сдвинутся, чтобы их центр по Z совпал с центром якоря по Z. Якорь — вторая выделенная фигура — остаётся на месте.',
-  },
-  align_z_max: {
-    label: 'Z max',
-    description: '◨ Выровнять по дальней грани якоря (по оси Z). Все выбранные фигуры сдвинутся, чтобы их дальняя грань совпала с дальней гранью якоря. Якорь — вторая выделенная фигура — остаётся на месте.',
-  },
+  align_x_min: { labelKey: 'align.x_min', descriptionKey: 'tooltips.alignXMin' },
+  align_x_center: { labelKey: 'align.x_center', descriptionKey: 'tooltips.alignXCenter' },
+  align_x_max: { labelKey: 'align.x_max', descriptionKey: 'tooltips.alignXMax' },
+  align_y_min: { labelKey: 'align.y_min', descriptionKey: 'tooltips.alignYMin' },
+  align_y_center: { labelKey: 'align.y_center', descriptionKey: 'tooltips.alignYCenter' },
+  align_y_max: { labelKey: 'align.y_max', descriptionKey: 'tooltips.alignYMax' },
+  align_z_min: { labelKey: 'align.z_min', descriptionKey: 'tooltips.alignZMin' },
+  align_z_center: { labelKey: 'align.z_center', descriptionKey: 'tooltips.alignZCenter' },
+  align_z_max: { labelKey: 'align.z_max', descriptionKey: 'tooltips.alignZMax' },
 
   // --- CSG operations ---
-  csg_union: { label: 'Объединение', shortcut: 'U', description: 'Объединяет два объекта в один (union)' },
-  csg_subtract: { label: 'Вычитание', shortcut: 'X', description: 'Вычитает один объект из другого (subtract)' },
-  csg_intersect: { label: 'Пересечение', shortcut: 'I', description: 'Оставляет общую часть двух объектов (intersect)' },
+  csg_union: { labelKey: 'csg.union', shortcut: 'U', descriptionKey: 'tooltips.csgUnion' },
+  csg_subtract: { labelKey: 'csg.subtract', shortcut: 'X', descriptionKey: 'tooltips.csgSubtract' },
+  csg_intersect: { labelKey: 'csg.intersect', shortcut: 'I', descriptionKey: 'tooltips.csgIntersect' },
 
   // --- Theme ---
-  theme_toggle: { label: 'Сменить тему', description: 'Переключает между тёмной и светлой темой' },
+  theme_toggle: { labelKey: 'theme.toggle', descriptionKey: 'tooltips.themeToggle' },
 
   // --- Clear ---
-  clear_scene: { label: 'Очистить сцену', description: 'Удаляет все объекты из сцены' },
+  clear_scene: { labelKey: 'actions.clearScene', descriptionKey: 'tooltips.clearScene' },
 }

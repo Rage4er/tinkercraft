@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import NumInput from "./NumInput";
 import AlignButtons from "./AlignButtons";
 import CsgButtons from "./CsgButtons";
@@ -64,6 +65,7 @@ export default function PropertiesPanel({
   onShowProjects: () => void;
   onSaveToProject: (name: string) => void;
 }) {
+  const { t } = useTranslation();
   // FIX: Draft color state — only commit to history on blur or object switch
   const [draftColor, setDraftColor] = useState<string | null>(null);
 
@@ -93,22 +95,22 @@ export default function PropertiesPanel({
     return (
       <>
         <div className="props-empty">
-          Выберите объект
+          {t("properties.selectObject")}
           <br />
-          для просмотра свойств
+          {t("properties.toViewProperties")}
         </div>
         {objectList.length > 0 && (
           <div className="text-sm text-muted-xs" style={{ padding: "8px 12px" }}>
-            В сцене:{" "}
+            {t("properties.inScene")}{" "}
             <strong className="text-primary">
               {objectList.length}
             </strong>{" "}
-            объектов
+            {t("properties.objects")}
           </div>
         )}
         {/* Проект */}
         <div className="csg-group margin-8-0">
-          <div className="csg-group-title">Проект</div>
+          <div className="csg-group-title">{t("actions.save")}</div>
           {currentProjectName ? (
             <div className="text-sm text-muted" style={{ padding: "4px 12px 8px" }}>
               📁 <strong>{currentProjectName}</strong>
@@ -121,14 +123,14 @@ export default function PropertiesPanel({
             </div>
           ) : (
             <div className="text-sm text-muted" style={{ padding: "4px 12px 8px" }}>
-              ⚠ Несохранённый проект
+              {t("properties.unsavedProject")}
             </div>
           )}
           <button
             className="btn btn-full"
             onClick={onShowProjects}
           >
-            <FolderIcon size={32} /> Менеджер проектов
+            <FolderIcon size={32} /> {t("properties.projectManager")}
           </button>
           <button
             className="btn primary btn-full mt-2"
@@ -137,7 +139,7 @@ export default function PropertiesPanel({
               onSaveToProject(currentProjectName ?? "")
             }
           >
-            <SaveIcon size={32} /> {currentProjectId ? "Сохранить" : "Быстрое сохранение"}
+            <SaveIcon size={32} /> {currentProjectId ? t("properties.save") : t("properties.quickSave")}
           </button>
         </div>
       </>
@@ -147,12 +149,12 @@ export default function PropertiesPanel({
   return (
     <>
       <div className="props-row">
-        <span className="props-label">Тип</span>
+        <span className="props-label">{t("properties.type")}</span>
         <span className="props-value">{firstSelected.shapeType}</span>
       </div>
 
       <div className="props-row">
-        <span className="props-label">Цвет</span>
+        <span className="props-label">{t("properties.color")}</span>
         <div className="flex-row-6">
           <div
             className="color-swatch"
@@ -169,24 +171,24 @@ export default function PropertiesPanel({
       </div>
 
       <div className="props-row">
-        <span className="props-label">Видим</span>
+        <span className="props-label">{t("properties.visible")}</span>
         <button
           className="btn btn-compact"
           onClick={() => onToggleVisible(firstSelected.id)}
         >
           {firstSelected.visible ? <EyeIcon size={32} /> : <EyeOffIcon size={32} />}{" "}
-          {firstSelected.visible ? "Да" : "Нет"}
+          {firstSelected.visible ? t("properties.yes") : t("properties.no")}
         </button>
       </div>
 
       <div className="props-row">
-        <span className="props-label">Триг.</span>
+        <span className="props-label">{t("properties.triangles")}</span>
         <span className="props-value">
           {(firstSelected.indices.length / 3).toLocaleString()}
         </span>
       </div>
 
-      <div className="props-section-title">Позиция (мм)</div>
+      <div className="props-section-title">{t("properties.position")}</div>
       <NumInput
         label="X"
         value={firstSelected.transform.x}
@@ -206,7 +208,7 @@ export default function PropertiesPanel({
         onChange={(v) => onMoveAxis("z", v)}
       />
 
-      <div className="props-section-title">Вращение (°)</div>
+      <div className="props-section-title">{t("properties.rotation")}</div>
       <NumInput
         label="rotX"
         unit="°"
@@ -229,7 +231,7 @@ export default function PropertiesPanel({
         onChange={(v) => onRotAxis("rotZ", v)}
       />
 
-      <div className="props-section-title">Масштаб</div>
+      <div className="props-section-title">{t("properties.scale")}</div>
       <NumInput
         label="X"
         unit="×"
@@ -261,26 +263,26 @@ export default function PropertiesPanel({
       {/* Resize dims — только для примитивов и CSG результатов */}
       {canResize && firstSelected.shapeType !== "import_mesh" && (
         <div className="csg-group">
-          <div className="csg-group-title">Размеры (мм)</div>
+          <div className="csg-group-title">{t("properties.dimensions")}</div>
           {firstSelected.shapeType === "cube" && !firstSelected.params.width && firstSelected.originalBboxSize ? (
             // CSG result: show real bbox dimensions in mm
             <>
               <NumInput
-                label="Ширина"
+                label={t("properties.width")}
                 min={0.1}
                 value={Math.round(firstSelected.originalBboxSize.x * 100) / 100}
                 disabled={busy}
                 onChange={(v) => onResizeObject(firstSelected.id, { width: v })}
               />
               <NumInput
-                label="Высота"
+                label={t("properties.height")}
                 min={0.1}
                 value={Math.round(firstSelected.originalBboxSize.y * 100) / 100}
                 disabled={busy}
                 onChange={(v) => onResizeObject(firstSelected.id, { height: v })}
               />
               <NumInput
-                label="Глубина"
+                label={t("properties.depth")}
                 min={0.1}
                 value={Math.round(firstSelected.originalBboxSize.z * 100) / 100}
                 disabled={busy}
@@ -291,21 +293,21 @@ export default function PropertiesPanel({
             // Regular cube: show params
             <>
               <NumInput
-                label="Ширина"
+                label={t("properties.width")}
                 min={0.1}
                 value={firstSelected.params.width ?? 20}
                 disabled={busy}
                 onChange={(v) => onResizeDim("width", v)}
               />
               <NumInput
-                label="Высота"
+                label={t("properties.height")}
                 min={0.1}
                 value={firstSelected.params.height ?? 20}
                 disabled={busy}
                 onChange={(v) => onResizeDim("height", v)}
               />
               <NumInput
-                label="Глубина"
+                label={t("properties.depth")}
                 min={0.1}
                 value={firstSelected.params.depth ?? 20}
                 disabled={busy}
@@ -316,7 +318,7 @@ export default function PropertiesPanel({
           {firstSelected.shapeType === "sphere" && (
             <>
               <NumInput
-                label="Радиус"
+                label={t("properties.radius")}
                 min={0.1}
                 value={firstSelected.params.radius ?? 12}
                 disabled={busy}
@@ -332,7 +334,7 @@ export default function PropertiesPanel({
             firstSelected.shapeType === "cone") && (
               <>
                 <NumInput
-                  label="Радиус"
+                  label={t("properties.radius")}
                   min={0.1}
                   value={firstSelected.params.radius ?? 10}
                   disabled={busy}
@@ -343,7 +345,7 @@ export default function PropertiesPanel({
                   }
                 />
                 <NumInput
-                  label="Высота"
+                  label={t("properties.height")}
                   min={0.1}
                   value={firstSelected.params.height ?? 30}
                   disabled={busy}
@@ -358,7 +360,7 @@ export default function PropertiesPanel({
           {firstSelected.shapeType === "torus" && (
             <>
               <NumInput
-                label="Радиус тора"
+                label={t("properties.torusRadius")}
                 min={1}
                 value={firstSelected.params.torusRadius ?? 15}
                 disabled={busy}
@@ -367,7 +369,7 @@ export default function PropertiesPanel({
                 }
               />
               <NumInput
-                label="Радиус трубки"
+                label={t("properties.tubeRadius")}
                 min={0.5}
                 value={firstSelected.params.tubeRadius ?? 4}
                 disabled={busy}
@@ -381,7 +383,7 @@ export default function PropertiesPanel({
             firstSelected.shapeType === "pyramid") && (
               <>
                 <NumInput
-                  label="Радиус"
+                  label={t("properties.radius")}
                   min={0.5}
                   value={firstSelected.params.radius ?? 12}
                   disabled={busy}
@@ -390,7 +392,7 @@ export default function PropertiesPanel({
                   }
                 />
                 <NumInput
-                  label="Высота"
+                  label={t("properties.height")}
                   min={0.1}
                   value={firstSelected.params.height ?? 20}
                   disabled={busy}
@@ -399,7 +401,7 @@ export default function PropertiesPanel({
                   }
                 />
                 <NumInput
-                  label="Граней"
+                  label={t("properties.sides")}
                   unit=""
                   min={3}
                   value={firstSelected.params.sides ?? (firstSelected.shapeType === "prism" ? 6 : 4)}
@@ -416,9 +418,9 @@ export default function PropertiesPanel({
       {/* Fillet — только для кубов (не для CSG результатов) */}
       {canFillet && firstSelected.shapeType === 'cube' && (
         <div className="csg-group">
-          <div className="csg-group-title">Скругление (Fillet)</div>
+          <div className="csg-group-title">{t("properties.filletTitle")}</div>
           <NumInput
-            label="Радиус"
+            label={t("properties.radius")}
             unit="мм"
             min={0}
             value={filletRadius}
@@ -429,7 +431,7 @@ export default function PropertiesPanel({
             disabled={!canFillet}
             onClick={() => onApplyFillet(firstSelected.id, filletRadius)}
           >
-            <FilletIcon size={32} /> Применить
+            <FilletIcon size={32} /> {t("actions.apply")}
           </button>
         </div>
       )}

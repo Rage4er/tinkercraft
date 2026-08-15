@@ -15,9 +15,9 @@ import { ALL_SHAPES_DATA } from "./constants";
 // ---- Shapes (React components) ----
 export const ALL_SHAPES_ICONS: {
   type: ShapeType | "text";
-  label: string;
+  labelKey: string;
   icon: (props: { size?: number; className?: string }) => React.ReactNode;
-  category: string;
+  categoryKey: string;
 }[] = ALL_SHAPES_DATA.map((s) => {
   const IconMap: Record<string, any> = {
     cube: CubeIcon,

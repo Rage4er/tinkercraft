@@ -1373,6 +1373,23 @@ body {
   color: var(--accent-yellow);
 }
 
+.lang-switcher {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 2px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 11px;
+  white-space: nowrap;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.lang-switcher:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent);
+}
+
 .text-sm {
   font-size: 11px;
 }

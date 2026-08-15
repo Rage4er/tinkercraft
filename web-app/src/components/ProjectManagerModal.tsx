@@ -4,6 +4,7 @@
 // ============================================================
 
 import { useState, useEffect, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   listProjects, saveProject, deleteProject, updateProject,
   type ProjectMeta,
@@ -19,9 +20,11 @@ interface Props {
 }
 
 export default function ProjectManagerModal({ onClose, onLoad, onSave, currentProjectId, setCurrentProjectId }: Props) {
+  const { t, i18n } = useTranslation()
+  const currentLang = i18n.language?.startsWith("ru") ? "ru" : "en"
   const [projects, setProjects] = useState<ProjectMeta[]>([])
   const [loading, setLoading] = useState(true)
-  const [newName, setNewName] = useState('Новый проект')
+  const [newName, setNewName] = useState(t('projectManager.newProject'))
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState<string | null>(null)
 
@@ -60,35 +63,35 @@ export default function ProjectManagerModal({ onClose, onLoad, onSave, currentPr
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal-box" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
-          <span><FolderIcon size={32} /> Менеджер проектов</span>
-          <button className="btn" onClick={onClose} title="Закрыть"><CloseIcon size={32} /></button>
+          <span><FolderIcon size={32} /> {t('projectManager.title')}</span>
+          <button className="btn" onClick={onClose} title={t('actions.close')}><CloseIcon size={32} /></button>
         </div>
 
         {/* Сохранить текущий */}
         <div className="modal-section">
-          <div className="modal-section-title">Сохранить текущую сцену</div>
+          <div className="modal-section-title">{t('projectManager.saveCurrentScene')}</div>
           <div className="flex-row" style={{ gap: 6 }}>
             <input
               className="modal-input"
               type="text"
               value={newName}
               onChange={e => setNewName(e.target.value)}
-              placeholder="Имя проекта"
+              placeholder={t('projectManager.projectName')}
               onKeyDown={e => { if (e.key === 'Enter') handleSave() }}
             />
             <button className="btn primary" onClick={handleSave} disabled={saving || !newName.trim()}>
-              {saving ? '…' : <><SaveIcon size={32} /> Сохранить</>}
+              {saving ? '…' : <><SaveIcon size={32} /> {t('projectManager.save')}</>}
             </button>
           </div>
         </div>
 
         {/* Список проектов */}
         <div className="modal-section">
-          <div className="modal-section-title">Сохранённые проекты ({projects.length})</div>
+          <div className="modal-section-title">{t('projectManager.savedProjects', { count: projects.length })}</div>
           {loading ? (
-            <div className="modal-empty">Загрузка…</div>
+            <div className="modal-empty">{t('projectManager.loading')}</div>
           ) : projects.length === 0 ? (
-            <div className="modal-empty">Нет сохранённых проектов</div>
+            <div className="modal-empty">{t('projectManager.noProjects')}</div>
           ) : (
             <div className="proj-list">
               {projects.map(p => (
@@ -99,20 +102,20 @@ export default function ProjectManagerModal({ onClose, onLoad, onSave, currentPr
                   <div className="proj-info">
                     <div className="proj-name">{p.name}</div>
                     <div className="proj-meta">
-                      {p.objectCount} объект{p.objectCount === 1 ? '' : p.objectCount < 5 ? 'а' : 'ов'} ·{' '}
-                      {new Date(p.savedAt).toLocaleString('ru')}
-                      {p.id === currentProjectId && ' · текущий'}
+                      {t('projectManager.objectCount', { count: p.objectCount })} ·{' '}
+                      {new Date(p.savedAt).toLocaleString(currentLang)}
+                      {p.id === currentProjectId && ` · ${t('projectManager.current')}`}
                     </div>
                   </div>
                   <div className="proj-actions">
                     <button className="btn" onClick={() => handleLoad(p.id)}>
-                      <OpenIcon size={32} /> Открыть
+                      <OpenIcon size={32} /> {t('projectManager.open')}
                     </button>
                     <button
                       className="btn danger"
                       disabled={deleting === p.id}
                       onClick={() => handleDelete(p.id)}
-                      title="Удалить проект"
+                      title={t('projectManager.deleteProject')}
                     >
                       {deleting === p.id ? '…' : <DeleteIcon size={32} />}
                     </button>

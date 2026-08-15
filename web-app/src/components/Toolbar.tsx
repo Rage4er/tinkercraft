@@ -1,4 +1,5 @@
 import type { GizmoMode } from "./Viewport3D";
+import { useTranslation } from "react-i18next";
 import MirrorButtons from "./MirrorButtons";
 import AlignButtons from "./AlignButtons";
 import CsgButtons from "./CsgButtons";
@@ -107,6 +108,7 @@ export default function Toolbar({
   onToggleTheme: () => void;
   onClearScene: () => void;
 }) {
+  const { t } = useTranslation();
   // Определяем группы для алгоритма
   const groups: ToolbarGroup[] = [
     { id: "file", buttonCount: 5 },
@@ -134,7 +136,7 @@ export default function Toolbar({
       ref={toolbarRef}
       className="toolbar"
       role="toolbar"
-      aria-label="Панель инструментов"
+      aria-label={t("toolbar.label")}
     >
       <span className="toolbar-logo"><TCLogoIcon size={34} /> TinkerCraft</span>
 
@@ -142,11 +144,11 @@ export default function Toolbar({
       <ToolbarRowSplit
         rows={getRows("file")}
         buttons={[
-          <IconButton key="open" icon={<OpenIcon size={32} />} label="Открыть" onClick={onOpen} tooltip={TOOLTIP_DATA.open} />,
-          <IconButton key="save" icon={<SaveIcon size={32} />} label="Сохранить" onClick={onSave} tooltip={TOOLTIP_DATA.save} />,
+          <IconButton key="open" icon={<OpenIcon size={32} />} label={t("actions.open")} onClick={onOpen} tooltip={TOOLTIP_DATA.open} />,
+          <IconButton key="save" icon={<SaveIcon size={32} />} label={t("actions.save")} onClick={onSave} tooltip={TOOLTIP_DATA.save} />,
           <IconButton key="export" icon={<ExportIcon size={32} />} label="STL" onClick={onExportStl} disabled={objectCount === 0} tooltip={TOOLTIP_DATA.export_stl} />,
-          <IconButton key="import" icon={<ImportIcon size={32} />} label="Импорт" onClick={onImportStl} disabled={busy} tooltip={TOOLTIP_DATA.import_stl} />,
-          <IconButton key="projects" icon={<FolderIcon size={32} />} label="Проекты" onClick={onShowProjects} tooltip={TOOLTIP_DATA.projects} />,
+          <IconButton key="import" icon={<ImportIcon size={32} />} label={t("actions.import")} onClick={onImportStl} disabled={busy} tooltip={TOOLTIP_DATA.import_stl} />,
+          <IconButton key="projects" icon={<FolderIcon size={32} />} label={t("properties.projectManager")} onClick={onShowProjects} tooltip={TOOLTIP_DATA.projects} />,
         ]}
       />
       <div className="toolbar-separator" />
@@ -155,8 +157,8 @@ export default function Toolbar({
       <ToolbarRowSplit
         rows={getRows("edit1")}
         buttons={[
-          <IconButton key="undo" icon={<UndoIcon size={32} />} label="Undo" onClick={onUndo} disabled={!canUndo || busy} tooltip={TOOLTIP_DATA.undo} />,
-          <IconButton key="redo" icon={<RedoIcon size={32} />} label="Redo" onClick={onRedo} disabled={!canRedo || busy} tooltip={TOOLTIP_DATA.redo} />,
+          <IconButton key="undo" icon={<UndoIcon size={32} />} label={t("actions.undo")} onClick={onUndo} disabled={!canUndo || busy} tooltip={TOOLTIP_DATA.undo} />,
+          <IconButton key="redo" icon={<RedoIcon size={32} />} label={t("actions.redo")} onClick={onRedo} disabled={!canRedo || busy} tooltip={TOOLTIP_DATA.redo} />,
         ]}
       />
       <div className="toolbar-separator" />
@@ -165,9 +167,9 @@ export default function Toolbar({
       <ToolbarRowSplit
         rows={getRows("edit2")}
         buttons={[
-          <IconButton key="copy" icon={<CopyIcon size={32} />} label="Copy" onClick={onCopy} disabled={selectedCount === 0} tooltip={TOOLTIP_DATA.copy} />,
-          <IconButton key="paste" icon={<PasteIcon size={32} />} label="Paste" onClick={onPaste} disabled={!hasCopied || busy} tooltip={TOOLTIP_DATA.paste} />,
-          <IconButton key="delete" icon={<DeleteIcon size={32} />} label="Del" onClick={onDelete} disabled={selectedCount === 0 || busy} tooltip={TOOLTIP_DATA.delete} />,
+          <IconButton key="copy" icon={<CopyIcon size={32} />} label={t("actions.copy")} onClick={onCopy} disabled={selectedCount === 0} tooltip={TOOLTIP_DATA.copy} />,
+          <IconButton key="paste" icon={<PasteIcon size={32} />} label={t("actions.paste")} onClick={onPaste} disabled={!hasCopied || busy} tooltip={TOOLTIP_DATA.paste} />,
+          <IconButton key="delete" icon={<DeleteIcon size={32} />} label={t("actions.delete")} onClick={onDelete} disabled={selectedCount === 0 || busy} tooltip={TOOLTIP_DATA.delete} />,
         ]}
       />
       <div className="toolbar-separator" />
@@ -176,9 +178,9 @@ export default function Toolbar({
       <ToolbarRowSplit
         rows={getRows("view")}
         buttons={[
-          <IconButton key="fit" icon={<FitViewIcon size={32} />} label="Fit" onClick={onFitView} tooltip={TOOLTIP_DATA.fit_view} />,
-          <IconButton key="home" icon={<HomeIcon size={32} />} label="Home" onClick={onResetView} tooltip={TOOLTIP_DATA.home_view} />,
-          <IconButton key="camera" icon={<PerspectiveIcon size={32} />} label={cameraMode === "perspective" ? "Persp" : "Ortho"} onClick={onToggleCamera} tooltip={TOOLTIP_DATA.toggle_camera} buttonVariant={cameraMode === "orthographic" ? "active" : "default"} />,
+          <IconButton key="fit" icon={<FitViewIcon size={32} />} label={t("tools.fitView")} onClick={onFitView} tooltip={TOOLTIP_DATA.fit_view} />,
+          <IconButton key="home" icon={<HomeIcon size={32} />} label={t("tools.homeView")} onClick={onResetView} tooltip={TOOLTIP_DATA.home_view} />,
+          <IconButton key="camera" icon={<PerspectiveIcon size={32} />} label={cameraMode === "perspective" ? t("tools.persp") : t("tools.ortho")} onClick={onToggleCamera} tooltip={TOOLTIP_DATA.toggle_camera} buttonVariant={cameraMode === "orthographic" ? "active" : "default"} />,
         ]}
       />
       <div className="toolbar-separator" />
@@ -187,9 +189,9 @@ export default function Toolbar({
       <ToolbarRowSplit
         rows={getRows("gizmo")}
         buttons={[
-          <IconButton key="move" icon={<MoveIcon size={32} />} label="Move" onClick={() => onGizmo("translate")} disabled={selectedCount === 0} tooltip={TOOLTIP_DATA.gizmo_translate} buttonVariant={gizmoMode === "translate" ? "active" : "default"} />,
-          <IconButton key="rotate" icon={<RotateIcon size={32} />} label="Rotate" onClick={() => onGizmo("rotate")} disabled={selectedCount === 0} tooltip={TOOLTIP_DATA.gizmo_rotate} buttonVariant={gizmoMode === "rotate" ? "active" : "default"} />,
-          <IconButton key="scale" icon={<ScaleIcon size={32} />} label="Scale" onClick={() => onGizmo("scale")} disabled={selectedCount === 0} tooltip={TOOLTIP_DATA.gizmo_scale} buttonVariant={gizmoMode === "scale" ? "active" : "default"} />,
+          <IconButton key="move" icon={<MoveIcon size={32} />} label={t("tools.move")} onClick={() => onGizmo("translate")} disabled={selectedCount === 0} tooltip={TOOLTIP_DATA.gizmo_translate} buttonVariant={gizmoMode === "translate" ? "active" : "default"} />,
+          <IconButton key="rotate" icon={<RotateIcon size={32} />} label={t("tools.rotate")} onClick={() => onGizmo("rotate")} disabled={selectedCount === 0} tooltip={TOOLTIP_DATA.gizmo_rotate} buttonVariant={gizmoMode === "rotate" ? "active" : "default"} />,
+          <IconButton key="scale" icon={<ScaleIcon size={32} />} label={t("tools.scale")} onClick={() => onGizmo("scale")} disabled={selectedCount === 0} tooltip={TOOLTIP_DATA.gizmo_scale} buttonVariant={gizmoMode === "scale" ? "active" : "default"} />,
           ...(gizmoMode !== "none" ? [<IconButton key="exit" icon={<CloseIcon size={32} />} onClick={() => onGizmo("none")} tooltip={TOOLTIP_DATA.gizmo_exit} buttonVariant="danger" />] : []),
         ]}
       />
@@ -199,7 +201,7 @@ export default function Toolbar({
       <ToolbarRowSplit
         rows={getRows("ruler")}
         buttons={[
-          <IconButton key="ruler" icon={<RulerIcon size={32} />} label="Линейка" onClick={onToggleRuler} tooltip={TOOLTIP_DATA.ruler} buttonVariant={rulerActive ? "active" : "default"} />,
+          <IconButton key="ruler" icon={<RulerIcon size={32} />} label={t("tools.ruler")} onClick={onToggleRuler} tooltip={TOOLTIP_DATA.ruler} buttonVariant={rulerActive ? "active" : "default"} />,
         ]}
       />
       <div className="toolbar-separator" />
@@ -229,7 +231,7 @@ export default function Toolbar({
           <IconButton
             key="theme"
             icon={<ThemeIcon size={32} />}
-            label={theme === "dark" ? "Light" : "Dark"}
+            label={theme === "dark" ? t("theme.light") : t("theme.dark")}
             onClick={onToggleTheme}
             tooltip={TOOLTIP_DATA.theme_toggle}
           />,
@@ -241,7 +243,7 @@ export default function Toolbar({
       <ToolbarRowSplit
         rows={getRows("clear")}
         buttons={[
-          <IconButton key="clear" icon={<CloseIcon size={32} />} label="Clear" onClick={onClearScene} disabled={busy} tooltip={TOOLTIP_DATA.clear_scene} buttonVariant="danger" />,
+          <IconButton key="clear" icon={<CloseIcon size={32} />} label={t("actions.clearScene")} onClick={onClearScene} disabled={busy} tooltip={TOOLTIP_DATA.clear_scene} buttonVariant="danger" />,
         ]}
       />
     </div>

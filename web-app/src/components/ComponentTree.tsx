@@ -4,6 +4,7 @@
 // ============================================================
 
 import { useState, useRef, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { SceneObject } from '../csg/types'
 import {
   CubeIcon,
@@ -32,14 +33,16 @@ interface Props {
 // FIX (LOW-18-30): Named constant instead of magic number
 const INPUT_SELECT_DELAY_MS = 30
 
-function displayName(obj: SceneObject): string {
+function displayName(obj: SceneObject, t: (key: string, opts?: Record<string, unknown>) => string): string {
   if (obj.name) return obj.name
-  if (obj.shapeType === 'csg') return `CSG ${obj.id.split('_')[1] ?? ''}`
-  if (obj.shapeType === 'import_mesh') return `Импорт ${obj.id.split('_')[1] ?? ''}`
-  return `${obj.shapeType} ${obj.id.split('_')[1] ?? ''}`
+  const num = obj.id.split('_')[1] ?? ''
+  if (obj.shapeType === 'csg') return t('csg.result') + (num ? ` ${num}` : '')
+  if (obj.shapeType === 'import_mesh') return t('componentTree.import') + (num ? ` ${num}` : '')
+  return `${t(`shapes.${obj.shapeType}`)} ${num}`
 }
 
 export default function ComponentTree({ objects, selectedIds, onSelect, onRename, onToggleVis, onDelete }: Props) {
+  const { t } = useTranslation()
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editValue, setEditValue] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
@@ -56,7 +59,7 @@ export default function ComponentTree({ objects, selectedIds, onSelect, onRename
 
   function startEdit(obj: SceneObject) {
     setEditingId(obj.id)
-    setEditValue(obj.name ?? displayName(obj))
+    setEditValue(obj.name ?? displayName(obj, t))
     if (selectTimerRef.current !== null) clearTimeout(selectTimerRef.current)
     selectTimerRef.current = setTimeout(() => inputRef.current?.select(), INPUT_SELECT_DELAY_MS)
   }
@@ -68,7 +71,7 @@ export default function ComponentTree({ objects, selectedIds, onSelect, onRename
   }
 
   if (objects.length === 0) {
-    return <div className="ct-empty">Сцена пуста</div>
+    return <div className="ct-empty">{t("componentTree.sceneEmpty")}</div>
   }
 
   return (
@@ -115,9 +118,9 @@ export default function ComponentTree({ objects, selectedIds, onSelect, onRename
               <span
                 className="ct-name"
                 onDoubleClick={e => { e.stopPropagation(); startEdit(obj) }}
-                title="Двойной клик — переименовать"
+                title={t("componentTree.doubleClickRename")}
               >
-                {displayName(obj)}
+                {displayName(obj, t)}
               </span>
             )}
 
@@ -127,14 +130,14 @@ export default function ComponentTree({ objects, selectedIds, onSelect, onRename
             {/* Действия */}
             <button
               className="ct-btn"
-              title={obj.visible ? 'Скрыть' : 'Показать'}
+              title={obj.visible ? t("componentTree.hide") : t("componentTree.show")}
               onClick={e => { e.stopPropagation(); onToggleVis(obj.id) }}
             >
               {obj.visible ? <EyeIcon size={32} /> : <EyeOffIcon size={32} />}
             </button>
             <button
               className="ct-btn ct-del"
-              title="Удалить"
+              title={t("componentTree.delete")}
               onClick={e => { e.stopPropagation(); onDelete(obj.id) }}
             >
               <DeleteIcon size={32} />

@@ -23,6 +23,7 @@ import {
   getNode,
 } from '../csg/history-tree'
 import { notify } from './notifications'
+import i18n from '../i18n'
 import { devLog } from '../utils/debug'
 
 /** Metadata accumulated over the operation chain. Exported for testing. */
@@ -328,7 +329,7 @@ export function rebuildBuildTree(
             '\n  operation:', treeOp,
           )
           // FIX (MED-18-8): Notify user about boolean node creation failure
-          try { notify('Ошибка создания булевой операции', 'error') } catch { /* notify not available */ }
+          try { notify(i18n.t('errors.csgFailed'), 'error') } catch { /* notify not available */ }
         }
       }
     }

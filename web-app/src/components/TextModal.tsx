@@ -1,4 +1,5 @@
 import { useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { TextIcon, PlusIcon } from "./icons";
 
 export default function TextModal({
@@ -24,6 +25,7 @@ export default function TextModal({
   onAdd: () => void;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   const handleAdd = useCallback(() => void onAdd(), [onAdd]);
 
   return (
@@ -36,14 +38,14 @@ export default function TextModal({
         aria-labelledby="text-modal-title"
       >
         <div className="text-modal-title" id="text-modal-title">
-          <PlusIcon size={32} /> 3D Текст
+          <PlusIcon size={32} /> {t("textModal.title")}
         </div>
         <input
           className="text-modal-input"
           type="text"
           maxLength={64}
           value={textInput}
-          placeholder="Введите текст…"
+          placeholder={t("textModal.placeholder")}
           autoFocus
           onChange={(e) => onTextChange(e.target.value)}
           onKeyDown={(e) => {
@@ -53,7 +55,7 @@ export default function TextModal({
         />
         <div className="text-modal-row">
           <label className="text-modal-label">
-            Размер
+            {t("textModal.size")}
             <input
               type="number"
               value={textSize}
@@ -69,7 +71,7 @@ export default function TextModal({
             мм
           </label>
           <label className="text-modal-label">
-            Глубина
+            {t("textModal.depth")}
             <input
               type="number"
               value={textDepth}
@@ -91,10 +93,10 @@ export default function TextModal({
             disabled={busy || !workerOk}
             onClick={handleAdd}
           >
-            <PlusIcon size={32} /> Добавить
+            <PlusIcon size={32} /> {t("textModal.add")}
           </button>
           <button className="btn" onClick={onClose}>
-            Отмена
+            {t("textModal.cancel")}
           </button>
         </div>
       </div>
