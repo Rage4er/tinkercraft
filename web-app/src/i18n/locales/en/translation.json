@@ -208,7 +208,7 @@
     "webLabel": "Tinker Craft Web"
   },
   "viewport": {
-    "hint": "LMB — select · Shift — multi · Drag — box · RMB — orbit · F — Fit · H — Home · G/R/S — gizmo"
+    "hint": "LMB — select · Shift — multi · Drag — box · RMB — orbit · F — Fit View · H — Home View · G/R/S — gizmo"
   },
   "projectManager": {
     "title": "Project Manager",
