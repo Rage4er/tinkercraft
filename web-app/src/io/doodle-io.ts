@@ -65,6 +65,71 @@ const VALID_OP_TYPES = new Set([
   'mirror', 'align', 'group', 'delete', 'visibility', 'color', 'rename',
 ])
 
+/**
+ * FIX (DOODLE-MESH): Restore mesh arrays after JSON round-trip.
+ *
+ * JSON.stringify turns Float32Array/Uint32Array into plain objects like
+ * {"0":1.5,"1":2.3,...} WITHOUT a `length` property. After JSON.parse,
+ * `new Float32Array(obj)` on such an object produces an EMPTY array
+ * (ToLength(undefined) === 0), so CSG results and imported meshes
+ * silently disappear when opening a .doodle file.
+ *
+ * This function converts any array-like input (plain number[], TypedArray,
+ * or numeric-keyed plain object) into a proper number[] that TypedArray
+ * constructors accept. Returns undefined for non-array-like input.
+ */
+export function restoreMeshArray(data: unknown): number[] | undefined {
+  if (data == null) return undefined
+  // Already a plain array — use as-is
+  if (Array.isArray(data)) return data as number[]
+  // Already a TypedArray (e.g. from IndexedDB structured clone) — convert
+  if (data instanceof Float32Array || data instanceof Uint32Array) {
+    return Array.from(data as Float32Array | Uint32Array)
+  }
+  // Plain object with numeric keys — the JSON.stringify(Float32Array) case
+  if (typeof data === 'object') {
+    const obj = data as Record<string, unknown>
+    const keys = Object.keys(obj)
+    if (keys.length === 0) return undefined
+    // Verify all keys are numeric indices and find the max
+    let maxIdx = -1
+    for (const k of keys) {
+      if (!/^\d+$/.test(k)) return undefined // Not a pure array-like object
+      const n = Number(k)
+      if (n > maxIdx) maxIdx = n
+    }
+    // Must be dense (0..maxIdx with no gaps)
+    if (maxIdx !== keys.length - 1) return undefined
+    const result = new Array<number>(keys.length)
+    for (const k of keys) {
+      result[Number(k)] = Number(obj[k])
+    }
+    return result
+  }
+  return undefined
+}
+
+/**
+ * FIX (DOODLE-MESH): Restore mesh arrays on group/import_mesh operations
+ * after JSON.parse so downstream TypedArray constructors receive valid data.
+ */
+function restoreOperationMeshArrays(operations: TinkerCraftOperation[]): void {
+  for (const op of operations) {
+    if (op.type === 'group') {
+      const g = op as import('../csg/types').GroupOperation
+      if (g.resultVertices !== undefined) g.resultVertices = restoreMeshArray(g.resultVertices)
+      if (g.resultIndices !== undefined) g.resultIndices = restoreMeshArray(g.resultIndices)
+      if (g.resultNormals !== undefined) g.resultNormals = restoreMeshArray(g.resultNormals)
+    } else if (op.type === 'import_mesh') {
+      const im = op as import('../csg/types').ImportMeshOperation
+      const v = restoreMeshArray(im.vertices)
+      const i = restoreMeshArray(im.indices)
+      if (v) im.vertices = v
+      if (i) im.indices = i
+    }
+  }
+}
+
 // ---- Разобрать .doodle файл ----
 
 export async function parseDoodle(buffer: ArrayBuffer): Promise<TinkerCraftFile> {
@@ -117,6 +182,12 @@ export async function parseDoodle(buffer: ArrayBuffer): Promise<TinkerCraftFile>
   if (!operations.every(op => op && typeof op === 'object' && VALID_OP_TYPES.has((op as { type?: string }).type ?? ''))) {
     throw new Error('Некорректный model.json: обнаружена операция с неизвестным типом')
   }
+
+  // FIX (DOODLE-TYPEDARRAY): JSON.stringify превращает Float32Array/Uint32Array
+  // в plain-объекты {"0":...,"1":...} без length. new Float32Array(такой объект)
+  // даёт ПУСТОЙ массив → CSG-результаты и импорты не отображаются после открытия.
+  // Нормализуем массивы обратно в числовые массивы.
+  restoreOperationMeshArrays(operations)
 
   let thumbnail: string | undefined
   const thumbFile = zip.file('thumbnail.png')
