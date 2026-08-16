@@ -325,6 +325,13 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         // PERF-R8-1: Храним TypedArray вместо number[] для экономии памяти (8×)
         entry.importVertices = new Float32Array(obj.vertices)
         entry.importIndices = new Uint32Array(obj.indices)
+      } else if (obj.shapeType === 'csg') {
+        // FIX (PASTE-CSG): Store CSG mesh data for paste
+        entry.csgVertices = new Float32Array(obj.vertices)
+        entry.csgIndices = new Uint32Array(obj.indices)
+        entry.csgNormals = obj.normals ? new Float32Array(obj.normals) : undefined
+        entry.csgAABB = obj.aabb ? { min: { ...obj.aabb.min }, max: { ...obj.aabb.max } } : undefined
+        entry.csgOriginalBboxSize = obj.originalBboxSize ? { ...obj.originalBboxSize } : undefined
       }
       return [entry]
     })
@@ -355,6 +362,26 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
           newOps.push(op)
           // Register baked node in build tree for CSG/mirror/align support
           createBakedNode(id, result.vertices, result.indices, result.normals ?? null, transform)
+        } else if (clip.shapeType === 'csg' && clip.csgVertices && clip.csgIndices) {
+          // FIX (PASTE-CSG): Paste CSG results with their mesh data instead of recreating as primitives
+          const obj: SceneObject = makeObject({
+            id, shapeType: 'csg', params: {}, color: clip.color,
+            transform, visible: true, locked: false,
+            vertices: clip.csgVertices, indices: clip.csgIndices,
+            normals: clip.csgNormals, aabb: clip.csgAABB,
+            originalBboxSize: clip.csgOriginalBboxSize,
+          })
+          const histOp: GroupOperation = {
+            type: 'group', ids: [], resultId: id,
+            resultVertices: clip.csgVertices, resultIndices: clip.csgIndices,
+            resultNormals: clip.csgNormals, resultCenter: { x: transform.x, y: transform.y, z: transform.z },
+            originalBboxSize: clip.csgOriginalBboxSize,
+            treeOperation: 'union', shapeType: 'csg',
+          }
+          newObjects = { ...newObjects, [id]: obj }
+          newOps.push(histOp)
+          // Register baked node for CSG paste
+          createBakedNode(id, clip.csgVertices, clip.csgIndices, clip.csgNormals ?? null, transform)
         } else {
           const mesh = await workerBuildShape(id, clip.shapeType, clip.params, transform)
           const obj: SceneObject = makeObject({ id, shapeType: clip.shapeType, params: clip.params, color: clip.color, transform, visible: true, locked: false, vertices: mesh.vertices, indices: mesh.indices, normals: mesh.normals })
@@ -455,11 +482,22 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       // import_mesh already excluded by early return above.
       const isOperandA_Primitive = objects[idA].shapeType !== 'csg'
       const isOperandB_Primitive = objects[idB].shapeType !== 'csg'
-      const mesh = await workerCsgBooleanWithSync(
-        idA, idB, op, resultId, srOf(idA), srOf(idB),
-        isOperandA_Primitive ? { shapeType: objects[idA].shapeType, params: objects[idA].params } : undefined,
-        isOperandB_Primitive ? { shapeType: objects[idB].shapeType, params: objects[idB].params } : undefined,
-      )
+      let mesh: MeshResult
+
+      // FIX (CSG-BOOLEAN-CSG): When both operands are CSG results, workerCsgBooleanWithSync
+      // cannot rebuild them (no shapeType/params). Use workerCsgBoolean instead —
+      // syncObjectsForOperation already synced the mesh data via workerSyncMesh.
+      if (!isOperandA_Primitive && !isOperandB_Primitive) {
+        // Both operands are CSG — use csgBoolean (no shapeType/params needed)
+        mesh = await workerCsgBoolean(idA, idB, op, resultId, srOf(idA), srOf(idB))
+      } else {
+        // At least one operand is a primitive — use csgBooleanWithSync
+        mesh = await workerCsgBooleanWithSync(
+          idA, idB, op, resultId, srOf(idA), srOf(idB),
+          isOperandA_Primitive ? { shapeType: objects[idA].shapeType, params: objects[idA].params } : undefined,
+          isOperandB_Primitive ? { shapeType: objects[idB].shapeType, params: objects[idB].params } : undefined,
+        )
+      }
       const ms = performance.now() - t0
       // Single-pass: center geometry at origin + compute AABB (PERF-R6-1)
       const { cx, cy, cz, aabb } = extractAndCenterGetAABB(mesh.vertices)
@@ -895,6 +933,14 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       clearSnapshots()
       const t0 = performance.now()
       const newObjects = await rebuildFromHistory(doc.operations)
+      // DEBUG: verify CSG objects have mesh data
+      if (import.meta.env.DEV) {
+        const csgObjs = Object.values(newObjects).filter(o => o.shapeType === 'csg')
+        console.log('[loadDoodle] CSG objects count:', csgObjs.length)
+        for (const c of csgObjs) {
+          console.log(`[loadDoodle]  ${c.id}: tris=${c.indices.length / 3} verts=${c.vertices.length / 3} rot=${c.transform.rotX}/${c.transform.rotY}/${c.transform.rotZ} scl=${c.transform.scaleX}/${c.transform.scaleY}/${c.transform.scaleZ}`)
+        }
+      }
       // FIX (R17-7): Rebuild build tree after loading from file to ensure
       // CSG/mirror/align operations have the correct tree structure.
       rebuildBuildTree(doc.operations, newObjects)

@@ -139,4 +139,10 @@ export interface ClipEntry {
   // For import_mesh:
   importVertices?: Float32Array
   importIndices?: Uint32Array
+  // For CSG results (pasted as baked mesh):
+  csgVertices?: Float32Array
+  csgIndices?: Uint32Array
+  csgNormals?: Float32Array
+  csgAABB?: { min: Vec3; max: Vec3 }
+  csgOriginalBboxSize?: { x: number; y: number; z: number }
 }
