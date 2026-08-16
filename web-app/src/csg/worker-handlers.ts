@@ -879,14 +879,14 @@ export async function handleRebuildScene(msg: RebuildSceneMessage): Promise<void
             const nt = applyMoveDelta(t, d, rd, sd)
             currentTransforms.set(id, nt)
             if (info) {
+              // FIX (MOVE-RS-DOUBLE): Apply only translation to geometry.
+              // Rotation/scale is tracked in currentTransforms and applied:
+              // - At render time via viewport pivot (rotation/scale on Three.js object)
+              // - At CSG time via applySRAroundCenter in the group handler
+              // Previously buildTransformMatrix baked full RS+T into vertices,
+              // causing doubling when viewport also applied RS via pivot.
               const fresh = buildPrimitiveWithFillet(info.shapeType, info.params, info.filletRadius)
-              const fullMatrix = buildTransformMatrix(
-                { x: nt.x, y: nt.y, z: nt.z },
-                { rotX: nt.rotX, rotY: nt.rotY, rotZ: nt.rotZ },
-                { scaleX: nt.scaleX, scaleY: nt.scaleY, scaleZ: nt.scaleZ },
-              )
-              const tm = fresh.transform(fullMatrix)
-              fresh.delete()
+              const tm = applyTransform(fresh, { x: nt.x, y: nt.y, z: nt.z })
               setCached(id, tm)
             }
           } else {
