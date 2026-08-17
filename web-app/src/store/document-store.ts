@@ -933,12 +933,23 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       clearSnapshots()
       const t0 = performance.now()
       const newObjects = await rebuildFromHistory(doc.operations)
-      // DEBUG: verify CSG objects have mesh data
+      // DEBUG: verify CSG objects have mesh data and check children
       if (import.meta.env.DEV) {
         const csgObjs = Object.values(newObjects).filter(o => o.shapeType === 'csg')
         console.log('[loadDoodle] CSG objects count:', csgObjs.length)
         for (const c of csgObjs) {
           console.log(`[loadDoodle]  ${c.id}: tris=${c.indices.length / 3} verts=${c.vertices.length / 3} rot=${c.transform.rotX}/${c.transform.rotY}/${c.transform.rotZ} scl=${c.transform.scaleX}/${c.transform.scaleY}/${c.transform.scaleZ}`)
+          // Log CSG children from operations
+          const childrenOps = doc.operations.filter(op => op.type === 'group' && (op as import('../csg/types').GroupOperation).resultId === c.id)
+          for (const childOp of childrenOps) {
+            const g = childOp as import('../csg/types').GroupOperation
+            console.log(`[loadDoodle]   children of ${c.id}: ids=[${g.ids.join(', ')}] hasMesh=${!!g.resultVertices?.length}`)
+            // Log children details from operations array
+            for (const childId of g.ids) {
+              const childObj = newObjects[childId]
+              console.log(`[loadDoodle]   child ${childId}: shapeType=${childObj?.shapeType} tris=${childObj?.indices.length / 3} verts=${childObj?.vertices.length / 3}`)
+            }
+          }
         }
       }
       // FIX (R17-7): Rebuild build tree after loading from file to ensure

@@ -207,6 +207,16 @@ export async function serializeDoodle(
 ): Promise<Blob> {
   const zip = new JSZip()
 
+  // DEBUG: Log CSG children serialization
+  if (import.meta.env.DEV) {
+    const groupOps = operations.filter(op => op.type === 'group')
+    console.log(`[serializeDoodle] Total operations: ${operations.length}, group operations: ${groupOps.length}`)
+    for (const gOp of groupOps) {
+      const g = gOp as import('../csg/types').GroupOperation
+      console.log(`[serializeDoodle] group resultId=${g.resultId} ids=[${g.ids.join(', ')}] hasMesh=${!!g.resultVertices?.length} tris=${g.resultIndices ? (Array.isArray(g.resultIndices) ? (g.resultIndices as number[]).length / 3 : 'N/A') : 'N/A'}`)
+    }
+  }
+
   const doc: TinkerCraftFile = {
     version: FORMAT_VERSION,
     operations,
