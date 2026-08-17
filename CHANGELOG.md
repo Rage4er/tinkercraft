@@ -9,6 +9,13 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **PASTE-CSG-TREE**: Pasted CSG objects (`ids: []` in GroupOperation) were skipped by `rebuildBuildTree`, causing "children not in tree" warnings and missing tree nodes after undo/redo/load. Now registered as baked nodes from stored mesh data. (`rebuild.ts`)
+- **CSG-MISSING-CHILD**: When a CSG group's child is missing from the tree (e.g. consumed by another CSG), the group is now registered as a baked node from stored mesh data instead of being skipped entirely. (`rebuild.ts`)
+- **MIRROR-CSG-REBUILD**: Mirror copies of CSG results disappeared after loading from file. The worker's `handleRebuildScene` mirror handler only handled primitives (via `shapeInfos`), not CSG results. Now mirrors the cached manifold geometry for CSG/import_mesh objects. (`worker-handlers.ts`)
+- **PASTE-CSG-COLOR**: Pasted CSG objects lost their color (always got default `#89b4fa`). Added `color` field to `GroupOperation` and use it in `buildRebuildMeta` when `ids` is empty. (`types.ts`, `rebuild.ts`, `document-store.ts`)
+
 ### Added
 
 - **i18n локализация (Фаза 7.7)**: Полная локализация приложения на английский и русский языки через i18next + react-i18next. Автоопределение языка браузера, переключатель в StatusBar. Переведены все UI-элементы (~150 фраз): названия фигур, инструменты, CSG операции, тултипы, ошибки, уведомления, модалки. Создана структура `src/i18n/` с файлами переводов `locales/en/translation.json` и `locales/ru/translation.json`. (`i18n/index.ts`, все компоненты)

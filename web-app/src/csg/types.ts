@@ -98,6 +98,8 @@ export interface GroupOperation {
   originalBboxSize?: { x: number; y: number; z: number }
   /** Shape type of CSG result — 'csg' for boolean operations */
   shapeType?: ShapeType
+  /** Color of the CSG result — used when ids is empty (pasted CSG) */
+  color?: string
   // ── BuildTree: tree structure for this CSG operation ──
   /** Operation type for tree (union/subtract/intersect) */
   treeOperation?: 'union' | 'subtract' | 'intersect'

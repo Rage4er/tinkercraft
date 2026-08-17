@@ -130,7 +130,10 @@ export function buildRebuildMeta(ops: TinkerCraftOperation[]): {
       for (const id of op.ids) { delete meta[id]; delete transforms[id] }
 
     } else if (op.type === 'group') {
-      const srcColor = op.ids[0] ? meta[op.ids[0]]?.color ?? '#89b4fa' : '#89b4fa'
+      // FIX (PASTE-CSG-COLOR): For pasted CSG (ids: []), use op.color directly.
+      const srcColor = op.ids.length > 0
+        ? (op.ids[0] ? meta[op.ids[0]]?.color ?? '#89b4fa' : '#89b4fa')
+        : (op.color ?? '#89b4fa')
       for (const id of op.ids) { delete meta[id]; delete transforms[id] }
       if (op.resultId) {
         // FIX (CRIT-CSG-2): Use resultCenter from the GroupOperation as the
@@ -296,24 +299,37 @@ export function rebuildBuildTree(
           ? { x: op.resultCenter.x, y: op.resultCenter.y, z: op.resultCenter.z, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
           : makeDefaultTransform() as TransformNR
         transforms[op.resultId] = startT
-        // Register boolean node in tree
         const treeOp = op.treeOperation ?? 'union'
 
+        // FIX (PASTE-CSG-TREE): Pasted CSG has ids: [] (no children).
+        // Register as baked node from stored mesh data instead of boolean node.
+        if (op.ids.length === 0) {
+          if (objects && objects[op.resultId]) {
+            const obj = objects[op.resultId]
+            createBakedNode(op.resultId, obj.vertices, obj.indices, obj.normals ?? null, startT)
+          }
+          continue
+        }
+
         // FIX (CYCLE-CSG): Verify children exist in tree before creating boolean node.
-        // During jumpToHistory / loadFromProject, children may have been deleted
-        // or never created — creating a boolean node with missing children causes
-        // "Cannot create cycle in tree" errors from isAncestor checks.
         const childAId = op.ids[0]
         const childBId = op.ids[1]
         const childA = getNode(childAId)
         const childB = getNode(childBId)
 
         if (!childA || !childB) {
-          console.warn(
-            `[rebuildBuildTree] Skipping group ${op.resultId}: children not in tree. ` +
-            `childA=${childAId} (${childA ? 'found' : 'missing'}), ` +
-            `childB=${childBId} (${childB ? 'found' : 'missing'})`,
-          )
+          // FIX (CSG-MISSING-CHILD): If child is missing but we have stored mesh data,
+          // register as baked node instead of skipping entirely.
+          if (objects && objects[op.resultId]) {
+            const obj = objects[op.resultId]
+            createBakedNode(op.resultId, obj.vertices, obj.indices, obj.normals ?? null, startT)
+          } else {
+            console.warn(
+              `[rebuildBuildTree] Skipping group ${op.resultId}: children not in tree. ` +
+              `childA=${childAId} (${childA ? 'found' : 'missing'}), ` +
+              `childB=${childBId} (${childB ? 'found' : 'missing'})`,
+            )
+          }
           continue
         }
 

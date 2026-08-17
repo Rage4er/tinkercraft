@@ -376,7 +376,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
             resultVertices: clip.csgVertices, resultIndices: clip.csgIndices,
             resultNormals: clip.csgNormals, resultCenter: { x: transform.x, y: transform.y, z: transform.z },
             originalBboxSize: clip.csgOriginalBboxSize,
-            treeOperation: 'union', shapeType: 'csg',
+            treeOperation: 'union', shapeType: 'csg', color: clip.color,
           }
           newObjects = { ...newObjects, [id]: obj }
           newOps.push(histOp)
@@ -519,7 +519,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const newObjects = { ...objects }; delete newObjects[idA]; delete newObjects[idB]; newObjects[resultId] = newObj
       // Store result vertices/indices AND center position in GroupOperation
       // so rebuildFromHistory can reconstruct the CSG result geometry at the correct position.
-      const histOp: GroupOperation = { type: 'group', ids: [idA, idB], resultId, resultVertices: mesh.vertices, resultIndices: mesh.indices, resultNormals: mesh.normals ?? undefined, resultCenter: { x: cx, y: cy, z: cz }, originalBboxSize: originalBboxSize, treeOperation: op as 'union' | 'subtract' | 'intersect', shapeType: 'csg' }
+      const histOp: GroupOperation = { type: 'group', ids: [idA, idB], resultId, resultVertices: mesh.vertices, resultIndices: mesh.indices, resultNormals: mesh.normals ?? undefined, resultCenter: { x: cx, y: cy, z: cz }, originalBboxSize: originalBboxSize, treeOperation: op as 'union' | 'subtract' | 'intersect', shapeType: 'csg', color: objects[idA].color }
       const newOps = [...operations.slice(0, historyIndex), histOp]
       // Ensure children are registered in build tree.
       // CSG results (shapeType='csg') and import_mesh are registered as BAKED nodes

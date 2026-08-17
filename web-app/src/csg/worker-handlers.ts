@@ -909,10 +909,27 @@ export async function handleRebuildScene(msg: RebuildSceneMessage): Promise<void
             const origT = currentTransforms.get(origId)
             const origShape = shapeInfos.get(origId)
             if (origT && origShape) {
+              // Primitive — rebuild at mirrored position
               const nt = applyMirrorToTransform(origT, op.plane as 'XY' | 'XZ' | 'YZ')
               const m = applyTransform(buildPrimitiveWithFillet(origShape.shapeType, origShape.params, origShape.filletRadius), nt)
               setCached(newId, m)
               currentTransforms.set(newId, nt)
+            } else {
+              // FIX (MIRROR-CSG-REBUILD): CSG result or imported mesh —
+              // mirror the cached manifold geometry around origin.
+              // The cached manifold has full TRS baked in (world position).
+              // flip matrix mirrors around origin, producing geometry at
+              // mirrored world position. The mirrored transform (from
+              // applyMirrorToTransform) tracks the correct position/rotation.
+              // When extractMesh runs, vertices are at mirrored world position.
+              // The store centers them and uses centroid as position — correct.
+              const origManifold = cache.get(origId)
+              if (origManifold && origT) {
+                const nt = applyMirrorToTransform(origT, op.plane as 'XY' | 'XZ' | 'YZ')
+                const mirrored = origManifold.transform(flip)
+                setCached(newId, mirrored)
+                currentTransforms.set(newId, nt)
+              }
             }
           }
         }
