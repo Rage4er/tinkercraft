@@ -381,6 +381,8 @@ web-app/src/components/icons/
 | 8.7 | **Visual feedback** — визуальная индикация редактируемого шага | Низкий | Низкая | 🔲 |
 | | | Подсветка текущего редактируемого элемента в Timeline | | |
 | | | Индикатор «rebuilding...» при перестроении цепочки | | |
+| 8.8 | **CSG-CSG-POSITION-DRIFT** — исправить смещение операндов при boolean между двумя CSG-результатами (`csg_16 = union(obj_14, obj_6)` с `hasSR=true` операндами даёт `hasSR=false` результат с потерей относительного позиционирования) | Высокий | Высокая | 🔲 |
+| 8.9 | **MIRROR-CSG-CHILD-RS-LOSS** — исправить сброс масштаба/поворота у дочерних примитивов при зеркалировании CSG, собранного из отзеркаленных копий (RS живёт в root-ноде, а `mirrorNodeRecursive` применяется к identity-трансформам примитивов) | Высокий | Высокая | 🔲 |
 
 #### 🚀 Будущие возможности (после релиза)
 
@@ -539,6 +541,8 @@ web-app/
 | | — Подробные тултипы Align (9 кнопок) | — | ✅ |
 | | — Vite dev-server (ERR_HTTP_HEADERS_SENT) | P0 | ✅ ИСПРАВЛЕНО (2026-08-14) |
 | | — Shadow acne (полосатые грани) | P0 | ✅ ИСПРАВЛЕНО (2026-08-14) |
+| | **CSG-CSG-POSITION-DRIFT** — Булевые операции между двумя CSG-результатами приводят к смещению операндов относительно друг друга (визуально форма "разъезжается"). Воспроизведение: `csg_16 = union(obj_14, obj_6)` где оба операнда — отзеркаленные CSG с `hasSR=true` (rot/scale в transform). Worker принимает меши через `handleSyncMesh` с полным TRS, но при boolean между двумя CSG-результатами `extractAndCenter` результата даёт `hasSR=false` и теряется относительное позиционирование. Смотреть логи `[DIAG:syncObjectsForOperation]` + `[DIAG:handleSyncMesh]` для `obj_14`/`obj_6` → `csg_16`. | **HIGH** | 🔄 **Фаза 8** |
+| | **MIRROR-CSG-CHILD-RS-LOSS** — Зеркалирование CSG, полученного объединением двух отзеркаленных копий (`csg_16 = union(mirror_A, mirror_B)` → `mirror(csg_16)`), сбрасывает масштаб и поворот у дочерних примитивов простой геометрии в зеркальной копии. `mirrorNodeRecursive` применяется к `localTransform` примитивов, но RS живёт в root-ноде CSG-поддерева, а у примитивов `localTransform` = identity по rot/scale → после клонирования/зеркала `relativeToParent` теряет `rotationDelta`/`scaleRatio` для вложенных boolean-нод. Смотреть `clone-before-rebuild` фазы в `[TREE]` логах для `obj_17`/`obj_18`/`obj_19`/`obj_20` (источник `csg_16`). | **HIGH** | 🔄 **Фаза 8** |
 
 ---
 
