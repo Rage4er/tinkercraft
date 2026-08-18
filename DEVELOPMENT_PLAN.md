@@ -513,6 +513,8 @@ web-app/
 |---|----------|-----------|--------|
 | | **CYCLE-CSG** — `Cannot create cycle in tree` при `jumpToHistory`/`loadFromProject` (дети CSG отсутствуют в дереве при rebuildBuildTree) | **CRITICAL** | ✅ **ИСПРАВЛЕНО** (2026-08-08) |
 | | **MIRROR-CSG-RS** — Потеря rotation/scale при булевых операциях над зеркальными CSG-результатами | **CRITICAL** | ✅ **ИСПРАВЛЕНО** (2026-08-07) |
+| | **MIRROR-DOUBLE-TRANSLATE** — Зеркало CSG давало ломанные, непредсказуемые копии (двойной translation: `moveTreeNode` сдвигал детей в дереве + root localTransform содержит translation) | **CRITICAL** | ✅ **ИСПРАВЛЕНО** (2026-08-18) |
+| | **CSG-RESIZE-NO-BAKE** — Ресайз CSG-результата запекал scale в вершины через `rebuildNode` (двойное scale при boolean/Viewport3D) | **HIGH** | ✅ **ИСПРАВЛЕНО** (2026-08-18) |
 | | **OPT (MIRROR-CACHE)** — Дублированная работа previewMirror и mirrorSelected | **PERFORMANCE** | ✅ **ИСПРАВЛЕНО** (2026-08-07) |
 | | ~~MIRROR-19-11: as unknown as в rebuild.ts~~ | **MEDIUM** | ✅ НЕ БАГ |
 | | CRIT-R16-3: `any` в worker | WARN | ✅ Исправлено |

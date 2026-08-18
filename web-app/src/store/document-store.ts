@@ -44,6 +44,7 @@ import {
   createBooleanNode,
   createBakedNode,
   syncNodeTransform,
+  applyNodeTransform,
   getNode,
   setNode,
   rebuildNode,
@@ -52,7 +53,6 @@ import {
   deleteNode,
   clearTree,
   resetSubtreeTransform,
-  moveTreeNode,
 } from '../csg/history-tree'
 import { getAllNodes } from '../csg/history-tree'
 import { previewMirror as mirrorPreviewFn, mirrorSelected as mirrorConfirmFn, invalidateMirrorCache } from './mirror-store'
@@ -621,26 +621,27 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       }
     }
 
-    // FIX (MIRROR-SYNC-TREE): For CSG boolean nodes, keep child primitives in sync
-    // with the parent SceneObject position.
+    // FIX (MIRROR-DOUBLE-TRANSLATE): Do NOT call moveTreeNode here.
     //
-    // Problem: when the user moves a CSG object, only SceneObject.transform is updated.
-    // The tree children stay at their ORIGINAL world positions (from when the CSG was
-    // created). When mirror later rebuilds the CSG from the tree, it uses the stale
-    // child positions → the mirrored geometry is offset from the visual representation.
+    // The previous code called moveTreeNode(id, delta) to shift child primitives
+    // in the tree by the translation delta. However, syncNodeTransform below
+    // ALSO sets the boolean root's localTransform to the full new TRS (including
+    // translation). This creates DOUBLE TRANSLATION when applyCSGMeshes rebuilds:
+    //   1. Children are shifted by accumulated delta (via moveTreeNode)
+    //   2. Root localTransform translation is applied again (via applyCSGMeshes)
     //
-    // Solution: when translating a CSG object, also translate all child primitives in
-    // the tree by the same delta. This keeps the tree's world coordinates in sync with
-    // the scene position, so the tree-rebuild mirror gives the correct geometry.
+    // During normal rendering this is masked (Viewport3D uses cached centered
+    // vertices + pivot TRS, not tree rebuild). But during mirror, the clone's
+    // root is reset to identity — only the shifted children remain, producing
+    // broken, non-deterministic mirror results.
     //
-    // Only TRANSLATION is synced here — rotation/scale are render-time concerns
-    // (applied by Viewport3D's pivot) and do NOT affect tree child positions.
-    const node = getNode(id)
-    if (node?.type === 'boolean') {
-      if (Math.abs(dx) > 1e-9 || Math.abs(dy) > 1e-9 || Math.abs(dz) > 1e-9) {
-        moveTreeNode(id, { x: dx, y: dy, z: dz })
-      }
-    }
+    // Correct model: children keep their ORIGINAL world positions (from CSG
+    // creation). The boolean root's localTransform carries the full TRS.
+    // applyCSGMeshes centers the child geometry and applies root TRS → correct
+    // world position. Mirror clones the tree, mirrors children + root TRS,
+    // resets root to identity, rebuilds → centered mirrored geometry. The
+    // mirrored SceneObject.transform = mirror(original TRS). Viewport3D applies
+    // it via pivot. This is correct and deterministic.
 
     // Sync the new transform to the tree node (for future CSG/mirror/align ops)
     syncNodeTransform(id, newTransform)
@@ -1059,21 +1060,24 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
           scaleZ: targetDepth / currentSize.z,
         }
 
-        // Для CSG объектов в дереве: обновляем localTransform иммутабельно
-        const node = getNode(id)
-        if (node) {
-          setNode(id, { ...node, localTransform: newTransform })
-        }
-
-        // Синхронизируем с worker
-        const mesh = await rebuildNode(id)
+        // FIX (CSG-RESIZE-NO-BAKE): НЕ вызываем rebuildNode для CSG-результатов.
+        //
+        // Прежний код вызывал rebuildNode(id), который через applyCSGMeshes
+        // применяет root localTransform (включая scale) к центрированной
+        // геометрии детей — vertices получали scale, ЗАПЕЧЁННЫЙ в координаты.
+        // Затем эти vertices сохранялись в SceneObject, а transform тоже содержал
+        // scale → двойное применение scale (и в Viewport3D через pivot, и в
+        // handleSyncMesh при булевых операциях — результат смещался).
+        //
+        // Правильная модель: vertices остаются центрированными (без scale),
+        // scale живёт в transform и применяется Viewport3D через pivot.
+        // localTransform в дереве обновляется через applyNodeTransform
+        // (инвалидирует кэш rebuildNode для корректного последующего mirror).
+        applyNodeTransform(id, newTransform)
 
         const newObj = makeObject({
           ...obj,
           transform: newTransform,
-          vertices: mesh.vertices,
-          indices: mesh.indices,
-          normals: mesh.normals
         })
 
         const op: ResizeDimsOperation = { type: 'resize_dims', id, params }
