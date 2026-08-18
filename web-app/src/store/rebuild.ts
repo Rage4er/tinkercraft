@@ -279,15 +279,27 @@ export function rebuildBuildTree(
         if (t) {
           const nt = applyMirrorToTransform(t as unknown as RebuildTransform, op.plane) as TransformNR
           transforms[newId] = nt
-          // Register mirrored primitive in tree
-          const origNode = getNode(origId)
-          if (origNode && origNode.type === 'primitive') {
-            createPrimitiveNode(newId, origNode.shapeType!, { ...origNode.params! }, nt)
-          } else if (origNode && origNode.type === 'baked') {
-            createBakedNode(newId, origNode.vertices!, origNode.indices!, origNode.normals ?? null, nt)
+
+          // FIX (MIRROR-TREE-PRESERVE): Check if node already exists (created by mirrorObject).
+          // If yes, update its transform but keep the existing node type (boolean/primitive/baked).
+          // If no, create the appropriate node type based on the original.
+          const existingNode = getNode(newId)
+          if (existingNode) {
+            // Node already exists from mirrorObject — update transform only, keep structure
+            if (existingNode.localTransform) {
+              existingNode.localTransform = { ...nt }
+            }
           } else {
-            // Fallback: create a placeholder primitive node
-            createPrimitiveNode(newId, 'cube', {}, nt)
+            // No pre-existing node — create appropriate node type
+            const origNode = getNode(origId)
+            if (origNode && origNode.type === 'primitive') {
+              createPrimitiveNode(newId, origNode.shapeType!, { ...origNode.params! }, nt)
+            } else if (origNode && origNode.type === 'baked') {
+              createBakedNode(newId, origNode.vertices!, origNode.indices!, origNode.normals ?? null, nt)
+            } else {
+              // Fallback: create a placeholder primitive node
+              createPrimitiveNode(newId, 'cube', {}, nt)
+            }
           }
         }
       }

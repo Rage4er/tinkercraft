@@ -204,7 +204,25 @@ export async function mirrorObject(
         logMirrorTreeSnapshot(newId, `clone-before-rebuild plane=${plane} source=${id}`)
 
         const rebuiltMesh = await rebuildNode(newId)
-        deleteNode(newId, true)
+
+        // FIX (MIRROR-TREE-PRESERVE): Do NOT delete the cloned subtree.
+        //
+        // The previous code called deleteNode(newId, true) which removed the entire
+        // cloned tree from the build tree. This caused two bugs:
+        //
+        // 1. Repeated mirror creates cube: when mirroring the result again,
+        //    ensureInTree(newId, newObj) finds no tree node, creates a baked node,
+        //    and rebuildBuildTree falls back to createPrimitiveNode(newId, 'cube', {})
+        //    — losing all CSG structure.
+        //
+        // 2. CSG+CSG boolean shift: after mirror, the tree node is deleted. When the
+        //    mirrored result is used in a boolean, ensureInTree creates a baked node
+        //    instead of a boolean node. The boolean tree becomes corrupted, causing
+        //    incorrect geometry in subsequent operations.
+        //
+        // By keeping the cloned subtree, the tree accurately reflects the scene state.
+        // Future mirror/CSG operations will find the correct node type and work properly.
+        // The SceneObject already has the correct mesh and transform.
 
         vertices = rebuiltMesh.vertices
         indices = rebuiltMesh.indices
