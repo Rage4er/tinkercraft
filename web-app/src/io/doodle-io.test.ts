@@ -5,7 +5,8 @@
 
 import { describe, it, expect } from 'vitest'
 import { restoreMeshArray, serializeDoodle, parseDoodle } from './doodle-io'
-import type { GroupOperation, ImportMeshOperation } from '../csg/types'
+import { buildRebuildMeta } from '../store/rebuild'
+import type { GroupOperation, ImportMeshOperation, TinkerCraftOperation } from '../csg/types'
 
 describe('restoreMeshArray', () => {
   // FIX (DOODLE-MESH): JSON.stringify превращает TypedArray в объект {"0":..}
@@ -115,5 +116,45 @@ describe('ShapeParams validation', () => {
     const params = { width: 20, height: 30, depth: 40 }
     const safeWidth = Math.max(0.001, params.width)
     expect(safeWidth).toBe(20)
+  })
+})
+
+// FIX (COLOR-HISTORY): User-assigned colors must survive the .doodle
+// round-trip. Regression test for the PropertiesPanel bug where the 'color'
+// operation was never committed to history (so colors reset to defaults after
+// opening a saved project).
+describe('.doodle color round-trip', () => {
+  const DEFAULT_TRANSFORM = { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
+
+  it('preserves a color operation after serialize → parse → buildRebuildMeta', async () => {
+    const ops: TinkerCraftOperation[] = [
+      { type: 'add_shape', id: 'obj_1', shapeType: 'cube', params: { width: 20, height: 20, depth: 20 }, color: '#89b4fa', transform: { ...DEFAULT_TRANSFORM } },
+      { type: 'color', ids: ['obj_1'], color: '#ff5722' },
+    ]
+
+    const blob = await serializeDoodle(ops)
+    const buf = await blob.arrayBuffer()
+    const doc = await parseDoodle(buf)
+
+    const colorOps = doc.operations.filter(op => op.type === 'color')
+    expect(colorOps).toHaveLength(1)
+
+    const { meta } = buildRebuildMeta(doc.operations)
+    expect(meta['obj_1'].color).toBe('#ff5722')
+  })
+
+  it('color op written after the last move still wins on rebuild', async () => {
+    const ops: TinkerCraftOperation[] = [
+      { type: 'add_shape', id: 'obj_1', shapeType: 'cube', params: { width: 20, height: 20, depth: 20 }, color: '#89b4fa', transform: { ...DEFAULT_TRANSFORM } },
+      { type: 'move', ids: ['obj_1'], delta: { x: 10, y: 0, z: 0 } },
+      { type: 'color', ids: ['obj_1'], color: '#00e676' },
+    ]
+
+    const blob = await serializeDoodle(ops)
+    const doc = await parseDoodle(await blob.arrayBuffer())
+
+    const { meta } = buildRebuildMeta(doc.operations)
+    expect(meta['obj_1'].color).toBe('#00e676')
+    expect(meta['obj_1'].transform.x).toBe(10)
   })
 })

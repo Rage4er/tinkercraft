@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import NumInput from "./NumInput";
 import AlignButtons from "./AlignButtons";
@@ -66,29 +66,58 @@ export default function PropertiesPanel({
   onSaveToProject: (name: string) => void;
 }) {
   const { t } = useTranslation();
-  // FIX: Draft color state — only commit to history on blur or object switch
+  // FIX: Draft color state — preview in real-time (no history), commit once
+  // on blur or object switch.
+  //
+  // FIX (COLOR-HISTORY): Comparing draftColor against firstSelected.color was
+  // always false — handleColorChange already previews the color into the store,
+  // so at blur time they were equal and the 'color' operation was NEVER added
+  // to history. As a result user-assigned colors were not saved to .doodle and
+  // reset to defaults after reload. Track the target object id and the base
+  // (committed) color at draft start instead.
   const [draftColor, setDraftColor] = useState<string | null>(null);
+  const draftTargetIdRef = useRef<string | null>(null);
+  const baseColorRef = useRef<string | null>(null);
 
-  // Apply draft color when object changes or when blur fires
-  const applyDraftColor = () => {
-    if (firstSelected && draftColor && draftColor !== firstSelected.color) {
-      onSetColor(firstSelected.id, draftColor);
+  const commitDraftColor = () => {
+    const targetId = draftTargetIdRef.current;
+    const base = baseColorRef.current;
+    if (targetId && draftColor && base !== null && draftColor !== base) {
+      onSetColor(targetId, draftColor);
     }
     setDraftColor(null);
+    draftTargetIdRef.current = null;
+    baseColorRef.current = null;
   };
+
+  // Apply draft color when blur fires
+  const applyDraftColor = () => commitDraftColor();
 
   // Preview color change in real-time (no history entry)
   const handleColorChange = (color: string) => {
     if (firstSelected) {
+      // Capture target object and committed color on the first change only
+      if (draftTargetIdRef.current === null) {
+        draftTargetIdRef.current = firstSelected.id;
+        baseColorRef.current = firstSelected.color;
+      }
       setDraftColor(color);
       // Update store for visual feedback — skip history
       onSetColor(firstSelected.id, color, true);
     }
   };
 
-  // Reset draft color when selected object changes
+  // Commit pending draft when selected object changes (blur may not fire,
+  // e.g. Escape deselect while the color input is focused), then reset
   useEffect(() => {
+    const targetId = draftTargetIdRef.current;
+    const base = baseColorRef.current;
+    if (targetId && targetId !== firstSelected?.id && draftColor && base !== null && draftColor !== base) {
+      onSetColor(targetId, draftColor);
+    }
     setDraftColor(null);
+    draftTargetIdRef.current = null;
+    baseColorRef.current = null;
   }, [firstSelected?.id]);
 
   if (!firstSelected) {

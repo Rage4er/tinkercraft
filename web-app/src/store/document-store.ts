@@ -705,6 +705,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   setColor: (id, color, skipHistory = false) => {
     const { objects, operations, historyIndex } = get()
     if (!objects[id]) return
+    devLog('setColor', { id, color, skipHistory, from: objects[id].color })
     const newObjects = { ...objects, [id]: { ...objects[id], color } }
     if (skipHistory) {
       // Visual preview only — no history entry (used for draft color picker)
