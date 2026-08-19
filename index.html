@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TinkerCraft — Browser 3D CAD Editor</title>
+<meta name="description" content="Open source 3D CAD editor for education and hobby. Build, edit, and export 3D models directly in your browser.">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{
+  font-family:'Segoe UI',system-ui,-apple-system,sans-serif;
+  background:#0d0d1a;
+  color:#e0e0e0;
+  min-height:100vh;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  padding:40px 20px;
+}
+.card{
+  max-width:720px;
+  background:#1a1a2e;
+  border:1px solid #2a2a4a;
+  border-radius:24px;
+  padding:48px 40px;
+  text-align:center;
+  box-shadow:0 24px 80px rgba(0,0,0,.6);
+}
+.logo{
+  font-size:64px;
+  font-weight:700;
+  background:linear-gradient(135deg,#4a9eff,#6c5ce7);
+  -webkit-background-clip:text;
+  -webkit-text-fill-color:transparent;
+  margin-bottom:8px;
+}
+.badge{
+  display:inline-block;
+  background:#2a2a4a;
+  color:#8888cc;
+  font-size:12px;
+  font-weight:600;
+  padding:4px 14px;
+  border-radius:20px;
+  letter-spacing:.5px;
+  margin-bottom:16px;
+}
+h1{font-size:28px;font-weight:600;margin-bottom:8px;color:#f0f0f0}
+.sub{color:#8888aa;font-size:16px;margin-bottom:24px;line-height:1.6}
+.btn{
+  display:inline-block;
+  background:#4a9eff;
+  color:#fff;
+  font-weight:600;
+  padding:14px 40px;
+  border-radius:40px;
+  text-decoration:none;
+  font-size:18px;
+  transition:background .2s;
+  box-shadow:0 4px 20px rgba(74,158,255,.3);
+}
+.btn:hover{background:#3a7fd9}
+.features{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:16px;
+  margin-top:28px;
+  text-align:left;
+}
+.feature{
+  background:#12121f;
+  border-radius:12px;
+  padding:14px 16px;
+  border:1px solid #2a2a4a;
+}
+.feature span{font-size:20px}
+.feature p{font-size:12px;color:#7777aa;margin-top:4px}
+.footer{margin-top:28px;color:#555577;font-size:13px}
+.footer a{color:#6666aa;text-decoration:none}
+@media(max-width:560px){.card{padding:32px 20px}.features{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">✦</div>
+  <div class="badge">v1.0.0</div>
+  <h1>TinkerCraft</h1>
+  <div class="sub">Browser-based 3D CAD editor for education and hobby<br>Build, edit, and export 3D models directly in your browser.</div>
+  <a href="web-app/index.html" class="btn">🚀 Open Editor</a>
+  <div class="features">
+    <div class="feature">
+      <span>🧊</span>
+      <p>7 primitives<br/>CSG operations</p>
+    </div>
+    <div class="feature">
+      <span>🔄</span>
+      <p>Mirror<br/>Align</p>
+    </div>
+    <div class="feature">
+      <span>💾</span>
+      <p>Import / Export STL<br/>Auto-save</p>
+    </div>
+  </div>
+  <div class="footer">
+    <a href="https://github.com/Rage4er/tinkercraft">GitHub</a> ·
+    <a href="web-app/index.html">Editor</a> ·
+    <span>MIT License</span>
+  </div>
+</div>
+</body>
+</html>
