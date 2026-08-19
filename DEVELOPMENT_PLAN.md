@@ -592,5 +592,5 @@ pnpm test
 ```bash
 pnpm dev          # Dev-сервер (порт 5000)
 pnpm build        # Production-сборка
-pnpm test         # Запуск тестов (104 теста)
+pnpm test         # Запуск тестов (~236 тестов)
 pnpm typecheck    # tsc --noEmit
