@@ -62,7 +62,7 @@ const stripReactRefresh = {
 }
 
 export default defineConfig({
-  base: '/tinkercraft/',
+  base: '/',
   test: {
     environment: 'jsdom',
     globals: true,
