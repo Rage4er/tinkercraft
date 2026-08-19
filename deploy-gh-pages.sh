@@ -7,9 +7,22 @@ echo "========================="
 # 1. Build the app
 cd web-app
 echo "1️⃣  Installing dependencies..."
-npm install
+if command -v pnpm &> /dev/null; then
+  pnpm install
+elif command -v yarn &> /dev/null; then
+  yarn install
+else
+  npm install
+fi
+
 echo "2️⃣  Building project..."
-npm run build
+if command -v pnpm &> /dev/null; then
+  pnpm build
+elif command -v yarn &> /dev/null; then
+  yarn build
+else
+  npm run build
+fi
 
 # 2. Switch to gh-pages branch
 echo "3️⃣  Switching to gh-pages branch..."
