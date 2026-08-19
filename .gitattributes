@@ -1,2 +1,5 @@
 * text=auto eol=lf
 *.java eol=lf
+
+# Hide reference/ (CaDoodle Java source) from GitHub language stats
+reference/* linguist-vendored
