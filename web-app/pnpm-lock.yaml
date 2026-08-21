@@ -45,6 +45,9 @@ importers:
       '@types/three':
         specifier: ^0.170.0
         version: 0.170.0
+      '@types/ysdk':
+        specifier: ^1.2.0
+        version: 1.2.0
       '@vitejs/plugin-react':
         specifier: ^4.3.4
         version: 4.7.0(vite@6.4.3)
@@ -914,6 +917,9 @@ packages:
 
   '@types/webxr@0.5.24':
     resolution: {integrity: sha512-h8fgEd/DpoS9CBrjEQXR+dIDraopAEfu4wYVNY2tEPwk60stPWhvZMf4Foo5FakuQ7HFZoa8WceaWFervK2Ovg==}
+
+  '@types/ysdk@1.2.0':
+    resolution: {integrity: sha512-Yij8fFuzm67TghIb74/mVTWhByHgU95IUsgTHDJgvYPNBuBP0ZmagpopPTaflcY49eGw1YjHu0g0e+bV6RpyIA==}
 
   '@vitejs/plugin-react@4.7.0':
     resolution: {integrity: sha512-gUu9hwfWvvEDBBmgtAowQCojwZmJ5mcLn3aufeCsitijs3+f2NsrPtlAWIR6OPiqljl96GVCUbLe0HyqIpVaoA==}
@@ -2182,6 +2188,8 @@ snapshots:
       meshoptimizer: 0.18.1
 
   '@types/webxr@0.5.24': {}
+
+  '@types/ysdk@1.2.0': {}
 
   '@vitejs/plugin-react@4.7.0(vite@6.4.3)':
     dependencies:

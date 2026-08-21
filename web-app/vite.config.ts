@@ -90,10 +90,14 @@ export default defineConfig({
     host: '0.0.0.0',
     port: 5000,
     allowedHosts: true,
-    headers: {
-      'Cross-Origin-Opener-Policy': 'same-origin',
-      'Cross-Origin-Embedder-Policy': 'require-corp',
-    },
+    // COEP/COOP нужны только для clean-версии (WebAssembly SharedArrayBuffer)
+    // Для yandex-версии эти заголовки блокируют загрузку SDK с yandex.ru
+    headers: isYandex
+      ? undefined
+      : {
+        'Cross-Origin-Opener-Policy': 'same-origin',
+        'Cross-Origin-Embedder-Policy': 'require-corp',
+      },
     hmr: {
       overlay: false,
     },
