@@ -2,10 +2,9 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
+const isYandex = process.env.VITE_PLATFORM === 'yandex'
+
 // FIX: Перехватываем ВСЕ HTTP-ответы Vite dev-сервера и удаляем @react-refresh.
-// @vitejs/plugin-react внедряет @react-refresh в бандл воркера через Rollup pipeline,
-// который НЕ проходит через transform hook. Middleware перехватывает готовый HTTP-ответ.
-// Используем stack.unshift() чтобы middleware сработал ДО встроенных middleware Vite.
 const stripReactRefresh = {
   name: 'strip-react-refresh',
   configureServer(server) {
@@ -54,15 +53,16 @@ const stripReactRefresh = {
       }
 
       // Добавляем В НАЧАЛО chain — ДО встроенных middleware Vite
-      // Connect expects middleware entries to expose `handle`; using `handler`
-      // makes the server crash on the first request in newer Vite versions.
       server.middlewares.stack.unshift({ route: '', handle: handler })
     }
   },
 }
 
 export default defineConfig({
-  base: '/tinkercraft/',
+  base: isYandex ? '/' : '/tinkercraft/',
+  define: {
+    __PLATFORM__: JSON.stringify(isYandex ? 'yandex' : 'clean'),
+  },
   test: {
     environment: 'jsdom',
     globals: true,
