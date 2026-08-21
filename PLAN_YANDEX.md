@@ -61,30 +61,30 @@ yandex-games/
 export interface IPlatform {
   // Инициализация
   init(): Promise<boolean>
-  
+
   // Реклама
   showFullscreenAd(): Promise<boolean>
   showRewardedVideo(): Promise<'tokens' | 'hints' | null>
-  
+
   // Игрок
   getPlayer(): { id: string; name: string } | null
   isAuthorized(): boolean
-  
+
   // Сохранения
   saveData(data: Record<string, unknown>): Promise<void>
   loadData(): Promise<Record<string, unknown>>
-  
+
   // Лидерборды
   submitScore(leaderboardName: string, score: number): Promise<void>
   getLeaderboardEntries(
     leaderboardName: string,
     count?: number
   ): Promise<Array<{ rank: number; userId: string; score: number; playerName: string }>>
-  
+
   // Геймплей
   startGameplay(): void
   stopGameplay(): void
-  
+
   // Очистка
   dispose(): void
 }
@@ -110,7 +110,15 @@ class YandexPlatform implements IPlatform {
 
   async init(): Promise<boolean> {
     if (this.initialized) return true
-    
+
+    // ✅ Обработка офлайн-режима и локальной разработки
+    if (typeof window === 'undefined' || !window.YaGames) {
+      console.warn('[Yandex] SDK not available (local dev or offline mode)')
+      // Fallback: использовать localStorage для локальной разработки
+      this.useLocalStorage = true
+      return false
+    }
+
     // Проверка окружения
     if (!import.meta.env.VITE_PLATFORM || import.meta.env.VITE_PLATFORM !== 'yandex') {
       console.warn('[Yandex] Platform not enabled')
@@ -124,6 +132,9 @@ class YandexPlatform implements IPlatform {
       return result
     } catch (error) {
       console.error('[Yandex] Init failed:', error)
+      // Fallback при ошибке SDK
+      console.warn('[Yandex] Falling back to localStorage')
+      this.useLocalStorage = true
       return false
     }
   }
@@ -214,7 +225,7 @@ export async function initPlatform(): Promise<boolean> {
   if (_platform) return true
 
   const platformType = import.meta.env.VITE_PLATFORM || 'clean'
-  
+
   if (platformType === 'yandex') {
     const { platform: yandex } = await import('./yandex')
     _platform = yandex
@@ -230,14 +241,16 @@ export async function initPlatform(): Promise<boolean> {
 
 ### Этап 2: Интеграция в приложение (P1)
 
-#### 2.1 Добавить SDK в `index.html`
+#### 2.1 Добавить ОФИЦИАЛЬНЫЙ SDK в `index.html`
+
+> ⚠️ Важно: Это скрипт **ОФИЦИАЛЬНОГО** Yandex Games SDK, а не наш `yandex-sdk.js` (который является обёрткой).
 
 ```html
 <!DOCTYPE html>
 <html lang="ru">
 <head>
   <!-- ... -->
-  <!-- Yandex Games SDK -->
+  <!-- Официальный Yandex Games SDK v2 -->
   <script src="https://yandex.ru/games/sdk/v2"></script>
 </head>
 <body>
@@ -245,6 +258,9 @@ export async function initPlatform(): Promise<boolean> {
 </body>
 </html>
 ```
+
+**Почему не импортируем `yandex-sdk.js` напрямую?**
+Наш `yandex-sdk.js` использует `import { CONFIG } from './config.js'` и `import { logger } from './utils.js'`, которых нет в проекте. Лучше использовать официальный SDK `https://yandex.ru/games/sdk/v2` напрямую через `window.YaGames`, а `yandex-sdk.js` использовать как референс для архитектуры.
 
 #### 2.2 Инициализация в `main.tsx`
 
@@ -303,7 +319,7 @@ interface GameState {
   tokens: number
   lastDailyBonus: number | null
   totalModelsCreated: number
-  
+
   // Actions
   addTokens(amount: number): void
   claimDailyBonus(): Promise<boolean>
@@ -339,6 +355,22 @@ export const useGameStore = create<GameState>((set, get) => ({
   incrementModelsCreated: () => {
     set((state) => ({ totalModelsCreated: state.totalModelsCreated + 1 }))
   },
+
+  // ✅ Автоматическая синхронизация с облаком при изменении токенов
+  syncWithCloud: async () => {
+    const platform = getPlatform()
+    if (!platform) return
+    try {
+      await platform.saveData({
+        tokens: get().tokens,
+        lastDailyBonus: get().lastDailyBonus,
+        totalModelsCreated: get().totalModelsCreated,
+      })
+      console.log('[Game] Cloud synced')
+    } catch (error) {
+      console.error('[Game] Cloud sync failed:', error)
+    }
+  },
 }))
 ```
 
@@ -351,7 +383,7 @@ export function GameUI() {
   const { tokens, lastDailyBonus, claimDailyBonus } = useGameStore()
   const [showDaily, setShowDaily] = useState(false)
 
-  const canClaimDaily = lastDailyBonus === null || 
+  const canClaimDaily = lastDailyBonus === null ||
     Date.now() - lastDailyBonus > 24 * 60 * 60 * 1000
 
   return (
@@ -511,4 +543,13 @@ pnpm build:yandex
 - [ ] Реклама показывается и закрывается
 - [ ] Сохранения работают (setData/getData)
 - [ ] Авторизация игрока (гостевой режим тоже работает)
-- [ ] Нет крэшей при отсутствии SDK (loca
+- [ ] Нет крэшей при отсутствии SDK (локальный режим)
+- [ ] Кнопка "Выход" из игры (для TV)
+- [ ] Обработка паузы (onPause/onResume)
+- [ ] Сохранение прогресса при закрытии вкладки
+- [ ] `LoadingAPI.ready()` вызывается до показа интерфейса
+- [ ] Реклама не показывается во время геймплея (только в меню)
+- [ ] Данные игрока корректно загружаются при старте
+- [ ] Нет дублирования рекламы при быстрых переходах
+- [ ] Проверка на мобильных устройствах (iOS/Android)
+- [ ] Проверка на Smart TV (если поддерживается)
