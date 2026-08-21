@@ -1,10 +1,27 @@
 // @ts-nocheck
-import { defineConfig } from 'vite'
+import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 
-const isYandex = process.env.VITE_PLATFORM === 'yandex'
+// ─── Yandex SDK Plugin ───────────────────────────────────────────
+// Вставляет SDK только для yandex-сборки. В clean-версии скрипт
+// физически отсутствует в HTML — нет COEP конфликта.
+const yandexSdkPlugin = (): Plugin => ({
+  name: 'vite-plugin-yandex-sdk',
+  transformIndexHtml(html) {
+    const isYandex = process.env.VITE_PLATFORM === 'yandex'
+    if (isYandex) {
+      return html.replace(
+        '</head>',
+        '    <!-- Yandex Games SDK (Injected for Yandex build only) -->\n' +
+        '    <script src="https://yandex.ru/games/sdk/v2"><\/script>\n' +
+        '  </head>'
+      )
+    }
+    return html
+  },
+})
 
-// FIX: Перехватываем ВСЕ HTTP-ответы Vite dev-сервера и удаляем @react-refresh.
+// ─── Strip React Refresh (HMR fix) ──────────────────────────────
 const stripReactRefresh = {
   name: 'strip-react-refresh',
   configureServer(server) {
@@ -45,18 +62,20 @@ const stripReactRefresh = {
             originalWrite(body)
             originalEnd()
           } catch {
-            // Заголовки уже отправлены — игнорируем, Vite сам завершит ответ
+            // Заголовки уже отправлены — игнорируем
           }
         }
 
         return next()
       }
 
-      // Добавляем В НАЧАЛО chain — ДО встроенных middleware Vite
       server.middlewares.stack.unshift({ route: '', handle: handler })
     }
   },
 }
+
+// ─── Main config ─────────────────────────────────────────────────
+const isYandex = process.env.VITE_PLATFORM === 'yandex'
 
 export default defineConfig({
   base: isYandex ? '/' : '/tinkercraft/',
@@ -69,11 +88,11 @@ export default defineConfig({
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
   },
   plugins: [
-    stripReactRefresh,
     react({
-      // FIX: Исключаем воркер из обработки React Refresh
       exclude: /.worker.(js|ts)$/,
     }),
+    yandexSdkPlugin(),
+    stripReactRefresh,
   ],
   resolve: {
     dedupe: ['react', 'react-dom', 'three'],
