@@ -87,6 +87,60 @@ pnpm build          # Сборка в dist/
 # Деплой на GitHub Pages / Vercel / Netlify / любой статический хостинг
 ```
 
+---
+
+## [Yandex MVP] — 2026-08-21
+
+**Интеграция Яндекс.Игр — MVP завершён.**
+
+> **Статус:** ✅ Готов к тестированию в песочнице
+> **Ветка:** `yandex-games`
+> **SDK:** Официальный `@types/ysdk` + `https://yandex.ru/games/sdk/v2`
+
+### ✨ Что реализовано
+
+- **IPlatform интерфейс** — абстракция платформы (`types.ts`)
+- **Yandex реализация** — полная реализация через `@types/ysdk` (`yandex.ts`)
+- **Clean stub** — fallback с localStorage (`clean.ts`)
+- **Platform switch** — динамический импорт по `VITE_PLATFORM` (`index.ts`)
+- **Game store** — токены, ежедневные бонусы, cloud sync (`game-store.ts`)
+- **GameUI** — баланс токенов, ежедневный бонус (`GameUI.tsx`)
+- **Gameplay API** — stop/start при открытии/закрытии модалок (`App.tsx`)
+- **SDK script** — официальный SDK в `index.html`
+- **Сборка** — `dev:yandex`, `build:yandex` скрипты
+- **i18n** — полный перевод RU/EN
+
+### 📊 Экономика токенов
+
+| Действие | Токены |
+|----------|--------|
+| Ежедневный бонус | +5 |
+| С рекламой | +20 |
+| Rewarded видео | +10 |
+| Экспорт STL | -5 |
+| Экспорт PNG | -3 |
+| Премиум-цвет | -20 |
+
+### 🔲 Не реализовано (следующие этапы)
+
+- Лидерборды (заглушка)
+- Платежи / In-app покупки
+- Баннерная реклама
+- Daily Challenge, Speed Build, Турниры
+- Система достижений
+
+### 🧪 Тестирование
+
+```bash
+# Clean-версия (main)
+pnpm dev          # чистый CAD
+pnpm build        # dist/
+
+# Яндекс-версия (yandex-games)
+pnpm dev:yandex   # с SDK
+pnpm build:yandex # dist-yandex/
+```
+
 ### 📋 Чек-лист релиза
 
 - [x] Код-ревью: все ~291 проблем закрыты (0 активных)

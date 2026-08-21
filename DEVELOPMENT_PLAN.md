@@ -51,6 +51,8 @@
 | | Блок B: Интерфейс | ✅ Все задачи завершены |
 | Фаза 7.6 — Mirror Pipeline Performance | ✅ Завершена |
 | **🎉 РЕЛИЗ v1.0.0** | **✅ 2026-08-19** |
+| **🎮 Yandex MVP** | **✅ 2026-08-21** |
+| | SDK, токены, ежедневные бонусы, Gameplay API | |
 | Фаза 8 — Параметрическая история операций | 🔲 Не начата |
 
 ---
@@ -575,6 +577,74 @@ web-app/
 | | — Shadow acne (полосатые грани) | P0 | ✅ ИСПРАВЛЕНО (2026-08-14) |
 | | **CSG-CSG-POSITION-DRIFT** — Булевые операции между двумя CSG-результатами приводят к смещению операндов относительно друг друга (визуально форма "разъезжается"). Воспроизведение: `csg_16 = union(obj_14, obj_6)` где оба операнда — отзеркаленные CSG с `hasSR=true` (rot/scale в transform). Worker принимает меши через `handleSyncMesh` с полным TRS, но при boolean между двумя CSG-результатами `extractAndCenter` результата даёт `hasSR=false` и теряется относительное позиционирование. Смотреть логи `[DIAG:syncObjectsForOperation]` + `[DIAG:handleSyncMesh]` для `obj_14`/`obj_6` → `csg_16`. | **HIGH** | 🔄 **Фаза 8** |
 | | **MIRROR-CSG-CHILD-RS-LOSS** — Зеркалирование CSG, полученного объединением двух отзеркаленных копий (`csg_16 = union(mirror_A, mirror_B)` → `mirror(csg_16)`), сбрасывает масштаб и поворот у дочерних примитивов простой геометрии в зеркальной копии. `mirrorNodeRecursive` применяется к `localTransform` примитивов, но RS живёт в root-ноде CSG-поддерева, а у примитивов `localTransform` = identity по rot/scale → после клонирования/зеркала `relativeToParent` теряет `rotationDelta`/`scaleRatio` для вложенных boolean-нод. Смотреть `clone-before-rebuild` фазы в `[TREE]` логах для `obj_17`/`obj_18`/`obj_19`/`obj_20` (источник `csg_16`). | **HIGH** | 🔄 **Фаза 8** |
+
+---
+
+## 🎮 Фаза Y — Яндекс.Игры (yandex-games)
+
+> **Статус MVP:** ✅ **ЗАВЕРШЕНО** (2026-08-21)
+> **Ветка:** `yandex-games`
+> **SDK:** Официальный `@types/ysdk` + `https://yandex.ru/games/sdk/v2`
+
+### ✅ Реализовано в MVP
+
+| Компонент | Файлы | Описание |
+|-----------|-------|----------|
+| **SDK + типизация** | `@types/ysdk`, `index.html` | Официальный SDK с полной TypeScript-типизацией |
+| **IPlatform интерфейс** | `src/platform/types.ts` | Абстракция платформы |
+| **Yandex реализация** | `src/platform/yandex.ts` | Полная реализация через `@types/ysdk` |
+| **Clean stub** | `src/platform/clean.ts` | Fallback с localStorage |
+| **Platform switch** | `src/platform/index.ts` | Динамический импорт по `VITE_PLATFORM` |
+| **Game store** | `src/store/game-store.ts` | Токены, ежедневные бонусы, cloud sync |
+| **GameUI** | `src/components/GameUI.tsx` | Баланс токенов, ежедневный бонус |
+| **Gameplay API** | `src/App.tsx` | stop/start при открытии/закрытии модалок |
+| **Сборка** | `vite.config.ts`, `package.json` | `dev:yandex`, `build:yandex` |
+
+### 📊 Экономика токенов
+
+| Действие | Токены | Описание |
+|----------|--------|----------|
+| Ежедневный бонус | +5 | Бесплатно (1 раз в сутки) |
+| С рекламой | +20 | Rewarded видео |
+| Rewarded видео | +10 | За просмотр рекламы |
+| Экспорт STL | -5 | Расход токенов |
+| Экспорт PNG | -3 | Расход токенов |
+| Премиум-цвет | -20 | Расход токенов |
+
+### 🔲 Следующие этапы
+
+| Этап | Задачи | Приоритет | Оценка |
+|------|--------|-----------|--------|
+| **Лидерборды** | `submitScore()`, `getLeaderboardEntries()` | 🟢 P2 | 2-3 часа |
+| **Платежи** | `ysdk.getPayments()`, покупка токенов | 🟢 P2 | 3-4 часа |
+| **Баннеры** | `AdBanner.tsx`, баннерная реклама | 🟢 P3 | 3-4 часа |
+| **Daily Challenge** | Ежедневные задания | 🟢 P4 | 6-8 часов |
+| **Speed Build** | Гонка на время | 🟢 P4 | 8-10 часов |
+| **Турниры** | Тематические конкурсы | 🟢 P5 | 10-15 часов |
+| **Достижения** | Система долгосрочных целей | 🟢 P4 | 6-8 часов |
+
+### 🧪 Тестирование
+
+```bash
+# Clean-версия (main branch)
+pnpm dev          # чистый CAD
+pnpm build        # dist/
+
+# Яндекс-версия (yandex-games branch)
+pnpm dev:yandex   # с SDK
+pnpm build:yandex # dist-yandex/
+```
+
+### 📦 Деплой
+
+1. `pnpm build:yandex` → `dist-yandex/`
+2. ZIP архив
+3. Загрузить в [Песочницу Яндекс.Игр](https://yandex.ru/dev/games/doc/ru/test)
+4. После модерации — отправить в каталог
+
+> **Полная документация:** [`PLAN_YANDEX.md`](PLAN_YANDEX.md)
+
+---
 
 ---
 
