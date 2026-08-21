@@ -2,24 +2,24 @@
 
 **Ветка:** `yandex-games`
 **Цель:** Добавить SDK Яндекс.Игр с монетизацией, лидербордами и сохранением прогресса
-**SDK файл:** `web-app/public/yandex-sdk.js` (464 строки, полный менеджер)
+**SDK:** Официальный `@types/ysdk` + `https://yandex.ru/games/sdk/v2`
 
 ---
 
-## 📋 Что есть в SDK
+## 📋 Что есть в официальном SDK
 
 | Метод | Описание | Приоритет |
 |-------|----------|-----------|
-| `initialize()` | Инициализация YaGames SDK | 🔴 P0 |
-| `startGameplay()` / `stopGameplay()` | Управление геймплеем (для модерации) | 🔴 P0 |
-| `showFullscreenAd()` | Полноэкранная реклама | 🟡 P1 |
-| `showRewardedVideo()` | Rewarded реклама (за бонусы) | 🟡 P1 |
-| `getPlayer()` | Объект игрока | 🟡 P1 |
-| `isAuthorized()` | Проверка авторизации | 🟡 P1 |
-| `getPayments()` | Объект платежей (покупки) | 🟢 P2 |
-| `getServerTime()` | Серверное время (от накруток) | 🟢 P2 |
-| `onPause()` / `onResume()` | События паузы/возобновления | 🟢 P2 |
-| `dispose()` | Очистка ресурсов | 🟢 P2 |
+| `YaGames.init()` | Инициализация SDK | 🔴 P0 |
+| `ysdk.getPlayer()` | Объект игрока (авторизация) | 🔴 P0 |
+| `ysdk.adv.showFullscreenAdv()` | Полноэкранная реклама | 🟡 P1 |
+| `ysdk.adv.showRewardedVideo()` | Rewarded реклама (за бонусы) | 🟡 P1 |
+| `ysdk.features.GameplayAPI` | Управление геймплеем (для модерации) | 🔴 P0 |
+| `ysdk.leaderboards` | Лидерборды | 🟢 P2 |
+| `ysdk.getPayments()` | Объект платежей (покупки) | 🟢 P2 |
+| `ysdk.serverTime()` | Серверное время (от накруток) | 🟢 P2 |
+| `player.setData()` / `getData()` | Сохранения игрока | 🟡 P1 |
+| `player.getName()` / `getID()` | Информация об игроке | 🟡 P1 |
 
 ---
 
@@ -29,35 +29,68 @@
 yandex-games/
 ├── web-app/
 │   ├── public/
-│   │   └── yandex-sdk.js      # ✅ Уже есть (YandexSDKManager)
+│   │   └── index.html           # + <script src="https://yandex.ru/games/sdk/v2">
 │   ├── src/
 │   │   ├── platform/
-│   │   │   ├── types.ts       # IPlatform интерфейс
-│   │   │   ├── yandex.ts      # Реализация через YandexSDKManager
-│   │   │   └── index.ts       # Переключение по VITE_PLATFORM
+│   │   │   ├── types.ts         # IPlatform интерфейс + SDK/Player типы
+│   │   │   ├── yandex.ts        # Реализация через официальный SDK
+│   │   │   └── index.ts         # Переключение по VITE_PLATFORM
 │   │   ├── store/
-│   │   │   ├── game-store.ts  # Токены, бонусы, лидерборды
-│   │   │   └── yandex-sync.ts # Синхронизация с Яндекс.Облако
+│   │   │   ├── game-store.ts    # Токены, бонусы, лидерборды
+│   │   │   └── yandex-sync.ts   # Синхронизация с Яндекс.Облако
 │   │   └── components/
-│   │       ├── GameUI.tsx     # Баланс токенов, кнопка "Бонус"
-│   │       ├── AdBanner.tsx   # Баннерная реклама
-│   │       └── Leaderboard.tsx # Таблица лидеров
-│   ├── index.html             # + <script src="/yandex-sdk.js">
-│   ├── vite.config.ts         # + define: VITE_PLATFORM
-│   └── package.json           # + build:yandex скрипт
-└── PLAN_YANDEX.md             # Этот файл
+│   │       ├── GameUI.tsx       # Баланс токенов, кнопка "Бонус"
+│   │       ├── AdBanner.tsx     # Баннерная реклама
+│   │       └── Leaderboard.tsx  # Таблица лидеров
+│   ├── vite.config.ts           # + define: VITE_PLATFORM
+│   └── package.json             # + build:yandex скрипт
+│       └── dependencies:
+│           └── @types/ysdk
+└── PLAN_YANDEX.md               # Этот файл
 ```
 
 ---
 
 ## 📝 Этапы реализации
 
+### Подготовка (P0)
+
+#### 0.1 Установить зависимости
+
+```bash
+cd web-app
+npm install --save @types/ysdk
+```
+
+#### 0.2 Добавить SDK в `index.html`
+
+```html
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <!-- ... -->
+  <!-- Официальный Yandex Games SDK v2 -->
+  <script src="https://yandex.ru/games/sdk/v2"></script>
+</head>
+<body>
+  <!-- ... -->
+</body>
+</html>
+```
+
+---
+
 ### Этап 1: Инфраструктура (P0)
 
 #### 1.1 Создать `src/platform/types.ts`
 
 ```typescript
+import type { SDK, Player } from 'ysdk'
+
 export interface IPlatform {
+  // SDK объект (для прямого доступа)
+  ysdk: SDK | null
+
   // Инициализация
   init(): Promise<boolean>
 
@@ -66,7 +99,7 @@ export interface IPlatform {
   showRewardedVideo(): Promise<'tokens' | 'hints' | null>
 
   // Игрок
-  getPlayer(): { id: string; name: string } | null
+  getPlayer(): Player | null
   isAuthorized(): boolean
 
   // Сохранения
@@ -91,29 +124,24 @@ export interface IPlatform {
 
 #### 1.2 Создать `src/platform/yandex.ts`
 
-Адаптация `YandexSDKManager` из `yandex-sdk.js`:
+**Официальный подход** с `@types/ysdk`:
 
 ```typescript
 import type { IPlatform } from './types'
-import { YandexSDKManager } from '../../public/yandex-sdk.js'
-
-declare global {
-  interface Window {
-    YaGames: any
-  }
-}
+import type { SDK, Player } from 'ysdk'
 
 class YandexPlatform implements IPlatform {
-  private sdk: YandexSDKManager | null = null
+  public ysdk: SDK | null = null
+  private player: Player | null = null
   private initialized = false
+  private useLocalStorage = false
 
   async init(): Promise<boolean> {
     if (this.initialized) return true
 
     // ✅ Обработка офлайн-режима и локальной разработки
-    if (typeof window === 'undefined' || !window.YaGames) {
+    if (typeof window === 'undefined' || !(window as any).YaGames) {
       console.warn('[Yandex] SDK not available (local dev or offline mode)')
-      // Fallback: использовать localStorage для локальной разработки
       this.useLocalStorage = true
       return false
     }
@@ -125,83 +153,207 @@ class YandexPlatform implements IPlatform {
     }
 
     try {
-      this.sdk = new YandexSDKManager()
-      const result = await this.sdk.initialize()
-      this.initialized = result
-      return result
+      // ✅ Официальный SDK с типизацией
+      const YaGames = (window as any).YaGames
+      this.ysdk = await YaGames.init()
+      console.log('[Yandex] SDK initialized')
+
+      // Загрузка игрока
+      try {
+        this.player = await this.ysdk.getPlayer()
+        console.log('[Yandex] Player authorized:', this.player.getName())
+      } catch {
+        console.log('[Yandex] Player not authorized (guest mode)')
+        this.player = null
+      }
+
+      this.initialized = true
+      return true
     } catch (error) {
       console.error('[Yandex] Init failed:', error)
-      // Fallback при ошибке SDK
-      console.warn('[Yandex] Falling back to localStorage')
       this.useLocalStorage = true
       return false
     }
   }
 
   async showFullscreenAd(): Promise<boolean> {
-    if (!this.sdk) return false
-    return this.sdk.showFullscreenAd()
+    if (!this.ysdk) return false
+    return new Promise((resolve) => {
+      this.ysdk.adv.showFullscreenAdv({
+        callbacks: {
+          onClose: (wasShown) => resolve(!!wasShown),
+          onError: () => resolve(false),
+        },
+      })
+    })
   }
 
   async showRewardedVideo(): Promise<'tokens' | 'hints' | null> {
-    if (!this.sdk) return null
-    const rewarded = await this.sdk.showRewardedVideo()
-    return rewarded ? 'tokens' : null
+    if (!this.ysdk) return null
+    return new Promise((resolve) => {
+      this.ysdk.adv.showRewardedVideo({
+        callbacks: {
+          onOpen: () => this.ysdk?.features.GameplayAPI?.stop(),
+          onRewarded: () => resolve('tokens'),
+          onClose: () => {
+            this.ysdk?.features.GameplayAPI?.start()
+            resolve(null)
+          },
+          onError: () => resolve(null),
+        },
+      })
+    })
   }
 
-  getPlayer() {
-    if (!this.sdk) return null
-    const player = this.sdk.getPlayer()
-    if (!player) return null
-    return {
-      id: player.getID?.() || 'anonymous',
-      name: player.getName?.() || 'Player'
-    }
+  getPlayer(): Player | null {
+    return this.player
   }
 
   isAuthorized(): boolean {
-    return this.sdk?.isAuthorized() ?? false
+    return this.player !== null
   }
 
   async saveData(data: Record<string, unknown>): Promise<void> {
-    if (!this.sdk) return
-    const player = this.sdk.getPlayer()
-    if (!player) {
+    if (!this.player) {
       console.warn('[Yandex] Cannot save: player not authorized')
       return
     }
-    await player.setData(data)
+    await this.player.setData(data)
   }
 
   async loadData(): Promise<Record<string, unknown>> {
-    if (!this.sdk) return {}
-    const player = this.sdk.getPlayer()
-    if (!player) return {}
-    const data = await player.getData()
+    if (!this.player) return {}
+    const data = await this.player.getData()
     return data as Record<string, unknown>
   }
 
   async submitScore(leaderboardName: string, score: number): Promise<void> {
-    if (!this.sdk) return
-    // TODO: Использовать ysdk.leaderboards.setLeaderboardScore
-    console.log(`[Yandex] Submit score ${score} to ${leaderboardName}`)
+    if (!this.ysdk) return
+    await this.ysdk.leaderboards.setLeaderboardScore(leaderboardName, score)
   }
 
   async getLeaderboardEntries(): Promise<any[]> {
-    // TODO: Использовать ysdk.leaderboards.getLeaderboardEntries
+    // TODO: Реализовать при необходимости
     return []
   }
 
   startGameplay(): void {
-    this.sdk?.startGameplay()
+    this.ysdk?.features.GameplayAPI?.start()
   }
 
   stopGameplay(): void {
-    this.sdk?.stopGameplay()
+    this.ysdk?.features.GameplayAPI?.stop()
   }
 
   dispose(): void {
-    this.sdk?.dispose()
+    this.ysdk = null
+    this.player = null
+    this.initialized = false
+  }
+}
+
+export const platform = new YandexPlatform()
+```
+
+#### 1.3 Создать `src/platform/index.ts`
+
+```typescript
+import type { IPlatform } from './types'
+
+let _platform: IPlatform | null = null
+
+export function getPlatform(): IPlatform | null {
+  return _platform
+}
+
+export async function initPlatform(): Promise<boolean> {
+  if (_platform) return true
+
+  const platformType = import.meta.env.VITE_PLATFORM || 'clean'
+
+  if (platformType === 'yandex') {
+    const { platform: yandex } = await import('./yandex')
+    _platform = yandex
+    return await _platform.init()
+  }
+
+  // Для clean-версии возвращаем null (нет платформы)
+  return false
+}
+```
+
+  async showFullscreenAd(): Promise<boolean> {
+    if (!this.ysdk) return false
+    return new Promise((resolve) => {
+      this.ysdk.adv.showFullscreenAdv({
+        callbacks: {
+          onClose: (wasShown) => resolve(!!wasShown),
+          onError: () => resolve(false),
+        },
+      })
+    })
+  }
+
+  async showRewardedVideo(): Promise<'tokens' | 'hints' | null> {
+    if (!this.ysdk) return null
+    return new Promise((resolve) => {
+      this.ysdk.adv.showRewardedVideo({
+        callbacks: {
+          onOpen: () => this.ysdk?.features.GameplayAPI?.stop(),
+          onRewarded: () => resolve('tokens'),
+          onClose: () => {
+            this.ysdk?.features.GameplayAPI?.start()
+            resolve(null)
+          },
+          onError: () => resolve(null),
+        },
+      })
+    })
+  }
+
+  getPlayer(): Player | null {
+    return this.player
+  }
+
+  isAuthorized(): boolean {
+    return this.player !== null
+  }
+
+  async saveData(data: Record<string, unknown>): Promise<void> {
+    if (!this.player) {
+      console.warn('[Yandex] Cannot save: player not authorized')
+      return
+    }
+    await this.player.setData(data)
+  }
+
+  async loadData(): Promise<Record<string, unknown>> {
+    if (!this.player) return {}
+    const data = await this.player.getData()
+    return data as Record<string, unknown>
+  }
+
+  async submitScore(leaderboardName: string, score: number): Promise<void> {
+    if (!this.ysdk) return
+    await this.ysdk.leaderboards.setLeaderboardScore(leaderboardName, score)
+  }
+
+  async getLeaderboardEntries(): Promise<any[]> {
+    // TODO: Реализовать при необходимости
+    return []
+  }
+
+  startGameplay(): void {
+    this.ysdk?.features.GameplayAPI?.start()
+  }
+
+  stopGameplay(): void {
+    this.ysdk?.features.GameplayAPI?.stop()
+  }
+
+  dispose(): void {
+    this.ysdk = null
+    this.player = null
     this.initialized = false
   }
 }
@@ -583,25 +735,27 @@ pnpm build:yandex
 
 ## ⚠️ Важные моменты
 
-1. **SDK подключается только в Яндекс.Играх** — в clean-версии `VITE_PLATFORM !== 'yandex'`, поэтому `yandex.ts` не инициализируется
-2. **Геймплей API обязателен для модерации** — `startGameplay()` / `stopGameplay()` должны вызываться при открытии/закрытии меню
-3. **Сохранения через `player.setData()`** — требуют авторизации игрока
-4. **Rewarded реклама** — основной источник монетизации (пользователь получает токены)
-5. **Лидерборды** — опционально, но рекомендуется для удержания
-6. **Экономика токенов** — тестируется на 10 000 игроков (из [`IDEAS_TC_game.md`](../ideas/IDEAS_TC_game.md))
-   - Ожидаемый доход: ~275 000 ₽/месяц
-   - 6 способов монетизации (баннер, rewarded, экспорты, фигуры, ускорение, супер-бонус)
+1. **Официальный SDK** — используем `@types/ysdk` + `https://yandex.ru/games/sdk/v2`
+2. **Типизация** — все типы из `@types/ysdk`: `SDK`, `Player`, `Leaderboards`
+3. **SDK подключается только в Яндекс.Играх** — в clean-версии `VITE_PLATFORM !== 'yandex'`, поэтому `yandex.ts` не инициализируется
+4. **Геймплей API обязателен для модерации** — `GameplayAPI.start/stop` при открытии/закрытии меню
+5. **Сохранения через `player.setData()`** — требуют авторизации игрока
+6. **Rewarded реклама** — основной источник монетизации (пользователь получает токены)
+7. **Лидерборды** — опционально, но рекомендуется для удержания
+8. **Офлайн-режим** — при отсутствии SDK автоматически используется localStorage
 
 ---
 
 ## 🔗 Ресурсы
 
 - [Документация Яндекс.Игр SDK](https://yandex.ru/dev/games/doc/ru/)
-- [Инициализация SDK](https://yandex.ru/dev/games/doc/ru/sdk/initializing-js)
+- [Инициализация SDK + типизация](https://yandex.ru/dev/games/doc/ru/sdk/initializing-js)
+- [Пакет @types/ysdk](https://www.npmjs.com/package/@types/ysdk)
 - [Реклама](https://yandex.ru/dev/games/doc/ru/ads/ads-js)
 - [Сохранения](https://yandex.ru/dev/games/doc/ru/persistence/persistence-js)
 - [Лидерборды](https://yandex.ru/dev/games/doc/ru/leaderboards/leaderboards-js)
 - **[Идеи для Яндекс-версии](../ideas/IDEAS_TC_game.md)** — полный список геймплейных режимов и экономики
+- **[Сообщество Telegram](https://t.me/kodacommunity)** — вопросы по SDK
 
 ---
 
