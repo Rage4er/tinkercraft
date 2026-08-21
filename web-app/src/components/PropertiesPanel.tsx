@@ -5,6 +5,7 @@ import AlignButtons from "./AlignButtons";
 import CsgButtons from "./CsgButtons";
 import type { ShapeParams, SceneObject } from "../csg/types";
 import { EyeIcon, EyeOffIcon, FilletIcon, FolderIcon, SaveIcon } from "./icons";
+import GamePanel from "./GamePanel";
 
 export default function PropertiesPanel({
   firstSelected,
@@ -121,6 +122,13 @@ export default function PropertiesPanel({
   }, [firstSelected?.id]);
 
   if (!firstSelected) {
+    // FIX (REVIEW-1): Игровая панель ТОЛЬКО для yandex-версии.
+    // В clean-версии — как было раньше (EmptyState).
+    const isYandex = import.meta.env.VITE_PLATFORM === "yandex";
+    if (isYandex) {
+      return <GamePanel onShowProjects={onShowProjects} />;
+    }
+
     return (
       <>
         <div className="props-empty">

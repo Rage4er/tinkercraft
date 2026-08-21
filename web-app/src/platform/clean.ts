@@ -13,7 +13,7 @@ export const platform: IPlatform = {
   },
 
   async showRewardedVideo() {
-    return null
+    return false
   },
 
   getPlayer() {

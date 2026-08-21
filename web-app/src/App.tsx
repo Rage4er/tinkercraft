@@ -11,7 +11,6 @@ import TextModal from "./components/TextModal";
 import StatusBar from "./components/StatusBar";
 import LeftPanel from "./components/LeftPanel";
 import PropertiesPanel from "./components/PropertiesPanel";
-import GameUI from "./components/GameUI";
 import { useDocumentStore } from "./store/document-store";
 import { useUiStore } from "./store/ui-store";
 import { useShallow } from "zustand/shallow";
@@ -623,9 +622,6 @@ export default function App() {
 
         {/* ── Правая панель ── */}
         <div className="panel-right">
-          {/* GameUI — токены и бонусы (только для yandex-версии) */}
-          {import.meta.env.VITE_PLATFORM === "yandex" && <GameUI />}
-
           <div className="props-header">{t("properties.header")}</div>
 
           <PropertiesPanel

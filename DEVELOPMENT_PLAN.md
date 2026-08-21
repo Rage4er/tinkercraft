@@ -595,8 +595,8 @@ web-app/
 | **Yandex реализация** | `src/platform/yandex.ts` | Полная реализация через `@types/ysdk` |
 | **Clean stub** | `src/platform/clean.ts` | Fallback с localStorage |
 | **Platform switch** | `src/platform/index.ts` | Динамический импорт по `VITE_PLATFORM` |
-| **Game store** | `src/store/game-store.ts` | Токены, ежедневные бонусы, cloud sync |
-| **GameUI** | `src/components/GameUI.tsx` | Баланс токенов, ежедневный бонус |
+| **Game store** | `src/store/game-store.ts` | Токены, бонусы, cloud sync, безлимитная реклама |
+| **GamePanel** | `src/components/GamePanel.tsx` | Игровая панель (токены, бонусы, экспорт STL) |
 | **Gameplay API** | `src/App.tsx` | stop/start при открытии/закрытии модалок |
 | **Сборка** | `vite.config.ts`, `package.json` | `dev:yandex`, `build:yandex` |
 

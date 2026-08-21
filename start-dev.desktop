@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=TinkerCraft Dev (Yandex SDK)
+Comment=Запуск Yandex SDK с моками (dev-режим)
+Exec=/home/small-room/GitHub/tinkercraft/start-dev.sh
+Icon=utilities-terminal
+Terminal=false
+Type=Application
+Categories=Development;
+Keywords=yandex;games;sdk;dev;

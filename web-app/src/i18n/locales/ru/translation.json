@@ -317,5 +317,27 @@
     "claimFree": "Забрать бесплатно",
     "claimWithAd": "Посмотреть рекламу",
     "later": "Позже"
+  },
+  "game": {
+    "dailyBonus": "Ежедневный бонус",
+    "claimFree": "Забрать",
+    "claimWithAd": "С рекламой",
+    "watchAd": "Реклама за токены",
+    "exportTitle": "Экспорт",
+    "exportStl": "Экспорт STL",
+    "exportStlFree": "Экспорт STL за рекламу",
+    "projects": "Проекты",
+    "emptyScene": "Сцена пуста — добавьте фигуру",
+    "notEnoughTokens": "Недостаточно токенов",
+    "exported": "STL экспортирован",
+    "exportedFree": "STL экспортирован бесплатно",
+    "bonusClaimed": "Бонус: +{{amount}} токенов",
+    "bonusNotReady": "Бонус уже получен сегодня",
+    "dailyClaimed": "Ежедневный бонус: +{{amount}} токенов",
+    "adTokens": "Получено +{{amount}} токенов",
+    "adNotReady": "Реклама недоступна",
+    "adNotShown": "Реклама не показана",
+    "dailyDone": "Бонус получен. Возвращайтесь завтра!",
+    "addShapes": "Добавьте фигуру для экспорта"
   }
 }

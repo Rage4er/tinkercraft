@@ -14,12 +14,14 @@ export const TOKEN_COSTS = {
 export const TOKEN_EARNINGS = {
   dailyBonus: 5,
   dailyBonusWithAd: 20,
+  adRewarded: 10,
   modelRated: 5,
   challengeComplete: 15,
   speedBuildWin: 25,
   achievementUnlock: 50,
-  adRewarded: 10,
 } as const
+
+const ONE_DAY = 24 * 60 * 60 * 1000
 
 // ─── Состояние ─────────────────────────────────────────────────────
 interface GameState {
@@ -30,9 +32,10 @@ interface GameState {
 
   // Actions
   addTokens(amount: number): void
-  spendTokens(amount: number): boolean
+  spendTokens(amount: number, reason: string): boolean
   claimDailyBonus(): Promise<boolean>
   claimDailyBonusWithAd(): Promise<boolean>
+  watchAdForTokens(): Promise<boolean>
   incrementModelsCreated(): void
   loadFromCloud(): Promise<void>
   syncToCloud(): Promise<void>
@@ -48,52 +51,69 @@ export const useGameStore = create<GameState>((set, get) => ({
     set((state) => ({ tokens: state.tokens + amount }))
   },
 
-  spendTokens: (amount) => {
+  spendTokens: (amount, reason) => {
     const state = get()
     if (state.tokens < amount) return false
     set((state) => ({ tokens: state.tokens - amount }))
+    // FIX (REVIEW-7): Полная синхронизация, а не частичный saveData
+    void get().syncToCloud()
+    console.log(`[Game] Spent ${amount} tokens for ${reason}`)
     return true
   },
 
+  // ✅ Ежедневный бонус: +5, 1 раз в сутки, без рекламы
   claimDailyBonus: async () => {
     const now = Date.now()
     const lastBonus = get().lastDailyBonus
-    const ONE_DAY = 24 * 60 * 60 * 1000
 
     if (lastBonus && now - lastBonus < ONE_DAY) {
       console.warn('[Game] Daily bonus not ready')
       return false
     }
 
-    // Сохраняем бонус
-    const platform = getPlatform()
-    if (platform) {
-      await platform.saveData({ lastDailyBonus: now })
-    }
-
     set({
       tokens: get().tokens + TOKEN_EARNINGS.dailyBonus,
       lastDailyBonus: now,
     })
+    await get().syncToCloud()
     return true
   },
 
+  // ✅ Ежедневный бонус ×4: +20, 1 раз в сутки, с рекламой
   claimDailyBonusWithAd: async () => {
+    const now = Date.now()
+    const lastBonus = get().lastDailyBonus
+
+    // Сначала проверяем лимит — не показываем рекламу зря
+    if (lastBonus && now - lastBonus < ONE_DAY) {
+      console.warn('[Game] Daily bonus already claimed. Use watchAdForTokens() for +10.')
+      return false
+    }
+
     const platform = getPlatform()
     if (!platform) return false
 
-    // Показываем rewarded рекламу
+    // Реклама с корректным onRewarded
     const rewarded = await platform.showRewardedVideo()
     if (!rewarded) return false
 
-    // Начисляем бонус
-    const now = Date.now()
     set({
       tokens: get().tokens + TOKEN_EARNINGS.dailyBonusWithAd,
       lastDailyBonus: now,
     })
+    await get().syncToCloud()
+    return true
+  },
 
-    // Синхронизируем с облаком
+  // ✅ Реклама за токены: +10, БЕЗ лимита — отдельная механика
+  watchAdForTokens: async () => {
+    const platform = getPlatform()
+    if (!platform) return false
+
+    const rewarded = await platform.showRewardedVideo()
+    if (!rewarded) return false
+
+    set((state) => ({ tokens: state.tokens + TOKEN_EARNINGS.adRewarded }))
     await get().syncToCloud()
     return true
   },

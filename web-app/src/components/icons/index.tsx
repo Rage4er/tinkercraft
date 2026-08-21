@@ -500,3 +500,38 @@ export const TextIcon = (p: any) => (
     <path d="M12 22h32v10H33v20H23V32H12Z" {...face(0.25)} />
   </Icon>
 )
+
+/* ===== Группа 12 · Игры (Yandex) — токены, бонусы, реклама ===== */
+export const TokenIcon = (p: any) => (
+  <Icon {...p}>
+    <path d="M32 12 50 22v20L32 52 14 42V22Z" {...face(0.25)} />
+    <path d="M14 22l18 10 18-10" {...line} />
+    <path d="M32 32v20" {...line} />
+    <path {...line} d="M14 22l18 10 18-10" />
+  </Icon>
+)
+
+export const GiftIcon = (p: any) => (
+  <Icon {...p}>
+    <path d="M16 28h32v24H16Z" {...face(0.25)} />
+    <path {...line} d="M16 28h32M18 28v-6h28v6M32 28v24" />
+    <path d="M32 22c-4 0-10-6-8-10 1.6-3 6.4-2 8 4 1.6-6 6.4-7 8-4 2 4-4 10-8 10Z" {...face(0.4)} />
+    <path {...line} d="M32 22c-4 0-10-6-8-10 1.6-3 6.4-2 8 4 1.6-6 6.4-7 8-4 2 4-4 10-8 10Z" />
+  </Icon>
+)
+
+export const AdIcon = (p: any) => (
+  <Icon {...p}>
+    <rect {...line} x="8" y="14" width="48" height="36" rx="3" />
+    <rect x="12" y="18" width="20" height="28" {...face(0.4)} />
+    <path d="M32 18l20 28" {...line} />
+    <path d="M36 26v12M44 26v12" {...line} />
+  </Icon>
+)
+
+export const PlayIcon = (p: any) => (
+  <Icon {...p}>
+    <circle cx="32" cy="32" r="20" {...face(0.22)} />
+    <path {...line} d="M27 24l12 8-12 8Z" fill="currentColor" fillOpacity={0.4} />
+  </Icon>
+)

@@ -316,5 +316,27 @@
     "claimFree": "Claim free",
     "claimWithAd": "Watch ad",
     "later": "Later"
+  },
+  "game": {
+    "dailyBonus": "Daily bonus",
+    "claimFree": "Claim",
+    "claimWithAd": "With ad",
+    "watchAd": "Watch ad for tokens",
+    "exportTitle": "Export",
+    "exportStl": "Export STL",
+    "exportStlFree": "Export STL for free (ad)",
+    "projects": "Projects",
+    "emptyScene": "Scene is empty — add a shape",
+    "notEnoughTokens": "Not enough tokens",
+    "exported": "STL exported",
+    "exportedFree": "STL exported for free",
+    "bonusClaimed": "Bonus: +{{amount}} tokens",
+    "bonusNotReady": "Bonus already claimed today",
+    "dailyClaimed": "Daily bonus: +{{amount}} tokens",
+    "adTokens": "Earned +{{amount}} tokens",
+    "adNotReady": "Ad not available",
+    "adNotShown": "Ad was not shown",
+    "dailyDone": "Bonus claimed. Come back tomorrow!",
+    "addShapes": "Add a shape to export"
   }
 }

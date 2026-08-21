@@ -1,13 +1,11 @@
-// src/platform/yandex.ts — Официальный SDK с @types/ysdk
+// src/platform/yandex.ts — Реализация официального Yandex Games SDK
 import type { IPlatform } from './types'
 import type { SDK, Player } from 'ysdk'
 
-// Расширяем глобальный объект Window
+// Расширяем window
 declare global {
   interface Window {
-    YaGames: {
-      init: () => Promise<SDK>
-    }
+    YaGames?: { init: () => Promise<SDK> }
   }
 }
 
@@ -19,23 +17,22 @@ class YandexPlatform implements IPlatform {
   async init(): Promise<boolean> {
     if (this.initialized) return true
 
-    // Fallback для локальной разработки
-    if (typeof window === 'undefined' || !(window as any).YaGames) {
-      console.warn('[Yandex] SDK not available (local dev mode). Using fallback.')
+    // Фолбэк для локальной разработки
+    if (typeof window === 'undefined' || !window.YaGames) {
+      console.warn('[Yandex] SDK not available (local dev fallback).')
       this.initialized = true
       return false
     }
 
     try {
-      // ✅ Строгая типизация инициализации
-      const YaGames = (window as any).YaGames
+      const YaGames = window.YaGames
       this.ysdk = await YaGames.init()
 
-      // Пробуем получить игрока
+      // Пробуем получить авторизованного игрока
       try {
-        this.player = await this.ysdk.getPlayer({ scopes: false })
+        this.player = await this.ysdk.getPlayer()
       } catch {
-        console.warn('[Yandex] Player not authorized yet, using guest mode')
+        console.warn('[Yandex] Player not authorized yet, guest mode')
         this.player = null
       }
 
@@ -68,20 +65,35 @@ class YandexPlatform implements IPlatform {
     }
   }
 
-  async showRewardedVideo(): Promise<'tokens' | 'hints' | null> {
-    if (!this.ysdk) return null
-    try {
-      await this.ysdk.adv.showRewardedVideo({
-        callbacks: {
-          onRewarded: () => console.log('[Yandex] Rewarded!'),
-          onClose: () => console.log('[Yandex] Rewarded video closed'),
-          onError: (err: Error) => console.error('[Yandex] Rewarded video error:', err),
-        },
-      })
-      return 'tokens'
-    } catch {
-      return null
-    }
+  async showRewardedVideo(): Promise<boolean> {
+    if (!this.ysdk) return false
+
+    return new Promise<boolean>((resolve) => {
+      let rewarded = false
+
+      try {
+        this.ysdk!.adv.showRewardedVideo({
+          callbacks: {
+            onRewarded: () => {
+              // ✅ Факт награды — только здесь выдаём токены
+              console.log('[Yandex] Rewarded!')
+              rewarded = true
+            },
+            onClose: () => {
+              // ✅ Резолвим ТОЛЬКО после закрытия
+              console.log('[Yandex] onClose, rewarded =', rewarded)
+              resolve(rewarded)
+            },
+            onError: (err: Error) => {
+              console.error('[Yandex] Rewarded error:', err)
+              resolve(false)
+            },
+          },
+        })
+      } catch {
+        resolve(false)
+      }
+    })
   }
 
   getPlayer(): Player | null {
@@ -117,7 +129,7 @@ class YandexPlatform implements IPlatform {
   async submitScore(leaderboardName: string, score: number): Promise<void> {
     if (!this.ysdk || !this.player) return
     try {
-      await this.ysdk.leaderboards.setLeaderboardScore(leaderboardName, score)
+      await this.ysdk.leaderboards.setScore(leaderboardName, score)
     } catch (e) {
       console.error('[Yandex] Submit score failed:', e)
     }
@@ -129,15 +141,15 @@ class YandexPlatform implements IPlatform {
   ): Promise<Array<{ rank: number; userId: string; score: number; playerName: string }>> {
     if (!this.ysdk) return []
     try {
-      const entries = await this.ysdk.leaderboards.getLeaderboardEntries(leaderboardName, {
+      const data = await this.ysdk.leaderboards.getEntries(leaderboardName, {
         quantityTop: count,
         quantityAround: 0,
       })
-      return entries.map((e: any) => ({
+      return data.entries.map((e) => ({
         rank: e.rank,
-        userId: e.uniqueID,
+        userId: e.player.uniqueID,
         score: e.score,
-        playerName: e.player?.publicName || 'Unknown',
+        playerName: e.player.publicName || 'Unknown',
       }))
     } catch (e) {
       console.error('[Yandex] Get leaderboard failed:', e)

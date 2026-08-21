@@ -89,6 +89,29 @@ pnpm build          # Сборка в dist/
 
 ---
 
+## [Unreleased]
+
+### 🔒 Безопасность экономики (код-ревью)
+
+- **Fixed:** `showRewardedVideo()` больше не выдаёт награду до фактического просмотра — резолв только в `onRewarded` (`yandex.ts`)
+- **Fixed:** `claimDailyBonusWithAd()` проверяет суточный лимит ДО показа рекламы — нет лишних роликов (`game-store.ts`)
+- **Added:** `watchAdForTokens()` — безлимитная реклама за +10 токенов (отделена от ежедневного бонуса) (`game-store.ts`)
+- **Changed:** `spendTokens()` теперь вызывает полный `syncToCloud()` вместо частичного `saveData` — не затирает другие поля
+- **Fixed:** тип `showRewardedVideo()` приведён к `Promise<boolean>` во всех платформах (`types.ts`, `yandex.ts`, `clean.ts`)
+- **Fixed:** типизация SDK по официальному `@types/ysdk`: `getPlayer()`, `leaderboards.setScore()/getEntries()` (`yandex.ts`)
+
+### 🎨 Архитектура игровой панели (код-ревью)
+
+- **Added:** `GamePanel.tsx` — игровая панель (токены, бонусы, реклама, экспорт STL)
+- **Changed:** `GamePanel` монтируется из `PropertiesPanel` ТОЛЬКО при `VITE_PLATFORM=yandex` — clean-версия не содержит игрового кода
+- **Removed:** `GameUI.tsx` — дубликат, удалён вместе с подключением в `App.tsx`
+- **Added:** SVG-иконки `TokenIcon`, `GiftIcon`, `AdIcon`, `PlayIcon` в стиле проекта (заменили эмодзи)
+- **Changed:** Порядок экспорта: валидация → списание → экспорт (нет сожжённых токенов на пустой сцене)
+- **Fixed:** `hr` скоуплен классом `.game-hr` — не протекает в другие компоненты
+- **Added:** i18n-ключи `game.*` (RU/EN) — нет хардкода русских строк
+
+---
+
 ## [Yandex MVP] — 2026-08-21
 
 **Интеграция Яндекс.Игр — MVP завершён.**

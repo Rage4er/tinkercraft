@@ -10,7 +10,7 @@ export interface IPlatform {
 
   // Реклама
   showFullscreenAd(): Promise<boolean>
-  showRewardedVideo(): Promise<'tokens' | 'hints' | null>
+  showRewardedVideo(): Promise<boolean>
 
   // Игрок
   getPlayer(): Player | null
