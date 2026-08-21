@@ -308,5 +308,13 @@
     "csgIntersect": "Keeps the common part of two objects (intersect)",
     "themeToggle": "Switches between dark and light theme",
     "clearScene": "Removes all objects from the scene"
+  },
+  "gameUI": {
+    "tokensTitle": "Token balance",
+    "dailyBonus": "Daily bonus",
+    "dailyBonusDesc": "Get free tokens for logging in today!",
+    "claimFree": "Claim free",
+    "claimWithAd": "Watch ad",
+    "later": "Later"
   }
 }

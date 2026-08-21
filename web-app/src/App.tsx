@@ -11,11 +11,13 @@ import TextModal from "./components/TextModal";
 import StatusBar from "./components/StatusBar";
 import LeftPanel from "./components/LeftPanel";
 import PropertiesPanel from "./components/PropertiesPanel";
+import GameUI from "./components/GameUI";
 import { useDocumentStore } from "./store/document-store";
 import { useUiStore } from "./store/ui-store";
 import { useShallow } from "zustand/shallow";
 import { isWorkerReady } from "./csg/worker-client";
 import { SNAP_VALUES, AUTOSAVE_DELAY_MS } from "./constants";
+import { getPlatform } from "./platform";
 import type {
   TransformNR,
   ShapeParams,
@@ -213,6 +215,21 @@ export default function App() {
     saveDoodle, openDoodle, clearSelection, copySelected, pasteClipboard,
     showTextModal, showPM,
   };
+
+  // ── Yandex Gameplay API — обязательное требование модерации ──
+  // При открытии модальных окон — stopGameplay(), при закрытии — startGameplay()
+  useEffect(() => {
+    const platform = getPlatform()
+    if (!platform) return
+
+    const showAnyModal = showTextModal || showPM
+
+    if (showAnyModal) {
+      platform.stopGameplay()
+    } else {
+      platform.startGameplay()
+    }
+  }, [showTextModal, showPM])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -606,6 +623,9 @@ export default function App() {
 
         {/* ── Правая панель ── */}
         <div className="panel-right">
+          {/* GameUI — токены и бонусы (только для yandex-версии) */}
+          {import.meta.env.VITE_PLATFORM === "yandex" && <GameUI />}
+
           <div className="props-header">{t("properties.header")}</div>
 
           <PropertiesPanel
