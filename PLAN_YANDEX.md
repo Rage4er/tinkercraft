@@ -996,7 +996,59 @@ pnpm build:yandex
 
 ## 🧪 Тестирование
 
-### Локальная проверка
+### 🏆 Локальное тестирование с @yandex-games/sdk-dev-proxy
+
+> **Официальный инструмент Яндекса** — прокси-сервер, который обрабатывает все заголовки безопасности (CSP/COEP), позволяя настоящему SDK загружаться с моками.
+
+#### Шаг 1: Запуск Vite
+
+```bash
+cd web-app
+pnpm dev:yandex
+# Сервер на http://localhost:5173
+```
+
+#### Шаг 2: Запуск прокси Яндекса
+
+```bash
+npx @yandex-games/sdk-dev-proxy -h http://localhost:5173 --dev-mode=true
+# Откроет браузер на http://localhost:8080
+```
+
+#### Шаг 3: Управление моками через URL
+
+| Сценарий | URL |
+|----------|-----|
+| Игрок авторизован | `http://localhost:8080?mocks={"isAuthorized":true}` |
+| Мобильная ориентация | `http://localhost:8080?mocks={"isAuthorized":true,"lockedOrientation":"landscape"}` |
+| Без моков (по умолчанию) | `http://localhost:8080` |
+
+#### Что работает в dev-режиме
+
+| Функция | Статус | Описание |
+|---------|--------|----------|
+| SDK инициализация | ✅ | Настоящий SDK с моками |
+| Реклама (fullscreen) | ✅ | Мок-окно, callback-функции работают |
+| Rewarded видео | ✅ | Мок-окно, токены начисляются |
+| Авторизация | ✅ | Мок-диалог через URL-параметры |
+| Сохранения | ✅ | localStorage |
+| Лидерборды | ✅ | Мок-данные |
+| Платежи | ✅ | Загружаются из `public/purchases-catalog.json` |
+| Логи | ✅ | Все вызовы SDK логируются в консоль |
+
+#### 📦 Локальный каталог покупок
+
+Создан файл `public/purchases-catalog.json` с моками товаров:
+- Premium Colors Pack — 50 RUB
+- Shape Pack — 100 RUB
+- No Ads (30 days) — 200 RUB
+- 1000 Tokens — 500 RUB
+
+При вызове покупки показывается мок-диалог с опциями успешной покупки и отмены.
+
+---
+
+### 🧪 Тестирование без прокси (fallback)
 
 ```bash
 # Clean-версия (без SDK, main branch)
@@ -1008,6 +1060,8 @@ pnpm build        # сборка в dist/
 pnpm dev:yandex   # с SDK, localStorage fallback
 pnpm build:yandex # сборка в dist-yandex/
 ```
+
+> ⚠️ **Без прокси** SDK может не загрузиться из-за COEP в dev-режиме. Используйте `@yandex-games/sdk-dev-proxy` для полноценного тестирования.
 
 ### Песочница Яндекс.Игр
 

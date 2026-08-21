@@ -131,6 +131,23 @@ pnpm build          # Сборка в dist/
 
 ### 🧪 Тестирование
 
+#### 🏆 Официальный прокси (рекомендуется)
+
+```bash
+# Терминал 1
+cd web-app && pnpm dev:yandex
+
+# Терминал 2
+npx @yandex-games/sdk-dev-proxy -h http://localhost:5173 --dev-mode=true
+# Откроет http://localhost:8080
+```
+
+**URL для моков:**
+- `?mocks={"isAuthorized":true}` — авторизованный игрок
+- `?mocks={"isAuthorized":true,"lockedOrientation":"landscape"}` — мобильная ориентация
+
+#### Fallback (без прокси)
+
 ```bash
 # Clean-версия (main)
 pnpm dev          # чистый CAD
@@ -140,6 +157,16 @@ pnpm build        # dist/
 pnpm dev:yandex   # с SDK
 pnpm build:yandex # dist-yandex/
 ```
+
+> ⚠️ Без прокси SDK может не загрузиться из-за COEP. Используйте прокси для полноценного тестирования.
+
+### 📦 Локальный каталог покупок
+
+Создан `public/purchases-catalog.json` с моками товаров для dev-режима:
+- Premium Colors Pack — 50 RUB
+- Shape Pack — 100 RUB
+- No Ads (30 days) — 200 RUB
+- 1000 Tokens — 500 RUB
 
 ### 📋 Чек-лист релиза
 

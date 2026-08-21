@@ -625,6 +625,24 @@ web-app/
 
 ### 🧪 Тестирование
 
+#### 🏆 Официальный прокси (рекомендуется)
+
+```bash
+# Терминал 1: Запуск Vite
+cd web-app
+pnpm dev:yandex
+
+# Терминал 2: Запуск прокси Яндекса
+npx @yandex-games/sdk-dev-proxy -h http://localhost:5173 --dev-mode=true
+# Откроет http://localhost:8080
+```
+
+**URL для моков:**
+- `http://localhost:8080?mocks={"isAuthorized":true}` — авторизованный игрок
+- `http://localhost:8080?mocks={"isAuthorized":true,"lockedOrientation":"landscape"}` — мобильная ориентация
+
+#### Fallback (без прокси)
+
 ```bash
 # Clean-версия (main branch)
 pnpm dev          # чистый CAD
@@ -634,6 +652,8 @@ pnpm build        # dist/
 pnpm dev:yandex   # с SDK
 pnpm build:yandex # dist-yandex/
 ```
+
+> ⚠️ Без прокси SDK может не загрузиться из-за COEP. Используйте прокси для полноценного тестирования.
 
 ### 📦 Деплой
 
