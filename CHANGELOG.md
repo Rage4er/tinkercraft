@@ -91,6 +91,12 @@ pnpm build          # Сборка в dist/
 
 ## [Unreleased]
 
+### 🌐 Автоопределение языка через SDK (п. 2.14 требований)
+
+- **Added:** `YandexLanguageDetector.ts` — асинхронный i18next-детектор, получающий язык из `ysdk.environment.i18n.lang`
+- **Changed:** `i18n/index.ts` — детектор Яндекса подключён первым (приоритет: Yandex SDK → localStorage → navigator)
+- **Fixed:** `yandex.ts` — тип `window.YaGames` приведён к `Promise<SDK<false>>` (совместимость с @types/ysdk)
+
 ### 🔒 Безопасность экономики (код-ревью)
 
 - **Fixed:** `showRewardedVideo()` больше не выдаёт награду до фактического просмотра — резолв только в `onRewarded` (`yandex.ts`)

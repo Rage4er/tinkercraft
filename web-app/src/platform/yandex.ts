@@ -2,10 +2,9 @@
 import type { IPlatform } from './types'
 import type { SDK, Player } from 'ysdk'
 
-// Расширяем window
 declare global {
   interface Window {
-    YaGames?: { init: () => Promise<SDK> }
+    YaGames?: { init: () => Promise<SDK<false>> }
   }
 }
 
@@ -28,12 +27,20 @@ class YandexPlatform implements IPlatform {
       const YaGames = window.YaGames
       this.ysdk = await YaGames.init()
 
+      this.player = await this.ysdk!.getPlayer()
       // Пробуем получить авторизованного игрока
       try {
-        this.player = await this.ysdk.getPlayer()
+        this.player = await this.ysdk!.getPlayer()
       } catch {
         console.warn('[Yandex] Player not authorized yet, guest mode')
         this.player = null
+      }
+
+      this.initialized = true
+
+      // LoadingAPI.ready() — обязательно для модерации
+      if (this.ysdk?.features?.LoadingAPI?.ready) {
+        this.ysdk.features.LoadingAPI.ready()
       }
 
       this.initialized = true
