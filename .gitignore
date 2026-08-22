@@ -40,3 +40,6 @@ bowler
 # Added by cargo
 
 /target
+web-app/dist-yandex/
+dist-yandex/
+tinkercraft-yandex-v1.0.0.zip
