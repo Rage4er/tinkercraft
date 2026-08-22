@@ -7,9 +7,11 @@ import react from '@vitejs/plugin-react'
 // физически отсутствует в HTML — нет COEP конфликта.
 const yandexSdkPlugin = (): Plugin => ({
   name: 'vite-plugin-yandex-sdk',
-  transformIndexHtml(html) {
-    const isYandex = process.env.VITE_PLATFORM === 'yandex'
-    if (isYandex) {
+  transformIndexHtml(html, { filename }) {
+    const isYandex = process.env.VITE_PLATFORM === 'yandex' || filename === 'index.html' && process.env.VITE_PLATFORM
+    // Для сборки: проверяем через mode
+    const isBuildYandex = process.env.NODE_ENV === 'production' && process.env.VITE_PLATFORM === 'yandex'
+    if (isYandex || isBuildYandex) {
       return html.replace(
         '</head>',
         '    <!-- Yandex Games SDK (Injected for Yandex build only) -->\n' +
@@ -77,48 +79,55 @@ const stripReactRefresh = {
 // ─── Main config ─────────────────────────────────────────────────
 const isYandex = process.env.VITE_PLATFORM === 'yandex'
 
-export default defineConfig({
-  base: isYandex ? '/' : '/tinkercraft/',
-  define: {
-    __PLATFORM__: JSON.stringify(isYandex ? 'yandex' : 'clean'),
-  },
-  test: {
-    environment: 'jsdom',
-    globals: true,
-    include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
-  },
-  plugins: [
-    react({
-      exclude: /.worker.(js|ts)$/,
-    }),
-    yandexSdkPlugin(),
-    stripReactRefresh,
-  ],
-  resolve: {
-    dedupe: ['react', 'react-dom', 'three'],
-  },
-  optimizeDeps: {
-    exclude: ['manifold-3d'],
-    include: ['react', 'react-dom', 'zustand', 'three'],
-  },
-  worker: {
-    format: 'es',
-    plugins: () => [],
-  },
-  server: {
-    host: '0.0.0.0',
-    port: 5000,
-    allowedHosts: true,
-    // COEP/COOP нужны только для clean-версии (WebAssembly SharedArrayBuffer)
-    // Для yandex-версии эти заголовки блокируют загрузку SDK с yandex.ru
-    headers: isYandex
-      ? undefined
-      : {
-        'Cross-Origin-Opener-Policy': 'same-origin',
-        'Cross-Origin-Embedder-Policy': 'require-corp',
-      },
-    hmr: {
-      overlay: false,
+export default defineConfig(({ mode }) => {
+  const yandex = mode === 'yandex' || isYandex
+  return {
+    base: yandex ? '/' : '/tinkercraft/',
+    define: {
+      __PLATFORM__: JSON.stringify(yandex ? 'yandex' : 'clean'),
     },
-  },
+    build: {
+      outDir: yandex ? 'dist-yandex' : 'dist',
+      emptyOutDir: true,
+    },
+    test: {
+      environment: 'jsdom',
+      globals: true,
+      include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+    },
+    plugins: [
+      react({
+        exclude: /.worker.(js|ts)$/,
+      }),
+      yandexSdkPlugin(),
+      stripReactRefresh,
+    ],
+    resolve: {
+      dedupe: ['react', 'react-dom', 'three'],
+    },
+    optimizeDeps: {
+      exclude: ['manifold-3d'],
+      include: ['react', 'react-dom', 'zustand', 'three'],
+    },
+    worker: {
+      format: 'es',
+      plugins: () => [],
+    },
+    server: {
+      host: '0.0.0.0',
+      port: 5000,
+      allowedHosts: true,
+      // COEP/COOP нужны только для clean-версии (WebAssembly SharedArrayBuffer)
+      // Для yandex-версии эти заголовки блокируют загрузку SDK с yandex.ru
+      headers: isYandex
+        ? undefined
+        : {
+          'Cross-Origin-Opener-Policy': 'same-origin',
+          'Cross-Origin-Embedder-Policy': 'require-corp',
+        },
+      hmr: {
+        overlay: false,
+      },
+    },
+  }
 })

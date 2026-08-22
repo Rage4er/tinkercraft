@@ -7,7 +7,7 @@
     "dev": "vite",
     "dev:yandex": "VITE_PLATFORM=yandex vite",
     "build": "tsc && vite build",
-    "build:yandex": "VITE_PLATFORM=yandex tsc && vite build",
+    "build:yandex": "VITE_PLATFORM=yandex tsc && vite build --mode yandex",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
