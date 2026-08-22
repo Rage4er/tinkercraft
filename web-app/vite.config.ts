@@ -3,21 +3,19 @@ import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 
 // ─── Yandex SDK Plugin ───────────────────────────────────────────
-// Вставляет SDK только для yandex-сборки. В clean-версии скрипт
-// физически отсутствует в HTML — нет COEP конфликта.
+// Вставляет SDK в НАЧАЛО <head>, ДО кода приложения.
+// Синхронная загрузка (без async) — SDK обязан быть готов до app code.
 // ✅ Путь: /sdk.js (требование Яндекса п. 1.1)
 const yandexSdkPlugin = (): Plugin => ({
   name: 'vite-plugin-yandex-sdk',
-  transformIndexHtml(html, { filename }) {
-    const isYandex = process.env.VITE_PLATFORM === 'yandex' || filename === 'index.html' && process.env.VITE_PLATFORM
-    // Для сборки: проверяем через mode
-    const isBuildYandex = process.env.NODE_ENV === 'production' && process.env.VITE_PLATFORM === 'yandex'
-    if (isYandex || isBuildYandex) {
+  transformIndexHtml(html, ctx) {
+    const isYandex = process.env.VITE_PLATFORM === 'yandex' || ctx?.mode === 'yandex'
+    if (isYandex) {
+      // Вставляем SDK ПЕРВЫМ в <head>, до всех остальных скриптов
       return html.replace(
-        '</head>',
-        '    <!-- Yandex Games SDK (Injected for Yandex build only) -->\n' +
-        '    <script async src="/sdk.js"><\/script>\n' +
-        '  </head>'
+        '<head>',
+        '<head>\n    <!-- Yandex Games SDK (п. 1.1) — загружается синхронно ДО app code -->\n' +
+        '    <script src="/sdk.js"><\/script>'
       )
     }
     return html

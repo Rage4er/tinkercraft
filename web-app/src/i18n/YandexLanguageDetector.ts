@@ -1,36 +1,28 @@
 // ============================================================
-// i18next detector for Yandex Games SDK
-// Priority: Yandex SDK > localStorage > navigator
+// i18next detector for Yandex Games SDK (п. 2.14 требований)
+// Использует уже инициализированный SDK из sdk.ts (getSdk)
+// НЕ вызывает YaGames.init() повторно
 // ============================================================
 import type { LanguageDetectorAsyncModule } from 'i18next'
-
-// Расширяем window — тип определяется в platform/yandex.ts
-// здесь только для совместимости с i18next
+import { initSdk } from '../platform/sdk'
 
 const YandexLanguageDetector: LanguageDetectorAsyncModule = {
   type: 'languageDetector',
-  async: true, // асинхронный детектор
+  async: true,
   detect: (callback) => {
-    // Проверяем, доступен ли YaGames
-    if (typeof window !== 'undefined' && (window as any).YaGames) {
-      (window as any).YaGames.init()
-        .then((ysdk: any) => {
-          // ✅ Получаем язык из SDK (п. 2.14 требований)
-          const lang = ysdk?.environment?.i18n?.lang
-          console.log('[i18n] Yandex SDK language:', lang)
-          callback(lang)
-        })
-        .catch(() => {
-          // Если SDK не загрузился — fallback на navigator
-          callback(undefined)
-        })
-    } else {
-      // SDK недоступен — вызываем callback с undefined
-      // (i18next перейдёт к следующему детектору)
-      callback(undefined)
-    }
+    // ✅ Используем централизованный init (один на всё приложение)
+    initSdk().then((ysdk) => {
+      if (ysdk) {
+        // ✅ Читаем язык из SDK (п. 2.14)
+        const lang = ysdk.environment?.i18n?.lang
+        console.log('[i18n] Yandex SDK language:', lang)
+        callback(lang)
+      } else {
+        // SDK недоступен — i18next перейдёт к navigator/localStorage
+        callback(undefined)
+      }
+    })
   },
-  // i18next не будет кэшировать результат в localStorage
   cacheUserLanguage: () => { },
 }
 

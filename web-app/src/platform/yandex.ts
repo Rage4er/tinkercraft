@@ -1,12 +1,8 @@
-// src/platform/yandex.ts — Реализация официального Yandex Games SDK
+// src/platform/yandex.ts — Реализация Yandex Games SDK
+// Использует централизованную инициализацию из sdk.ts (initSdk/getSdk)
 import type { IPlatform } from './types'
 import type { SDK, Player } from 'ysdk'
-
-declare global {
-  interface Window {
-    YaGames?: { init: () => Promise<SDK<false>> }
-  }
-}
+import { initSdk } from './sdk'
 
 class YandexPlatform implements IPlatform {
   public ysdk: SDK | null = null
@@ -16,45 +12,25 @@ class YandexPlatform implements IPlatform {
   async init(): Promise<boolean> {
     if (this.initialized) return true
 
-    // Фолбэк для локальной разработки
-    if (typeof window === 'undefined' || !window.YaGames) {
-      console.warn('[Yandex] SDK not available (local dev fallback).')
+    // ✅ Централизованная инициализация — один init() на всё приложение
+    const ysdk = await initSdk()
+    if (!ysdk) {
       this.initialized = true
       return false
     }
 
+    this.ysdk = ysdk
+
+    // Пробуем получить игрока
     try {
-      const YaGames = window.YaGames
-      this.ysdk = await YaGames.init()
-
-      this.player = await this.ysdk!.getPlayer()
-      // Пробуем получить авторизованного игрока
-      try {
-        this.player = await this.ysdk!.getPlayer()
-      } catch {
-        console.warn('[Yandex] Player not authorized yet, guest mode')
-        this.player = null
-      }
-
-      this.initialized = true
-
-      // LoadingAPI.ready() — обязательно для модерации
-      if (this.ysdk?.features?.LoadingAPI?.ready) {
-        this.ysdk.features.LoadingAPI.ready()
-      }
-
-      this.initialized = true
-
-      // LoadingAPI.ready() — обязательно для модерации
-      if (this.ysdk.features?.LoadingAPI?.ready) {
-        this.ysdk.features.LoadingAPI.ready()
-      }
-
-      return true
-    } catch (error) {
-      console.error('[Yandex] Init failed:', error)
-      return false
+      this.player = await ysdk.getPlayer()
+    } catch {
+      console.warn('[Yandex] Player not authorized yet, guest mode')
+      this.player = null
     }
+
+    this.initialized = true
+    return true
   }
 
   async showFullscreenAd(): Promise<boolean> {
@@ -82,12 +58,10 @@ class YandexPlatform implements IPlatform {
         this.ysdk!.adv.showRewardedVideo({
           callbacks: {
             onRewarded: () => {
-              // ✅ Факт награды — только здесь выдаём токены
               console.log('[Yandex] Rewarded!')
               rewarded = true
             },
             onClose: () => {
-              // ✅ Резолвим ТОЛЬКО после закрытия
               console.log('[Yandex] onClose, rewarded =', rewarded)
               resolve(rewarded)
             },
