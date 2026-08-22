@@ -1,0 +1,38 @@
+[
+  {
+    "description": "Unlock all premium colors",
+    "id": "premium_colors",
+    "imageURI": "",
+    "price": "50 RUB",
+    "priceCurrencyCode": "RUB",
+    "priceValue": "50",
+    "title": "Premium Colors Pack"
+  },
+  {
+    "description": "Unlock all primitive shapes",
+    "id": "all_shapes",
+    "imageURI": "",
+    "price": "100 RUB",
+    "priceCurrencyCode": "RUB",
+    "priceValue": "100",
+    "title": "Shape Pack"
+  },
+  {
+    "description": "Remove ads for 30 days",
+    "id": "no_ads_30",
+    "imageURI": "",
+    "price": "200 RUB",
+    "priceCurrencyCode": "RUB",
+    "priceValue": "200",
+    "title": "No Ads (30 days)"
+  },
+  {
+    "description": "1000 bonus tokens",
+    "id": "tokens_1000",
+    "imageURI": "",
+    "price": "500 RUB",
+    "priceCurrencyCode": "RUB",
+    "priceValue": "500",
+    "title": "1000 Tokens"
+  }
+]

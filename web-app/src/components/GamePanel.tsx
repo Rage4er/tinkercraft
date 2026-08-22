@@ -155,7 +155,7 @@ export default function GamePanel({ onShowProjects }: GamePanelProps) {
         disabled={!hasObjects}
         onClick={handleExportStl}
       >
-        <ExportIcon size={32} /> {t("game.exportStl")} (5 ✦)
+        <ExportIcon size={32} /> {t("game.exportStl")} ({t("game.cost", { amount: 5 })})
       </button>
       <button
         className="btn btn-full"

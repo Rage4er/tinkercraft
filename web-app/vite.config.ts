@@ -5,6 +5,7 @@ import react from '@vitejs/plugin-react'
 // ─── Yandex SDK Plugin ───────────────────────────────────────────
 // Вставляет SDK только для yandex-сборки. В clean-версии скрипт
 // физически отсутствует в HTML — нет COEP конфликта.
+// ✅ Путь: /sdk.js (требование Яндекса п. 1.1)
 const yandexSdkPlugin = (): Plugin => ({
   name: 'vite-plugin-yandex-sdk',
   transformIndexHtml(html, { filename }) {
@@ -15,7 +16,7 @@ const yandexSdkPlugin = (): Plugin => ({
       return html.replace(
         '</head>',
         '    <!-- Yandex Games SDK (Injected for Yandex build only) -->\n' +
-        '    <script src="https://yandex.ru/games/sdk/v2"><\/script>\n' +
+        '    <script async src="/sdk.js"><\/script>\n' +
         '  </head>'
       )
     }

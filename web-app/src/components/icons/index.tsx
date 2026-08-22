@@ -504,10 +504,38 @@ export const TextIcon = (p: any) => (
 /* ===== Группа 12 · Игры (Yandex) — токены, бонусы, реклама ===== */
 export const TokenIcon = (p: any) => (
   <Icon {...p}>
-    <path d="M32 12 50 22v20L32 52 14 42V22Z" {...face(0.25)} />
-    <path d="M14 22l18 10 18-10" {...line} />
-    <path d="M32 32v20" {...line} />
-    <path {...line} d="M14 22l18 10 18-10" />
+    {/* Верхняя грань — золотая, самая светлая */}
+    <path
+      d="M32 12 50 21l-18 9-18-9Z"
+      fill="rgba(251, 191, 36, 0.95)"
+    />
+    {/* Левая грань */}
+    <path
+      d="M14 21l18 9v22l-18-9Z"
+      fill="rgba(251, 191, 36, 0.7)"
+    />
+    {/* Правая грань */}
+    <path
+      d="M50 21l-18 9v22l18-9Z"
+      fill="rgba(251, 191, 36, 0.45)"
+    />
+    {/* Свечение — тонкая обводка */}
+    <path
+      d="M32 12 50 21l-18 9-18-9Z"
+      fill="none"
+      stroke="#fcd34d"
+      strokeWidth={1}
+      opacity={0.6}
+    />
+    {/* Буква TC на левой грани */}
+    <g fill="none" stroke="#78350f" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20 28h8" />
+      <path d="M24 28v10" />
+    </g>
+    {/* Буква C на правой грани */}
+    <g fill="none" stroke="#78350f" strokeWidth={1.5} strokeLinecap="round">
+      <path d="M38 32a6 6 0 0 1 0 12 6 6 0 0 1-6-6 6 6 0 0 1 6-6" />
+    </g>
   </Icon>
 )
 

@@ -17,6 +17,8 @@
   --accent-green: #a6e3a1;
   --accent-yellow: #f9e2af;
   --accent-mauve: #cba6f7;
+  --gold: #f59e0b;
+  --gold-semitransparent: rgba(251, 191, 36, 0.15);
   --btn-bg: #2a2a3e;
   --btn-hover: #45475a;
   --btn-active: #585b70;
@@ -38,6 +40,8 @@
   --accent-green: #40a860;
   --accent-yellow: #c09020;
   --accent-mauve: #8050c8;
+  --gold: #b45309;
+  --gold-semitransparent: rgba(180, 83, 9, 0.1);
   --btn-bg: #ededf8;
   --btn-hover: #dcdcf0;
   --btn-active: #cccce8;
@@ -809,20 +813,23 @@ body {
   gap: 8px;
   padding: 12px;
 }
+
 .game-panel .game-balance {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
   border-radius: 8px;
-  background: var(--accent-semitransparent, rgba(74, 158, 255, 0.15));
-  color: var(--accent, #4a9eff);
+  background: var(--gold-semitransparent, rgba(251, 191, 36, 0.15));
+  color: var(--gold, #f59e0b);
   font-weight: 600;
   font-size: 16px;
 }
+
 .game-panel .game-balance-value {
   font-family: 'Courier New', monospace;
 }
+
 .game-panel .game-section-title {
   color: var(--text-muted);
   font-size: 11px;
@@ -831,17 +838,20 @@ body {
   letter-spacing: 0.5px;
   margin-top: 4px;
 }
+
 .game-panel .game-actions {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
+
 .game-panel .game-hint {
   color: var(--text-muted);
   font-size: 11px;
   text-align: center;
   padding: 2px 0;
 }
+
 /* Скоупленный hr — не протекает в другие компоненты (REVIEW-10) */
 .game-panel hr.game-hr {
   width: 100%;
