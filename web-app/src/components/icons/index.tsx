@@ -563,3 +563,34 @@ export const PlayIcon = (p: any) => (
     <path {...line} d="M27 24l12 8-12 8Z" fill="currentColor" fillOpacity={0.4} />
   </Icon>
 )
+
+/* ===== Группа 13 · Бейджи: замок, реклама ===== */
+export const LockIcon = (p: any) => (
+  <Icon {...p}>
+    <g fill="none" stroke="currentColor" strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+      <rect x="16" y="28" width="32" height="24" rx="5" />
+      <path d="M22 28v-5a10 10 0 0 1 20 0v5" />
+    </g>
+    <circle cx="32" cy="37" r="3" fill="currentColor" />
+    <path d="M32 40v5" fill="none" stroke="currentColor" strokeWidth={SW} strokeLinecap="round" />
+  </Icon>
+)
+
+export const AdFilmIcon = (p: any) => (
+  <Icon {...p}>
+    <rect x="10" y="16" width="44" height="32" rx="4"
+      fill="none" stroke="currentColor" strokeWidth={SW} strokeLinejoin="round" />
+    <g fill="currentColor">
+      {/* перфорация слева */}
+      <rect x="14.5" y="20" width="4" height="5" rx="1" />
+      <rect x="14.5" y="29.5" width="4" height="5" rx="1" />
+      <rect x="14.5" y="39" width="4" height="5" rx="1" />
+      {/* перфорация справа */}
+      <rect x="45.5" y="20" width="4" height="5" rx="1" />
+      <rect x="45.5" y="29.5" width="4" height="5" rx="1" />
+      <rect x="45.5" y="39" width="4" height="5" rx="1" />
+      {/* Play */}
+      <path d="M28 24v16l14-8Z" />
+    </g>
+  </Icon>
+)

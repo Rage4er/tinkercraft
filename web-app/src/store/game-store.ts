@@ -1,6 +1,7 @@
-// src/store/game-store.ts — Токены, ежедневные бонусы, синхронизация
+// src/store/game-store.ts — Токены, ежедневные бонусы, синхронизация, разблокировки
 import { create } from 'zustand'
 import { getPlatform } from '../platform'
+import { getLockConfig } from './lock-config'
 
 // ─── Константы экономики ───────────────────────────────────────────
 export const TOKEN_COSTS = {
@@ -29,6 +30,7 @@ interface GameState {
   tokens: number
   lastDailyBonus: number | null
   totalModelsCreated: number
+  unlockedItems: string[]
 
   // Actions
   addTokens(amount: number): void
@@ -39,6 +41,9 @@ interface GameState {
   incrementModelsCreated(): void
   loadFromCloud(): Promise<void>
   syncToCloud(): Promise<void>
+  isUnlocked(id: string): boolean
+  unlockWithTokens(id: string): Promise<{ ok: boolean; code?: string }>
+  unlockWithAd(id: string): Promise<{ ok: boolean; code?: string }>
 }
 
 // ─── Store ─────────────────────────────────────────────────────────
@@ -46,6 +51,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   tokens: 0,
   lastDailyBonus: null,
   totalModelsCreated: 0,
+  unlockedItems: [] as string[],
 
   addTokens: (amount) => {
     set((state) => ({ tokens: state.tokens + amount }))
@@ -122,6 +128,41 @@ export const useGameStore = create<GameState>((set, get) => ({
     set((state) => ({ totalModelsCreated: state.totalModelsCreated + 1 }))
   },
 
+  // ─── Разблокировка элементов ──────────────────────────────────────
+  isUnlocked: (id: string) => {
+    const state = get()
+    if (!getLockConfig(id)) return true // нет конфига — всегда разблокировано
+    return state.unlockedItems.includes(id)
+  },
+
+  unlockWithTokens: async (id: string) => {
+    const cfg = getLockConfig(id)
+    if (!cfg) return { ok: true }
+    const state = get()
+    if (state.tokens < cfg.tokens) return { ok: false, code: 'not_enough' }
+
+    set((s) => ({
+      tokens: s.tokens - cfg.tokens,
+      unlockedItems: [...s.unlockedItems, id],
+    }))
+    await get().syncToCloud()
+    console.log(`[Game] Unlocked ${id} with ${cfg.tokens} tokens`)
+    return { ok: true, code: 'ok' }
+  },
+
+  unlockWithAd: async (id: string) => {
+    const cfg = getLockConfig(id)
+    if (!cfg?.ad) return { ok: false, code: 'no_ad' }
+
+    const rewarded = await getPlatform()?.showRewardedVideo()
+    if (!rewarded) return { ok: false, code: 'ad_skipped' }
+
+    set((s) => ({ unlockedItems: [...s.unlockedItems, id] }))
+    await get().syncToCloud()
+    console.log(`[Game] Unlocked ${id} with ad`)
+    return { ok: true, code: 'ok' }
+  },
+
   loadFromCloud: async () => {
     const platform = getPlatform()
     if (!platform) return
@@ -132,6 +173,8 @@ export const useGameStore = create<GameState>((set, get) => ({
       if (data.lastDailyBonus) set({ lastDailyBonus: data.lastDailyBonus as number })
       if (data.totalModelsCreated)
         set({ totalModelsCreated: data.totalModelsCreated as number })
+      if (data.unlockedItems)
+        set({ unlockedItems: data.unlockedItems as string[] })
     } catch (error) {
       console.error('[Game] Load from cloud failed:', error)
     }
@@ -146,6 +189,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         tokens: get().tokens,
         lastDailyBonus: get().lastDailyBonus,
         totalModelsCreated: get().totalModelsCreated,
+        unlockedItems: get().unlockedItems,
       })
     } catch (error) {
       console.error('[Game] Sync to cloud failed:', error)

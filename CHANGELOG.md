@@ -91,6 +91,18 @@ pnpm build          # Сборка в dist/
 
 ## [Unreleased]
 
+### 🏷️ Система бейджей разблокировки (Yandex monetization)
+
+- **Added:** `LockIcon`, `AdFilmIcon` — SVG-иконки для бейджей (замок, плёнка+play)
+- **Added:** `ToolBadge.tsx` — компонент бейджа (TL/BL/BR позиции)
+- **Added:** `lock-config.ts` — конфигурация заблокированных фигур (torus, cone, text3d)
+- **Added:** `UnlockModal.tsx` — модалка выбора оплаты (токены/реклама)
+- **Added:** Методы в `game-store`: `isUnlocked`, `unlockWithTokens`, `unlockWithAd`, `unlockedItems`
+- **Changed:** `LeftPanel` — фигуры с бейджами (замок TL, токены BL, реклама BR)
+- **Changed:** `game-store.ts` — `syncToCloud`/`loadFromCloud` сохраняют `unlockedItems`
+- **Changed:** `App.css` — стили бейджей (.btn-badge) и UnlockModal
+- **Added:** Переводы `unlock.*` в en/ru
+
 ### 🌐 Автоопределение языка через SDK (п. 2.14 требований)
 
 - **Added:** `YandexLanguageDetector.ts` — асинхронный i18next-детектор, получающий язык из `ysdk.environment.i18n.lang`

@@ -3,10 +3,14 @@ import { useTranslation } from "react-i18next";
 import Section from "./Section";
 import Timeline from "./Timeline";
 import ComponentTree from "./ComponentTree";
-import { OP_FILTER_LABELS } from "../constants";
+import { UnlockModal } from "./UnlockModal";
 import { ALL_SHAPES } from "../constants.tsx";
+import { OP_FILTER_LABELS } from "../constants";
 import type { ShapeType, TinkerCraftOperation, SceneObject } from "../csg/types";
 import { ChevronUpIcon, ChevronDownIcon } from "./icons";
+import { useGameStore } from "../store/game-store";
+import { getLockConfig } from "../store/lock-config";
+import { ToolBadge } from "./ToolBadge";
 
 // Отображаемое имя фигуры для списка объектов
 function getShapeLabel(obj: SceneObject, t: (key: string) => string): string {
@@ -69,6 +73,28 @@ export default function LeftPanel({
   // Filter dropdown state
   const [filtersOpen, setFiltersOpen] = useState(false);
 
+  // Unlock modal state
+  const [unlockItemId, setUnlockItemId] = useState<string | null>(null);
+  const isYandex = import.meta.env.VITE_PLATFORM === 'yandex';
+  const isUnlocked = useGameStore((s) => s.isUnlocked);
+
+  const handleShapeClick = (type: ShapeType) => {
+    const id = `shape:${type}`
+    if (isYandex && getLockConfig(id) && !isUnlocked(id)) {
+      setUnlockItemId(id)
+      return
+    }
+    if (type === 'import_mesh') return // handled elsewhere
+    onAddShape(type)
+  };
+
+  const getShapeLockInfo = (type: ShapeType) => {
+    if (!isYandex) return { locked: false, cfg: null }
+    const id = `shape:${type}`
+    const cfg = getLockConfig(id)
+    return { locked: cfg !== null && !isUnlocked(id), cfg }
+  };
+
   return (
     <div className="panel-left">
       {/* Фигуры с поиском */}
@@ -88,22 +114,29 @@ export default function LeftPanel({
               {t("leftPanel.notFound")}
             </div>
           )}
-          {filteredShapes.map((s) => (
-            <button
-              key={s.type}
-              className="shape-btn"
-              title={t('leftPanel.addShape', { label: t(s.labelKey) })}
-              disabled={!workerOk || busy}
-              onClick={() =>
-                s.type === "text"
-                  ? onShowTextModal()
-                  : onAddShape(s.type as ShapeType)
-              }
-            >
-              <span className="shape-icon">{s.icon({ size: 32 })}</span>
-              <span className="shape-lbl">{t(s.labelKey)}</span>
-            </button>
-          ))}
+          {filteredShapes.map((s) => {
+            const lockInfo = getShapeLockInfo(s.type as ShapeType)
+            return (
+              <button
+                key={s.type}
+                className="shape-btn"
+                title={t('leftPanel.addShape', { label: t(s.labelKey) })}
+                disabled={!workerOk || busy || lockInfo.locked}
+                onClick={() => handleShapeClick(s.type as ShapeType)}
+                style={{ position: 'relative' as const }}
+              >
+                <span className="shape-icon">{s.icon({ size: 32 })}</span>
+                <span className="shape-lbl">{t(s.labelKey)}</span>
+                {lockInfo.locked && lockInfo.cfg && (
+                  <>
+                    <ToolBadge kind="lock" pos="tl" />
+                    <ToolBadge kind="token" pos="bl" />
+                    {lockInfo.cfg.ad && <ToolBadge kind="ad" pos="br" />}
+                  </>
+                )}
+              </button>
+            )
+          })}
         </div>
       </Section>
 
@@ -200,6 +233,14 @@ export default function LeftPanel({
           filters={tlFilters}
         />
       </Section>
+
+      {/* Unlock Modal (Yandex monetization) */}
+      {isYandex && (
+        <UnlockModal
+          itemId={unlockItemId}
+          onClose={() => setUnlockItemId(null)}
+        />
+      )}
     </div>
   );
 }

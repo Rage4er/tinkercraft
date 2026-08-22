@@ -339,5 +339,13 @@
     "dailyDone": "Bonus claimed. Come back tomorrow!",
     "addShapes": "Add a shape to export",
     "cost": "{{amount}} ✦"
+  },
+  "unlock": {
+    "title": "Unlock this item",
+    "forTokens": "{{n}} tokens",
+    "forAd": "Free (watch ad)",
+    "notEnough": "Not enough tokens",
+    "adSkipped": "Ad was skipped",
+    "success": "Unlocked!"
   }
 }
