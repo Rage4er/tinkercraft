@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import NumInput from "./NumInput";
 import AlignButtons from "./AlignButtons";
 import CsgButtons from "./CsgButtons";
+import ColorPalette from "./ColorPalette";
 import type { ShapeParams, SceneObject } from "../csg/types";
 import { EyeIcon, EyeOffIcon, FilletIcon, FolderIcon, SaveIcon } from "./icons";
 import GamePanel from "./GamePanel";
@@ -73,12 +74,14 @@ export default function PropertiesPanel({
   // FIX (COLOR-HISTORY): Comparing draftColor against firstSelected.color was
   // always false — handleColorChange already previews the color into the store,
   // so at blur time they were equal and the 'color' operation was NEVER added
-  // to history. As a result user-assigned colors were not saved to .doodle and
-  // reset to defaults after reload. Track the target object id and the base
+  // to history. Track the target object id and the base
   // (committed) color at draft start instead.
   const [draftColor, setDraftColor] = useState<string | null>(null);
   const draftTargetIdRef = useRef<string | null>(null);
   const baseColorRef = useRef<string | null>(null);
+
+  // Toggle: показывать ли нативный color picker вместо палитры
+  const [showNativePicker, setShowNativePicker] = useState(false);
 
   const commitDraftColor = () => {
     const targetId = draftTargetIdRef.current;
@@ -196,18 +199,39 @@ export default function PropertiesPanel({
 
       <div className="props-row">
         <span className="props-label">{t("properties.color")}</span>
-        <div className="flex-row-6">
-          <div
-            className="color-swatch"
-            style={{ background: draftColor || firstSelected.color }}
-          />
-          <input
-            type="color"
-            value={draftColor || firstSelected.color}
-            className="color-input"
-            onChange={(e) => handleColorChange(e.target.value)}
-            onBlur={applyDraftColor}
-          />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          {showNativePicker ? (
+            <div className="flex-row-6">
+              <div
+                className="color-swatch"
+                style={{ background: draftColor || firstSelected.color }}
+              />
+              <input
+                type="color"
+                value={draftColor || firstSelected.color}
+                className="color-input"
+                onChange={(e) => handleColorChange(e.target.value)}
+                onBlur={applyDraftColor}
+              />
+            </div>
+          ) : (
+            <ColorPalette
+              selectedColor={draftColor || firstSelected.color}
+              onChange={(color) => handleColorChange(color)}
+              onBlur={applyDraftColor}
+            />
+          )}
+          <button
+            className="btn btn-compact btn-full"
+            onClick={() => {
+              setShowNativePicker(!showNativePicker);
+              setDraftColor(null);
+              draftTargetIdRef.current = null;
+              baseColorRef.current = null;
+            }}
+          >
+            {showNativePicker ? t("properties.palette") : t("properties.advancedPicker")}
+          </button>
         </div>
       </div>
 

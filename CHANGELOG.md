@@ -89,7 +89,16 @@ pnpm build          # Сборка в dist/
 
 ---
 
-## [Unreleased]
+ ## [Unreleased]
+
+### 🎨 Палитра Wad's Optimum 16 (цветовая схема по умолчанию)
+
+- **Added:** `constants.ts` — массив `WADS_OPTIMUM_16` (16 цветов с name, nameRu, hex, rgb)
+- **Added:** `ColorPalette.tsx` — компонент палитры с 16 цветами (hover, active state, tooltip)
+- **Changed:** `PropertiesPanel.tsx` — палитра отображается по умолчанию вместо нативного picker
+- **Changed:** `PropertiesPanel.tsx` — нативный color picker скрыт за кнопкой-переключателем
+- **Changed:** `App.css` — добавлены стили для `.color-palette-swatch`
+- **Added:** Переводы `properties.palette` и `properties.advancedPicker` в en/ru
 
 ### 🏷️ Система бейджей разблокировки (Yandex monetization)
 

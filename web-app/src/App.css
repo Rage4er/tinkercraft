@@ -888,6 +888,18 @@ body {
   cursor: pointer;
 }
 
+/* ---- Wad's Optimum 16 Palette ---- */
+.color-palette-swatch {
+  border: 2px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.color-palette-swatch:hover {
+  transform: scale(1.15);
+}
+
 .props-input {
   width: 65px;
   background: var(--bg-surface);

@@ -94,6 +94,8 @@
     "header": "Свойства",
     "type": "Тип",
     "color": "Цвет",
+    "palette": "Wad's Optimum 16",
+    "advancedPicker": "Расширенный выбор",
     "visible": "Видим",
     "yes": "Да",
     "no": "Нет",

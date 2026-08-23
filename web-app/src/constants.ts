@@ -90,6 +90,30 @@ export const OBJECT_COLORS = [
   '#f38ba8', '#94e2d5', '#fab387', '#74c7ec',
 ];
 
+// ---- Wad's Optimum 16 — curated color palette ----
+/**
+ * Wad's Optimum 16 — палитра из 16 тщательно подобранных цветов
+ * для быстрого выбора цвета объектов.
+ */
+export const WADS_OPTIMUM_16: { name: string; nameRu: string; hex: string; rgb: string }[] = [
+  { name: 'Amethyst', nameRu: 'Аметистовый', hex: '#F0A0FF', rgb: 'rgb(240, 160, 255)' },
+  { name: 'Blue', nameRu: 'Синий', hex: '#0075DC', rgb: 'rgb(0, 117, 220)' },
+  { name: 'Caramel', nameRu: 'Карамельный', hex: '#993F00', rgb: 'rgb(153, 63, 0)' },
+  { name: 'Damson', nameRu: 'Темно-сливовый', hex: '#4C005C', rgb: 'rgb(76, 0, 92)' },
+  { name: 'Ebony', nameRu: 'Черный', hex: '#191919', rgb: 'rgb(25, 25, 25)' },
+  { name: 'Forest', nameRu: 'Лесной зеленый', hex: '#005C31', rgb: 'rgb(0, 92, 49)' },
+  { name: 'Green', nameRu: 'Зеленый', hex: '#2BCE48', rgb: 'rgb(43, 206, 72)' },
+  { name: 'Honeydew', nameRu: 'Бледно-зеленый', hex: '#FFCC99', rgb: 'rgb(255, 204, 153)' },
+  { name: 'Iron', nameRu: 'Серый', hex: '#808080', rgb: 'rgb(128, 128, 128)' },
+  { name: 'Jade', nameRu: 'Нефритовый', hex: '#94FFB5', rgb: 'rgb(148, 255, 181)' },
+  { name: 'Khaki', nameRu: 'Хаки', hex: '#8F7C00', rgb: 'rgb(143, 124, 0)' },
+  { name: 'Lime', nameRu: 'Лайм', hex: '#9DCC00', rgb: 'rgb(157, 204, 0)' },
+  { name: 'Magenta', nameRu: 'Пурпурный', hex: '#C20088', rgb: 'rgb(194, 0, 136)' },
+  { name: 'Navy', nameRu: 'Темно-синий', hex: '#003380', rgb: 'rgb(0, 51, 128)' },
+  { name: 'Orange', nameRu: 'Оранжевый', hex: '#FFA405', rgb: 'rgb(255, 164, 5)' },
+  { name: 'Pink', nameRu: 'Розовый', hex: '#FFA8BB', rgb: 'rgb(255, 168, 187)' },
+];
+
 // ============================================================
 // Tooltip data — two-level tooltips for all toolbar buttons
 // Level 1 (instant): label + shortcut

@@ -94,6 +94,8 @@
     "header": "Properties",
     "type": "Type",
     "color": "Color",
+    "palette": "Wad's Optimum 16",
+    "advancedPicker": "Advanced picker",
     "visible": "Visible",
     "yes": "Yes",
     "no": "No",

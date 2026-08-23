@@ -41,7 +41,7 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 | Файл | Ответственность |
 |---|---|
 | `src/App.tsx` | Layout, keyboard shortcuts, text modal form state |
-| `src/constants.ts` | Общие константы (ALL_SHAPES, SNAP_VALUES, OP_FILTER_LABELS, spacing, epsilon) |
+| `src/constants.ts` | Общие константы (ALL_SHAPES, SNAP_VALUES, OP_FILTER_LABELS, spacing, epsilon, OBJECT_COLORS, WADS_OPTIMUM_16) |
 | `src/store/document-store.ts` | Zustand store — действия (create), 500 строк |
 | `src/store/ui-store.ts` | Zustand store — UI state (gizmo, theme, camera, modals, etc.) |
 | `src/store/helpers.ts` | Утилиты store (extractAndCenter, extractAndCenterGetAABB, computeAABB, makeObject, nextId, colorForIndex) |
@@ -56,7 +56,8 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 | `src/components/snap-utils.ts` | Привязка (snap) к геометрии: vertex, edge, face, circle |
 | `src/components/Toolbar.tsx` | Тулбар (файл, undo, view, gizmo, CSG, тема) |
 | `src/components/LeftPanel.tsx` | Палитра фигур + список объектов + история |
-| `src/components/PropertiesPanel.tsx` | Панель свойств (трансформ, resize, fillet, extrude, CSG) |
+| `src/components/PropertiesPanel.tsx` | Панель свойств (трансформ, resize, fillet, extrude, CSG, палитра цветов) |
+| `src/components/ColorPalette.tsx` | Палитра Wad's Optimum 16 — 16 цветов для быстрого выбора |
 | `src/components/TextModal.tsx` | Модалка 3D текста |
 | `src/components/StatusBar.tsx` | Статус-бар |
 | `src/components/NumInput.tsx` | Numeric input с draft-редактированием |
@@ -157,6 +158,12 @@ Worker НЕ центрирует геометрию. Центрирование 
 - Визуальный индикатор — цветная сфера (`createSnapIndicator`)
 - Цвета: vertex=красный, edge=зелёный, circle=синий, face=жёлтый
 - Константы радиусов: `SNAP_VERTEX_RADIUS=2.0`, `SNAP_EDGE_RADIUS=2.0`, `SNAP_FACE_RADIUS=2.0`, `SNAP_CIRCLE_RADIUS=3.0`
+
+### Палитра цветов (Wad's Optimum 16)
+По умолчанию в `PropertiesPanel.tsx` отображается палитра `ColorPalette.tsx` с 16 цветами из `WADS_OPTIMUM_16` (`constants.ts`):
+- Нативный `<input type="color">` скрыт за кнопкой-переключателем "Расширенный выбор"
+- Выбор цвета в палитре работает через draft-режим (preview без history, commit при blur/object switch)
+- Цвета: Amethyst, Blue, Caramel, Damson, Ebony, Forest, Green, Honeydew, Iron, Jade, Khaki, Lime, Magenta, Navy, Orange, Pink
 
 ## Известные ограничения (не баги)
 
