@@ -1,9 +1,0 @@
-[Desktop Entry]
-Name=TinkerCraft Prod (Yandex SDK)
-Comment=Запуск Yandex SDK с реальным SDK (prod-режим, app-id=572445)
-Exec=/home/small-room/GitHub/tinkercraft/start-prod.sh
-Icon=utilities-terminal
-Terminal=false
-Type=Application
-Categories=Development;
-Keywords=yandex;games;sdk;prod;
