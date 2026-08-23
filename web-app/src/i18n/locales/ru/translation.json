@@ -122,6 +122,24 @@
     "inScene": "В сцене:",
     "objects": "объектов"
   },
+  "economy": {
+    "quests": "Ежедневные задания",
+    "tokens": "Токены",
+    "dailyBonus": "Ежедневный бонус",
+    "watchAd": "Смотреть рекламу",
+    "subscription": "Подписка",
+    "rentals": "Аренда 24ч",
+    "export": "Экспорт STL",
+    "import": "Импорт STL",
+    "cashback": "Кэшбэк",
+    "noAdsLeft": "Реклама закончилась",
+    "bonusReady": "Забрать +50",
+    "adReady": "Реклама +50",
+    "questCompleted": "Задание выполнено!",
+    "subscriptionActive": "Pro активна",
+    "daysLeft": "дней осталось",
+    "expires": "Истекает"
+  },
   "leftPanel": {
     "shapes": "Фигуры",
     "searchPlaceholder": "🔍 Поиск фигуры…",

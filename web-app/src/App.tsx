@@ -11,8 +11,11 @@ import TextModal from "./components/TextModal";
 import StatusBar from "./components/StatusBar";
 import LeftPanel from "./components/LeftPanel";
 import PropertiesPanel from "./components/PropertiesPanel";
+import EconomyHUD from "./components/EconomyHUD";
+import QuestPanel from "./components/QuestPanel";
 import { useDocumentStore } from "./store/document-store";
 import { useUiStore } from "./store/ui-store";
+import { useEconomyStore } from "./store/economy-store";
 import { useShallow } from "zustand/shallow";
 import { isWorkerReady } from "./csg/worker-client";
 import { SNAP_VALUES, AUTOSAVE_DELAY_MS } from "./constants";
@@ -174,6 +177,45 @@ export default function App() {
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
   }, [theme]);
+
+  // ── Экономика: инициализация и синхронизация ──
+  const economyInitialized = useRef(false)
+
+  useEffect(() => {
+    if (economyInitialized.current) return
+    economyInitialized.current = true
+
+    const loadEconomy = async () => {
+      await useEconomyStore.getState().loadFromCloud()
+      useEconomyStore.getState().initDailyQuests()
+      useEconomyStore.getState().checkSubscriptionExpiry()
+    }
+    void loadEconomy()
+
+    // Периодическая синхронизация экономики (каждые 30 сек)
+    const syncInterval = setInterval(() => {
+      void useEconomyStore.getState().syncToCloud()
+    }, 30000)
+
+    return () => clearInterval(syncInterval)
+  }, [])
+
+  // ── Триггеры квестов при действиях ──
+  const completeQuest = useEconomyStore((s) => s.completeQuest)
+
+  useEffect(() => {
+    // Слушаем изменения в document-store для триггеров квестов
+    const unsubscribe = useDocumentStore.subscribe((state, prevState) => {
+      // Квест: добавление объекта
+      if (Object.keys(state.objects).length > Object.keys(prevState.objects).length) {
+        completeQuest('addShape:cube') // универсальный триггер
+      }
+      // Квест: изменение цвета
+      // (отслеживается через setColor в document-store)
+    })
+
+    return () => unsubscribe()
+  }, [completeQuest])
 
   useEffect(() => {
     if (workerOk) return;
@@ -654,6 +696,12 @@ export default function App() {
             onShowProjects={() => setShowPM(true)}
             onSaveToProject={saveToProject}
           />
+
+          {/* HUD экономики (токены + бонусы) */}
+          <EconomyHUD />
+
+          {/* Ежедневные квесты */}
+          <QuestPanel />
         </div>
       </div>
 

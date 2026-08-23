@@ -1826,3 +1826,72 @@ body {
   background: rgba(19, 19, 31, 0.5);
   pointer-events: none;
 }
+
+/* ─── Economy HUD ─────────────────────────────────────────────────── */
+.economy-hud {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  margin-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.economy-tokens {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+}
+
+.economy-icon {
+  font-size: 14px;
+}
+
+.economy-value {
+  font-weight: bold;
+}
+
+.economy-bonus-btn,
+.economy-ad-btn {
+  font-size: 11px;
+  padding: 3px 6px;
+  border-radius: 4px;
+}
+
+.economy-bonus-btn {
+  background: var(--accent-yellow);
+  color: var(--text-primary);
+}
+
+.economy-ad-btn {
+  background: var(--primary);
+  color: white;
+}
+
+/* ─── Quest Panel ─────────────────────────────────────────────────── */
+.quest-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.quest-item {
+  padding: 8px;
+  border-radius: 6px;
+  transition: opacity 0.2s ease;
+}
+
+.quest-progress {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--bg-secondary);
+  overflow: hidden;
+}
+
+.quest-progress-bar {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}

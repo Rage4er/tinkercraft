@@ -122,6 +122,24 @@
     "inScene": "In scene:",
     "objects": "objects"
   },
+  "economy": {
+    "quests": "Daily Quests",
+    "tokens": "Tokens",
+    "dailyBonus": "Daily Bonus",
+    "watchAd": "Watch Ad",
+    "subscription": "Subscription",
+    "rentals": "24h Rentals",
+    "export": "Export STL",
+    "import": "Import STL",
+    "cashback": "Cashback",
+    "noAdsLeft": "No ads left today",
+    "bonusReady": "Claim +50 tokens",
+    "adReady": "Watch ad for +50",
+    "questCompleted": "Quest completed!",
+    "subscriptionActive": "Pro active",
+    "daysLeft": "days left",
+    "expires": "Expires"
+  },
   "leftPanel": {
     "shapes": "Shapes",
     "searchPlaceholder": "🔍 Search shapes…",

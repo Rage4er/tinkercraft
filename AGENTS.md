@@ -40,10 +40,13 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 
 | Файл | Ответственность |
 |---|---|
-| `src/App.tsx` | Layout, keyboard shortcuts, text modal form state |
+| `src/App.tsx` | Layout, keyboard shortcuts, text modal form state, economy init |
 | `src/constants.ts` | Общие константы (ALL_SHAPES, SNAP_VALUES, OP_FILTER_LABELS, spacing, epsilon, OBJECT_COLORS, WADS_OPTIMUM_16) |
 | `src/store/document-store.ts` | Zustand store — действия (create), 500 строк |
 | `src/store/ui-store.ts` | Zustand store — UI state (gizmo, theme, camera, modals, etc.) |
+| `src/store/economy-store.ts` | Экономика: токены, подписки, аренда 24ч, квесты, кэшбэк |
+| `src/store/economy-config.ts` | Конфиг экономики (тарифы, лимиты, кулдауны) |
+| `src/store/economy-ui-config.ts` | Конфиг UI экономики (видимость элементов) |
 | `src/store/helpers.ts` | Утилиты store (extractAndCenter, extractAndCenterGetAABB, computeAABB, makeObject, nextId, colorForIndex) |
 | `src/store/types.ts` | DocumentStore interface |
 | `src/store/rebuild.ts` | rebuildFromHistory — восстановление объектов из истории операций |
@@ -58,6 +61,8 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 | `src/components/LeftPanel.tsx` | Палитра фигур + список объектов + история |
 | `src/components/PropertiesPanel.tsx` | Панель свойств (трансформ, resize, fillet, extrude, CSG, палитра цветов) |
 | `src/components/ColorPalette.tsx` | Палитра Wad's Optimum 16 — 16 цветов для быстрого выбора |
+| `src/components/EconomyHUD.tsx` | HUD экономики (токены, ежедневный бонус, реклама) |
+| `src/components/QuestPanel.tsx` | Панель ежедневных квестов с прогрессом |
 | `src/components/TextModal.tsx` | Модалка 3D текста |
 | `src/components/StatusBar.tsx` | Статус-бар |
 | `src/components/NumInput.tsx` | Numeric input с draft-редактированием |
@@ -164,6 +169,14 @@ Worker НЕ центрирует геометрию. Центрирование 
 - Нативный `<input type="color">` скрыт за кнопкой-переключателем "Расширенный выбор"
 - Выбор цвета в палитре работает через draft-режим (preview без history, commit при blur/object switch)
 - Цвета: Amethyst, Blue, Caramel, Damson, Ebony, Forest, Green, Honeydew, Iron, Jade, Khaki, Lime, Magenta, Navy, Orange, Pink
+
+### Экономика (токены, квесты, подписки)
+- `economy-store.ts` — Zustand store с persist (localStorage) + syncToCloud (Yandex SDK)
+- Доход: ежедневный бонус +50, реклама +50 (≤3/день), квесты +20/+30/+50, действия +1 (≤30/день), кэшбэк 5–25
+- Траты: экспорт 50, импорт 100, аренда 24ч (текст 75, палитра 75), подписки 700/неделя, 2000/месяц
+- Квесты: 3/день (1 лёгкое + 1 среднее + 1 сложное), сброс в полночь, прогресс по триггерам
+- Аренда 24ч: отсчёт от момента покупки (не до полуночи)
+- Clean-версия: вся экономика отключена, всё бесплатно
 
 ## Известные ограничения (не баги)
 
