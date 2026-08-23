@@ -19,7 +19,7 @@ import { useEconomyStore } from "./store/economy-store";
 import { useShallow } from "zustand/shallow";
 import { isWorkerReady } from "./csg/worker-client";
 import { SNAP_VALUES, AUTOSAVE_DELAY_MS } from "./constants";
-import { getPlatform } from "./platform";
+import { getPlatform, initPlatform } from "./platform";
 import type {
   TransformNR,
   ShapeParams,
@@ -177,6 +177,11 @@ export default function App() {
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
   }, [theme]);
+
+  // ── Инициализация платформы (Yandex SDK) ──
+  useEffect(() => {
+    initPlatform().catch((err) => console.error('[App] Platform init failed:', err))
+  }, [])
 
   // ── Экономика: инициализация и синхронизация ──
   const economyInitialized = useRef(false)

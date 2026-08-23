@@ -590,7 +590,8 @@ web-app/
 
 | Компонент | Файлы | Описание |
 |-----------|-------|----------|
-| **SDK + типизация** | `@types/ysdk`, `index.html` | Официальный SDK с полной TypeScript-типизацией |
+| **SDK + типизация** | `@types/ysdk`, `index.html` | Официальный SDK с полной TypeScript-типизацией. SDK подключён напрямую в `index.html` через `<script src="/sdk.js">` (требование платформы, п. 1.1). |
+| **Инициализация SDK** | `src/platform/sdk.ts`, `App.tsx` | Централизованная `initSdk()` + вызов `initPlatform()` при монтировании. `LoadingAPI.ready()` вызывается после полной загрузки. |
 | **IPlatform интерфейс** | `src/platform/types.ts` | Абстракция платформы |
 | **Yandex реализация** | `src/platform/yandex.ts` | Полная реализация через `@types/ysdk` |
 | **Clean stub** | `src/platform/clean.ts` | Fallback с localStorage |
