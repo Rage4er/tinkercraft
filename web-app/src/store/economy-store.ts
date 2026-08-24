@@ -85,7 +85,7 @@ interface EconomyState {
   // ── Квесты ──
   todayQuests: Quest[]
   questTriggers: Record<QuestTrigger, number>
-  completeQuest(trigger: QuestTrigger): void
+  completeQuest(trigger: QuestTrigger, sceneSize?: number): void
   getTodayQuests(): Quest[]
   initDailyQuests(): void
 
@@ -112,7 +112,7 @@ interface EconomyState {
   buyRental(key: RentalKey): Promise<{ ok: boolean; code?: string }>
 
   // ── Квесты ──
-  completeQuest(trigger: QuestTrigger): void
+  completeQuest(trigger: QuestTrigger, sceneSize?: number): void
   getTodayQuests(): Quest[]
 
   // ── Синхронизация ──
@@ -365,16 +365,34 @@ export const useEconomyStore = create<EconomyState>()(
       },
 
       // ── Квесты ──
-      completeQuest: (trigger: QuestTrigger) => {
+      completeQuest: (trigger: QuestTrigger, sceneSize?: number) => {
         const state = get()
         const quests = state.todayQuests
 
         for (const quest of quests) {
           if (quest.progress >= quest.target) continue
 
-          // Специальная обработка для sceneSize
+          // Сценарий sceneSize: максимальный размер сцены за день
           if (quest.trigger === 'sceneSize') {
-            // Это триггер "максимальный размер сцены за день" — проверяется отдельно
+            if (sceneSize !== undefined && sceneSize > quest.progress) {
+              const newProgress = sceneSize
+              const completed = newProgress >= quest.target
+
+              set((state) => ({
+                todayQuests: state.todayQuests.map((q) =>
+                  q === quest ? { ...q, progress: newProgress } : q
+                ),
+                questTriggers: { ...state.questTriggers, [trigger]: (state.questTriggers[trigger] || 0) + 1 },
+              }))
+
+              if (completed && !state.todayQuestsCompleted.includes(quest.difficulty)) {
+                set((state) => ({
+                  tokens: state.tokens + quest.reward,
+                  todayQuestsCompleted: [...state.todayQuestsCompleted, quest.difficulty],
+                }))
+                console.log(`[Economy] Quest completed (${quest.difficulty}): +${quest.reward} tokens`)
+              }
+            }
             continue
           }
 

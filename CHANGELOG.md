@@ -13,6 +13,8 @@
 - **Проверка актуальности проблем Y.2** — верифицировано состояние 4 проблем ревью: Y2.1, Y2.2, Y2.4 полностью исправлены; Y2.3 частично (не хватает триггера `export:stl`, квест `sceneSize` не прогрессирует — пропускается через `continue` в `completeQuest`) (`CODE_REVIEW.md`)
 
 ### Fixed
+- **Y2.3 Добавлен триггер export:stl** — обёртка `handleExportStl` в `App.tsx` вызывает `completeQuest('export:stl')` после экспорта (`App.tsx`)
+- **Y2.3 Исправлен прогресс sceneSize** — `completeQuest` в `economy-store.ts` принимает `sceneSize?: number`, прогресс квеста по количеству объектов в сцене (ранее пропускался через `continue`) (`economy-store.ts`, `App.tsx`)
 - **Y2.1 Удалён дублирующий game-store.ts** — удалён устаревший `game-store.ts` (V11: +5/10 токенов, вечные разблокировки), оставлен `economy-store.ts` (V12: +50 токенов, аренда 24ч, лимиты) (`store/`)
 - **Y2.2 Удалён GamePanel.tsx** — удалён `GamePanel.tsx` (использовал старый game-store), EconomyHUD + QuestPanel в App.tsx покрывают все функции (`components/`)
 - **Y2.3 Удалён UnlockModal.tsx и ToolBadge.tsx** — замки на фигурах убраны, фигуры бесплатны по V12 (`components/`)

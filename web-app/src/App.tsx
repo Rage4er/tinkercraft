@@ -208,15 +208,75 @@ export default function App() {
   // ── Триггеры квестов при действиях ──
   const completeQuest = useEconomyStore((s) => s.completeQuest)
 
+  // Обёртка exportStl с триггером квеста
+  const handleExportStl = useCallback(() => {
+    exportStl()
+    completeQuest('export:stl')
+  }, [exportStl, completeQuest])
+
   useEffect(() => {
-    // Слушаем изменения в document-store для триггеров квестов
     const unsubscribe = useDocumentStore.subscribe((state, prevState) => {
-      // Квест: добавление объекта
-      if (Object.keys(state.objects).length > Object.keys(prevState.objects).length) {
-        completeQuest('addShape:cube') // универсальный триггер
+      // ── addShape: отслеживаем появление нового объекта ──
+      const prevKeys = Object.keys(prevState.objects)
+      const currKeys = Object.keys(state.objects)
+      const newId = currKeys.find((k) => !prevKeys.includes(k))
+
+      if (newId && state.objects[newId]) {
+        const obj = state.objects[newId]
+        if (obj.shapeType === 'import_mesh') {
+          completeQuest('import:stl')
+        } else if (obj.shapeType !== 'csg') {
+          completeQuest(`addShape:${obj.shapeType}` as any)
+        }
       }
-      // Квест: изменение цвета
-      // (отслеживается через setColor в document-store)
+
+      // ── csgBoolean: появление нового csg-объекта ──
+      const csgObj = currKeys.find((k) => !prevKeys.includes(k) && state.objects[k]?.shapeType === 'csg')
+      if (csgObj) {
+        // Ищем последнюю операцию group в истории
+        const ops = state.operations.slice(0, state.historyIndex)
+        const lastGroupOp = [...ops].reverse().find((o) => o.type === 'group')
+        if (lastGroupOp && 'op' in lastGroupOp) {
+          completeQuest(`csg:${lastGroupOp.op}` as any)
+        }
+      }
+
+      // ── setColor: отслеживаем изменение цвета ──
+      for (const id of currKeys) {
+        const prev = prevState.objects[id]
+        const curr = state.objects[id]
+        if (prev && curr && prev.color !== curr.color) {
+          completeQuest('setColor')
+          break // только один вызов за тик
+        }
+      }
+
+      // ── mirrorSelected / alignSelected: отслеживаем изменения transform ──
+      // Если количество объектов не изменилось, но transform изменился у нескольких
+      let transformChanges = 0
+      for (const id of currKeys) {
+        const prev = prevState.objects[id]
+        const curr = state.objects[id]
+        if (prev && curr) {
+          const t = prev.transform
+          const ct = curr.transform
+          if (t.x !== ct.x || t.y !== ct.y || t.z !== ct.z ||
+            t.rotX !== ct.rotX || t.rotY !== ct.rotY || t.rotZ !== ct.rotZ ||
+            t.scaleX !== ct.scaleX || t.scaleY !== ct.scaleY || t.scaleZ !== ct.scaleZ) {
+            transformChanges++
+          }
+        }
+      }
+      // Движение > 1 объекта = mirror или align
+      if (transformChanges > 1 && Object.keys(prevState.objects).length === currKeys.length) {
+        completeQuest('tool:mirror')
+        completeQuest('tool:align')
+      }
+
+      // ── sceneSize: отслеживаем размер сцены ──
+      if (currKeys.length !== prevKeys.length) {
+        completeQuest('sceneSize', currKeys.length)
+      }
     })
 
     return () => unsubscribe()
@@ -545,7 +605,7 @@ export default function App() {
         theme={theme}
         onOpen={openDoodle}
         onSave={saveDoodle}
-        onExportStl={exportStl}
+        onExportStl={handleExportStl}
         onImportStl={importStl}
         onShowProjects={() => setShowPM(true)}
         onUndo={undo}
