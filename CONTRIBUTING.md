@@ -24,7 +24,7 @@ pnpm install
 
 ```bash
 pnpm dev          # dev-сервер на http://localhost:5000
-pnpm test         # 104 теста должны пройти
+pnpm test         # 236 тестов должны пройти
 pnpm typecheck    # 0 ошибок типов
 pnpm build        # production-сборка без ошибок
 ```
@@ -83,7 +83,7 @@ web-app/src/
 ### Перед каждым PR
 
 ```bash
-pnpm test         # все 104 теста проходят
+pnpm test         # все 236 тестов проходят
 pnpm typecheck    # 0 ошибок
 ```
 

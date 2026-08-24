@@ -1,6 +1,7 @@
 // src/store/lock-config.ts — Конфигурация заблокированных элементов
 // Только для Yandex-версии. В clean-версии замков нет.
 // Обновлено для экономики v1.0: аренда 24ч вместо вечных покупок
+// Все фигуры бесплатны (по ECONOMY.md) — замки только на действиях
 
 export type LockBadgeKind = 'lock' | 'ad' | 'token'
 
@@ -11,12 +12,10 @@ export interface LockConfig {
 }
 
 /**
- * Заблокированные элементы на релизе.
- * Все разблокировки — аренда 24 часа (по ECONOMY.md).
+ * Заблокированные действия на релизе V12.
+ * Все фигуры бесплатны — замки только на действиях.
  */
 export const LOCKED_ITEMS: Record<string, LockConfig> = {
-  'shape:torus': { tokens: 10, ad: true, rental24h: true },
-  'shape:cone': { tokens: 10, ad: true, rental24h: true },
   'tool:text3d': { tokens: 75, ad: false, rental24h: true },
   'tool:extendedPalette': { tokens: 75, ad: false, rental24h: true },
 }

@@ -27,7 +27,15 @@ TinkerCraft — браузерный 3D CAD-редактор. Пользоват
                    │  Viewport3D.tsx │    │  IndexedDB   │    │  worker.ts   │
                    │  Three.js render│    │  autosave    │    │  manifold-3d │
                    │  гизмо, raycast │    │  projects    │    │  (WASM CSG)  │
-                   └─────────────────┘    └──────────────┘    └──────────────┘
+                   └────────┬────────┘    └──────────────┘    └──────────────┘
+                            │
+                            ▼
+                   ┌─────────────────┐
+                   │  Platform       │
+                   │  (yandex/clean) │
+                   │  SDK, реклама,  │
+                   │  GameplayAPI    │
+                   └─────────────────┘
 ```
 
 ### Пошагово
@@ -40,6 +48,7 @@ TinkerCraft — браузерный 3D CAD-редактор. Пользоват
 6. **Worker** возвращает mesh (vertices + indices)
 7. **Store** центрирует CSG-результаты через `extractAndCenter()`
 8. **Viewport3D** обновляет Three.js меши
+9. **Platform** — при открытии/закрытии модалок `App.tsx` вызывает `GameplayAPI.stop/start()` (Yandex), `initPlatform()` инициализирует SDK при старте
 
 ---
 
@@ -79,6 +88,17 @@ Web Worker с manifold-3d (WASM). Воркер кэширует manifold-объ�
 - `doodle-io.ts` — ZIP + JSON (.doodle формат, вдохновлён CaDoodle)
 - `autosave.ts` — IndexedDB автосохранение
 - `project-manager.ts` — IndexedDB CRUD для проектов
+
+### 5. Platform Layer — `platform/`
+
+Абстракция платформы для поддержки нескольких деплой-таргетов:
+- `types.ts` — `IPlatform` интерфейс (SDK, реклама, сохранения, геймплей)
+- `yandex.ts` — реализация Yandex Games SDK (`YaGames.init()`, `LoadingAPI`, `GameplayAPI`, реклама, `player.setData/getData`)
+- `clean.ts` — stub для Open Source CAD-версии (localStorage fallback, no-op реклама)
+- `index.ts` — переключение по `VITE_PLATFORM` (yandex / clean), динамический импорт
+- `sdk.ts` — централизованная инициализация SDK (single `initSdk()` кэш)
+
+**Правило:** UI вызывает `getPlatform()` для платформенных функций. Clean-версия полностью автономна без SDK.
 
 ---
 

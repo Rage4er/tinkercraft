@@ -806,60 +806,7 @@ body {
   line-height: 1.5;
 }
 
-/* ===== GamePanel (Yandex) — скоупленные стили, чистая версия не трогается ===== */
-.game-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 12px;
-}
-
-.game-panel .game-balance {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  border-radius: 8px;
-  background: var(--gold-semitransparent, rgba(251, 191, 36, 0.15));
-  color: var(--gold, #f59e0b);
-  font-weight: 600;
-  font-size: 16px;
-}
-
-.game-panel .game-balance-value {
-  font-family: 'Courier New', monospace;
-}
-
-.game-panel .game-section-title {
-  color: var(--text-muted);
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-top: 4px;
-}
-
-.game-panel .game-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.game-panel .game-hint {
-  color: var(--text-muted);
-  font-size: 11px;
-  text-align: center;
-  padding: 2px 0;
-}
-
 /* Скоупленный hr — не протекает в другие компоненты (REVIEW-10) */
-.game-panel hr.game-hr {
-  width: 100%;
-  height: 1px;
-  border: none;
-  margin: 4px 0;
-  background: rgba(58, 58, 92, 0.35);
-}
 
 .props-row {
   display: flex;
@@ -1241,7 +1188,9 @@ body {
   padding: 6px 0;
 }
 
-/* ---- Unlock Modal (monetization) ---- */
+/* ---- Project list ---- */
+
+/* ---- Modal overlay (общий, для ProjectManagerModal и др.) ---- */
 .modal-overlay {
   position: fixed;
   inset: 0;
@@ -1252,78 +1201,6 @@ body {
   z-index: 9999;
 }
 
-.unlock-modal {
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: 24px;
-  min-width: 300px;
-  max-width: 400px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.unlock-modal h3 {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0 0 8px 0;
-  font-size: 18px;
-  color: var(--text-primary);
-}
-
-.unlock-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  padding: 12px 16px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
-  font-size: 15px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
-}
-
-.unlock-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.unlock-btn--tokens {
-  background: #78350f;
-  color: #fcd34d;
-  border-color: #92400e;
-}
-
-.unlock-btn--tokens:hover:not(:disabled) {
-  background: #92400e;
-}
-
-.unlock-btn--ad {
-  background: #5b21b6;
-  color: #e9d5ff;
-  border-color: #6d28d9;
-}
-
-.unlock-btn--ad:hover:not(:disabled) {
-  background: #6d28d9;
-}
-
-.unlock-btn--cancel {
-  background: transparent;
-  color: var(--text-muted);
-  border-color: var(--border);
-}
-
-.unlock-btn--cancel:hover:not(:disabled) {
-  background: var(--hover-bg);
-  color: var(--text-primary);
-}
-
-/* ---- Project list ---- */
 .proj-list {
   display: flex;
   flex-direction: column;
@@ -1585,58 +1462,6 @@ body {
 /* Full-width button */
 .btn-full {
   width: 100%;
-}
-
-/* ---- Badge system for locked items (Yandex monetization) ---- */
-.btn-badge {
-  position: absolute;
-  width: 50%;
-  height: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 6px;
-  border: 1px solid var(--border-color);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
-  pointer-events: none;
-  /* клик проходит сквозь бейдж на кнопку */
-  z-index: 2;
-}
-
-.btn-badge>svg {
-  width: 70%;
-  height: 70%;
-}
-
-.btn-badge--tl {
-  top: 2px;
-  left: 2px;
-}
-
-.btn-badge--bl {
-  bottom: 2px;
-  left: 2px;
-}
-
-.btn-badge--br {
-  bottom: 2px;
-  right: 2px;
-}
-
-/* Семантические цвета */
-.btn-badge--lock {
-  background: #475569;
-  color: #f8fafc;
-}
-
-.btn-badge--ad {
-  background: #6d28d9;
-  color: #ffffff;
-}
-
-.btn-badge--token {
-  background: #78350f;
-  color: #fcd34d;
 }
 
 /* ---- Error / fallback screens ---- */
