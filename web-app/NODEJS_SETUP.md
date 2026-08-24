@@ -168,14 +168,19 @@ pnpm build:yandex
 
 **Результат:** `dist-yandex/` (~3.2 MB)
 
-### Шаг 2: Переименование SDK (требование Яндекса)
+### Шаг 2: Проверка SDK (ОФИЦИАЛЬНЫЙ)
 
 ```bash
-cd /home/small-room/GitHub/tinkercraft/web-app/dist-yandex
-mv yandex-sdk.js sdk.js
+ls -lh dist-yandex/sdk.js
+head -1 dist-yandex/sdk.js
 ```
 
-> **Важно:** SDK_Yandex.md требует `/sdk.js`, а не `yandex-sdk.js`
+**Ожидаемый результат:**
+- Размер: ~3.7 KB (официальный SDK Яндекс Игр)
+- Начало: `var YaGamesLoader;` (не `import`/`export`)
+
+> **SDK_Yandex.md (п. 1.1):** SDK загружается с `sdk.games.s3.yandex.net/sdk.js`
+> Подключается в index.html как `<script src="/sdk.js"></script>` ДО app code
 
 ### Шаг 3: Проверка содержимого
 
