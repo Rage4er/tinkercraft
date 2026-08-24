@@ -182,7 +182,37 @@ head -1 dist-yandex/sdk.js
 > **SDK_Yandex.md (п. 1.1):** SDK загружается с `sdk.games.s3.yandex.net/sdk.js`
 > Подключается в index.html как `<script src="/sdk.js"></script>` ДО app code
 
-### Шаг 3: Проверка содержимого
+### Шаг 3: Проверка подключения в index.html
+
+```bash
+grep "sdk.js" dist-yandex/index.html
+```
+
+**Должно быть:**
+```html
+<script src="/sdk.js"></script>
+```
+
+✅ SDK подключён **ДО** `<script type="module">` (app code)
+
+### Шаг 4: Чек-лист корректной интеграции SDK
+
+> **Требование платформы (п. 1.1):** SDK встроен корректно, реклама вызывается через SDK
+
+| Проверка | Статус |
+|----------|--------|
+| SDK загружен синхронно через `<script src="/sdk.js">` | ✅ |
+| SDK подключён ДО app code | ✅ |
+| `YaGames.init()` вызывается в `sdk.ts` | ✅ |
+| `LoadingAPI.ready()` вызывается после init | ✅ |
+| `GameplayAPI.start()` вызывается после init | ✅ |
+| Реклама вызывается ТОЛЬКО через `ysdk.adv.*` | ✅ |
+| `stopGameplay()` при открытии рекламы | ✅ |
+| `startGameplay()` при закрытии рекламы | ✅ |
+| Обработка ошибок для всех вызовов SDK | ✅ |
+| `getBannerAdvStatus()` для sticky banner | ✅ |
+
+### Шаг 5: Проверка содержимого
 
 ```bash
 ls -la dist-yandex/
@@ -196,7 +226,7 @@ ls -la dist-yandex/
 - ✅ `purchases-catalog.json` — каталог покупок (IAP)
 - ✅ `assets/` — JS/CSS/WASM бандлы
 
-### Шаг 4: Создание ZIP-архива
+### Шаг 5: Создание ZIP-архива
 
 ```bash
 cd /home/small-room/GitHub/tinkercraft/web-app/dist-yandex
