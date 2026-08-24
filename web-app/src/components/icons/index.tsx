@@ -594,3 +594,35 @@ export const AdFilmIcon = (p: any) => (
     </g>
   </Icon>
 )
+
+/* ===== Квесты: сложность ===== */
+export const SparkIcon = (p: any) => (
+  <Icon {...p}>
+    <path
+      d="M32 12C34 24 40 30 52 32 40 34 34 40 32 52 30 40 24 34 12 32 24 30 30 24 32 12Z"
+      fill="none" stroke="currentColor" strokeWidth={SW} strokeLinejoin="round"
+    />
+  </Icon>
+)
+
+export const StarIcon = (p: any) => (
+  <Icon {...p}>
+    <path
+      d="M32 14 36.7 27.5 51 27.8 39.6 36.5 43.8 50.2 32 42 20.2 50.2 24.4 36.5 13 27.8 27.3 27.5Z"
+      fill="none" stroke="currentColor" strokeWidth={SW} strokeLinejoin="round"
+    />
+  </Icon>
+)
+
+export const TrophyIcon = (p: any) => (
+  <Icon {...p}>
+    <g fill="none" stroke="currentColor" strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20 12h24v10a12 12 0 0 1-24 0Z" />
+      <path d="M20 14h-6c0 8 3 12 8 12" />
+      <path d="M44 14h6c0 8-3 12-8 12" />
+      <path d="M32 34v8" />
+      <path d="M26 42h12l2 8H24Z" />
+      <path d="M20 50h24" />
+    </g>
+  </Icon>
+)

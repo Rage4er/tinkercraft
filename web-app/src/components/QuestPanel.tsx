@@ -1,7 +1,7 @@
 // src/components/QuestPanel.tsx — Панель ежедневных квестов
 import { useTranslation } from 'react-i18next'
 import { useEconomyStore } from '../store/economy-store'
-import { ECONOMY_UI, QUEST_LABELS, TRIGGER_LABELS } from '../store/economy-ui-config'
+import { ECONOMY_UI, DIFFICULTY_ICON, ICON_REGISTRY } from '../store/economy-ui-config'
 import Section from './Section'
 
 export default function QuestPanel() {
@@ -19,6 +19,11 @@ export default function QuestPanel() {
           const isCompleted = todayQuestsCompleted.includes(quest.difficulty)
           const progress = Math.min(quest.progress / quest.target, 1)
 
+          // Получаем иконку сложности из реестра
+          const iconKey = DIFFICULTY_ICON[quest.difficulty]
+          const IconComponent = ICON_REGISTRY[iconKey]
+          const iconSize = 16
+
           return (
             <div
               key={idx}
@@ -31,10 +36,15 @@ export default function QuestPanel() {
                 opacity: isCompleted ? 0.6 : 1,
               }}
             >
-              {/* Заголовок */}
+              {/* Заголовок с иконкой сложности */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                <span style={{ fontSize: '12px', fontWeight: 'bold' }}>
-                  {QUEST_LABELS[quest.difficulty]}
+                <span style={{ fontSize: '12px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  {IconComponent && (
+                    <IconComponent width={iconSize} height={iconSize} />
+                  )}
+                  {quest.difficulty === 'easy' ? t('economy.difficulty.easy') :
+                    quest.difficulty === 'medium' ? t('economy.difficulty.medium') :
+                      t('economy.difficulty.hard')}
                 </span>
                 <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
                   {quest.progress} / {quest.target}
@@ -43,7 +53,8 @@ export default function QuestPanel() {
 
               {/* Описание */}
               <div style={{ fontSize: '13px', marginBottom: '4px' }}>
-                {TRIGGER_LABELS[quest.trigger] || quest.trigger}
+                {/* TODO: заменить на i18n ключ */}
+                {quest.trigger}
               </div>
 
               {/* Прогресс-бар */}
@@ -67,9 +78,12 @@ export default function QuestPanel() {
                 />
               </div>
 
-              {/* Награда */}
-              <div style={{ fontSize: '11px', marginTop: '4px', color: 'var(--text-muted)' }}>
-                🎁 +{quest.reward} 💎
+              {/* Награда с иконкой токена */}
+              <div style={{ fontSize: '11px', marginTop: '4px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                {IconComponent && (
+                  <IconComponent width={14} height={14} />
+                )}
+                +{quest.reward}
               </div>
             </div>
           )

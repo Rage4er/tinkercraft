@@ -6,7 +6,7 @@ import CsgButtons from "./CsgButtons";
 import ColorPalette from "./ColorPalette";
 import type { ShapeParams, SceneObject } from "../csg/types";
 import { EyeIcon, EyeOffIcon, FilletIcon, FolderIcon, SaveIcon } from "./icons";
-import GamePanel from "./GamePanel";
+
 
 export default function PropertiesPanel({
   firstSelected,
@@ -125,13 +125,7 @@ export default function PropertiesPanel({
   }, [firstSelected?.id]);
 
   if (!firstSelected) {
-    // FIX (REVIEW-1): Игровая панель ТОЛЬКО для yandex-версии.
-    // В clean-версии — как было раньше (EmptyState).
-    const isYandex = import.meta.env.VITE_PLATFORM === "yandex";
-    if (isYandex) {
-      return <GamePanel onShowProjects={onShowProjects} />;
-    }
-
+    // FIX (REVIEW-1): В clean-версии — EmptyState.
     return (
       <>
         <div className="props-empty">
@@ -153,12 +147,13 @@ export default function PropertiesPanel({
           <div className="csg-group-title">{t("actions.save")}</div>
           {currentProjectName ? (
             <div className="text-sm text-muted" style={{ padding: "4px 12px 8px" }}>
-              📁 <strong>{currentProjectName}</strong>
+              <FolderIcon width={16} height={16} style={{ display: 'inline-block', verticalAlign: 'middle' }} />{' '}
+              <strong>{currentProjectName}</strong>
               {modified && <span className="text-warning"> •</span>}
             </div>
           ) : fileName ? (
             <div className="text-sm text-muted" style={{ padding: "4px 12px 8px" }}>
-              📄 <strong>{fileName}</strong>
+              {t("properties.unsavedProject")}
               {modified && <span className="text-warning"> •</span>}
             </div>
           ) : (
