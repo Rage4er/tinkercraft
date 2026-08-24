@@ -1,21 +1,64 @@
 // src/platform/sdk.ts — Единая точка инициализации Yandex SDK
 // YaGames.init() вызывается ОДИН РАЗ, результат кэшируется.
-// Все компоненты (i18n, platform, game-store) используют getSdk().
+// Все компоненты (i18n, platform, economy-store) используют getSdk().
+//
+// ⚠️ SDK загружается синхронно через <script src="/sdk.js"> в index.html
+// ⚠️ initSdk() вызывается ПОСЛЕ загрузки SDK в DOM
 
 import type { SDK } from 'ysdk'
 
 let _ysdk: SDK | null = null
 let _initPromise: Promise<SDK | null> | null = null
+let _waitForSdk: Promise<void> | null = null
+
+/**
+ * Дождаться загрузки SDK в DOM (если ещё не загружен).
+ * SDK загружается синхронно через <script src="/sdk.js"> в index.html.
+ */
+function waitForSdkLoaded(): Promise<void> {
+  if (_waitForSdk) return _waitForSdk
+
+  _waitForSdk = new Promise((resolve) => {
+    // SDK уже загружен
+    if ((window as any).YaGames) {
+      resolve()
+      return
+    }
+
+    // Ждём загрузки SDK
+    const checkInterval = setInterval(() => {
+      if ((window as any).YaGames) {
+        clearInterval(checkInterval)
+        resolve()
+      }
+    }, 50)
+
+    // Таймаут 5 секунд
+    setTimeout(() => {
+      clearInterval(checkInterval)
+      console.warn('[SDK] Timeout waiting for YaGames')
+      resolve()
+    }, 5000)
+  })
+
+  return _waitForSdk
+}
 
 /**
  * Инициализировать SDK один раз.
  * Возвращает ysdk или null (если SDK недоступен).
+ *
+ * ВАЖНО: SDK должен быть загружен в DOM ДО вызова этого метода.
+ * SDK загружается синхронно через <script src="/sdk.js"> в index.html.
  */
 export function initSdk(): Promise<SDK | null> {
   if (_ysdk) return Promise.resolve(_ysdk)
   if (_initPromise) return _initPromise
 
   _initPromise = (async () => {
+    // Ждём загрузки SDK в DOM
+    await waitForSdkLoaded()
+
     if (typeof window === 'undefined' || !(window as any).YaGames) {
       console.warn('[SDK] YaGames not available (clean/local mode)')
       return null
@@ -29,6 +72,11 @@ export function initSdk(): Promise<SDK | null> {
       // LoadingAPI.ready() — обязательно для модерации
       if (ysdk?.features?.LoadingAPI?.ready) {
         ysdk.features.LoadingAPI.ready()
+      }
+
+      // GameplayAPI.start() — начинаем отслеживание геймплея
+      if (ysdk?.features?.GameplayAPI?.start) {
+        ysdk.features.GameplayAPI.start()
       }
 
       return ysdk

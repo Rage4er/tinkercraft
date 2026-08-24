@@ -1,55 +1,114 @@
 // src/platform/yandex.ts — Реализация Yandex Games SDK
 // Использует централизованную инициализацию из sdk.ts (initSdk/getSdk)
+//
+// ⚠️ ВСЕ вызовы рекламы должны быть ТОЛЬКО через SDK методы
+// ⚠️ Реклама вызывается ПОСЛЕ успешной инициализации SDK
+
 import type { IPlatform } from './types'
 import type { SDK, Player } from 'ysdk'
-import { initSdk } from './sdk'
+import { initSdk, getSdk } from './sdk'
 
 class YandexPlatform implements IPlatform {
   public ysdk: SDK | null = null
   private player: Player | null = null
   private initialized = false
+  private initError: string | null = null
 
   async init(): Promise<boolean> {
-    if (this.initialized) return true
+    if (this.initialized) return this.ysdk !== null
 
-    // ✅ Централизованная инициализация — один init() на всё приложение
-    const ysdk = await initSdk()
-    if (!ysdk) {
+    try {
+      // ✅ Централизованная инициализация — один init() на всё приложение
+      const ysdk = await initSdk()
+      if (!ysdk) {
+        this.initError = 'SDK initialization failed'
+        this.initialized = true
+        console.warn('[Yandex] SDK not available, running in clean mode')
+        return false
+      }
+
+      this.ysdk = ysdk
+      console.log('[Yandex] SDK initialized successfully')
+
+      // Пробуем получить игрока
+      try {
+        this.player = await ysdk.getPlayer()
+        console.log('[Yandex] Player loaded, authorized:', this.player?.isAuthorized?.())
+      } catch {
+        console.warn('[Yandex] Player not authorized yet, guest mode')
+        this.player = null
+      }
+
       this.initialized = true
-      return false
-    }
-
-    this.ysdk = ysdk
-
-    // Пробуем получить игрока
-    try {
-      this.player = await ysdk.getPlayer()
-    } catch {
-      console.warn('[Yandex] Player not authorized yet, guest mode')
-      this.player = null
-    }
-
-    this.initialized = true
-    return true
-  }
-
-  async showFullscreenAd(): Promise<boolean> {
-    if (!this.ysdk) return false
-    try {
-      await this.ysdk.adv.showFullscreenAdv({
-        callbacks: {
-          onClose: () => console.log('[Yandex] Fullscreen ad closed'),
-          onError: (err: Error) => console.error('[Yandex] Fullscreen ad error:', err),
-        },
-      })
       return true
-    } catch {
+    } catch (e) {
+      this.initError = (e as Error).message
+      this.initialized = true
+      console.error('[Yandex] SDK init error:', e)
       return false
     }
   }
 
+  /**
+   * Показать полноэкранную рекламу
+   * ⚠️ Вызывается ТОЛЬКО ПОСЛЕ init()
+   */
+  async showFullscreenAd(): Promise<boolean> {
+    if (!this.ysdk) {
+      console.warn('[Yandex] showFullscreenAd: SDK not initialized')
+      return false
+    }
+
+    if (!this.ysdk.adv) {
+      console.warn('[Yandex] showFullscreenAd: adv API not available')
+      return false
+    }
+
+    try {
+      return new Promise<boolean>((resolve) => {
+        this.ysdk!.adv.showFullscreenAdv({
+          callbacks: {
+            onOpen: () => {
+              console.log('[Yandex] Fullscreen ad opened')
+              // Останавливаем геймплей во время рекламы
+              this.stopGameplay()
+            },
+            onClose: (wasShown: boolean = true) => {
+              console.log('[Yandex] Fullscreen ad closed, wasShown:', wasShown)
+              // Возобновляем геймплей
+              this.startGameplay()
+              resolve(wasShown)
+            },
+            onError: (err: Error) => {
+              console.error('[Yandex] Fullscreen ad error:', err)
+              // Возобновляем геймплей даже при ошибке
+              this.startGameplay()
+              resolve(false)
+            },
+          },
+        })
+      })
+    } catch (err) {
+      console.error('[Yandex] showFullscreenAd exception:', err)
+      this.startGameplay()
+      return false
+    }
+  }
+
+  /**
+   * Показать видеорекламу с вознаграждением
+   * ⚠️ Вызывается ТОЛЬКО ПОСЛЕ init()
+   */
   async showRewardedVideo(): Promise<boolean> {
-    if (!this.ysdk) return false
+    if (!this.ysdk) {
+      console.warn('[Yandex] showRewardedVideo: SDK not initialized')
+      return false
+    }
+
+    if (!this.ysdk.adv) {
+      console.warn('[Yandex] showRewardedVideo: adv API not available')
+      return false
+    }
 
     return new Promise<boolean>((resolve) => {
       let rewarded = false
@@ -57,24 +116,48 @@ class YandexPlatform implements IPlatform {
       try {
         this.ysdk!.adv.showRewardedVideo({
           callbacks: {
+            onOpen: () => {
+              console.log('[Yandex] Rewarded video opened')
+              this.stopGameplay()
+            },
             onRewarded: () => {
-              console.log('[Yandex] Rewarded!')
+              console.log('[Yandex] Rewarded! User earned reward')
               rewarded = true
             },
-            onClose: () => {
-              console.log('[Yandex] onClose, rewarded =', rewarded)
+            onClose: (wasShown: boolean = true) => {
+              console.log('[Yandex] Rewarded video closed, wasShown:', wasShown)
+              this.startGameplay()
               resolve(rewarded)
             },
             onError: (err: Error) => {
-              console.error('[Yandex] Rewarded error:', err)
+              console.error('[Yandex] Rewarded video error:', err)
+              this.startGameplay()
               resolve(false)
             },
           },
         })
-      } catch {
+      } catch (err) {
+        console.error('[Yandex] showRewardedVideo exception:', err)
+        this.startGameplay()
         resolve(false)
       }
     })
+  }
+
+  /**
+   * Проверить статус sticky banner
+   */
+  async getBannerAdvStatus(): Promise<{ stickyAdvIsShowing: boolean; reason?: string }> {
+    if (!this.ysdk?.adv) {
+      return { stickyAdvIsShowing: false, reason: 'ADV_IS_NOT_CONNECTED' }
+    }
+
+    try {
+      return await this.ysdk.adv.getBannerAdvStatus()
+    } catch (err) {
+      console.error('[Yandex] getBannerAdvStatus error:', err)
+      return { stickyAdvIsShowing: false, reason: 'UNKNOWN' }
+    }
   }
 
   getPlayer(): Player | null {
@@ -140,13 +223,21 @@ class YandexPlatform implements IPlatform {
 
   startGameplay(): void {
     if (this.ysdk?.features?.GameplayAPI?.start) {
-      this.ysdk.features.GameplayAPI.start()
+      try {
+        this.ysdk.features.GameplayAPI.start()
+      } catch (e) {
+        console.error('[Yandex] GameplayAPI.start error:', e)
+      }
     }
   }
 
   stopGameplay(): void {
     if (this.ysdk?.features?.GameplayAPI?.stop) {
-      this.ysdk.features.GameplayAPI.stop()
+      try {
+        this.ysdk.features.GameplayAPI.stop()
+      } catch (e) {
+        console.error('[Yandex] GameplayAPI.stop error:', e)
+      }
     }
   }
 
@@ -154,6 +245,7 @@ class YandexPlatform implements IPlatform {
     this.ysdk = null
     this.player = null
     this.initialized = false
+    this.initError = null
   }
 }
 
