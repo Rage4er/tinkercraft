@@ -7,6 +7,21 @@
 
 ---
 
+## [Unreleased]
+
+### Changed
+- **Проверка актуальности проблем Y.2** — верифицировано состояние 4 проблем ревью: Y2.1, Y2.2, Y2.4 полностью исправлены; Y2.3 частично (не хватает триггера `export:stl`, квест `sceneSize` не прогрессирует — пропускается через `continue` в `completeQuest`) (`CODE_REVIEW.md`)
+
+### Fixed
+- **Y2.1 Удалён дублирующий game-store.ts** — удалён устаревший `game-store.ts` (V11: +5/10 токенов, вечные разблокировки), оставлен `economy-store.ts` (V12: +50 токенов, аренда 24ч, лимиты) (`store/`)
+- **Y2.2 Удалён GamePanel.tsx** — удалён `GamePanel.tsx` (использовал старый game-store), EconomyHUD + QuestPanel в App.tsx покрывают все функции (`components/`)
+- **Y2.3 Удалён UnlockModal.tsx и ToolBadge.tsx** — замки на фигурах убраны, фигуры бесплатны по V12 (`components/`)
+- **Y2.4 Очистка lock-config.ts** — удалены замки на torus/cone, оставлены только `tool:text3d` и `tool:extendedPalette` (`store/`)
+- **Y2.5 Триггеры квестов** — добавлены все 14 триггеров: addShape (7 типов), csgBoolean (union/subtract/intersect), setColor, mirror/align, import:stl, sceneSize (`App.tsx`)
+- **Y2.6 LeftPanel.tsx** — убраны импорты useGameStore, getLockConfig, ToolBadge, UnlockModal; фигуры теперь бесплатны без замков (`components/`)
+
+---
+
 ## [1.0.0] — 2026-08-19
 
 **Первый стабильный релиз TinkerCraft Web — Open Source 3D CAD-редактор.**

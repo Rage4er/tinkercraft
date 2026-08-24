@@ -38,15 +38,256 @@
 
 ---
 
-## 📋 Активные проблемы
+## 🎮 РЕЛИЗ Y.1 — Фундамент SDK — 2026-08-21
 
-> **Статус: ✅ Активных проблем нет.** Все выявленные проблемы закрыты
-> (исправлены или признаны архитектурными / «не багами»).
-> Детальная история каждого раунда — в [`CODE_REVIEW_ARCHIVE.md`](CODE_REVIEW_ARCHIVE.md).
+| Метрика | Значение |
+|---------|----------|
+| Проблем выявлено | 0 |
+| Исправлено | 0 |
+| **Активных проблем** | **0** |
+| **Статус** | **✅ Готов** |
+
+### Что реализовано
+
+- [x] IPlatform интерфейс (types.ts)
+- [x] Yandex реализация (yandex.ts)
+- [x] Clean stub (clean.ts)
+- [x] Platform switch (index.ts)
+- [x] SDK инициализация (sdk.ts + App.tsx)
+- [x] SDK в HTML (index.html — п. 1.1)
+- [x] Gameplay API stop/start
+- [x] COEP-разделение сборок (vite.config.ts)
+- [x] Сборка dev:yandex / build:yandex
 
 ---
 
-### ✅ ИСПРАВЛЕНО — CYCLE-CSG (Cannot create cycle in tree при rebuildBuildTree) (2026-08-08)
+## 🎮 РЕЛИЗ Y.2 — Экономика V12 — 2026-08-23 (текущий)
+
+| Метрика | Значение |
+|---------|----------|
+| Проблем выявлено | 4 |
+| Исправлено | 3 |
+| **Активных проблем** | **1** |
+| **Статус** | **🔄 В работе** |
+
+### Что реализовано ✅
+
+- [x] `economy-config.ts` — все цены/лимиты V12
+- [x] `economy-store.ts` — токены, лимиты, подписки, кэшбэк, квесты
+- [x] `EconomyHUD.tsx` — HUD токенов + бонусы
+- [x] `QuestPanel.tsx` — панель квестов
+- [x] `economy-ui-config.ts` — конфиг UI + метки
+
+### Проблемы
+
+- [x] **Y2.1** CRITICAL — два стора экономики (game-store + economy-store) — **ИСПРАВЛЕНО**
+- [x] **Y2.2** CRITICAL — замки на фигурах против V12 (все фигуры бесплатны) — **ИСПРАВЛЕНО**
+- [ ] **Y2.3** HIGH — триггеры квестов (не хватает `export:stl`, `sceneSize` не прогрессирует) — **ЧАСТИЧНО**
+- [x] **Y2.4** MEDIUM — дублирование UI (EconomyHUD + GamePanel) — **ИСПРАВЛЕНО**
+
+---
+
+## 📋 Активные проблемы
+
+> **Статус: 🔄 Активных проблем 1** — Y2.3 частично исправлена (не хватает триггера `export:stl`; квест `sceneSize` не прогрессирует, т.к. пропускается в `completeQuest`).
+
+---
+
+### 🔴 Y2.1 — Два стора экономики (game-store + economy-store) — CRITICAL
+
+**Дата:** 2026-08-23
+**Приоритет:** CRITICAL
+**Статус:** ✅ **ИСПРАВЛЕНО**
+
+#### Проблема
+
+Два Zustand-стора экономики работают одновременно и конфликтуют:
+
+| Стор | Файл | Модель | Бонус | Реклама | Экспорт |
+|------|------|--------|-------|---------|---------|
+| **game-store.ts** | `src/store/game-store.ts` | Старая V11 | +5 | +10 (безлимит) | 5 токенов |
+| **economy-store.ts** | `src/store/economy-store.ts` | Новая V12 | +50 | +50 (≤3/день) | 50 токенов |
+
+**Влияние:** Игрок видит два UI-пула (EconomyHUD + GamePanel), может получить токены двумя путями, экономика несбалансирована.
+
+**Корневая причина:** game-store.ts создан в MVP (Y.1), economy-store.ts — в Y.2. При переходе на V12 старый стор не удалён.
+
+**Файлы:**
+- `src/store/game-store.ts` — **удалить** (устаревший)
+- `src/components/GamePanel.tsx` — **удалить или переписать** на economy-store
+- `src/components/PropertiesPanel.tsx` — GamePanel рендерится при отсутствии выделения
+
+#### Решение
+
+1. Удалить `game-store.ts`
+2. Удалить `GamePanel.tsx` (заменён EconomyHUD + QuestPanel)
+3. Убрать импорт GamePanel из PropertiesPanel.tsx
+4. Убрать import useGameStore из LeftPanel.tsx и UnlockModal.tsx (или перенести логику в economy-store)
+
+---
+
+### 🔴 Y2.2 — Замки на фигурах против V12 (все фигуры бесплатны) — CRITICAL
+
+**Дата:** 2026-08-23
+**Приоритет:** CRITICAL
+**Статус:** ✅ **ИСПРАВЛЕНО**
+
+#### Проблема
+
+`lock-config.ts` блокирует torus (10 токенов) и cone (10 токенов) — противоречит ECONOMY.md:
+
+> **Бесплатно навсегда:** Все примитивы (куб, сфера, цилиндр, конус, торус, призма)
+
+**Влияние:** Игрок видит замки на фигурах, которые по V12 должны быть бесплатны.
+
+**Файлы:**
+- `src/store/lock-config.ts` — содержит `LOCKED_ITEMS` с фигурами
+- `src/components/LeftPanel.tsx` — рендерит бейджи на фигурах
+- `src/components/UnlockModal.tsx` — модалка разблокировки фигур
+
+#### Решение
+
+1. Очистить `LOCKED_ITEMS` от фигур — оставить только действия:
+   ```ts
+   'tool:text3d': { tokens: 75, ad: false, rental24h: true },
+   'tool:extendedPalette': { tokens: 75, ad: false, rental24h: true },
+   'action:exportSTL': { tokens: 50, ad: true, rental24h: false },
+   'action:importSTL': { tokens: 100, ad: true, rental24h: false },
+   ```
+2. Убрать бейджи из LeftPanel.tsx для фигур
+3. Перенести бейджи на кнопки действий (экспорт, импорт, текст, палитра)
+
+---
+
+### 🟡 Y2.3 — Триггеры квестов: только 1 из 14 — HIGH
+
+**Дата:** 2026-08-23
+**Приоритет:** HIGH
+**Статус:** 🟡 **ЧАСТИЧНО ИСПРАВЛЕНО**
+
+#### Проблема
+
+В `App.tsx` только один триггер:
+```ts
+completeQuest('addShape:cube') // универсальный триггер
+```
+
+Отсутствуют 13 из 14 триггеров по ECONOMY.md:
+
+| Триггер | Статус |
+|---------|--------|
+| `addShape:cube` | ✅ Есть (но только куб) |
+| `addShape:sphere` | ❌ Нет |
+| `addShape:cylinder` | ❌ Нет |
+| `addShape:cone` | ❌ Нет |
+| `addShape:torus` | ❌ Нет |
+| `addShape:prism` | ❌ Нет |
+| `addShape:pyramid` | ❌ Нет |
+| `tool:mirror` | ❌ Нет |
+| `setColor` | ❌ Нет |
+| `tool:align` | ❌ Нет |
+| `csg:union` | ❌ Нет |
+| `csg:subtract` | ❌ Нет |
+| `csg:intersect` | ❌ Нет |
+| `export:stl` | ❌ Нет |
+| `import:stl` | ❌ Нет |
+| `sceneSize` | ❌ Нет (специальный, по размеру сцены) |
+
+**Влияние:** Квесты генерируются, но прогресс не считается — игроки получают задания, которые невозможно выполнить.
+
+**Файл:** `src/App.tsx` (useEffect с useDocumentStore.subscribe)
+
+#### Решение
+
+Добавить вызовы `completeQuest()` в document-store.ts в соответствующие actions:
+- `addShape` → `completeQuest('addShape:' + shapeType)`
+- `csgBoolean` → `completeQuest('csg:' + op)`
+- `mirrorSelected` → `completeQuest('tool:mirror')`
+- `setColor` → `completeQuest('setColor')`
+- `alignSelected` → `completeQuest('tool:align')`
+- `exportStl` → `completeQuest('export:stl')`
+- `importStl` → `completeQuest('import:stl')`
+- `sceneSize` → проверять в subscribe по `Object.keys(objects).length`
+
+#### Актуальное состояние (2026-08-23)
+
+Большинство триггеров реализовано в `App.tsx` через `useDocumentStore.subscribe`:
+
+| Триггер | Статус |
+|---------|--------|
+| `addShape:*` (все типы) | ✅ Реализован (универсальный `addShape:${shapeType}`) |
+| `csg:*` (union/subtract/intersect) | ✅ Реализован (`csg:${lastGroupOp.op}`) |
+| `setColor` | ✅ Реализован |
+| `tool:mirror` | ✅ Реализован |
+| `tool:align` | ✅ Реализован |
+| `import:stl` | ✅ Реализован |
+| `sceneSize` | ⚠️ Вызывается, но **не прогрессирует** — `completeQuest` пропускает `sceneSize` через `continue` |
+| `export:stl` | ❌ **Отсутствует** — `exportStl` в document-store.ts не вызывает `completeQuest('export:stl')` |
+
+**Осталось:**
+1. Добавить `completeQuest('export:stl')` в `exportStl` (document-store.ts) или в App.tsx
+2. Исправить обработку `sceneSize` в `completeQuest` (economy-store.ts) — сейчас `continue` пропускает прогресс
+
+---
+
+### 🟡 Y2.4 — Дублирование UI: EconomyHUD + GamePanel — MEDIUM
+
+**Дата:** 2026-08-23
+**Приоритет:** MEDIUM
+**Статус:** ✅ **ИСПРАВЛЕНО**
+
+#### Проблема
+
+Два UI-пула экономики рендерятся одновременно:
+
+| Компонент | Где | Стор | Содержимое |
+|-----------|-----|------|------------|
+| **EconomyHUD** | `App.tsx:706` | economy-store | 💎 токены, +50 бонус, +50 реклама |
+| **GamePanel** | `PropertiesPanel.tsx:132` | game-store | 💎 токены, +5 бонус, +10 реклама, экспорт за 5 |
+
+**Влияние:** Игрок видит два разных UI для одной экономики с разными значениями.
+
+**Файл:** `src/components/PropertiesPanel.tsx` — GamePanel рендерится когда `!firstSelected`
+
+#### Решение
+
+Убрать GamePanel из PropertiesPanel.tsx. EconomyHUD в App.tsx уже покрывает все функции.
+
+---
+
+## 📊 Сводка по раундам
+
+| Раунд | Проблемы | Статус |
+|-------|----------|--------|
+| **Раунд 1** (2025-07-15) | CRIT-1 (God Component), CRIT-2 (store разделение), CRIT-3 (не баг), WARN-1..8, SEC-1/2, PERF-1/2/3, TEST-1, COSM-1/2/3 | ✅ Все исправлены |
+| **Раунд 3** (2025-07-16) | CRIT-R3-1/2/3, WARN-R3-1..8, PERF, TEST, STRUCT | ✅ Все исправлены |
+| **Раунд 4** (2026-07-16) | CRIT-R4-1/2/3, WARN-R4-1..7, LOW-R4-1/2/3 | ✅ Все исправлены |
+| **Раунд 5** (2026-07-16) | CRIT-R5-1/2, WARN-R5-1/2/3, LOW-R5-1/2/3, Worker cache sync | ✅ Все исправлены |
+| **Раунд 6** (2026-07-16) | CRIT-R6-1/2/3, WARN-R6-1..6, PERF-R6-1/2, Q-R6-1/2/3, SEC-R6-1 | ✅ Все исправлены |
+| **Раунд 7** (2026-07-16) | ERR-1..6, PART-1..6 — верификация, точность ~78% | ✅ Задокументировано |
+| **Раунд 8** (2026-07-16) | CRIT-R8-1/2/3 (WASM leak, race condition, Prototype Pollution) | ✅ Все исправлены |
+| **Раунд 9** (2026-07-21) | CRIT-CSG-1/2/3 (CSG координаты, цепочка CSG) | ✅ Все исправлены |
+| **Раунд 11** (2026-07-21) | UX-2/3/4 (фильтры, extrude, mirror) | ✅ Все исправлены |
+| **Раунд 12** (2026-07-21) | CRIT-MIRROR-1, UX-5 (mirror rotation, ruler click-click) | ✅ Все исправлены |
+| **Раунд 14** (2026-07-21) | CRIT-MIRROR-1/2, CRIT-RESIZE-1/2, UX-5/6 | ✅ Все исправлены |
+| **Раунд 15** (2026-07-21) | CRIT-RESIZE-1/2, UX-6 | ✅ Все исправлены |
+| **BUG-CSG-POS** (2026-07-25) | BUG-CSG-POS-1/2 (CSG позиционирование, stale cache) | ✅ Исправлено |
+| **BUG-CSG-POS-5/6** (2026-07-26) | BUG-CSG-POS-5/6 (moveTreeNode рекурсия, двойное TRS) | ✅ Исправлено |
+| **Раунд 16 — 17 исправлений** (2026-07-26) | CRIT-R16-1..4, PERF-R16-2/3/4, CODE-R16-1/2/3/4, SEC-R16-1/2/3, TEST-R16-2/3 | ✅ Исправлено |
+| **Раунд 17 + SourceCraft** (2025-07-31) | CRIT-17-1 (boolean hash), CRIT-17-2 (resizeObject try/catch), HIGH-1..5, LOW-1..8 | ✅ Все исправлены |
+| **SourceCraft — 38 проблем** (2026-07-31) | CRIT-1..12 (treeNodes, busy, drag-select, WASM leak, etc.), MED Store/CSG/UI/IO (12), LOW (12) | ✅ Все исправлены |
+| **Mirror boolean/non-manifold** (2026-08-01) | MIRROR-BOOLEAN (finalTransform из centroid), MIRROR-NONMANIFOLD (workerMirrorObject для import_mesh) | ✅ Исправлено |
+| **Раунд 18 — 138 проблем** (2026-08-01) | CRIT-18 (5), HIGH-18 (27), MED-18 (56), LOW-18 (50) — 4 слоя (Store, CSG, UI, IO) | ✅ Все закрыты (64 исправлено, 74 архитектурно/НЕ БАГ) |
+| **Раунд 19 — 12 проблем** (2026-08-02) | MIRROR-19-1..12 (глубокий аудит mirror) | ✅ Все закрыты (6 исправлено, 5 неактуально, 1 «не баг») |
+| **Раунд 20 — CSG-PARAM** (2026-08-03) | CSG-PARAM-1/2/3 (createBakedNode→createBooleanNode, localTransform, дубликаты createPrimitiveNode) | ✅ **Все исправлены** |
+| **MIRROR-CSG-RS** (2026-08-07) | MIRROR-CSG-RS (потеря rotation/scale при булевых операциях над зеркальными CSG-результатами) | ✅ **Исправлено** |
+| **CYCLE-CSG** (2026-08-08) | CYCLE-CSG (Cannot create cycle in tree — дети CSG-операции отсутствуют при rebuildBuildTree) | ✅ **Исправлено** |
+| **7.5.4 — Тесты цепочек** (2026-08-08) | 15 тестов: CSG-цепочки, Mirror+CSG, Undo/Redo, Jump to history | ✅ **Завершено** |
+| **7.5.5 — Финальная полировка** (2026-08-13) | devLog, IconButton, тултипы, Layout тулбара, [DIAG:*] → dev mode, иконки Timeline, имя проекта в PropertiesPanel, тултипы Align | ✅ **Завершено** |
+| **Фаза 7 — Завершение** (2026-08-05) | Все проблемы Раундов 16–20 верифицированы и закрыты. Фаза 7 официально завершена. | ✅ **Завершена** |
+| **Фаза 7.5 — Параметрический скелет** (2026-08-05) | Инфраструктура: createBooleanNode ✅, rebuild boolean ✅, mirror-store ✅, syncObjectsForOperation ✅. Тестирование цепочек ✅, финальная полировка ✅. | ✅ **Завершена** |
+| **🎉 РЕЛИЗ v1.0.0** (2026-08-19) | Все ~291 проблем закрыты, 0 активных, готов к деплою | **✅ РЕЛИЗ** |
+| **Y2 — Экономика V12** (2026-08-23) | 4 проблемы: 2 CRITICAL, 2 HIGH/MEDIUM → 3 исправлено, 1 частично | 🔄 **Активна 1 (Y2.3)** |
 
 **Проблема:** Ошибка `Cannot create cycle in tree: obj_7 → csg_8 or obj_5 → csg_8` при `jumpToHistory`, `loadFromProject`, `undo/redo`. При восстановлении дерева из истории boolean-узлы создавались без проверки существования детей (`op.ids[0]`, `op.ids[1]`). Дети могли быть удалены из `objects` (через `delete`), но оставаться в операции `group` → `createBooleanNode` падал с ошибкой циклической зависимости.
 
@@ -115,14 +356,16 @@
 
 | Метрика | Значение |
 |---------|----------|
-| Всего выявлено проблем | ~291 (за всё время) |
+| Всего выявлено проблем | ~295 (за всё время) |
 | Исправлено | ~176 |
 | Архитектурные / НЕ БАГ | ~115 |
-| **Активных проблем** | **0** |
+| **Активных проблем** | **1** |
 | **Фаза 7** | **✅ Завершена (2026-08-05)** |
 | **Фаза 7.5** | **✅ Завершена (2026-08-13)** |
 | **Фаза 7.6** | **✅ Завершена (2026-08-13)** |
 | **🎉 РЕЛИЗ v1.0.0** | **✅ 2026-08-19** |
+| **🎮 Y.1 Фундамент SDK** | **✅ 2026-08-21** |
+| **🎮 Y.2 Экономика V12** | **🔄 2026-08-23 — 1 активная (Y2.3 частично)** |
 | Точность ревью (Раунд 16) | ~50% (8/18 полностью верных) |
 | Точность ревью (Раунд 17 + SourceCraft) | ~83% (12.5/15 подтверждено) |
 | Точность ревью (Раунд 18) | ✅ ЗАВЕРШЕНО (138/138 закрыто) |
