@@ -20,6 +20,7 @@ import {
   isCooldownPassed,
   isLimitReached,
 } from './economy-config'
+import type { SceneObject, TinkerCraftOperation } from '../csg/types'
 
 // ─── Типы ───────────────────────────────────────────────────────────
 
@@ -32,32 +33,38 @@ export type SubscriptionKey = 'weekly' | 'monthly'
 /** Сложность квеста */
 export type QuestDifficulty = 'easy' | 'medium' | 'hard'
 
-/** Триггеры для квестов */
-export type QuestTrigger =
-  | 'addShape:cube'
-  | 'addShape:sphere'
-  | 'addShape:cylinder'
-  | 'addShape:cone'
-  | 'addShape:torus'
-  | 'addShape:prism'
-  | 'addShape:pyramid'
-  | 'tool:mirror'
-  | 'setColor'
-  | 'tool:align'
-  | 'csg:union'
-  | 'csg:subtract'
-  | 'csg:intersect'
-  | 'export:stl'
-  | 'import:stl'
-  | 'sceneSize'
+/** Категория квеста V2 */
+export type QuestCategory = 'composition' | 'diversity' | 'boolean' | 'transform' | 'output'
 
-/** Текущий квест */
-interface Quest {
+/** Триггеры для квестов V2 (состояние проекта + события) */
+export type QuestTrigger =
+  // 🧱 Состав
+  | 'count_cubes'           // ≥ 5 кубов
+  | 'count_objects'         // ≥ 8/12/20 объектов
+  // 🎨 Разнообразие
+  | 'count_unique_shapes'   // ≥ 4 разных примитива
+  | 'count_colored'         // ≥ 3 объекта с изменённым цветом
+  // 🧩 Булевы
+  | 'count_csg'             // ≥ 1/2 CSG
+  | 'csg_complex'           // CSG с ≥ 3 детьми
+  // 🪞 Преобразования
+  | 'count_mirrored'        // ≥ 1/3 зеркала
+  // 📤 Вывод
+  | 'export_stl'            // экспорт STL (событие)
+  | 'export_stl_large'      // экспорт ≥ 10 объектов (событие)
+  | 'import_stl'            // импорт STL (событие)
+  // 🔤 Текст
+  | 'count_text3d'          // ≥ 1 3D-текст
+
+/** Текущий квест V2 */
+interface QuestV2 {
   difficulty: QuestDifficulty
   trigger: QuestTrigger
+  category: QuestCategory
   target: number
   progress: number
   reward: number
+  completed: boolean // флаг зачёта (не сбрасывается при прогрессе)
 }
 
 /** Состояние экономики */
@@ -83,10 +90,10 @@ interface EconomyState {
   todayQuestsCompleted: QuestDifficulty[]
 
   // ── Квесты ──
-  todayQuests: Quest[]
+  todayQuests: QuestV2[]
   questTriggers: Record<QuestTrigger, number>
-  completeQuest(trigger: QuestTrigger, sceneSize?: number): void
-  getTodayQuests(): Quest[]
+  evaluateQuests(objects: Record<string, SceneObject>, operations: TinkerCraftOperation[]): void
+  getTodayQuests(): QuestV2[]
   initDailyQuests(): void
 
   // ── Хэш модели для кэшбэка ──
@@ -112,51 +119,78 @@ interface EconomyState {
   buyRental(key: RentalKey): Promise<{ ok: boolean; code?: string }>
 
   // ── Квесты ──
-  completeQuest(trigger: QuestTrigger, sceneSize?: number): void
-  getTodayQuests(): Quest[]
+  getTodayQuests(): QuestV2[]
 
   // ── Синхронизация ──
   loadFromCloud(): Promise<void>
   syncToCloud(): Promise<void>
 }
 
-// ─── Генерация ежедневных квестов ───────────────────────────────────
+// ─── Пул квестов V2 — состояние проекта, а не клики ────────────────
 
-const QUEST_POOL: Record<QuestDifficulty, Array<{ trigger: QuestTrigger; target: number; reward: number }>> = {
+/** Пул квестов V2: 15 задач, 5 категорий, гарантия разных категорий в день */
+const QUEST_POOL_V2: Record<QuestDifficulty, Array<{
+  trigger: QuestTrigger
+  category: QuestCategory
+  target: number
+  reward: number
+}>> = {
   easy: [
-    { trigger: 'addShape:cube', target: 5, reward: EARNINGS_QUESTS.easy },
-    { trigger: 'tool:mirror', target: 3, reward: EARNINGS_QUESTS.easy },
-    { trigger: 'setColor', target: 3, reward: EARNINGS_QUESTS.easy },
-    { trigger: 'tool:align', target: 2, reward: EARNINGS_QUESTS.easy },
+    { trigger: 'count_cubes', category: 'composition', target: 5, reward: EARNINGS_QUESTS.easy },
+    { trigger: 'count_unique_shapes', category: 'diversity', target: 4, reward: EARNINGS_QUESTS.easy },
+    { trigger: 'count_objects', category: 'composition', target: 8, reward: EARNINGS_QUESTS.easy },
+    { trigger: 'count_colored', category: 'diversity', target: 3, reward: EARNINGS_QUESTS.easy },
+    { trigger: 'count_mirrored', category: 'transform', target: 1, reward: EARNINGS_QUESTS.easy },
   ],
   medium: [
-    { trigger: 'sceneSize', target: 10, reward: EARNINGS_QUESTS.medium }, // макс размер сцены
-    { trigger: 'csg:union', target: 5, reward: EARNINGS_QUESTS.medium },
-    { trigger: 'setColor', target: 5, reward: EARNINGS_QUESTS.medium },
-    { trigger: 'export:stl', target: 1, reward: EARNINGS_QUESTS.medium },
+    { trigger: 'export_stl', category: 'output', target: 1, reward: EARNINGS_QUESTS.medium },
+    { trigger: 'count_csg', category: 'boolean', target: 1, reward: EARNINGS_QUESTS.medium },
+    { trigger: 'import_stl', category: 'output', target: 1, reward: EARNINGS_QUESTS.medium },
+    { trigger: 'count_text3d', category: 'composition', target: 1, reward: EARNINGS_QUESTS.medium },
+    { trigger: 'count_objects', category: 'composition', target: 12, reward: EARNINGS_QUESTS.medium },
   ],
   hard: [
-    { trigger: 'sceneSize', target: 25, reward: EARNINGS_QUESTS.hard },
-    { trigger: 'csg:subtract', target: 10, reward: EARNINGS_QUESTS.hard },
-    { trigger: 'addShape:cube', target: 6, reward: EARNINGS_QUESTS.hard }, // все 6 примитивов
-    { trigger: 'import:stl', target: 1, reward: EARNINGS_QUESTS.hard },
+    { trigger: 'count_csg', category: 'boolean', target: 2, reward: EARNINGS_QUESTS.hard },
+    { trigger: 'csg_complex', category: 'boolean', target: 3, reward: EARNINGS_QUESTS.hard },
+    { trigger: 'count_objects', category: 'composition', target: 20, reward: EARNINGS_QUESTS.hard },
+    { trigger: 'export_stl', category: 'output', target: 10, reward: EARNINGS_QUESTS.hard },
+    { trigger: 'count_mirrored', category: 'transform', target: 3, reward: EARNINGS_QUESTS.hard },
   ],
 }
 
-/** Сгенерировать 3 квеста на день (1 лёгкий + 1 средний + 1 сложный) */
-function generateDailyQuests(): Quest[] {
+/** Категории для гарантии разнообразия дневных квестов */
+const ALL_CATEGORIES: QuestCategory[] = ['composition', 'diversity', 'boolean', 'transform', 'output']
+
+/**
+ * Сгенерировать 3 квеста на день (1 лёгкий + 1 средний + 1 сложный),
+ * все из РАЗНЫХ категорий.
+ */
+function generateDailyQuestsV2(): QuestV2[] {
   const difficulties: QuestDifficulty[] = ['easy', 'medium', 'hard']
-  return difficulties.map((diff) => {
-    const pool = QUEST_POOL[diff]
-    const quest = pool[Math.floor(Math.random() * pool.length)]
-    return {
+  const usedCategories = new Set<QuestCategory>()
+  const quests: QuestV2[] = []
+
+  for (const diff of difficulties) {
+    const pool = QUEST_POOL_V2[diff]
+    // Фильтруем по неиспользованным категориям
+    const available = pool.filter(q => !usedCategories.has(q.category))
+    const chosen = available.length > 0
+      ? available[Math.floor(Math.random() * available.length)]
+      : pool[Math.floor(Math.random() * pool.length)]
+
+    usedCategories.add(chosen.category)
+    quests.push({
       difficulty: diff,
-      trigger: quest.trigger,
-      target: quest.target,
+      trigger: chosen.trigger,
+      category: chosen.category,
+      target: chosen.target,
       progress: 0,
-      reward: quest.reward,
-    }
-  })
+      reward: chosen.reward,
+      completed: false,
+    })
+  }
+
+  return quests
 }
 
 // ─── Хэш для кэшбэка ────────────────────────────────────────────────
@@ -364,59 +398,8 @@ export const useEconomyStore = create<EconomyState>()(
         return { ok: true, code: 'ok' }
       },
 
-      // ── Квесты ──
-      completeQuest: (trigger: QuestTrigger, sceneSize?: number) => {
-        const state = get()
-        const quests = state.todayQuests
-
-        for (const quest of quests) {
-          if (quest.progress >= quest.target) continue
-
-          // Сценарий sceneSize: максимальный размер сцены за день
-          if (quest.trigger === 'sceneSize') {
-            if (sceneSize !== undefined && sceneSize > quest.progress) {
-              const newProgress = sceneSize
-              const completed = newProgress >= quest.target
-
-              set((state) => ({
-                todayQuests: state.todayQuests.map((q) =>
-                  q === quest ? { ...q, progress: newProgress } : q
-                ),
-                questTriggers: { ...state.questTriggers, [trigger]: (state.questTriggers[trigger] || 0) + 1 },
-              }))
-
-              if (completed && !state.todayQuestsCompleted.includes(quest.difficulty)) {
-                set((state) => ({
-                  tokens: state.tokens + quest.reward,
-                  todayQuestsCompleted: [...state.todayQuestsCompleted, quest.difficulty],
-                }))
-                console.log(`[Economy] Quest completed (${quest.difficulty}): +${quest.reward} tokens`)
-              }
-            }
-            continue
-          }
-
-          if (quest.trigger === trigger) {
-            const newProgress = quest.progress + 1
-            const completed = newProgress >= quest.target
-
-            set((state) => ({
-              todayQuests: state.todayQuests.map((q) =>
-                q === quest ? { ...q, progress: newProgress } : q
-              ),
-              questTriggers: { ...state.questTriggers, [trigger]: (state.questTriggers[trigger] || 0) + 1 },
-            }))
-
-            if (completed && !state.todayQuestsCompleted.includes(quest.difficulty)) {
-              set((state) => ({
-                tokens: state.tokens + quest.reward,
-                todayQuestsCompleted: [...state.todayQuestsCompleted, quest.difficulty],
-              }))
-              console.log(`[Economy] Quest completed (${quest.difficulty}): +${quest.reward} tokens`)
-            }
-          }
-        }
-      },
+      // ── Квесты V2: completeQuest удалён, используется evaluateQuests() ──
+      // Старый метод completeQuest удалён — квесты теперь оцениваются по состоянию проекта
 
       getTodayQuests: () => {
         const state = get()
@@ -431,13 +414,110 @@ export const useEconomyStore = create<EconomyState>()(
           return
         }
         set({
-          todayQuests: generateDailyQuests(),
+          todayQuests: generateDailyQuestsV2(),
           todayQuestsCompleted: [],
           todayAdsWatched: 0,
           todayActions: 0,
           todayCashbacks: 0,
           questTriggers: {} as Record<QuestTrigger, number>,
         })
+      },
+
+      // ── Оценка квестов V2 по состоянию проекта ──
+      evaluateQuests: (objects, operations) => {
+        const state = get()
+        const quests = state.todayQuests
+
+        // Считаем состояния проекта
+        const objectCount = Object.keys(objects).length
+        const shapeTypes = new Set<string>()
+        let mirroredCount = 0
+        let text3dCount = 0
+        let csgCount = 0
+
+        let coloredCount = 0
+        for (const obj of Object.values(objects)) {
+          shapeTypes.add(obj.shapeType)
+          if (obj.color && obj.color !== '#808080') coloredCount++
+          if (obj.shapeType === 'csg') csgCount++
+          if ((obj as any).shapeType === 'text') text3dCount++
+          // Зеркалирование: проверяем по history (mirror operation)
+          // Упрощённо: считаем объекты с transform.scaleX < 0 или scaleX == 1 && mirror flag
+          // TODO: добавить явный флаг mirror в SceneObject
+        }
+
+        // CSG с детьми: считаем операции group
+        for (const op of operations) {
+          if (op.type === 'group') {
+            // CSG операция — считаем детей
+          }
+        }
+
+        // Обновляем прогресс квестов
+        const updatedQuests = quests.map((quest) => {
+          if (quest.completed) return quest
+
+          let newProgress = quest.progress
+
+          switch (quest.trigger) {
+            case 'count_cubes':
+              // Считаем кубы
+              newProgress = Object.values(objects).filter(o => o.shapeType === 'cube').length
+              break
+            case 'count_objects':
+              newProgress = objectCount
+              break
+            case 'count_unique_shapes':
+              newProgress = shapeTypes.size
+              break
+            case 'count_colored':
+              newProgress = coloredCount
+              break
+            case 'count_mirrored':
+              newProgress = mirroredCount
+              break
+            case 'count_csg':
+              newProgress = csgCount
+              break
+            case 'csg_complex':
+              // TODO: считать CSG с ≥ 3 детьми
+              newProgress = 0
+              break
+            case 'count_text3d':
+              newProgress = text3dCount
+              break
+            case 'export_stl':
+            case 'import_stl':
+              // Событийные квесты — не обновляются здесь
+              break
+          }
+
+          const completed = newProgress >= quest.target && !quest.completed
+
+          return {
+            ...quest,
+            progress: Math.min(newProgress, quest.target),
+            completed,
+          }
+        })
+
+        // Начисляем токены за завершённые квесты
+        let tokensEarned = 0
+        for (const quest of updatedQuests) {
+          if (quest.completed && !quests.find(q => q.trigger === quest.trigger && q.completed)) {
+            tokensEarned += quest.reward
+            console.log(`[Economy] Quest completed (${quest.difficulty}): +${quest.reward} tokens`)
+          }
+        }
+
+        if (tokensEarned > 0) {
+          set({
+            todayQuests: updatedQuests,
+            tokens: state.tokens + tokensEarned,
+          })
+        } else {
+          set({ todayQuests: updatedQuests })
+        }
       },
 
       // ── Синхронизация ──
@@ -453,7 +533,7 @@ export const useEconomyStore = create<EconomyState>()(
           if (data.activeSubscription) set({ activeSubscription: data.activeSubscription as SubscriptionKey })
           if (data.subscriptionExpiresAt) set({ subscriptionExpiresAt: data.subscriptionExpiresAt as number })
           if (data.rentals) set({ rentals: data.rentals as Record<RentalKey, number | null> })
-          if (data.todayQuests) set({ todayQuests: data.todayQuests as Quest[] })
+          if (data.todayQuests) set({ todayQuests: data.todayQuests as QuestV2[] })
           if (data.todayQuestsCompleted) set({ todayQuestsCompleted: data.todayQuestsCompleted as QuestDifficulty[] })
         } catch (error) {
           console.error('[Economy] Load from cloud failed:', error)

@@ -20,22 +20,23 @@ export const QUEST_LABELS = {
   hard: '🏆 Сложное',
 } as const
 
-/** Метки для триггеров квестов */
+/** Метки для триггеров квестов V2 */
 export const TRIGGER_LABELS: Record<string, string> = {
-  'addShape:cube': 'Добавь куб',
-  'addShape:sphere': 'Добавь сферу',
-  'addShape:cylinder': 'Добавь цилиндр',
-  'addShape:cone': 'Добавь конус',
-  'addShape:torus': 'Добавь тор',
-  'addShape:prism': 'Добавь призму',
-  'addShape:pyramid': 'Добавь пирамиду',
-  'tool:mirror': 'Отрази зеркалом',
-  'setColor': 'Измени цвет',
-  'tool:align': 'Выровняй объект',
-  'csg:union': 'CSG: Объединение',
-  'csg:subtract': 'CSG: Вычитание',
-  'csg:intersect': 'CSG: Пересечение',
-  'export:stl': 'Экспорт STL',
-  'import:stl': 'Импорт STL',
-  'sceneSize': 'Размер сцены',
+  // 🧱 Состав
+  'count_cubes': 'Кубовая база (≥ 5 кубов)',
+  'count_objects': 'Непустая сцена (≥ {n} объектов)',
+  // 🎨 Разнообразие
+  'count_unique_shapes': 'Разнообразие (≥ {n} разных примитива)',
+  'count_colored': 'Маляр (≥ {n} объектов с цветом)',
+  // 🧩 Булевы
+  'count_csg': 'Булев дебют (≥ {n} CSG)',
+  'csg_complex': 'Сложная геометрия (CSG с ≥ 3 детьми)',
+  // 🪞 Преобразования
+  'count_mirrored': 'Зазеркалье (≥ {n} зеркал)',
+  // 📤 Вывод
+  'export_stl': 'Первая выгрузка (экспорт STL)',
+  'export_stl_large': 'Достойная печать (экспорт ≥ 10 объектов)',
+  'import_stl': 'Чужая геометрия (импорт STL)',
+  // 🔤 Текст
+  'count_text3d': 'Гравировка (≥ 1 3D-текст)',
 } as const

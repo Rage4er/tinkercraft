@@ -31,6 +31,7 @@ import { downloadStl } from '../io/stl-export'
 import { openStlFilePicker, parseStlFile } from '../io/stl-import'
 import { autosaveSession, restoreSession } from '../io/autosave'
 import i18n from '../i18n'
+import { useEconomyStore } from './economy-store'
 
 export { computeAABB, extractAndCenterInPlace, extractAndCenterGetAABB, computeWorldAABB } from './helpers'
 import { computeAABB, extractAndCenterInPlace, extractAndCenterGetAABB, computeWorldAABB, makeObject, nextId, colorForIndex } from './helpers'
@@ -965,17 +966,21 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
 
   // ── Save .doodle ──
   saveDoodle: async () => {
-    const { operations, historyIndex, fileName } = get()
+    const { operations, historyIndex, fileName, objects } = get()
     const opsToSave = operations.slice(0, historyIndex)
     const blob = await serializeDoodle(opsToSave)
     downloadBlob(blob, (fileName ?? 'untitled') + (fileName?.endsWith('.doodle') ? '' : '.doodle'))
     set({ modified: false })
+    // Квесты V2: оценка по состоянию проекта при сохранении
+    useEconomyStore.getState().evaluateQuests(objects, operations)
   },
 
   // ── Export STL ──
   exportStl: () => {
     const { objects, fileName } = get()
     downloadStl(Object.values(objects), (fileName?.replace(/\.doodle$/, '') ?? i18n.t('app.name')) + '.stl')
+    // Квесты V2: оценка по состоянию проекта
+    useEconomyStore.getState().evaluateQuests(objects, get().operations)
   },
 
   // ── Resize dims ──
