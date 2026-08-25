@@ -64,35 +64,33 @@ class YandexPlatform implements IPlatform {
       return false
     }
 
-    try {
-      return new Promise<boolean>((resolve) => {
+    return new Promise<boolean>((resolve) => {
+      try {
         this.ysdk!.adv.showFullscreenAdv({
           callbacks: {
-            onOpen: () => {
-              console.log('[Yandex] Fullscreen ad opened')
-              // Останавливаем геймплей во время рекламы
-              this.stopGameplay()
-            },
-            onClose: (wasShown: boolean = true) => {
+            onClose: (wasShown) => {
               console.log('[Yandex] Fullscreen ad closed, wasShown:', wasShown)
-              // Возобновляем геймплей
-              this.startGameplay()
-              resolve(wasShown)
+              // Обязательно возобновляем геймплей после закрытия рекламы
+              if (this.ysdk?.features?.GameplayAPI?.start) {
+                this.ysdk.features.GameplayAPI.start()
+              }
             },
-            onError: (err: Error) => {
+            onError: (err) => {
+              // Ошибка загрузки рекламы (AdBlock, нет сети и т.д.) — не блокируем игру
               console.error('[Yandex] Fullscreen ad error:', err)
-              // Возобновляем геймплей даже при ошибке
-              this.startGameplay()
-              resolve(false)
-            },
-          },
+              // Обязательно возобновляем геймплей даже при ошибке
+              if (this.ysdk?.features?.GameplayAPI?.start) {
+                this.ysdk.features.GameplayAPI.start()
+              }
+            }
+          }
         })
-      })
-    } catch (err) {
-      console.error('[Yandex] showFullscreenAd exception:', err)
-      this.startGameplay()
-      return false
-    }
+        resolve(true)
+      } catch (err) {
+        console.error('[Yandex] showFullscreenAd exception:', err)
+        resolve(false)
+      }
+    })
   }
 
   /**

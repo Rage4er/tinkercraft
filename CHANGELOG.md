@@ -9,6 +9,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- **Yandex SDK модерация** — исправлены критические проблемы встраивания SDK (п. 1.1 требований): `base: './'` вместо `'/'` для относительных путей, CDN SDK вместо локального лоадера (`vite.config.ts`), `manifest.json` с относительными путём и `start_url` (`public/manifest.json`), убран дублирующий `<script src="/sdk.js">` из `index.html` (`index.html`), обработка ошибок в callbacks рекламы с обязательным `GameplayAPI.start()` при ошибке (`src/platform/yandex.ts`)
+
 ### Changed
 - **Проверка актуальности проблем Y.2** — верифицировано состояние 4 проблем ревью: Y2.1, Y2.2, Y2.4 полностью исправлены; Y2.3 частично (не хватает триггера `export:stl`, квест `sceneSize` не прогрессирует — пропускается через `continue` в `completeQuest`) (`CODE_REVIEW.md`)
 

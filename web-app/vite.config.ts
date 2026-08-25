@@ -5,17 +5,22 @@ import react from '@vitejs/plugin-react'
 // ─── Yandex SDK Plugin ───────────────────────────────────────────
 // Вставляет SDK в НАЧАЛО <head>, ДО кода приложения.
 // Синхронная загрузка (без async) — SDK обязан быть готов до app code.
-// ✅ Путь: /sdk.js (требование Яндекса п. 1.1)
+// ✅ Путь: /sdk.js (относительный — обслуживается Яндексом при загрузке архива)
+// ✅ Также вставляет manifest.json с относительным путём
 const yandexSdkPlugin = (): Plugin => ({
   name: 'vite-plugin-yandex-sdk',
   transformIndexHtml(html, ctx) {
     const isYandex = process.env.VITE_PLATFORM === 'yandex' || ctx?.mode === 'yandex'
     if (isYandex) {
       // Вставляем SDK ПЕРВЫМ в <head>, до всех остальных скриптов
+      // Относительный путь /sdk.js — обслуживается Яндексом при загрузке архива в Консоль
       return html.replace(
         '<head>',
-        '<head>\n    <!-- Yandex Games SDK (п. 1.1) — загружается синхронно ДО app code -->\n' +
-        '    <script src="/sdk.js"><\/script>'
+        '<head>\n' +
+        '    <!-- Yandex Games SDK (п. 1.1) — относительный путь /sdk.js -->\n' +
+        '    <script src="/sdk.js"><\/script>\n' +
+        '    <!-- Manifest — относительный путь для корректной работы в iframe -->\n' +
+        '    <link rel="manifest" href="./manifest.json" />'
       )
     }
     return html
@@ -81,7 +86,7 @@ const isYandex = process.env.VITE_PLATFORM === 'yandex'
 export default defineConfig(({ mode }) => {
   const yandex = mode === 'yandex' || isYandex
   return {
-    base: yandex ? '/' : '/tinkercraft/',
+    base: yandex ? './' : '/tinkercraft/',
     define: {
       __PLATFORM__: JSON.stringify(yandex ? 'yandex' : 'clean'),
     },
