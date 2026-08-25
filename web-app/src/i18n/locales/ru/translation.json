@@ -138,7 +138,12 @@
     "questCompleted": "Задание выполнено!",
     "subscriptionActive": "Pro активна",
     "daysLeft": "дней осталось",
-    "expires": "Истекает"
+    "expires": "Истекает",
+    "difficulty": {
+      "easy": "Лёгкое",
+      "medium": "Среднее",
+      "hard": "Сложное"
+    }
   },
   "leftPanel": {
     "shapes": "Фигуры",

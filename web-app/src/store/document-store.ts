@@ -459,7 +459,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
 
     // Non-manifold geometry (imported STL, 3D text) cannot be used in CSG operations
     if (objects[idA].shapeType === 'import_mesh' || objects[idB].shapeType === 'import_mesh') {
-      notify('CSG операции с данным объектом невозможны (non-manifold геометрия)', 'warning')
+      notify(i18n.t('csg.nonManifold'), 'warning')
       return
     }
 
@@ -794,7 +794,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     if (get().busy) return
     const { selectedIds, objects, operations, historyIndex } = get()
     devLog('ALIGN:begin', { axis, anchor, selectedIds })
-    if (selectedIds.length === 0) { notify('No objects selected', 'warning'); return }
+    if (selectedIds.length === 0) { notify(i18n.t('errors.noObjectsSelected'), 'warning'); return }
     const ids = selectedIds.filter(id => objects[id])
     devLog('ALIGN:filtered', { ids, totalSelected: selectedIds.length })
     if (ids.length < 2) { devLog('ALIGN:skip', 'less than 2 objects'); return }
@@ -1102,7 +1102,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   extrudeSelected: async (axis, depth) => {
     if (get().busy) return
     const { selectedIds, objects, operations, historyIndex } = get()
-    if (selectedIds.length === 0) { notify('No objects selected', 'warning'); return }
+    if (selectedIds.length === 0) { notify(i18n.t('errors.noObjectsSelected'), 'warning'); return }
     if (selectedIds.length !== 1) return
     const id = selectedIds[0]
     const obj = objects[id]

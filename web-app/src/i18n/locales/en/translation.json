@@ -138,7 +138,12 @@
     "questCompleted": "Quest completed!",
     "subscriptionActive": "Pro active",
     "daysLeft": "days left",
-    "expires": "Expires"
+    "expires": "Expires",
+    "difficulty": {
+      "easy": "Easy",
+      "medium": "Medium",
+      "hard": "Hard"
+    }
   },
   "leftPanel": {
     "shapes": "Shapes",
