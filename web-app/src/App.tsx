@@ -8,6 +8,7 @@ import ProjectManagerModal from "./components/ProjectManagerModal";
 import ToastContainer from "./components/ToastContainer";
 import Toolbar from "./components/Toolbar";
 import TextModal from "./components/TextModal";
+import ExportModal from "./components/ExportModal";
 import StatusBar from "./components/StatusBar";
 import LeftPanel from "./components/LeftPanel";
 import PropertiesPanel from "./components/PropertiesPanel";
@@ -76,6 +77,9 @@ export default function App() {
   const [textInput, setTextInput] = useState("Text");
   const [textSize, setTextSize] = useState(10);
   const [textDepth, setTextDepth] = useState(5);
+
+  // Export modal state
+  const [showExportModal, setShowExportModal] = useState(false);
 
   const fitViewRef = useRef<(() => void) | null>(null);
   const resetViewRef = useRef<(() => void) | null>(null);
@@ -208,10 +212,19 @@ export default function App() {
   // ── Триггеры квестов V2 — оценка по состоянию проекта ──
   const evaluateQuests = useEconomyStore((s) => s.evaluateQuests)
 
-  // Обёртка exportStl с триггером квеста
+  // Обёртка exportStl — открывает модалку выбора способа экспорта
   const handleExportStl = useCallback(() => {
+    setShowExportModal(true)
+  }, [])
+
+  // Выполнить экспорт после выбора в модалке
+  const handleExportExecute = useCallback((method: 'tokens' | 'ad' | 'free') => {
+    if (method === 'ad') {
+      // Реклама уже показана в модалке
+    }
+    // tokens и free — просто экспортим
     exportStl()
-    // Квесты V2: evaluateQuests вызывается в saveProject и exportStl
+    // Квесты V2: evaluateQuests вызывается в exportStl
   }, [exportStl])
 
   // Подписка на изменения для оценки квестов (живой прогресс в UI)
@@ -270,14 +283,14 @@ export default function App() {
     const platform = getPlatform()
     if (!platform) return
 
-    const showAnyModal = showTextModal || showPM
+    const showAnyModal = showTextModal || showPM || showExportModal
 
     if (showAnyModal) {
       platform.stopGameplay()
     } else {
       platform.startGameplay()
     }
-  }, [showTextModal, showPM])
+  }, [showTextModal, showPM, showExportModal])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -512,6 +525,16 @@ export default function App() {
           onDepthChange={setTextDepth}
           onAdd={handleAddText}
           onClose={() => setShowTextModal(false)}
+        />
+      )}
+
+      {/* ── Export Modal ── */}
+      {showExportModal && (
+        <ExportModal
+          objects={objects}
+          operations={operations}
+          onClose={() => setShowExportModal(false)}
+          onExport={handleExportExecute}
         />
       )}
 

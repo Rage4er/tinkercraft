@@ -122,6 +122,9 @@
     "inScene": "В сцене:",
     "objects": "объектов"
   },
+  "palette": {
+    "regular": "Обычная палитра"
+  },
   "economy": {
     "quests": "Ежедневные задания",
     "tokens": "Токены",
@@ -143,7 +146,18 @@
       "easy": "Лёгкое",
       "medium": "Среднее",
       "hard": "Сложное"
-    }
+    },
+    "adLabel": "📺 +50",
+    "bonusLabel": "🎁 +50",
+    "tokensLabel": "💰"
+  },
+  "export": {
+    "title": "Экспорт STL",
+    "description": "Выберите способ экспорта вашей модели:",
+    "cashbackInfo": "Кэшбэк до {{cashback}} токенов → итоговая цена: {{netCost}}",
+    "payTokens": "💰 Оплатить {{cost}} токенов",
+    "watchAd": "📺 Реклама ({{count}}/3 просмотрено)",
+    "free": "🆓 Бесплатный экспорт"
   },
   "leftPanel": {
     "shapes": "Фигуры",

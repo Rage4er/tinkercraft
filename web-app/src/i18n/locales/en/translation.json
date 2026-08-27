@@ -122,6 +122,9 @@
     "inScene": "In scene:",
     "objects": "objects"
   },
+  "palette": {
+    "regular": "Standard Palette"
+  },
   "economy": {
     "quests": "Daily Quests",
     "tokens": "Tokens",
@@ -143,7 +146,18 @@
       "easy": "Easy",
       "medium": "Medium",
       "hard": "Hard"
-    }
+    },
+    "adLabel": "📺 +50",
+    "bonusLabel": "🎁 +50",
+    "tokensLabel": "💰"
+  },
+  "export": {
+    "title": "Export STL",
+    "description": "Choose how to export your model:",
+    "cashbackInfo": "Cashback up to {{cashback}} tokens → final price: {{netCost}}",
+    "payTokens": "💰 Pay {{cost}} tokens",
+    "watchAd": "📺 Watch ad ({{count}}/3 watched)",
+    "free": "🆓 Free export"
   },
   "leftPanel": {
     "shapes": "Shapes",
