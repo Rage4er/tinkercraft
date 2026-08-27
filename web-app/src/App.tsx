@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { useTranslation } from "react-i18next";
+import { RulerIcon } from "./components/icons";
 import "./i18n";
 import Viewport3D, { type GizmoMode } from "./components/Viewport3D";
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -508,7 +509,7 @@ export default function App() {
       {/* ── Ruler distance display ── */}
       {rulerDist !== null && (
         <div className="ruler-display">
-          📏 Расстояние: <strong>{rulerDist.toFixed(2)} мм</strong>
+          <RulerIcon size={20} /> {t('statusbar.rulerMode')}: <strong>{rulerDist.toFixed(2)} мм</strong>
         </div>
       )}
 

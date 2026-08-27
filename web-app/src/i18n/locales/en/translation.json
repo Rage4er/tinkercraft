@@ -87,7 +87,7 @@
     "projectSaved": "● Project saved",
     "csgTime": "CSG:",
     "ms": "ms",
-    "rulerMode": "📏 Measurement mode",
+    "rulerMode": "Measurement mode",
     "fps": "FPS:"
   },
   "properties": {
@@ -126,18 +126,18 @@
     "regular": "Standard Palette"
   },
   "economy": {
-    "quests": "Daily Quests",
+    "quests": "Daily quests",
     "tokens": "Tokens",
-    "dailyBonus": "Daily Bonus",
-    "watchAd": "Watch Ad",
+    "dailyBonus": "Daily bonus",
+    "watchAd": "Watch ad",
     "subscription": "Subscription",
-    "rentals": "24h Rentals",
+    "rentals": "24h rental",
     "export": "Export STL",
     "import": "Import STL",
     "cashback": "Cashback",
-    "noAdsLeft": "No ads left today",
-    "bonusReady": "Claim +50 tokens",
-    "adReady": "Watch ad for +50",
+    "noAdsLeft": "No ads left",
+    "bonusReady": "Claim +50",
+    "adReady": "Ad +50",
     "questCompleted": "Quest completed!",
     "subscriptionActive": "Pro active",
     "daysLeft": "days left",
@@ -149,19 +149,32 @@
     },
     "adLabel": "Ad",
     "bonusLabel": "Bonus",
-    "tokensLabel": "Tokens"
+    "tokensLabel": "Tokens",
+    "triggers": {
+      "count_cubes": "Cube base (≥ {{n}} cubes)",
+      "count_objects": "Non-empty scene (≥ {{n}} objects)",
+      "count_unique_shapes": "Variety (≥ {{n}} different shapes)",
+      "count_colored": "Painter (≥ {{n}} colored objects)",
+      "count_csg": "Boolean debut (≥ {{n}} CSG)",
+      "csg_complex": "Complex geometry (CSG with ≥ 3 children)",
+      "count_mirrored": "Mirror hall (≥ {{n}} mirrors)",
+      "export_stl": "First export (STL)",
+      "export_stl_large": "Worthy print (export ≥ {{n}} objects)",
+      "import_stl": "Import geometry (import STL)",
+      "count_text3d": "Engraving (≥ {{n}} 3D text)"
+    }
   },
   "export": {
     "title": "Export STL",
     "description": "Choose how to export your model:",
     "cashbackInfo": "Cashback up to {{cashback}} tokens → final price: {{netCost}}",
-    "payTokens": "💰 Pay {{cost}} tokens",
-    "watchAd": "📺 Watch ad ({{count}}/3 watched)",
-    "free": "🆓 Free export"
+    "payTokens": "Pay {{cost}} tokens",
+    "watchAd": "Watch ad ({{count}}/3 watched)",
+    "free": "Free export"
   },
   "leftPanel": {
     "shapes": "Shapes",
-    "searchPlaceholder": "🔍 Search shapes…",
+    "searchPlaceholder": "Search shapes…",
     "notFound": "Not found",
     "objects": "Objects",
     "list": "List",

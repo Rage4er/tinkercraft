@@ -15,9 +15,9 @@ export const ECONOMY_UI = {
 
 /** Метки для квестов */
 export const QUEST_LABELS = {
-  easy: '🌟 Лёгкое',
-  medium: '⭐ Среднее',
-  hard: '🏆 Сложное',
+  easy: 'Лёгкое',
+  medium: 'Среднее',
+  hard: 'Сложное',
 } as const
 
 /** Ключи иконок для сложности квестов */

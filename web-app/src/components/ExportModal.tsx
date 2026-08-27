@@ -3,7 +3,7 @@ import { useCallback, useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useEconomyStore } from '../store/economy-store'
 import { ECONOMY_COSTS, calculateCashback } from '../store/economy-config'
-import { ExportIcon } from './icons'
+import { ExportIcon, TokenIcon, AdFilmIcon, PlayIcon } from './icons'
 
 export default function ExportModal({
   objects,
@@ -75,29 +75,29 @@ export default function ExportModal({
         aria-labelledby="export-modal-title"
       >
         <div className="text-modal-title" id="export-modal-title">
-          <ExportIcon size={32} /> {t('export.title')}
+          <ExportIcon size={48} /> {t('export.title')}
         </div>
 
-        <div style={{ padding: '12px 0', fontSize: '14px', lineHeight: 1.6 }}>
-          <p style={{ margin: '0 0 8px' }}>
+        <div style={{ padding: '16px 0', fontSize: '16px', lineHeight: 1.6 }}>
+          <p style={{ margin: '0 0 12px' }}>
             {t('export.description')}
           </p>
           {estimatedCashback > 0 && (
-            <p style={{ margin: '0 0 12px', fontSize: '13px', color: 'var(--text-muted)' }}>
+            <p style={{ margin: '0 0 16px', fontSize: '15px', color: 'var(--text-muted)' }}>
               {t('export.cashbackInfo', { cashback: estimatedCashback, netCost })}
             </p>
           )}
         </div>
 
-        <div className="text-modal-actions" style={{ flexDirection: 'column', gap: '8px' }}>
+        <div className="text-modal-actions" style={{ flexDirection: 'column', gap: '12px' }}>
           {/* Вариант 1: оплатить токенами */}
           <button
             className="btn primary flex-1"
             disabled={tokens < netCost || busy}
             onClick={handlePayTokens}
-            style={{ justifyContent: 'center' }}
+            style={{ justifyContent: 'center', padding: '16px 24px', fontSize: '20px' }}
           >
-            💰 {t('export.payTokens', { cost: netCost })}
+            <TokenIcon size={32} /> {t('export.payTokens', { cost: netCost })}
           </button>
 
           {/* Вариант 2: посмотреть рекламу */}
@@ -105,9 +105,9 @@ export default function ExportModal({
             className="btn btn-compact flex-1"
             disabled={todayAdsWatched >= 3 || busy}
             onClick={handleWatchAd}
-            style={{ justifyContent: 'center' }}
+            style={{ justifyContent: 'center', padding: '16px 24px', fontSize: '20px' }}
           >
-            📺 {t('export.watchAd', { count: todayAdsWatched, max: 3 })}
+            <AdFilmIcon size={32} /> {t('export.watchAd', { count: todayAdsWatched, max: 3 })}
           </button>
 
           {/* Вариант 3: бесплатная реклама */}
@@ -115,9 +115,9 @@ export default function ExportModal({
             className="btn btn-compact flex-1"
             disabled={busy}
             onClick={() => { onClose(); onExport('free') }}
-            style={{ justifyContent: 'center' }}
+            style={{ justifyContent: 'center', padding: '16px 24px', fontSize: '20px' }}
           >
-            🆓 {t('export.free')}
+            <PlayIcon size={32} /> {t('export.free')}
           </button>
 
           <button className="btn" onClick={onClose}>

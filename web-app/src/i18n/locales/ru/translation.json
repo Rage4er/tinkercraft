@@ -87,7 +87,7 @@
     "projectSaved": "● Проект сохранён",
     "csgTime": "CSG:",
     "ms": "мс",
-    "rulerMode": "📏 Режим измерения",
+    "rulerMode": "Режим измерения",
     "fps": "FPS:"
   },
   "properties": {
@@ -149,19 +149,32 @@
     },
     "adLabel": "Реклама",
     "bonusLabel": "Бонус",
-    "tokensLabel": "Токены"
+    "tokensLabel": "Токены",
+    "triggers": {
+      "count_cubes": "Кубовая база (≥ {{n}} кубов)",
+      "count_objects": "Непустая сцена (≥ {{n}} объектов)",
+      "count_unique_shapes": "Разнообразие (≥ {{n}} разных примитива)",
+      "count_colored": "Маляр (≥ {{n}} объектов с цветом)",
+      "count_csg": "Булев дебют (≥ {{n}} CSG)",
+      "csg_complex": "Сложная геометрия (CSG с ≥ 3 детьми)",
+      "count_mirrored": "Зазеркалье (≥ {{n}} зеркал)",
+      "export_stl": "Первая выгрузка (экспорт STL)",
+      "export_stl_large": "Достойная печать (экспорт ≥ {{n}} объектов)",
+      "import_stl": "Чужая геометрия (импорт STL)",
+      "count_text3d": "Гравировка (≥ {{n}} 3D-текст)"
+    }
   },
   "export": {
     "title": "Экспорт STL",
     "description": "Выберите способ экспорта вашей модели:",
     "cashbackInfo": "Кэшбэк до {{cashback}} токенов → итоговая цена: {{netCost}}",
-    "payTokens": "💰 Оплатить {{cost}} токенов",
-    "watchAd": "📺 Реклама ({{count}}/3 просмотрено)",
-    "free": "🆓 Бесплатный экспорт"
+    "payTokens": "Оплатить {{cost}} токенов",
+    "watchAd": "Реклама ({{count}}/3 просмотрено)",
+    "free": "Бесплатный экспорт"
   },
   "leftPanel": {
     "shapes": "Фигуры",
-    "searchPlaceholder": "🔍 Поиск фигуры…",
+    "searchPlaceholder": "Поиск фигуры…",
     "notFound": "Не найдено",
     "objects": "Объекты",
     "list": "Список",

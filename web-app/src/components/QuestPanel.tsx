@@ -1,7 +1,7 @@
 // src/components/QuestPanel.tsx — Панель ежедневных квестов
 import { useTranslation } from 'react-i18next'
 import { useEconomyStore } from '../store/economy-store'
-import { ECONOMY_UI, DIFFICULTY_ICON, ICON_REGISTRY, TRIGGER_LABELS } from '../store/economy-ui-config'
+import { ECONOMY_UI, DIFFICULTY_ICON, ICON_REGISTRY } from '../store/economy-ui-config'
 import Section from './Section'
 
 export default function QuestPanel() {
@@ -12,12 +12,9 @@ export default function QuestPanel() {
   if (!ECONOMY_UI.showQuests) return null
   if (todayQuests.length === 0) return null
 
-  /** Получить читаемое имя триггера из TRIGGER_LABELS */
+  /** Получить читаемое имя триггера из i18n */
   function getTriggerLabel(trigger: string, target: number): string {
-    const label = TRIGGER_LABELS[trigger]
-    if (!label) return trigger
-    // Заменяем {n} на target
-    return label.replace('{n}', String(target))
+    return t(`economy.triggers.${trigger}`, { n: target })
   }
 
   return (
@@ -59,7 +56,7 @@ export default function QuestPanel() {
                 </span>
               </div>
 
-              {/* Описание — читаемое имя из TRIGGER_LABELS */}
+              {/* Описание — i18n с подстановкой {n} */}
               <div style={{ fontSize: '13px', marginBottom: '4px' }}>
                 {getTriggerLabel(quest.trigger, quest.target)}
               </div>
