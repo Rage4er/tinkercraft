@@ -10,6 +10,14 @@
 ## [Unreleased]
 
 ### Fixed
+- **Y3.1 Токены за действия** — `earnActionToken()` добавлен в `addShape`, `addRawMesh`, `addTextMesh`, `importStl` — теперь +1 начисляется при добавлении фигуры (лимит 30/день, кулдаун 5с) (`store/document-store.ts`)
+- **Y3.2 Кэшбэк за экспорт** — `calculateAndClaimCashback()` добавлен в `exportStl` с расчётом `objectCount` и `csgOps` — кэшбэк +5…+25 токенов теперь начисляется (`store/document-store.ts`)
+- **Y3.3 Хэш модели для кэшбэка** — `createExportHash()` вызывается при экспорте, кэшбэк начисляется только при изменении модели (`store/document-store.ts`, `store/economy-store.ts`)
+- **Y3.4 Событийные квесты** — `completeEventQuest('export_stl')` и `completeEventQuest('import_stl')` добавлены в соответствующие методы — квесты «Первая выгрузка» и «Чужая геометрия» теперь работают (`store/document-store.ts`, `store/economy-store.ts`)
+- **Y3.5 Квест csg_complex** — реализован подсчёт CSG с ≥3 детьми через `op.ids` — квест «Сложная геометрия» теперь выполним (`store/economy-store.ts`)
+- **Y3.6 Квест count_mirrored** — добавлена проверка `transform.scaleX/Y/Z < 0` — квесты «Зазеркалье» и «Зеркальный зал» теперь работают (`store/economy-store.ts`)
+- **Y3.7 Квест count_text3d** — исправлен `'text'` → `'text3d'` — квест «Гравировка» теперь выполним (`store/economy-store.ts`)
+- **Y3.10 Удалён бесплатный экспорт** — удалена кнопка «Бесплатный экспорт» из `ExportModal.tsx` — экспорт теперь только за токены или рекламу (`components/ExportModal.tsx`)
 - **Yandex SDK модерация** — исправлены критические проблемы встраивания SDK (п. 1.1 требований): `base: './'` вместо `'/'` для относительных путей, CDN SDK вместо локального лоадера (`vite.config.ts`), `manifest.json` с относительными путём и `start_url` (`public/manifest.json`), убран дублирующий `<script src="/sdk.js">` из `index.html` (`index.html`), обработка ошибок в callbacks рекламы с обязательным `GameplayAPI.start()` при ошибке (`src/platform/yandex.ts`)
 
 ### Changed
