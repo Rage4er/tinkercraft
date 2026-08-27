@@ -184,19 +184,22 @@
     "history": "История",
     "filter": "Фильтр",
     "timelineEmpty": "Пусто",
-    "addShape": "Добавить {{label}}"
+    "addShape": "Добавить {{label}}",
+    "text3d": "3D Текст"
   },
   "componentTree": {
     "sceneEmpty": "Сцена пуста",
-    "doubleClickRename": "Двойной клик — переименовать",
+    "doubleClickRename": "Двойной клик для переименования",
     "hide": "Скрыть",
     "show": "Показать",
     "delete": "Удалить",
-    "import": "Импорт"
+    "import": "Импорт",
+    "text3d": "3D Текст"
   },
   "timeline": {
     "addShape": "Добавить {{shape}}",
     "importMesh": "Импорт {{name}}",
+    "text3d": "3D Текст: {{name}}",
     "move": "Переместить",
     "scale": "Масштаб",
     "rotate": "Повернуть",

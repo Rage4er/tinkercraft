@@ -103,6 +103,7 @@ export default function App() {
       currentProjectName: s.currentProjectName,
       addShape: s.addShape,
       addRawMesh: s.addRawMesh,
+      addTextMesh: s.addTextMesh,
       importStl: s.importStl,
       deleteSelected: s.deleteSelected,
       selectObjects: s.selectObjects,
@@ -148,6 +149,7 @@ export default function App() {
     currentProjectName,
     addShape,
     addRawMesh,
+    addTextMesh,
     importStl,
     deleteSelected,
     selectObjects,
@@ -414,7 +416,7 @@ export default function App() {
       } else {
         indices = Array.from({ length: posAttr.count }, (_, i) => i);
       }
-      await addRawMesh(`Текст: ${textInput}`, vertices, indices);
+      await addTextMesh(`Текст: ${textInput}`, vertices, indices);
       setShowTextModal(false);
     } catch (err) {
       console.error("Ошибка генерации текста:", err);

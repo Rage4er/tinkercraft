@@ -11,6 +11,7 @@ export interface TinkerCraftFile {
 export type TinkerCraftOperation =
   | AddShapeOperation
   | ImportMeshOperation
+  | Text3DOperation
   | MoveOperation
   | ResizeOperation
   | ResizeDimsOperation
@@ -110,6 +111,7 @@ export interface RenameOperation { type: 'rename'; id: string; name: string }
 export interface DeleteOperation { type: 'delete'; ids: string[] }
 export interface HideShowOperation { type: 'visibility'; ids: string[]; visible: boolean }
 export interface ColorOperation { type: 'color'; ids: string[]; color: string }
+export interface Text3DOperation { type: 'text3d'; id: string; name: string; color: string; transform: TransformNR; vertices: number[]; indices: number[] }
 
 // ---- Вспомогательные типы ----
 
@@ -129,7 +131,7 @@ export type AnchorPoint =
 
 export type ShapeType =
   | 'cube' | 'sphere' | 'cylinder' | 'cone'
-  | 'torus' | 'prism' | 'pyramid' | 'import_mesh' | 'csg'
+  | 'torus' | 'prism' | 'pyramid' | 'import_mesh' | 'csg' | 'text3d'
 
 export interface ShapeParams {
   width?: number

@@ -26,7 +26,7 @@ export default function ExportModal({
 
   // Посчитать объекты (не импортированные)
   const objectCount = useMemo(
-    () => Object.values(objects).filter((o) => o.shapeType !== 'import_mesh').length,
+    () => Object.values(objects).filter((o) => o.shapeType !== 'import_mesh' && o.shapeType !== 'text3d').length,
     [objects],
   )
 

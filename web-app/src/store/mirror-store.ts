@@ -97,9 +97,9 @@ async function syncObjectsForOperation(
 function ensureInTree(id: string, obj: SceneObject): void {
     if (getNode(id) !== undefined) return
 
-    // CSG results (shapeType='csg') and import_mesh are registered as BAKED nodes
-    // (they have a ready mesh). Primitives are registered with shapeType + params.
-    const isPrimitive = obj.shapeType !== 'csg' && obj.shapeType !== 'import_mesh'
+    // FIX (MIRROR-CSG-KEEPTYPE): CSG results (shapeType='csg') and import_mesh/text3d
+    // have baked geometry. Don't rebuild them from shapeType/params.
+    const isPrimitive = obj.shapeType !== 'csg' && obj.shapeType !== 'import_mesh' && obj.shapeType !== 'text3d'
 
     if (isPrimitive && obj.shapeType && obj.params) {
         createPrimitiveNode(id, obj.shapeType, obj.params, obj.transform)
@@ -124,8 +124,9 @@ export async function mirrorObject(
     const newId = nextId()
 
     // Primitives have real params and can be rebuilt from shapeType + params.
-    // CSG results (shapeType='csg') and import_mesh have baked geometry.
-    const isPrimitive = obj.shapeType !== 'csg' && obj.shapeType !== 'import_mesh'
+    // FIX (MIRROR-CSG-KEEPTYPE): CSG results (shapeType='csg') and import_mesh/text3d
+    // have baked geometry. Don't rebuild them from shapeType/params.
+    const isPrimitive = obj.shapeType !== 'csg' && obj.shapeType !== 'import_mesh' && obj.shapeType !== 'text3d'
     const isCSGResult = obj.shapeType === 'csg'
 
     let vertices: Float32Array

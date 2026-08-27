@@ -188,7 +188,8 @@ export default function PropertiesPanel({
         <span className="props-value">
           {firstSelected.shapeType === 'csg' ? t("csg.result") :
             firstSelected.shapeType === 'import_mesh' ? t("actions.import") :
-              t(`shapes.${firstSelected.shapeType}`)}
+              firstSelected.shapeType === 'text3d' ? t("leftPanel.text3d") :
+                t(`shapes.${firstSelected.shapeType}`)}
         </span>
       </div>
 

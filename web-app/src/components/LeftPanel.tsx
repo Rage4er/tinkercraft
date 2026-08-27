@@ -13,6 +13,7 @@ function getShapeLabel(obj: SceneObject, t: (key: string) => string): string {
   if (obj.name) return obj.name
   if (obj.shapeType === 'csg') return t('csg.result')
   if (obj.shapeType === 'import_mesh') return t('actions.import')
+  if (obj.shapeType === 'text3d') return t('leftPanel.text3d')
   return t(`shapes.${obj.shapeType}`)
 }
 

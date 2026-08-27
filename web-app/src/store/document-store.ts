@@ -11,6 +11,7 @@
 import { create } from 'zustand/react'
 import type {
   TinkerCraftOperation, AddShapeOperation, ImportMeshOperation,
+  Text3DOperation,
   FilletOperation, MirrorOperation, AlignOperation, ResizeDimsOperation,
   MoveOperation, ColorOperation, GroupOperation, RenameOperation, HideShowOperation,
   DeleteOperation,
@@ -86,7 +87,7 @@ async function jumpToHistoryInner(newIdx: number, actionName: string): Promise<v
 // ── Type guard ──
 
 function isShapeType(v: string): v is ShapeType {
-  return ['cube', 'sphere', 'cylinder', 'cone', 'torus', 'prism', 'pyramid', 'import_mesh'].includes(v)
+  return ['cube', 'sphere', 'cylinder', 'cone', 'torus', 'prism', 'pyramid', 'import_mesh', 'text3d'].includes(v)
 }
 
 // ── Tree snapshot helpers ──
@@ -249,6 +250,30 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       cacheSnapshotWithTree(newOps.length, newObjects)
       invalidateMirrorCache()
     } catch (e) { set({ busy: false }); console.error('addRawMesh:', e); notify(i18n.t('errors.importMeshFailed'), 'error') }
+  },
+
+  // ── Добавить 3D текст ──
+  addTextMesh: async (name: string, vertices: number[], indices: number[]) => {
+    if (get().busy) return
+    const { objects, operations, historyIndex } = get()
+    const id = nextId('txt')
+    const color = colorForIndex(Object.keys(objects).length)
+    const transform: TransformNR = { x: Object.keys(objects).length * OBJECT_SPACING, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
+    set({ busy: true })
+    try {
+      const t0 = performance.now()
+      const result = await workerBuildImportedMesh(id, vertices, indices)
+      const ms = performance.now() - t0
+      const obj: SceneObject = makeObject({ id, shapeType: 'text3d', params: {}, color, transform, visible: true, locked: false, vertices: result.vertices, indices: result.indices, normals: result.normals })
+      const op: Text3DOperation = { type: 'text3d', id, name, color, transform, vertices, indices }
+      const newOps = [...operations.slice(0, historyIndex), op]
+      const newObjects = { ...objects, [id]: obj }
+      // Register baked node in build tree BEFORE caching snapshot
+      createBakedNode(id, result.vertices, result.indices, result.normals, transform)
+      set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, selectedIds: [id], modified: true, busy: false, lastCsgMs: ms })
+      cacheSnapshotWithTree(newOps.length, newObjects)
+      invalidateMirrorCache()
+    } catch (e) { set({ busy: false }); console.error('addTextMesh:', e); notify(i18n.t('errors.createShapeFailed'), 'error') }
   },
 
   // ── Импорт STL ──
@@ -523,14 +548,13 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const histOp: GroupOperation = { type: 'group', ids: [idA, idB], resultId, resultVertices: mesh.vertices, resultIndices: mesh.indices, resultNormals: mesh.normals ?? undefined, resultCenter: { x: cx, y: cy, z: cz }, originalBboxSize: originalBboxSize, treeOperation: op as 'union' | 'subtract' | 'intersect', shapeType: 'csg', color: objects[idA].color }
       const newOps = [...operations.slice(0, historyIndex), histOp]
       // Ensure children are registered in build tree.
-      // CSG results (shapeType='csg') and import_mesh are registered as BAKED nodes
-      // (carrying their actual mesh + transform). Primitives are registered with
-      // their shapeType + params for parametric rebuild.
+      // FIX (MIRROR-CSG-KEEPTYPE): CSG results (shapeType='csg') and import_mesh/text3d
+      // have baked geometry. Don't rebuild them from shapeType/params.
       const ensureInTree = (id: string) => {
         if (!getNode(id)) {
           const obj = objects[id]
           if (obj) {
-            const isPrimitive = obj.shapeType !== 'csg' && obj.shapeType !== 'import_mesh'
+            const isPrimitive = obj.shapeType !== 'csg' && obj.shapeType !== 'import_mesh' && obj.shapeType !== 'text3d'
             if (isPrimitive && obj.shapeType && obj.params) {
               createPrimitiveNode(id, obj.shapeType, obj.params, obj.transform)
             } else {
@@ -612,9 +636,9 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     // Ensure node exists in tree (may be missing after undo/redo tree restore)
     const treeExists = getNode(id) !== undefined
     if (!treeExists) {
-      // FIX (MIRROR-CSG-KEEPTYPE): CSG-результаты (shapeType='csg') и import_mesh
-      // регистрируются как baked-ноды (готовый меш), а не как primitive.
-      const isPrimitive = obj.shapeType !== 'csg' && obj.shapeType !== 'import_mesh'
+      // FIX (MIRROR-CSG-KEEPTYPE): CSG results (shapeType='csg') and import_mesh/text3d
+      // have baked geometry. Don't rebuild them from shapeType/params.
+      const isPrimitive = obj.shapeType !== 'csg' && obj.shapeType !== 'import_mesh' && obj.shapeType !== 'text3d'
       if (isPrimitive && obj.shapeType && obj.params) {
         createPrimitiveNode(id, obj.shapeType, obj.params, obj.transform)
       } else {

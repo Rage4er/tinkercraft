@@ -184,7 +184,8 @@
     "history": "History",
     "filter": "Filter",
     "timelineEmpty": "Empty",
-    "addShape": "Add {{label}}"
+    "addShape": "Add {{label}}",
+    "text3d": "3D Text"
   },
   "componentTree": {
     "sceneEmpty": "Scene is empty",
@@ -192,11 +193,13 @@
     "hide": "Hide",
     "show": "Show",
     "delete": "Delete",
-    "import": "Import"
+    "import": "Import",
+    "text3d": "3D Text"
   },
   "timeline": {
     "addShape": "Add {{shape}}",
     "importMesh": "Import {{name}}",
+    "text3d": "3D Text: {{name}}",
     "move": "Move",
     "scale": "Scale",
     "rotate": "Rotate",

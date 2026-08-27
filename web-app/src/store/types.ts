@@ -25,6 +25,7 @@ export interface DocumentStore {
   // Actions
   addShape: (shapeType: ShapeType, params?: ShapeParams) => Promise<void>
   addRawMesh: (name: string, vertices: number[], indices: number[]) => Promise<void>
+  addTextMesh: (name: string, vertices: number[], indices: number[]) => Promise<void>
   importStl: () => Promise<void>
   deleteSelected: () => Promise<void>
   selectObjects: (ids: string[], add: boolean) => void

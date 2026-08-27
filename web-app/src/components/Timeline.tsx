@@ -61,6 +61,8 @@ export function opIcon(op: TinkerCraftOperation): React.ReactNode {
       }
     case "import_mesh":
       return <ImportIcon size={32} />;
+    case "text3d":
+      return <TextIcon size={32} />;
     case "move": {
       const k = (op as { kind?: string }).kind;
       return k === "scale" ? <ScaleIcon size={32} /> : k === "rotate" ? <RotateIcon size={32} /> : <MoveIcon size={32} />;
@@ -105,6 +107,8 @@ export function opLabel(op: TinkerCraftOperation, t: (key: string, opts?: Record
       return t('timeline.addShape', { shape: t(`shapes.${op.shapeType}`) });
     case "import_mesh":
       return t('timeline.importMesh', { name: (op as { name?: string }).name ?? "STL" });
+    case "text3d":
+      return t('timeline.text3d', { name: (op as { name?: string }).name ?? "Text" });
     case "move": {
       const k = (op as { kind?: string }).kind;
       return k === "scale" ? t("timeline.scale") : k === "rotate" ? t("timeline.rotate") : t("timeline.move");

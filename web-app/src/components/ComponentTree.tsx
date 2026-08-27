@@ -15,10 +15,11 @@ import {
   PrismIcon,
   PyramidIcon,
   ImportIcon,
+  TextIcon,
+  UnionIcon,
   EyeIcon,
   EyeOffIcon,
   DeleteIcon,
-  UnionIcon,
 } from './icons'
 
 interface Props {
@@ -38,6 +39,7 @@ function displayName(obj: SceneObject, t: (key: string, opts?: Record<string, un
   const num = obj.id.split('_')[1] ?? ''
   if (obj.shapeType === 'csg') return t('csg.result') + (num ? ` ${num}` : '')
   if (obj.shapeType === 'import_mesh') return t('componentTree.import') + (num ? ` ${num}` : '')
+  if (obj.shapeType === 'text3d') return t('componentTree.text3d') + (num ? ` ${num}` : '')
   return `${t(`shapes.${obj.shapeType}`)} ${num}`
 }
 
@@ -97,6 +99,7 @@ export default function ComponentTree({ objects, selectedIds, onSelect, onRename
               {obj.shapeType === 'prism' && <PrismIcon size={32} />}
               {obj.shapeType === 'pyramid' && <PyramidIcon size={32} />}
               {obj.shapeType === 'import_mesh' && <ImportIcon size={32} />}
+              {obj.shapeType === 'text3d' && <TextIcon size={32} />}
               {obj.shapeType === 'csg' && <UnionIcon size={32} />}
             </span>
 

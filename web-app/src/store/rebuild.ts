@@ -64,6 +64,11 @@ export function buildRebuildMeta(ops: TinkerCraftOperation[]): {
       meta[op.id] = { color: op.color, shapeType: 'import_mesh', params: {}, transform: t, visible: true, name: op.name }
       transforms[op.id] = t
 
+    } else if (op.type === 'text3d') {
+      const t: TransformNR = { ...op.transform }
+      meta[op.id] = { color: op.color, shapeType: 'text3d', params: {}, transform: t, visible: true, name: op.name }
+      transforms[op.id] = t
+
     } else if (op.type === 'fillet') {
       if (meta[op.id]) meta[op.id] = { ...meta[op.id], params: { ...meta[op.id].params, filletRadius: op.radius } }
 
@@ -253,6 +258,11 @@ export function rebuildBuildTree(
       // Baked node created in registerBakedNodes() after mesh data is available
       // (called at end of rebuildBuildTree when `objects` parameter is provided)
 
+    } else if (op.type === 'text3d') {
+      transforms[op.id] = { ...op.transform }
+      // Baked node created in registerBakedNodes() after mesh data is available
+      // (called at end of rebuildBuildTree when `objects` parameter is provided)
+
     } else if (op.type === 'move') {
       const d: Vec3 = op.delta
       const rd = (op as { rotDelta?: Vec3 }).rotDelta
@@ -384,7 +394,7 @@ export function registerBakedNodes(
   ops: TinkerCraftOperation[],
 ): void {
   for (const op of ops) {
-    if (op.type === 'import_mesh' && objects[op.id]) {
+    if ((op.type === 'import_mesh' || op.type === 'text3d') && objects[op.id]) {
       const obj = objects[op.id]
       if (obj.vertices && obj.indices) {
         createBakedNode(op.id, obj.vertices, obj.indices, obj.normals ?? null, obj.transform)
