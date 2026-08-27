@@ -1,16 +1,27 @@
 // src/main.tsx — Entry point
-// Для Yandex-версии: SDK инициализируется ВНУТРИ i18n-детектора
-// (YandexLanguageDetector → initSdk → YaGames.init)
-// i18n.init() ждёт детектор, затем рендерит React.
-// Для clean-версии: i18n-детектор сразу возвращает undefined → navigator fallback.
+// Порядок: SDK → i18n (язык из SDK) → React render
+// Для clean-версии: SDK недоступен → fallback на navigator/localStorage
+
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import './i18n'
 import './App.css'
 import App from './App'
+import { initSdk } from './platform/sdk'
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-)
+// ── Инициализация SDK и i18n перед рендером ──
+async function bootstrap(): Promise<void> {
+  // 1. Инициализируем SDK (для clean-версии — сразу возвращает null)
+  await initSdk()
+
+  // 2. Инициализируем i18n с языком из SDK (или fallback)
+  const i18n = await import('./i18n')
+
+  // 3. Рендерим React
+  createRoot(document.getElementById('root')!).render(
+    <StrictMode>
+      <App />
+    </StrictMode>,
+  )
+}
+
+bootstrap()

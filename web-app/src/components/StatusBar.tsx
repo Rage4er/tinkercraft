@@ -23,13 +23,7 @@ export default function StatusBar({
   rulerActive: boolean;
   fps: number;
 }) {
-  const { t, i18n } = useTranslation();
-  const currentLang = i18n.language?.startsWith("ru") ? "ru" : "en";
-  const toggleLanguage = () => {
-    const next = currentLang === "en" ? "ru" : "en";
-    i18n.changeLanguage(next);
-    localStorage.setItem("i18nextLng", next);
-  };
+  const { t } = useTranslation();
   return (
     <div
       className="statusbar"
@@ -82,13 +76,6 @@ export default function StatusBar({
       <span className="status-item status-auto">
         {t("statusbar.fps")} <strong>{fps}</strong>
       </span>
-      <button
-        className="lang-switcher"
-        onClick={toggleLanguage}
-        title={t("language.switch", { lang: currentLang.toUpperCase() })}
-      >
-        {currentLang === "en" ? "🇬🇧 EN" : "🇷🇺 RU"}
-      </button>
       <span className="status-item text-muted-xs">
         {/* FIX (LOW-18-42): Remove debug phase info from production status bar */}
         {t("app.webLabel")}
