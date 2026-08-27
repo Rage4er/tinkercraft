@@ -32,7 +32,7 @@ import { downloadStl } from '../io/stl-export'
 import { openStlFilePicker, parseStlFile } from '../io/stl-import'
 import { autosaveSession, restoreSession } from '../io/autosave'
 import i18n from '../i18n'
-import { useEconomyStore } from './economy-store'
+import { useEconomyStore, createExportHash } from './economy-store'
 
 export { computeAABB, extractAndCenterInPlace, extractAndCenterGetAABB, computeWorldAABB } from './helpers'
 import { computeAABB, extractAndCenterInPlace, extractAndCenterGetAABB, computeWorldAABB, makeObject, nextId, colorForIndex } from './helpers'
@@ -225,6 +225,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true, busy: false, lastCsgMs: ms })
       cacheSnapshotWithTree(newOps.length, newObjects)
       invalidateMirrorCache()
+      // Y3.1: начисление токена за действие (лимит 30/день, кулдаун 5с)
+      useEconomyStore.getState().earnActionToken()
     } catch (e) { set({ busy: false }); console.error('addShape:', e); notify(i18n.t('errors.createShapeFailed'), 'error') }
   },
 
@@ -249,6 +251,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, selectedIds: [id], modified: true, busy: false, lastCsgMs: ms })
       cacheSnapshotWithTree(newOps.length, newObjects)
       invalidateMirrorCache()
+      // Y3.1: начисление токена за действие (лимит 30/день, кулдаун 5с)
+      useEconomyStore.getState().earnActionToken()
     } catch (e) { set({ busy: false }); console.error('addRawMesh:', e); notify(i18n.t('errors.importMeshFailed'), 'error') }
   },
 
@@ -273,6 +277,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, selectedIds: [id], modified: true, busy: false, lastCsgMs: ms })
       cacheSnapshotWithTree(newOps.length, newObjects)
       invalidateMirrorCache()
+      // Y3.1: начисление токена за действие (лимит 30/день, кулдаун 5с)
+      useEconomyStore.getState().earnActionToken()
     } catch (e) { set({ busy: false }); console.error('addTextMesh:', e); notify(i18n.t('errors.createShapeFailed'), 'error') }
   },
 
@@ -303,6 +309,10 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, selectedIds: [id], modified: true, busy: false, lastCsgMs: ms })
       cacheSnapshotWithTree(newOps.length, newObjects)
       invalidateMirrorCache()
+      // Y3.1: начисление токена за действие (лимит 30/день, кулдаун 5с)
+      useEconomyStore.getState().earnActionToken()
+      // Y3.4: событийный квест — импорт STL
+      useEconomyStore.getState().completeEventQuest('import_stl')
     } catch (e) { set({ busy: false }); notify(i18n.t('errors.stlImportFailed') + ': ' + e, 'error') }
   },
 
@@ -1001,10 +1011,29 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
 
   // ── Export STL ──
   exportStl: () => {
-    const { objects, fileName } = get()
-    downloadStl(Object.values(objects), (fileName?.replace(/\.doodle$/, '') ?? i18n.t('app.name')) + '.stl')
+    const { objects, fileName, operations } = get()
+    const objectList = Object.values(objects)
+    const objectCount = objectList.filter(o => o.shapeType !== 'import_mesh' && o.shapeType !== 'text3d').length
+    const csgOps = operations.filter(op => op.type === 'group').length
+
+    // Y3.3: проверка хэша модели для кэшбэка
+    const hash = createExportHash({ objects: objectList.map(o => ({ shapeType: o.shapeType, params: o.params, transform: o.transform })) })
+    const lastHash = useEconomyStore.getState().lastExportHash
+    const hashChanged = lastHash === null || lastHash !== hash
+
+    // Y3.2: кэшбэк за экспорт (только если модель изменилась)
+    if (hashChanged) {
+      const cashback = useEconomyStore.getState().calculateAndClaimCashback(objectCount, csgOps)
+      if (cashback > 0) {
+        useEconomyStore.getState().lastExportHash = hash
+      }
+    }
+
+    downloadStl(objectList, (fileName?.replace(/\.doodle$/, '') ?? i18n.t('app.name')) + '.stl')
     // Квесты V2: оценка по состоянию проекта
-    useEconomyStore.getState().evaluateQuests(objects, get().operations)
+    useEconomyStore.getState().evaluateQuests(objects, operations)
+    // Y3.4: событийный квест — экспорт STL
+    useEconomyStore.getState().completeEventQuest('export_stl')
   },
 
   // ── Resize dims ──

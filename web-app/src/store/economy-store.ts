@@ -92,9 +92,10 @@ interface EconomyState {
   // ── Квесты ──
   todayQuests: QuestV2[]
   questTriggers: Record<QuestTrigger, number>
-  evaluateQuests(objects: Record<string, SceneObject>, operations: TinkerCraftOperation[]): void
   getTodayQuests(): QuestV2[]
+  completeEventQuest(trigger: QuestTrigger): void
   initDailyQuests(): void
+  evaluateQuests(objects: Record<string, SceneObject>, operations: TinkerCraftOperation[]): void
 
   // ── Хэш модели для кэшбэка ──
   lastExportHash: string | null
@@ -415,6 +416,33 @@ export const useEconomyStore = create<EconomyState>()(
         return state.todayQuests
       },
 
+      // ── Событийный квест: отметить выполнение по триггеру ──
+      // Y3.4: export_stl, import_stl — срабатывают при действии, не по состоянию
+      completeEventQuest: (trigger: QuestTrigger) => {
+        const state = get()
+        const quests = state.todayQuests
+        const updated = quests.map((q) => {
+          if (q.completed || q.trigger !== trigger) return q
+          // Событийный квест выполнен при наступлении события
+          return { ...q, completed: true, progress: q.target }
+        })
+        // Начисляем токены за новые выполненные квесты
+        let tokensEarned = 0
+        for (const q of updated) {
+          if (q.completed && q.trigger === trigger) {
+            // Проверяем, не был ли уже начислен
+            const old = quests.find(x => x.trigger === trigger)
+            if (!old?.completed) tokensEarned += q.reward
+          }
+        }
+        if (tokensEarned > 0) {
+          set({ todayQuests: updated, tokens: state.tokens + tokensEarned })
+          console.log(`[Economy] Event quest completed (${trigger}): +${tokensEarned} tokens`)
+        } else {
+          set({ todayQuests: updated })
+        }
+      },
+
       // ── Инициализация квестов на новый день ──
       initDailyQuests: () => {
         const state = get()
@@ -433,7 +461,7 @@ export const useEconomyStore = create<EconomyState>()(
       },
 
       // ── Оценка квестов V2 по состоянию проекта ──
-      evaluateQuests: (objects, operations) => {
+      evaluateQuests: (objects: Record<string, SceneObject>, operations: TinkerCraftOperation[]) => {
         const state = get()
         const quests = state.todayQuests
 
@@ -443,22 +471,41 @@ export const useEconomyStore = create<EconomyState>()(
         let mirroredCount = 0
         let text3dCount = 0
         let csgCount = 0
+        let csgWithChildren = 0
 
         let coloredCount = 0
         for (const obj of Object.values(objects)) {
           shapeTypes.add(obj.shapeType)
           if (obj.color && obj.color !== '#808080') coloredCount++
           if (obj.shapeType === 'csg') csgCount++
-          if ((obj as any).shapeType === 'text') text3dCount++
-          // Зеркалирование: проверяем по history (mirror operation)
-          // Упрощённо: считаем объекты с transform.scaleX < 0 или scaleX == 1 && mirror flag
-          // TODO: добавить явный флаг mirror в SceneObject
+          // Y3.7: исправлено 'text' → 'text3d'
+          if (obj.shapeType === 'text3d') text3dCount++
+          // Y3.6: зеркало — проверяем scale < 0
+          if (obj.transform.scaleX < 0 || obj.transform.scaleY < 0 || obj.transform.scaleZ < 0) {
+            mirroredCount++
+          }
         }
 
-        // CSG с детьми: считаем операции group
+        // Y3.5: CSG с детьми — считаем CSG-объекты у которых есть дети в operations
+        const childOfCsg = new Set<string>()
         for (const op of operations) {
-          if (op.type === 'group') {
-            // CSG операция — считаем детей
+          if (op.type === 'group' && op.ids) {
+            for (const childId of op.ids) {
+              childOfCsg.add(childId)
+            }
+          }
+        }
+        for (const obj of Object.values(objects)) {
+          if (obj.shapeType === 'csg' && childOfCsg.has(obj.id)) {
+            // Проверяем сколько детей у этого CSG
+            let childCount = 0
+            for (const op of operations) {
+              if (op.type === 'group' && op.ids && op.ids.includes(obj.id)) {
+                childCount = op.ids.length
+                break
+              }
+            }
+            if (childCount >= 3) csgWithChildren++
           }
         }
 
@@ -489,8 +536,8 @@ export const useEconomyStore = create<EconomyState>()(
               newProgress = csgCount
               break
             case 'csg_complex':
-              // TODO: считать CSG с ≥ 3 детьми
-              newProgress = 0
+              // Y3.5: CSG с ≥ 3 детьми
+              newProgress = csgWithChildren
               break
             case 'count_text3d':
               newProgress = text3dCount

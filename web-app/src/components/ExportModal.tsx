@@ -110,16 +110,6 @@ export default function ExportModal({
             <AdFilmIcon size={32} /> {t('export.watchAd', { count: todayAdsWatched, max: 3 })}
           </button>
 
-          {/* Вариант 3: бесплатная реклама */}
-          <button
-            className="btn btn-compact flex-1"
-            disabled={busy}
-            onClick={() => { onClose(); onExport('free') }}
-            style={{ justifyContent: 'center', padding: '16px 24px', fontSize: '20px' }}
-          >
-            <PlayIcon size={32} /> {t('export.free')}
-          </button>
-
           <button className="btn" onClick={onClose}>
             {t('textModal.cancel')}
           </button>
