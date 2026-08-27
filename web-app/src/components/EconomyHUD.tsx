@@ -44,18 +44,18 @@ export default function EconomyHUD() {
   const canWatchAd = todayAdsWatched < 3 && cooldownMs === 0
 
   // Переводы для UI
-  const adLabel = t('economy.adLabel', '📺 +50')
-  const bonusLabel = t('economy.bonusLabel', '🎁 +50')
-  const tokenLabel = t('economy.tokensLabel', '💰')
+  const adLabel = t('economy.adLabel')
+  const bonusLabel = t('economy.bonusLabel')
+  const tokenLabel = t('economy.tokensLabel')
 
   return (
-    <div className="economy-hud" style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '6px 8px', flexWrap: 'wrap' }}>
+    <div className="economy-hud" style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '10px 14px', flexWrap: 'wrap' }}>
       {/* Токены */}
-      <div className="economy-tokens" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+      <div className="economy-tokens" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
         {ICON_REGISTRY.token && (
-          <ICON_REGISTRY.token width={24} height={24} className="economy-icon" />
+          <ICON_REGISTRY.token width={40} height={40} className="economy-icon" />
         )}
-        <span className="economy-value" style={{ fontWeight: 'bold', fontSize: '16px' }}>
+        <span className="economy-value" style={{ fontWeight: 'bold', fontSize: '22px' }}>
           {tokens}
         </span>
       </div>
@@ -65,10 +65,10 @@ export default function EconomyHUD() {
         <button
           className="btn btn-compact btn-sm economy-bonus-btn"
           onClick={claimDailyBonus}
-          style={{ fontSize: '13px', padding: '6px 12px', display: 'flex', alignItems: 'center', gap: '6px' }}
+          style={{ fontSize: '18px', padding: '12px 24px', display: 'flex', alignItems: 'center', gap: '10px' }}
         >
           {ICON_REGISTRY.gift && (
-            <ICON_REGISTRY.gift width={22} height={22} />
+            <ICON_REGISTRY.gift width={28} height={28} />
           )}
           {bonusLabel}
         </button>
@@ -79,10 +79,10 @@ export default function EconomyHUD() {
         <button
           className="btn btn-compact btn-sm economy-ad-btn"
           onClick={watchAdForTokens}
-          style={{ fontSize: '13px', padding: '6px 12px', display: 'flex', alignItems: 'center', gap: '6px' }}
+          style={{ fontSize: '18px', padding: '12px 24px', display: 'flex', alignItems: 'center', gap: '10px' }}
         >
           {ICON_REGISTRY.ad && (
-            <ICON_REGISTRY.ad width={22} height={22} />
+            <ICON_REGISTRY.ad width={28} height={28} />
           )}
           {adLabel}
         </button>
@@ -90,7 +90,7 @@ export default function EconomyHUD() {
 
       {/* Таймер кулдауна рекламы */}
       {ECONOMY_UI.showAdButton && todayAdsWatched < 3 && cooldownMs > 0 && (
-        <div style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+        <div style={{ fontSize: '16px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '6px' }}>
           ⏱ {formatCooldown(cooldownMs)}
         </div>
       )}

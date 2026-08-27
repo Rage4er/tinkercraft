@@ -147,9 +147,9 @@
       "medium": "Среднее",
       "hard": "Сложное"
     },
-    "adLabel": "📺 +50",
-    "bonusLabel": "🎁 +50",
-    "tokensLabel": "💰"
+    "adLabel": "Реклама",
+    "bonusLabel": "Бонус",
+    "tokensLabel": "Токены"
   },
   "export": {
     "title": "Экспорт STL",

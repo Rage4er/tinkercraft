@@ -99,6 +99,9 @@ interface EconomyState {
   // ── Хэш модели для кэшбэка ──
   lastExportHash: string | null
 
+  // ── Для предотвращения дубликатов setData ──
+  lastSavedData: string
+
   // ── Actions ──
   addTokens(amount: number): void
   spendTokens(amount: number): boolean
@@ -124,6 +127,10 @@ interface EconomyState {
   // ── Синхронизация ──
   loadFromCloud(): Promise<void>
   syncToCloud(): Promise<void>
+
+  // ── Статус панели ──
+  setBannerVisible(visible: boolean): void
+  bannerVisible: boolean
 }
 
 // ─── Пул квестов V2 — состояние проекта, а не клики ────────────────
@@ -237,6 +244,8 @@ export const useEconomyStore = create<EconomyState>()(
       todayQuests: [],
       questTriggers: {} as Record<QuestTrigger, number>,
       lastExportHash: null,
+      lastSavedData: '' as string,
+      bannerVisible: false,
 
       // ── Actions ──
       addTokens: (amount) => {
@@ -544,20 +553,31 @@ export const useEconomyStore = create<EconomyState>()(
         const platform = getPlatform()
         if (!platform) return
 
+        const currentData = {
+          tokens: get().tokens,
+          lastDailyBonus: get().lastDailyBonus,
+          totalModelsCreated: get().totalModelsCreated,
+          activeSubscription: get().activeSubscription,
+          subscriptionExpiresAt: get().subscriptionExpiresAt,
+          rentals: get().rentals,
+          todayQuests: get().todayQuests,
+          todayQuestsCompleted: get().todayQuestsCompleted,
+        }
+
+        // Не сохраняем, если данные не изменились с последней синхронизации
+        const dataHash = JSON.stringify(currentData)
+        if (get().lastSavedData === dataHash) return
+
         try {
-          await platform.saveData({
-            tokens: get().tokens,
-            lastDailyBonus: get().lastDailyBonus,
-            totalModelsCreated: get().totalModelsCreated,
-            activeSubscription: get().activeSubscription,
-            subscriptionExpiresAt: get().subscriptionExpiresAt,
-            rentals: get().rentals,
-            todayQuests: get().todayQuests,
-            todayQuestsCompleted: get().todayQuestsCompleted,
-          })
+          await platform.saveData(currentData)
+          set({ lastSavedData: dataHash })
         } catch (error) {
           console.error('[Economy] Sync to cloud failed:', error)
         }
+      },
+
+      setBannerVisible: (visible: boolean) => {
+        set({ bannerVisible: visible })
       },
     }),
     {

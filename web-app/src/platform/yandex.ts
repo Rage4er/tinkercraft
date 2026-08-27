@@ -30,6 +30,14 @@ class YandexPlatform implements IPlatform {
       this.ysdk = ysdk
       console.log('[Yandex] SDK initialized successfully')
 
+      // Инициализируем sticky banner (правый верхний угол)
+      try {
+        const bannerStatus = await ysdk.adv.getBannerAdvStatus()
+        console.log('[Yandex] Banner status:', bannerStatus)
+      } catch (e) {
+        console.log('[Yandex] Banner not available (may be dashboard-controlled):', e)
+      }
+
       // Пробуем получить игрока
       try {
         this.player = await ysdk.getPlayer()
