@@ -7,10 +7,9 @@ import react from '@vitejs/plugin-react'
 // Синхронная загрузка (без async) — SDK обязан быть готов до app code.
 // ✅ Путь: /sdk.js (относительный — обслуживается Яндексом при загрузке архива)
 // ✅ Также вставляет manifest.json с относительным путём
-const yandexSdkPlugin = (): Plugin => ({
+const yandexSdkPlugin = (isYandex: boolean): Plugin => ({
   name: 'vite-plugin-yandex-sdk',
-  transformIndexHtml(html, ctx) {
-    const isYandex = process.env.VITE_PLATFORM === 'yandex' || ctx?.mode === 'yandex'
+  transformIndexHtml(html) {
     if (isYandex) {
       // Вставляем SDK ПЕРВЫМ в <head>, до всех остальных скриптов
       // Относительный путь /sdk.js — обслуживается Яндексом при загрузке архива в Консоль
@@ -104,7 +103,7 @@ export default defineConfig(({ mode }) => {
       react({
         exclude: /.worker.(js|ts)$/,
       }),
-      yandexSdkPlugin(),
+      yandexSdkPlugin(yandex),
       stripReactRefresh,
     ],
     resolve: {
