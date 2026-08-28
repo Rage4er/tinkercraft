@@ -32,7 +32,7 @@ import { downloadStl } from '../io/stl-export'
 import { openStlFilePicker, parseStlFile } from '../io/stl-import'
 import { autosaveSession, restoreSession } from '../io/autosave'
 import i18n from '../i18n'
-import { useEconomyStore, createExportHash } from './economy-store'
+import { useEconomyStore, createExportHash, scanForCashback } from './economy-store'
 
 export { computeAABB, extractAndCenterInPlace, extractAndCenterGetAABB, computeWorldAABB } from './helpers'
 import { computeAABB, extractAndCenterInPlace, extractAndCenterGetAABB, computeWorldAABB, makeObject, nextId, colorForIndex } from './helpers'
@@ -1021,9 +1021,10 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const lastHash = useEconomyStore.getState().lastExportHash
     const hashChanged = lastHash === null || lastHash !== hash
 
-    // Y3.2: кэшбэк за экспорт (только если модель изменилась)
+    // Y3.2/Y2.0: кэшбэк V2 за экспорт (только если модель изменилась)
     if (hashChanged) {
-      const cashback = useEconomyStore.getState().calculateAndClaimCashback(objectCount, csgOps)
+      const scan = scanForCashback(objects, operations)
+      const cashback = useEconomyStore.getState().calculateAndClaimCashback(scan)
       if (cashback > 0) {
         useEconomyStore.getState().lastExportHash = hash
       }

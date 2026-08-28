@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useEconomyStore } from '../store/economy-store'
 import Section from './Section'
-import { TokenIcon, CrownIcon, ClockIcon } from './icons'
+import { TokenIcon, CrownIcon, ClockIcon, AdFilmIcon } from './icons'
 
 /** Форматировать оставшееся время аренды */
 function formatRentalRemaining(expiresAt: number): string {
@@ -31,6 +31,7 @@ export default function EconomyShop() {
   const subscriptionExpiresAt = useEconomyStore((s) => s.subscriptionExpiresAt)
   const buyRental = useEconomyStore((s) => s.buyRental)
   const buySubscription = useEconomyStore((s) => s.buySubscription)
+  const setBannerVisible = useEconomyStore((s) => s.setBannerVisible)
 
   const [busyRental, setBusyRental] = useState<string | null>(null)
   const [busySub, setBusySub] = useState<string | null>(null)
@@ -44,8 +45,8 @@ export default function EconomyShop() {
     setBusyRental(key)
     const result = await buyRental(key)
     setBusyRental(null)
-    if (result.ok) {
-      // Можно показать toast
+    if (result.ok && key === 'disableBanner') {
+      setBannerVisible(false)
     }
   }
 
@@ -56,7 +57,7 @@ export default function EconomyShop() {
     const result = await buySubscription(type)
     setBusySub(null)
     if (result.ok) {
-      // Можно показать toast
+      setBannerVisible(false)
     }
   }
 
@@ -178,6 +179,40 @@ export default function EconomyShop() {
               ))}
             </div>
           )}
+        </div>
+
+        {/* Кнопка скрытия баннера — два места (§6.3 ECONOMY.md v2.0) */}
+        <div style={{
+          padding: '8px 12px',
+          borderRadius: '6px',
+          background: 'var(--bg-tertiary)',
+          border: '1px solid var(--border)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}>
+          <div>
+            <div style={{ fontSize: '13px', fontWeight: 'bold' }}>{t('economy.triggers.bannerOff', { defaultValue: 'Нет баннера на 24 ч' })}</div>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{t('economy.tooltip.bannerOff')}</div>
+          </div>
+          <div style={{ display: 'flex', gap: '6px' }}>
+            <button
+              className="btn btn-compact btn-sm"
+              disabled={tokens < 50 || busyRental === 'disableBanner'}
+              onClick={() => handleBuyRental('disableBanner')}
+              style={{ fontSize: '11px', padding: '4px 8px', display: 'flex', alignItems: 'center', gap: '3px' }}
+            >
+              <TokenIcon width={12} height={12} /> 50
+            </button>
+            <button
+              className="btn btn-compact btn-sm"
+              disabled={busyRental === 'disableBanner'}
+              onClick={() => handleBuyRental('disableBanner')}
+              style={{ fontSize: '11px', padding: '4px 8px', display: 'flex', alignItems: 'center', gap: '3px' }}
+            >
+              <AdFilmIcon width={12} height={12} /> 1
+            </button>
+          </div>
         </div>
       </div>
     </Section>

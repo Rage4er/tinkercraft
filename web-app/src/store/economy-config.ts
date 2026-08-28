@@ -1,5 +1,6 @@
-// src/store/economy-config.ts — Константы экономики по ECONOMY.md
-// Версия: 1.0 (релиз) · Дата: 22.08.2026
+// src/store/economy-config.ts — Константы экономики по ECONOMY.md v2.0
+// Версия: 2.0 · Дата: 28.08.2026
+// Кэшбэк V2: формула коэффициентов, полная UI-спецификация
 
 // ─── Тарифы ─────────────────────────────────────────────────────────
 
@@ -45,14 +46,21 @@ export const EARNINGS_QUESTS = {
 /** Использование фигур/инструментов */
 export const EARNINGS_ACTION = 1
 
-/** Кэшбэк за экспорт */
+/** Кэшбэк V2 — формула коэффициентов (§2.1 ECONOMY.md v2.0)
+ *  Кэшбэк = min(25, 1 + Масштаб + РазнообразиеФигур + КолИнструментов + РазнообразиеИнструментов)
+ */
 export const EARNINGS_CASHBACK = {
-  base: 5,
-  perObjectOver5: 1,
-  maxObjectsBonus: 10, // максимум +10 за объекты
-  perCsgOp: 2,
-  maxCsgBonus: 10, // максимум +10 за CSG
-  ceiling: 25, // общий потолок
+  base: 1, // база за факт экспорта
+  // Масштаб: +1 за 5 объектов (примитивы+baked, включая детей CSG), кап 6
+  perObjectScale: 5,
+  maxObjectsBonus: 6,
+  // Разнообразие фигур: уникальные типы примитивов (0 если один), кап 6
+  maxShapeTypesBonus: 6,
+  // Кол-во инструментов: CSG-узлы + зеркала + перекраски + тексты, кап 6
+  maxToolsCount: 6,
+  // Разнообразие инструментов: категории булевы/зеркало/цвет/текст, кап 6
+  maxToolCategories: 6,
+  ceiling: 25,
 } as const
 
 // ─── Лимиты ─────────────────────────────────────────────────────────
@@ -111,26 +119,111 @@ export function isCooldownPassed(timestamp: number | null, ms: number): boolean 
   return Date.now() - timestamp >= ms
 }
 
-/** Рассчитать кэшбэк за экспорт */
+/**
+ * Рассчитать кэшбэк V2 по формуле коэффициентов (§2.1 ECONOMY.md v2.0)
+ * Кэшбэк = min(25, 1 + Масштаб + РазнообразиеФигур + КолИнструментов + РазнообразиеИнструментов)
+ *
+ * @param scanResult — результат сканирования дерева документов (общий с квестами V2)
+ */
+export interface CashbackScanResult {
+  /** Количество объектов (примитивы+baked, включая детей CSG) */
+  objectCount: number
+  /** Уникальные типы примитивов */
+  uniqueShapeTypes: number
+  /** CSG-узлы + зеркала + перекраски + тексты */
+  toolsCount: number
+  /** Категории инструментов: булевы/зеркало/цвет/текст */
+  toolCategories: number
+}
+
+export function calculateCashbackV2(scan: CashbackScanResult): number {
+  // Масштаб: +1 за 5 объектов, кап 6
+  const scaleBonus = Math.min(
+    Math.floor(scan.objectCount / EARNINGS_CASHBACK.perObjectScale),
+    EARNINGS_CASHBACK.maxObjectsBonus
+  )
+  // Разнообразие фигур: уникальные типы (0 если один), кап 6
+  const shapeDiversityBonus = Math.min(
+    Math.max(0, scan.uniqueShapeTypes - 1),
+    EARNINGS_CASHBACK.maxShapeTypesBonus
+  )
+  // Кол-во инструментов, кап 6
+  const toolsCountBonus = Math.min(scan.toolsCount, EARNINGS_CASHBACK.maxToolsCount)
+  // Разнообразие инструментов, кап 6
+  const toolsDiversityBonus = Math.min(scan.toolCategories, EARNINGS_CASHBACK.maxToolCategories)
+
+  const total =
+    EARNINGS_CASHBACK.base +
+    scaleBonus +
+    shapeDiversityBonus +
+    toolsCountBonus +
+    toolsDiversityBonus
+
+  return Math.min(total, EARNINGS_CASHBACK.ceiling)
+}
+
+/**
+ * Старая формула кэшбэка (для обратной совместимости)
+ * @deprecated Используйте calculateCashbackV2
+ */
 export function calculateCashback(
   objectCount: number,
   csgOps: number
 ): number {
   const objectsBonus = Math.min(
-    Math.max(0, objectCount - 5) * EARNINGS_CASHBACK.perObjectOver5,
-    EARNINGS_CASHBACK.maxObjectsBonus
+    Math.max(0, objectCount - 5) * 1,
+    10
   )
   const csgBonus = Math.min(
-    csgOps * EARNINGS_CASHBACK.perCsgOp,
-    EARNINGS_CASHBACK.maxCsgBonus
+    csgOps * 2,
+    10
   )
   return Math.min(
-    EARNINGS_CASHBACK.base + objectsBonus + csgBonus,
-    EARNINGS_CASHBACK.ceiling
+    5 + objectsBonus + csgBonus,
+    25
   )
 }
 
 /** Проверить, достигнут ли дневной лимит по количеству */
 export function isLimitReached(count: number, limit: number): boolean {
   return count >= limit
+}
+
+// ─── Сканирование дерева для кэшбэка V2 и квестов ───────────────────
+
+/**
+ * Отсканировать объекты и операции для расчёта кэшбэка V2.
+ * Общий сканер с квестами V2 (§2.1, §4 ECONOMY.md v2.0).
+ */
+export function scanForCashback(
+  objects: Record<string, { shapeType: string; color: string; transform: { scaleX: number; scaleY: number; scaleZ: number } }>,
+  operations: Array<{ type: string; ids?: string[] }>
+): CashbackScanResult {
+  const shapeTypes = new Set<string>()
+  let coloredCount = 0
+  let csgCount = 0
+  let mirrorCount = 0
+  let textCount = 0
+
+  for (const obj of Object.values(objects)) {
+    shapeTypes.add(obj.shapeType)
+    if (obj.color && obj.color !== '#808080') coloredCount++
+    if (obj.shapeType === 'csg') csgCount++
+    if (obj.transform.scaleX < 0 || obj.transform.scaleY < 0 || obj.transform.scaleZ < 0) mirrorCount++
+    if (obj.shapeType === 'text3d') textCount++
+  }
+
+  // Категории инструментов
+  let toolCategories = 0
+  if (csgCount > 0) toolCategories++ // булевы
+  if (mirrorCount > 0) toolCategories++ // зеркало
+  if (coloredCount > 0) toolCategories++ // цвет
+  if (textCount > 0) toolCategories++ // текст
+
+  return {
+    objectCount: Object.keys(objects).length,
+    uniqueShapeTypes: shapeTypes.size,
+    toolsCount: csgCount + mirrorCount + coloredCount + textCount,
+    toolCategories,
+  }
 }

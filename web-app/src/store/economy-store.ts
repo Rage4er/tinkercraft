@@ -1,4 +1,4 @@
-// src/store/economy-store.ts — Полная экономика по ECONOMY.md v1.0
+// src/store/economy-store.ts — Полная экономика по ECONOMY.md v2.0
 // Релиз: моделирование бесплатно · вывод и удобства — аренда · токены · квесты
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
@@ -11,15 +11,17 @@ import {
   EARNINGS_AD_REWARDED,
   EARNINGS_QUESTS,
   EARNINGS_ACTION,
-  EARNINGS_CASHBACK,
   LIMITS,
   AD_COOLDOWN_MS,
   ACTION_COOLDOWN_MS,
-  calculateCashback,
+  calculateCashbackV2,
+  scanForCashback,
   isDayPassed,
   isCooldownPassed,
   isLimitReached,
 } from './economy-config'
+
+export { scanForCashback, calculateCashbackV2 }
 import type { SceneObject, TinkerCraftOperation } from '../csg/types'
 
 // ─── Типы ───────────────────────────────────────────────────────────
@@ -112,7 +114,7 @@ interface EconomyState {
   claimDailyBonus(): Promise<boolean>
   watchAdForTokens(): Promise<boolean>
   earnActionToken(): boolean
-  calculateAndClaimCashback(objectCount: number, csgOps: number): number
+  calculateAndClaimCashback(scanResult: { objectCount: number; uniqueShapeTypes: number; toolsCount: number; toolCategories: number }): number
 
   // ── Подписки ──
   hasActiveSubscription(): boolean
@@ -329,20 +331,20 @@ export const useEconomyStore = create<EconomyState>()(
         return true
       },
 
-      // ── Кэшбэк за экспорт: +5…+25, ≤ 3/день ──
-      calculateAndClaimCashback: (objectCount: number, csgOps: number) => {
+      // ── Кэшбэк V2 за экспорт: +1…+25, ≤ 3/день ──
+      calculateAndClaimCashback: (scanResult) => {
         const state = get()
 
         if (isLimitReached(state.todayCashbacks, LIMITS.cashbackPerDay)) return 0
 
-        const cashback = calculateCashback(objectCount, csgOps)
+        const cashback = calculateCashbackV2(scanResult)
         if (cashback === 0) return 0
 
         set((state) => ({
           tokens: state.tokens + cashback,
           todayCashbacks: state.todayCashbacks + 1,
         }))
-        console.log(`[Economy] Cashback claimed: +${cashback}`)
+        console.log(`[Economy] Cashback V2 claimed: +${cashback}`)
         return cashback
       },
 
