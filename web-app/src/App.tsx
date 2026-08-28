@@ -10,6 +10,8 @@ import ToastContainer from "./components/ToastContainer";
 import Toolbar from "./components/Toolbar";
 import TextModal from "./components/TextModal";
 import ExportModal from "./components/ExportModal";
+import EconomyBanner from "./components/EconomyBanner";
+import EconomyOnboarding from "./components/EconomyOnboarding";
 import StatusBar from "./components/StatusBar";
 import LeftPanel from "./components/LeftPanel";
 import PropertiesPanel from "./components/PropertiesPanel";
@@ -507,6 +509,9 @@ export default function App() {
     <div className="app">
       <ToastContainer />
 
+      {/* ── ЭКОНОМИКА: онбординг (§6.7) ── */}
+      <EconomyOnboarding />
+
       {/* ── Ruler distance display ── */}
       {rulerDist !== null && (
         <div className="ruler-display">
@@ -600,6 +605,11 @@ export default function App() {
         onToggleTheme={() => setTheme(theme === "dark" ? "light" : "dark")}
         onClearScene={clearScene}
       />
+
+      {/* ── ЭКОНОМИКА: баннер (yandex-only, §6.3) ── */}
+      <div style={{ padding: '0 16px' }}>
+        <EconomyBanner />
+      </div>
 
       {/* ── MAIN ── */}
       <div className="main">

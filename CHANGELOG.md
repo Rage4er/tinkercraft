@@ -9,6 +9,23 @@
 
 ## [Unreleased]
 
+### Added
+- **EconomyHUD v2** — счётчик `+50 · N/3`, таймер кулдауна "ждём 4:32", состояние "до 23:45" для бонуса (§6.1) (`components/EconomyHUD.tsx`)
+- **EconomyBanner.tsx** — рекламный баннер с кнопкой скрытия (§6.3 место 1): [💎 50] [📺 1] (`components/EconomyBanner.tsx`)
+- **Badge.tsx** — компонент бейджей на кнопках: 💰/📺 слева-внизу, ⏱/👑 слева-вверху (§6.4) (`components/Badge.tsx`)
+- **EconomyOnboarding.tsx** — онбординг экономики 3 шага: ХУД → бейджи → панель, флаг в облако (§6.7) (`components/EconomyOnboarding.tsx`)
+- **ExportModal cashback breakdown** — разбивка кэшбэка V2 в модалке экспорта: база, масштаб, фигуры, инструменты (§6.5) (`components/ExportModal.tsx`)
+
+### Fixed
+- **Toolbar бейджи** — бейджи на кнопках экспорта (💎 50) и импорта (💎 100) (§6.4) (`components/Toolbar.tsx`)
+- **EconomyShop.tsx** — исправлен bug: хук в цикле заменён на `getState()` (`components/EconomyShop.tsx`)
+- **i18n** — дополнены ключи export.cashbackBreakdown (RU/EN), adLabel убран из статического значения (`i18n/locales/*/translation.json`)
+
+### Changed
+- **EconomyHUD** — переписан с SVG-иконками, динамическими счётчиками и состояниями (`components/EconomyHUD.tsx`)
+- **ExportModal** — используется scanForCashback() для точной разбивки кэшбэка (`components/ExportModal.tsx`)
+- **App.tsx** — добавлен EconomyBanner и EconomyOnboarding, экономика интегрирована (§6.3, §6.7)
+
 ### Fixed
 - **SDK автолокализация** — убран жёстко заданный `lang="ru"` из `index.html`: при неработающем SDK язык браузера (`navigator.language`) определялся как "ru" из-за атрибута `<html lang="ru">`. Теперь приоритет: 1) SDK `ysdk.environment.i18n.lang`, 2) `navigator.language`, 3) `navigator.languages[0]`, 4) `document.documentElement.lang`, 5) fallback → 'en'. Улучшено логирование: `[SDK] environment` и `[i18n] [SDK]` / `[navigator]` / `[document]` для отладки модерации. (`index.html`, `i18n/init.ts`, `platform/sdk.ts`)
 - **UI экономики §6.2** — экономика интегрирована в PropertiesPanel (токены, бонус, квесты, аренда, подписки, баннер off) вместо отдельных компонентов EconomyHUD/QuestPanel/EconomyShop. Добавлена проверка `isYandex` — экономика скрывается в clean-версии. Убраны дублирующие компоненты из App.tsx. (`PropertiesPanel.tsx`, `App.tsx`, `i18n/locales/*`)

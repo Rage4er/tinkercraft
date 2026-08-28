@@ -127,10 +127,20 @@
   },
   "export": {
     "title": "Экспорт STL",
-    "description": "Выберите способ экспорта вашей модели:",
+    "description": "Выберите способ экспорта модели:",
     "cashbackInfo": "Кэшбэк до {{cashback}} токенов → итоговая цена: {{netCost}}",
     "payTokens": "Оплатить {{cost}} токенов",
-    "watchAd": "Реклама ({{count}}/3 просмотрено)"
+    "watchAd": "Посмотреть рекламу ({{count}}/{{max}})",
+    "cashbackBreakdown": {
+      "base": "База: {{base}}",
+      "scale": "Масштаб: +{{scale}}",
+      "shapeDiv": "Разнообразие фигур: +{{shapeDiv}}",
+      "toolCount": "Кол-во инструментов: +{{toolCount}}",
+      "toolDiv": "Разнообразие инструментов: +{{toolDiv}}",
+      "total": "Итого кэшбэк: {{total}}"
+    },
+    "adNotAvailable": "Лимит рекламы на сегодня",
+    "notEnoughTokens": "Не хватает токенов"
   },
   "leftPanel": {
     "shapes": "Фигуры",
@@ -367,7 +377,7 @@
   "economy": {
     "tokensLabel": "💎 Токены",
     "bonusLabel": "+50",
-    "adLabel": "+50 · 2/3",
+    "adLabel": "+50",
     "quests": "Задания дня",
     "rentals": "Аренда",
     "subscription": "Pro",

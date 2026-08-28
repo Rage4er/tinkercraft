@@ -5,6 +5,7 @@ import AlignButtons from "./AlignButtons";
 import CsgButtons from "./CsgButtons";
 import IconButton from "./IconButton";
 import ToolbarRowSplit from "./ToolbarRowSplit";
+import Badge from "./Badge";
 import { TOOLTIP_DATA, type TooltipData } from "../constants";
 import {
   OpenIcon,
@@ -30,6 +31,7 @@ import {
 } from "./icons";
 import { useToolbarLayout } from "../hooks/useToolbarLayout";
 import type { ToolbarGroup } from "../utils/toolbar-layout";
+import { useEconomyStore } from "../store/economy-store";
 
 export default function Toolbar({
   objectCount,
@@ -109,6 +111,21 @@ export default function Toolbar({
   onClearScene: () => void;
 }) {
   const { t } = useTranslation();
+
+  // Экономика: бейджи на кнопках (§6.4)
+  const tokens = useEconomyStore((s) => s.tokens)
+
+  // Проверка: нужен ли бейдж на экспорте
+  const state = useEconomyStore.getState()
+  const hasActiveSub = state.hasActiveSubscription()
+  const hasRentalText3d = state.hasRental('text3d')
+
+  // Проверка: нужен ли бейдж на импорте
+  const exportLocked = !hasActiveSub && tokens < 50
+  const exportActive = hasActiveSub || hasRentalText3d
+
+  const importLocked = !hasActiveSub && tokens < 100
+  const importActive = hasActiveSub
   // Определяем группы для алгоритма
   const groups: ToolbarGroup[] = [
     { id: "file", buttonCount: 5 },
@@ -146,8 +163,14 @@ export default function Toolbar({
         buttons={[
           <IconButton key="open" icon={<OpenIcon size={32} />} label={t("actions.open")} onClick={onOpen} tooltip={TOOLTIP_DATA.open} />,
           <IconButton key="save" icon={<SaveIcon size={32} />} label={t("actions.save")} onClick={onSave} tooltip={TOOLTIP_DATA.save} />,
-          <IconButton key="export" icon={<ExportIcon size={32} />} label="STL" onClick={onExportStl} disabled={objectCount === 0} tooltip={TOOLTIP_DATA.export_stl} />,
-          <IconButton key="import" icon={<ImportIcon size={32} />} label={t("actions.import")} onClick={onImportStl} disabled={busy} tooltip={TOOLTIP_DATA.import_stl} />,
+          <div key="export" style={{ position: 'relative' }}>
+            <IconButton icon={<ExportIcon size={32} />} label="STL" onClick={onExportStl} disabled={objectCount === 0} tooltip={TOOLTIP_DATA.export_stl} />
+            <Badge type="tokens" value="50" isActive={exportActive} />
+          </div>,
+          <div key="import" style={{ position: 'relative' }}>
+            <IconButton icon={<ImportIcon size={32} />} label={t("actions.import")} onClick={onImportStl} disabled={busy} tooltip={TOOLTIP_DATA.import_stl} />
+            <Badge type="tokens" value="100" isActive={importActive} />
+          </div>,
           <IconButton key="projects" icon={<FolderIcon size={32} />} label={t("properties.projectManager")} onClick={onShowProjects} tooltip={TOOLTIP_DATA.projects} />,
         ]}
       />

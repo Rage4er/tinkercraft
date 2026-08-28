@@ -1,8 +1,9 @@
 // src/components/ExportModal.tsx — Модалка выбора способа экспорта STL
+// §6.5 ECONOMY.md v2.0: разбивка кэшбэка и фактическая стоимость
 import { useCallback, useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useEconomyStore } from '../store/economy-store'
-import { ECONOMY_COSTS, calculateCashback } from '../store/economy-config'
+import { useEconomyStore, scanForCashback } from '../store/economy-store'
+import { ECONOMY_COSTS } from '../store/economy-config'
 import { ExportIcon, TokenIcon, AdFilmIcon } from './icons'
 
 export default function ExportModal({
@@ -11,8 +12,8 @@ export default function ExportModal({
   onClose,
   onExport,
 }: {
-  objects: Record<string, { shapeType: string }>
-  operations: Array<{ type: string }>
+  objects: Record<string, { shapeType: string; transform?: { scaleX: number; scaleY: number; scaleZ: number }; color?: string }>
+  operations: Array<{ type: string; ids?: string[] }>
   onClose: () => void
   onExport: (method: 'tokens' | 'ad') => void
 }) {
@@ -36,12 +37,26 @@ export default function ExportModal({
     [operations],
   )
 
-  // Прогноз кэшбэка (не начисляем — только показываем)
-  const estimatedCashback = useMemo(
-    () => calculateCashback(objectCount, csgOps),
-    [objectCount, csgOps],
-  )
-  const netCost = Math.max(0, exportCost - estimatedCashback)
+  // Сканер для кэшбэка
+  const cashbackScan = useMemo(() => {
+    return scanForCashback(
+      objects as Record<string, { shapeType: string; color: string; transform: { scaleX: number; scaleY: number; scaleZ: number } }>,
+      operations
+    )
+  }, [objects, operations])
+
+  // Разбивка кэшбэка
+  const cashbackBreakdown = useMemo(() => {
+    const base = 1
+    const scale = Math.min(6, Math.floor(objectCount / 5))
+    const shapeDiv = Math.min(6, cashbackScan.uniqueShapeTypes > 1 ? cashbackScan.uniqueShapeTypes - 1 : 0)
+    const toolCount = Math.min(6, cashbackScan.toolsCount)
+    const toolDiv = [0, 0, 2, 4, 6][Math.min(4, cashbackScan.toolCategories)] || 0
+    const total = Math.min(25, base + scale + shapeDiv + toolCount + toolDiv)
+    return { base, scale, shapeDiv, toolCount, toolDiv, total }
+  }, [objectCount, cashbackScan])
+
+  const netCost = Math.max(0, exportCost - cashbackBreakdown.total)
 
   const handlePayTokens = useCallback(async () => {
     if (busy) return
@@ -82,10 +97,51 @@ export default function ExportModal({
           <p style={{ margin: '0 0 12px' }}>
             {t('export.description')}
           </p>
-          {estimatedCashback > 0 && (
-            <p style={{ margin: '0 0 16px', fontSize: '15px', color: 'var(--text-muted)' }}>
-              {t('export.cashbackInfo', { cashback: estimatedCashback, netCost })}
-            </p>
+
+          {/* Разбивка кэшбэка */}
+          {cashbackBreakdown.total > 0 && (
+            <div style={{
+              background: 'var(--bg-secondary)',
+              borderRadius: '6px',
+              padding: '12px',
+              marginBottom: '16px',
+              fontSize: '13px',
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                <span style={{ color: 'var(--text-muted)' }}>{t('export.cashbackBreakdown.base', { base: cashbackBreakdown.base })}</span>
+                <span>+{cashbackBreakdown.base}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                <span style={{ color: 'var(--text-muted)' }}>{t('export.cashbackBreakdown.scale', { scale: cashbackBreakdown.scale })}</span>
+                <span>+{cashbackBreakdown.scale}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                <span style={{ color: 'var(--text-muted)' }}>{t('export.cashbackBreakdown.shapeDiv', { shapeDiv: cashbackBreakdown.shapeDiv })}</span>
+                <span>+{cashbackBreakdown.shapeDiv}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                <span style={{ color: 'var(--text-muted)' }}>{t('export.cashbackBreakdown.toolCount', { toolCount: cashbackBreakdown.toolCount })}</span>
+                <span>+{cashbackBreakdown.toolCount}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                <span style={{ color: 'var(--text-muted)' }}>{t('export.cashbackBreakdown.toolDiv', { toolDiv: cashbackBreakdown.toolDiv })}</span>
+                <span>+{cashbackBreakdown.toolDiv}</span>
+              </div>
+              <div style={{
+                display: 'flex', justifyContent: 'space-between',
+                paddingTop: '8px', borderTop: '1px solid var(--border)',
+                fontWeight: 'bold', marginTop: '4px',
+              }}>
+                <span>{t('export.cashbackBreakdown.total', { total: cashbackBreakdown.total })}</span>
+                <span style={{ color: 'var(--success)' }}>+{cashbackBreakdown.total}</span>
+              </div>
+              <div style={{
+                display: 'flex', justifyContent: 'space-between',
+                marginTop: '8px', fontSize: '14px',
+              }}>
+                <span>{t('export.cashbackInfo', { cashback: cashbackBreakdown.total, netCost })}</span>
+              </div>
+            </div>
           )}
         </div>
 

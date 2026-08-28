@@ -130,7 +130,17 @@
     "description": "Choose how to export your model:",
     "cashbackInfo": "Cashback up to {{cashback}} tokens → final price: {{netCost}}",
     "payTokens": "Pay {{cost}} tokens",
-    "watchAd": "Watch ad ({{count}}/3 watched)"
+    "watchAd": "Watch ad ({{count}}/{{max}} watched)",
+    "cashbackBreakdown": {
+      "base": "Base: {{base}}",
+      "scale": "Scale: +{{scale}}",
+      "shapeDiv": "Shape types: +{{shapeDiv}}",
+      "toolCount": "Tools: +{{toolCount}}",
+      "toolDiv": "Tool categories: +{{toolDiv}}",
+      "total": "Total cashback: {{total}}"
+    },
+    "adNotAvailable": "Ad limit reached today",
+    "notEnoughTokens": "Not enough tokens"
   },
   "leftPanel": {
     "shapes": "Shapes",
@@ -366,7 +376,7 @@
   "economy": {
     "tokensLabel": "💎 Tokens",
     "bonusLabel": "+50",
-    "adLabel": "+50 · 2/3",
+    "adLabel": "+50",
     "quests": "Daily quests",
     "rentals": "Rentals",
     "subscription": "Pro",

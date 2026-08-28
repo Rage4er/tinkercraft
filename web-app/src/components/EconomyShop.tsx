@@ -85,7 +85,7 @@ export default function EconomyShop() {
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             {rentalsConfig.map((r) => {
-              const isActive = useEconomyStore((s) => s.hasRental(r.key))
+              const isActive = useEconomyStore.getState().hasRental(r.key)
               const rentalExpires = rentals[r.key]
               const remaining = rentalExpires !== null ? formatRentalRemaining(rentalExpires) : null
 
