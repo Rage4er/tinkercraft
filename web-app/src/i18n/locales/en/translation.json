@@ -125,42 +125,6 @@
   "palette": {
     "regular": "Standard Palette"
   },
-  "economy": {
-    "tokensLabel": "Tokens",
-    "bonusLabel": "Daily bonus",
-    "adLabel": "Watch ad",
-    "quests": "Daily quests",
-    "difficulty": {
-      "easy": "Easy",
-      "medium": "Medium",
-      "hard": "Hard"
-    },
-    "triggers": {
-      "count_cubes": "Cube base (≥ {{n}} cubes)",
-      "count_objects": "Empty scene (≥ {{n}} objects)",
-      "count_unique_shapes": "Diversity (≥ {{n}} shape types)",
-      "count_colored": "Painter (≥ {{n}} colored objects)",
-      "count_csg": "Boolean debut (≥ {{n}} CSG)",
-      "csg_complex": "Complex geometry (CSG with ≥ 3 children)",
-      "count_mirrored": "Mirror world (≥ {{n}} mirrors)",
-      "export_stl": "First export (export STL)",
-      "export_stl_large": "Worthy print (export ≥ {{n}} objects)",
-      "import_stl": "Foreign geometry (import STL)",
-      "count_text3d": "Engraving (≥ {{n}} 3D text)"
-    },
-    "rentals": "Rentals & subscriptions",
-    "subscription": "Pro subscription",
-    "tooltip": {
-      "tokens": "Internal currency: spend on export, rental, subscription",
-      "bonus": "Once per day, reset by server time",
-      "ad": "Up to 3 views per day, 5 minute cooldown",
-      "quests": "Reward granted on save or export",
-      "bannerOff": "Hide banner for 24h for 50 💎 or 1 ad view",
-      "subscription": "One-time purchase. No auto-renewal",
-      "cashback": "More complex model = more refund, up to 3x/day",
-      "notEnough": "Earn with bonus, ads and quests"
-    }
-  },
   "export": {
     "title": "Export STL",
     "description": "Choose how to export your model:",
@@ -398,5 +362,39 @@
     "notEnough": "Not enough tokens",
     "adSkipped": "Ad was skipped",
     "success": "Unlocked!"
+  },
+  "economy": {
+    "tokensLabel": "💎 Tokens",
+    "bonusLabel": "+50",
+    "adLabel": "+50 · 2/3",
+    "quests": "Daily quests",
+    "rentals": "Rentals",
+    "subscription": "Pro",
+    "difficulty": {
+      "easy": "Easy",
+      "medium": "Medium",
+      "hard": "Hard"
+    },
+    "triggers": {
+      "count_cubes": "Cube base (≥ {{n}} cubes)",
+      "count_objects": "Scene (≥ {{n}} objects)",
+      "count_unique_shapes": "Diversity (≥ {{n}} shape types)",
+      "count_colored": "Painter (≥ {{n}} colored objects)",
+      "count_csg": "Boolean debut (≥ {{n}} CSG)",
+      "csg_complex": "Complex geometry (CSG with ≥ 3 children)",
+      "count_mirrored": "Mirror world (≥ {{n}} mirrors)",
+      "export_stl": "First export (export STL)",
+      "export_stl_large": "Worthy print (export ≥ {{n}} objects)",
+      "import_stl": "Foreign geometry (import STL)",
+      "count_text3d": "Engraving (≥ {{n}} 3D text)",
+      "bannerOff": "No banner for 24h"
+    },
+    "tooltip": {
+      "bonus": "Once per day, reset by server time",
+      "ad": "Up to 3 views per day, 5 min cooldown",
+      "adLimit": "Daily limit",
+      "quests": "Reward granted on save or export",
+      "bannerOff": "Hide banner for 24h for 50 💎 or 1 ad"
+    }
   }
 }

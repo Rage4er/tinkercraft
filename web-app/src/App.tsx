@@ -13,9 +13,7 @@ import ExportModal from "./components/ExportModal";
 import StatusBar from "./components/StatusBar";
 import LeftPanel from "./components/LeftPanel";
 import PropertiesPanel from "./components/PropertiesPanel";
-import EconomyHUD from "./components/EconomyHUD";
-import QuestPanel from "./components/QuestPanel";
-import EconomyShop from "./components/EconomyShop";
+// EconomyHUD, QuestPanel, EconomyShop удалены — интегрированы в PropertiesPanel (§6.2 ECONOMY.md)
 import { useDocumentStore } from "./store/document-store";
 import { useUiStore } from "./store/ui-store";
 import { useEconomyStore } from "./store/economy-store";
@@ -731,14 +729,7 @@ export default function App() {
             onSaveToProject={saveToProject}
           />
 
-          {/* HUD экономики (токены + бонусы) */}
-          <EconomyHUD />
-
-          {/* Ежедневные квесты */}
-          <QuestPanel />
-
-          {/* Магазин экономики (аренда + подписки) */}
-          <EconomyShop />
+          {/* Economy: HUD, квесты, аренда, подписки — интегрированы в PropertiesPanel (§6.2) */}
         </div>
       </div>
 

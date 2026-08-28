@@ -5,8 +5,315 @@ import AlignButtons from "./AlignButtons";
 import CsgButtons from "./CsgButtons";
 import ColorPalette from "./ColorPalette";
 import type { ShapeParams, SceneObject } from "../csg/types";
-import { EyeIcon, EyeOffIcon, FilletIcon, FolderIcon, SaveIcon } from "./icons";
+import { EyeIcon, EyeOffIcon, FilletIcon, FolderIcon, SaveIcon, TokenIcon, GiftIcon, AdFilmIcon, CrownIcon, ClockIcon, SparkIcon, StarIcon, TrophyIcon } from "./icons";
+import { useEconomyStore, type QuestDifficulty, type RentalKey } from "../store/economy-store";
+import { getPlatform } from "../platform";
+import { ECONOMY_UI, DIFFICULTY_ICON, ICON_REGISTRY } from "../store/economy-ui-config";
 
+/** Форматировать оставшееся время аренды (ч м) */
+function formatRentalRemaining(expiresAt: number): string {
+  const remaining = expiresAt - Date.now()
+  if (remaining <= 0) return 'Истекла'
+  const hours = Math.floor(remaining / (1000 * 60 * 60))
+  const mins = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60))
+  return `${hours}ч ${mins}м`
+}
+
+/** Форматировать оставшееся время подписки (дн ч) */
+function formatSubRemaining(expiresAt: number): string {
+  const remaining = expiresAt - Date.now()
+  if (remaining <= 0) return 'Истекла'
+  const days = Math.floor(remaining / (1000 * 60 * 60 * 24))
+  const hours = Math.floor((remaining % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
+  return `${days}д ${hours}ч`
+}
+
+/** Форматировать ms → "5:00" */
+function formatCooldown(ms: number): string {
+  const totalSec = Math.ceil(ms / 1000)
+  const min = Math.floor(totalSec / 60)
+  const sec = totalSec % 60
+  return `${min}:${sec.toString().padStart(2, '0')}`
+}
+
+/** Рассчитать оставшееся время кулдауна рекламы (мс) */
+function getAdCooldownRemaining(): number {
+  const { lastAdTimestamp } = useEconomyStore.getState()
+  if (!lastAdTimestamp) return 0
+  const AD_COOLDOWN_MS = 5 * 60 * 1000
+  const elapsed = Date.now() - lastAdTimestamp
+  return Math.max(0, AD_COOLDOWN_MS - elapsed)
+}
+
+// ─── Экономика: панель (yandex-only, §6.2 ECONOMY.md v2.0) ──────────
+
+function EconomyPanel() {
+  const { t } = useTranslation()
+  const tokens = useEconomyStore((s) => s.tokens)
+  const claimDailyBonus = useEconomyStore((s) => s.claimDailyBonus)
+  const watchAdForTokens = useEconomyStore((s) => s.watchAdForTokens)
+  const todayAdsWatched = useEconomyStore((s) => s.todayAdsWatched)
+  const lastDailyBonus = useEconomyStore((s) => s.lastDailyBonus)
+  const todayQuests = useEconomyStore((s) => s.todayQuests)
+  const todayQuestsCompleted = useEconomyStore((s) => s.todayQuestsCompleted)
+  const rentals = useEconomyStore((s) => s.rentals)
+  const activeSubscription = useEconomyStore((s) => s.activeSubscription)
+  const subscriptionExpiresAt = useEconomyStore((s) => s.subscriptionExpiresAt)
+  const buyRental = useEconomyStore((s) => s.buyRental)
+  const buySubscription = useEconomyStore((s) => s.buySubscription)
+  const setBannerVisible = useEconomyStore((s) => s.setBannerVisible)
+  const hasActiveSub = useEconomyStore((s) => s.hasActiveSubscription())
+  const hasRental = useEconomyStore((s) => s.hasRental)
+
+  const [busy, setBusy] = useState<string | null>(null)
+  const [cooldownMs, setCooldownMs] = useState(getAdCooldownRemaining())
+
+  useEffect(() => {
+    const iv = setInterval(() => setCooldownMs(getAdCooldownRemaining()), 1000)
+    return () => clearInterval(iv)
+  }, [])
+
+  const canClaimBonus = lastDailyBonus ? new Date(lastDailyBonus).getDate() !== new Date().getDate() : true
+  const canWatchAd = todayAdsWatched < 3 && cooldownMs === 0
+
+  const handleBuyRental = async (key: RentalKey) => {
+    if (busy) return
+    setBusy(key)
+    const result = await buyRental(key)
+    setBusy(null)
+    if (result.ok && key === 'disableBanner') setBannerVisible(false)
+  }
+
+  const handleBuySub = async (type: 'weekly' | 'monthly') => {
+    if (busy) return
+    setBusy(type)
+    const result = await buySubscription(type)
+    setBusy(null)
+    if (result.ok) setBannerVisible(false)
+  }
+
+  // Утилиты для рендера иконок
+  const renderIcon = (key: string, w = 14, h = 14) => {
+    const Icon = ICON_REGISTRY[key]
+    return Icon ? <Icon width={w} height={h} /> : null
+  }
+
+  const getTriggerLabel = (trigger: string, target: number) =>
+    t(`economy.triggers.${trigger}`, { n: target })
+
+  // ── Токены и бонусы ──
+  const tokensSection = (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        {renderIcon('token', 20, 20)}
+        <span style={{ fontWeight: 'bold', fontSize: '16px' }}>{tokens}</span>
+        <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{t('economy.tokensLabel')}</span>
+      </div>
+      <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>(i)</span>
+    </div>
+  )
+
+  const bonusSection = (
+    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+      {ECONOMY_UI.showDailyBonus && canClaimBonus && (
+        <button className="btn btn-compact btn-sm" onClick={claimDailyBonus} disabled={!!busy}
+          title={t('economy.tooltip.bonus')}>
+          {renderIcon('gift', 14, 14)} {t('economy.bonusLabel')}
+        </button>
+      )}
+      {ECONOMY_UI.showAdButton && canWatchAd && (
+        <button className="btn btn-compact btn-sm" onClick={watchAdForTokens} disabled={!!busy}
+          title={t('economy.tooltip.ad')}>
+          {renderIcon('ad', 14, 14)} {t('economy.adLabel')}
+        </button>
+      )}
+      {ECONOMY_UI.showAdButton && todayAdsWatched < 3 && cooldownMs > 0 && (
+        <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+          ⏱ {formatCooldown(cooldownMs)}
+        </span>
+      )}
+      {ECONOMY_UI.showAdButton && todayAdsWatched >= 3 && cooldownMs === 0 && (
+        <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{t('economy.tooltip.adLimit')}</span>
+      )}
+    </div>
+  )
+
+  // ── Квесты ──
+  const questsSection = todayQuests.length > 0 && ECONOMY_UI.showQuests ? (() => {
+    const completedCount = todayQuestsCompleted.length
+    return (
+      <div>
+        <div style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '6px', color: 'var(--text-muted)' }}>
+          {t('economy.quests')} · {completedCount}/{todayQuests.length}
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          {todayQuests.map((quest, idx) => {
+            const isCompleted = todayQuestsCompleted.includes(quest.difficulty)
+            const progress = Math.min(quest.progress / quest.target, 1)
+            const iconKey = DIFFICULTY_ICON[quest.difficulty]
+            const IconComp = ICON_REGISTRY[iconKey]
+            return (
+              <div key={idx} style={{
+                padding: '6px 8px', borderRadius: '4px',
+                background: isCompleted ? 'var(--bg-secondary)' : 'var(--bg-tertiary)',
+                border: `1px solid ${isCompleted ? 'var(--border-success)' : 'var(--border)'}`,
+                opacity: isCompleted ? 0.6 : 1,
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    {IconComp && <IconComp width={12} height={12} />}
+                    {quest.difficulty === 'easy' ? t('economy.difficulty.easy') :
+                      quest.difficulty === 'medium' ? t('economy.difficulty.medium') :
+                        t('economy.difficulty.hard')}
+                  </span>
+                  <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{quest.progress}/{quest.target}</span>
+                </div>
+                <div style={{ fontSize: '11px' }}>{getTriggerLabel(quest.trigger, quest.target)}</div>
+                <div style={{ height: '3px', borderRadius: '2px', background: 'var(--bg-secondary)', overflow: 'hidden', marginTop: '3px' }}>
+                  <div style={{ height: '100%', width: `${progress * 100}%`, background: isCompleted ? 'var(--success)' : 'var(--primary)', borderRadius: '2px', transition: 'width 0.3s ease' }} />
+                </div>
+                <div style={{ fontSize: '10px', marginTop: '2px', color: 'var(--text-muted)' }}>
+                  +{quest.reward} 💎
+                </div>
+              </div>
+            )
+          })}
+        </div>
+        <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '4px' }}>
+          {t('economy.tooltip.quests')}
+        </div>
+      </div>
+    )
+  })() : null
+
+  // ── Аренда и подписки ──
+  const rentalsConfig = [
+    { key: 'text3d' as const, label: '3D-текст', cost: 75, icon: '🔤', desc: 'Создание 3D-текста' },
+    { key: 'extendedPalette' as const, label: 'Расширенная палитра', cost: 75, icon: '🎨', desc: 'Дополнительные цвета' },
+    { key: 'disableBanner' as const, label: 'Отключение баннера', cost: 50, icon: '🚫', desc: 'Без рекламы на 24ч' },
+  ]
+
+  const subsConfig = [
+    { key: 'weekly' as const, label: 'Недельная', cost: 700, days: 7, perDay: '≈ 100/день' },
+    { key: 'monthly' as const, label: 'Месячная', cost: 2000, days: 30, perDay: '≈ 67/день' },
+  ]
+
+  const rentalsSection = (
+    <div>
+      <div style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '6px', color: 'var(--text-muted)' }}>
+        <ClockIcon width={14} height={14} style={{ display: 'inline-block', verticalAlign: 'middle', marginRight: '4px' }} />
+        Аренда 24ч
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+        {rentalsConfig.map((r) => {
+          const isActive = hasRental(r.key)
+          const rentalExpires = rentals[r.key]
+          const remaining = rentalExpires !== null ? formatRentalRemaining(rentalExpires) : null
+          return (
+            <div key={r.key} style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '6px 8px', borderRadius: '4px',
+              background: isActive ? 'var(--bg-secondary)' : 'var(--bg-tertiary)',
+              border: `1px solid ${isActive ? 'var(--border-success)' : 'var(--border)'}`,
+              opacity: isActive ? 0.7 : 1,
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ fontSize: '14px' }}>{r.icon}</span>
+                <div>
+                  <div style={{ fontSize: '11px', fontWeight: 'bold' }}>{r.label}</div>
+                  <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                    {r.desc}{remaining && ` · ${remaining}`}
+                  </div>
+                </div>
+              </div>
+              {isActive ? (
+                <span style={{ fontSize: '10px', color: 'var(--success)' }}>Активно</span>
+              ) : (
+                <button className="btn btn-compact btn-sm" disabled={tokens < r.cost || busy === r.key}
+                  onClick={() => handleBuyRental(r.key)}
+                  style={{ fontSize: '10px', padding: '2px 6px' }}>
+                  <TokenIcon width={10} height={10} /> {r.cost}
+                </button>
+              )}
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Подписки */}
+      <div style={{ marginTop: '8px' }}>
+        <div style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '6px', color: 'var(--text-muted)' }}>
+          <CrownIcon width={14} height={14} style={{ display: 'inline-block', verticalAlign: 'middle', marginRight: '4px' }} />
+          {t('economy.subscription')}
+        </div>
+        {hasActiveSub && subscriptionExpiresAt ? (
+          <div style={{
+            padding: '4px 8px', borderRadius: '4px', background: 'var(--bg-secondary)',
+            border: '1px solid var(--border-success)', fontSize: '11px', color: 'var(--success)'
+          }}>
+            Pro активна · {formatSubRemaining(subscriptionExpiresAt)}
+          </div>
+        ) : (
+          <div style={{ display: 'flex', gap: '4px' }}>
+            {subsConfig.map((s) => (
+              <button key={s.key} className="btn btn-compact btn-sm" disabled={tokens < s.cost || busy === s.key}
+                onClick={() => handleBuySub(s.key)}
+                style={{ fontSize: '10px', padding: '2px 6px' }}>
+                <TokenIcon width={10} height={10} /> {s.cost}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+
+  // ── Скрытие баннера (2 место §6.3) ──
+  const bannerOffSection = (
+    <div style={{
+      padding: '6px 8px', borderRadius: '4px',
+      background: 'var(--bg-tertiary)', border: '1px solid var(--border)',
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+    }}>
+      <div>
+        <div style={{ fontSize: '11px', fontWeight: 'bold' }}>{t('economy.triggers.bannerOff', { defaultValue: 'Нет баннера на 24 ч' })}</div>
+        <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{t('economy.tooltip.bannerOff')}</div>
+      </div>
+      <div style={{ display: 'flex', gap: '4px' }}>
+        <button className="btn btn-compact btn-sm" disabled={tokens < 50 || busy === 'disableBanner'}
+          onClick={() => handleBuyRental('disableBanner')}
+          style={{ fontSize: '10px', padding: '2px 6px' }}>
+          <TokenIcon width={10} height={10} /> 50
+        </button>
+        <button className="btn btn-compact btn-sm" disabled={busy === 'disableBanner'}
+          onClick={() => handleBuyRental('disableBanner')}
+          style={{ fontSize: '10px', padding: '2px 6px' }}>
+          <AdFilmIcon width={10} height={10} /> 1
+        </button>
+      </div>
+    </div>
+  )
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+      {/* Токены */}
+      <div className="csg-group">
+        <div className="csg-group-title">{t('economy.tokensLabel')}</div>
+        {tokensSection}
+        {bonusSection}
+      </div>
+
+      {/* Квесты */}
+      {questsSection && <div className="csg-group">{questsSection}</div>}
+
+      {/* Аренда + подписки */}
+      <div className="csg-group">{rentalsSection}</div>
+
+      {/* Баннер off */}
+      <div className="csg-group">{bannerOffSection}</div>
+    </div>
+  )
+}
 
 export default function PropertiesPanel({
   firstSelected,
@@ -124,10 +431,16 @@ export default function PropertiesPanel({
     baseColorRef.current = null;
   }, [firstSelected?.id]);
 
+  // Проверка yandex-only
+  const isYandex = getPlatform() !== null
+
   if (!firstSelected) {
-    // FIX (REVIEW-1): В clean-версии — EmptyState.
+    // ── Нет выделения: показываем экономику (yandex-only) + проект ──
     return (
       <>
+        {/* Экономика — только в yandex-режиме (§6.2) */}
+        {isYandex && <EconomyPanel />}
+
         <div className="props-empty">
           {t("properties.selectObject")}
           <br />
