@@ -21,6 +21,16 @@ function normalizeLang(raw: string | undefined): string | undefined {
 /**
  * Определить язык из Yandex SDK (п. 2.14).
  * Вызывается ПОСЛЕ initSdk(), когда SDK уже полностью готов.
+ *
+ * Приоритеты:
+ *   1. Yandex SDK: ysdk.environment.i18n.lang (п. 2.14)
+ *   2. navigator.language / navigator.languages[0] (язык браузера)
+ *   3. document.documentElement.lang (атрибут <html lang>)
+ *   4. Fallback → 'en'
+ *
+ * ВАЖНО: document.documentElement.lang — НИЖЕ navigator.language,
+ * чтобы жёстко заданный lang на <html> не перебивал язык браузера
+ * при неработающем SDK.
  */
 export function determineLanguage(): string {
   const ysdk = getSdk()
@@ -29,32 +39,36 @@ export function determineLanguage(): string {
   if (ysdk?.environment?.i18n?.lang) {
     const raw = ysdk.environment.i18n.lang
     const lang = normalizeLang(raw)
-    console.log(`[i18n] SDK i18n.lang="${raw}" → normalized="${lang}"`)
+    console.log(`[i18n] [SDK] i18n.lang="${raw}" → normalized="${lang}"`)
+    if (lang) return lang
+  } else if (ysdk) {
+    console.log('[i18n] [SDK] environment.i18n.lang not available, skipping SDK')
+  } else {
+    console.log('[i18n] [SDK] not initialized, skipping SDK')
+  }
+
+  // 2. navigator.language (язык браузера — приоритетнее document.lang)
+  if (typeof navigator !== 'undefined' && navigator.language) {
+    const lang = normalizeLang(navigator.language)
+    console.log(`[i18n] [navigator] language="${navigator.language}" → "${lang}"`)
     if (lang) return lang
   }
 
-  // 2. document.documentElement.lang
+  // 3. navigator.languages[0]
+  if (typeof navigator !== 'undefined' && navigator.languages?.[0]) {
+    const lang = normalizeLang(navigator.languages[0])
+    console.log(`[i18n] [navigator] languages[0]="${navigator.languages[0]}" → "${lang}"`)
+    if (lang) return lang
+  }
+
+  // 4. document.documentElement.lang (атрибут <html lang>)
   if (typeof document !== 'undefined') {
     const docLang = document.documentElement.lang
     if (docLang) {
       const lang = normalizeLang(docLang)
-      console.log(`[i18n] document.documentElement.lang="${docLang}" → "${lang}"`)
+      console.log(`[i18n] [document] html.lang="${docLang}" → "${lang}"`)
       if (lang) return lang
     }
-  }
-
-  // 3. navigator.language
-  if (typeof navigator !== 'undefined' && navigator.language) {
-    const lang = normalizeLang(navigator.language)
-    console.log(`[i18n] navigator.language="${navigator.language}" → "${lang}"`)
-    if (lang) return lang
-  }
-
-  // 4. navigator.languages[0]
-  if (typeof navigator !== 'undefined' && navigator.languages?.[0]) {
-    const lang = normalizeLang(navigator.languages[0])
-    console.log(`[i18n] navigator.languages[0]="${navigator.languages[0]}" → "${lang}"`)
-    if (lang) return lang
   }
 
   // 5. Fallback

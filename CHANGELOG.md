@@ -9,6 +9,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- **SDK автолокализация** — убран жёстко заданный `lang="ru"` из `index.html`: при неработающем SDK язык браузера (`navigator.language`) определялся как "ru" из-за атрибута `<html lang="ru">`. Теперь приоритет: 1) SDK `ysdk.environment.i18n.lang`, 2) `navigator.language`, 3) `navigator.languages[0]`, 4) `document.documentElement.lang`, 5) fallback → 'en'. Улучшено логирование: `[SDK] environment` и `[i18n] [SDK]` / `[navigator]` / `[document]` для отладки модерации. (`index.html`, `i18n/init.ts`, `platform/sdk.ts`)
+
 ### Added
 - **Y2.0 Кэшбэк V2** — формула коэффициентов (§2.1 ECONOMY.md v2.0): `min(25, 1 + Масштаб + РазнообразиеФигур + КолИнструментов + РазнообразиеИнструментов)` (`store/economy-config.ts`, `store/economy-store.ts`)
 - **Y2.0 scanForCashback()** — общий сканер дерева документов для кэшбэка и квестов (`store/economy-config.ts`)

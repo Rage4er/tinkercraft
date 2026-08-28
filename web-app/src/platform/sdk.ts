@@ -67,7 +67,9 @@ export function initSdk(): Promise<SDK | null> {
     try {
       const ysdk = await (window as any).YaGames.init()
       _ysdk = ysdk
-      console.log('[SDK] YaGames.init() OK, lang =', ysdk?.environment?.i18n?.lang)
+      console.log('[SDK] YaGames.init() OK')
+      console.log('[SDK] environment:', JSON.stringify(ysdk?.environment))
+      console.log('[SDK] i18n.lang:', ysdk?.environment?.i18n?.lang)
 
       // LoadingAPI.ready() — обязательно для модерации
       if (ysdk?.features?.LoadingAPI?.ready) {
