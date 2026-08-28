@@ -17,7 +17,11 @@
 - **Y3.5 Квест csg_complex** — реализован подсчёт CSG с ≥3 детьми через `op.ids` — квест «Сложная геометрия» теперь выполним (`store/economy-store.ts`)
 - **Y3.6 Квест count_mirrored** — добавлена проверка `transform.scaleX/Y/Z < 0` — квесты «Зазеркалье» и «Зеркальный зал» теперь работают (`store/economy-store.ts`)
 - **Y3.7 Квест count_text3d** — исправлен `'text'` → `'text3d'` — квест «Гравировка» теперь выполним (`store/economy-store.ts`)
+- **Y3.8 + Y3.9 Магазин экономики** — создан `EconomyShop.tsx`: аренда (3D-текст 75, палитра 75, баннер 50) + подписки (неделя 700, месяц 2000), показ статуса с оставшимся временем (`components/EconomyShop.tsx`, `App.tsx`)
 - **Y3.10 Удалён бесплатный экспорт** — удалена кнопка «Бесплатный экспорт» из `ExportModal.tsx` — экспорт теперь только за токены или рекламу (`components/ExportModal.tsx`)
+- **Y3.12 Fallback категорий квестов** — исправлена генерация: `pool.find(q => !usedCategories.has(q.category)) ?? pool[0]` — гарантируются разные категории (`store/economy-store.ts`)
+- **Y3.13 todayQuestsCompleted** — добавлен флаг `_justCompleted`, токены начисляются только если difficulty ещё не в completed (`store/economy-store.ts`)
+- **Y3.11 Таймер кулдауна рекламы** — уже был реализован в `EconomyHUD.tsx` (строки 8-22, 32-41, 92-96) ✅
 - **Yandex SDK модерация** — исправлены критические проблемы встраивания SDK (п. 1.1 требований): `base: './'` вместо `'/'` для относительных путей, CDN SDK вместо локального лоадера (`vite.config.ts`), `manifest.json` с относительными путём и `start_url` (`public/manifest.json`), убран дублирующий `<script src="/sdk.js">` из `index.html` (`index.html`), обработка ошибок в callbacks рекламы с обязательным `GameplayAPI.start()` при ошибке (`src/platform/yandex.ts`)
 
 ### Changed
