@@ -626,3 +626,21 @@ export const TrophyIcon = (p: any) => (
     </g>
   </Icon>
 )
+
+/* ===== Y.3 — Экономика магазин ===== */
+export const CrownIcon = (p: any) => (
+  <svg viewBox="0 0 64 64" fill="none" {...p}>
+    <path d="M8 44h48v8H8z" fill="currentColor" opacity="0.3" />
+    <path d="M12 44l8-24 12 12 12-12 8 24H12z" fill="currentColor" />
+    <circle cx="20" cy="16" r="3" fill="currentColor" opacity="0.6" />
+    <circle cx="32" cy="14" r="3" fill="currentColor" opacity="0.6" />
+    <circle cx="44" cy="16" r="3" fill="currentColor" opacity="0.6" />
+  </svg>
+)
+
+export const ClockIcon = (p: any) => (
+  <svg viewBox="0 0 64 64" fill="none" {...p}>
+    <circle cx="32" cy="32" r="22" stroke="currentColor" strokeWidth="4" fill="none" />
+    <path d="M32 16v16l10 6" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
+  </svg>
+)

@@ -65,6 +65,7 @@ interface QuestV2 {
   progress: number
   reward: number
   completed: boolean // флаг зачёта (не сбрасывается при прогрессе)
+  _justCompleted?: boolean // внутренний флаг: newly completed в этом вызове
 }
 
 /** Состояние экономики */
@@ -172,6 +173,7 @@ const ALL_CATEGORIES: QuestCategory[] = ['composition', 'diversity', 'boolean', 
 /**
  * Сгенерировать 3 квеста на день (1 лёгкий + 1 средний + 1 сложный),
  * все из РАЗНЫХ категорий.
+ * Y3.12: строгая генерация — гарантируем разные категории даже при fallback.
  */
 function generateDailyQuestsV2(): QuestV2[] {
   const difficulties: QuestDifficulty[] = ['easy', 'medium', 'hard']
@@ -184,7 +186,8 @@ function generateDailyQuestsV2(): QuestV2[] {
     const available = pool.filter(q => !usedCategories.has(q.category))
     const chosen = available.length > 0
       ? available[Math.floor(Math.random() * available.length)]
-      : pool[Math.floor(Math.random() * pool.length)]
+      // Y3.12: fallback — берём квест из любой доступной категории, а не случайный
+      : pool.find(q => !usedCategories.has(q.category)) ?? pool[0]
 
     usedCategories.add(chosen.category)
     quests.push({
@@ -418,26 +421,27 @@ export const useEconomyStore = create<EconomyState>()(
 
       // ── Событийный квест: отметить выполнение по триггеру ──
       // Y3.4: export_stl, import_stl — срабатывают при действии, не по состоянию
+      // Y3.13: используем todayQuestsCompleted для проверки повторного начисления
       completeEventQuest: (trigger: QuestTrigger) => {
         const state = get()
         const quests = state.todayQuests
         const updated = quests.map((q) => {
           if (q.completed || q.trigger !== trigger) return q
           // Событийный квест выполнен при наступлении события
-          return { ...q, completed: true, progress: q.target }
+          return { ...q, completed: true, progress: q.target, _justCompleted: true }
         })
-        // Начисляем токены за новые выполненные квесты
+        // Y3.13: начисляем токены только если эта сложность ещё не в completed
         let tokensEarned = 0
+        const newCompleted: QuestDifficulty[] = [...state.todayQuestsCompleted]
         for (const q of updated) {
-          if (q.completed && q.trigger === trigger) {
-            // Проверяем, не был ли уже начислен
-            const old = quests.find(x => x.trigger === trigger)
-            if (!old?.completed) tokensEarned += q.reward
+          if (q.completed && q._justCompleted && !state.todayQuestsCompleted.includes(q.difficulty)) {
+            tokensEarned += q.reward
+            newCompleted.push(q.difficulty)
+            console.log(`[Economy] Event quest completed (${q.trigger}, ${q.difficulty}): +${q.reward} tokens`)
           }
         }
         if (tokensEarned > 0) {
-          set({ todayQuests: updated, tokens: state.tokens + tokensEarned })
-          console.log(`[Economy] Event quest completed (${trigger}): +${tokensEarned} tokens`)
+          set({ todayQuests: updated, tokens: state.tokens + tokensEarned, todayQuestsCompleted: newCompleted })
         } else {
           set({ todayQuests: updated })
         }
@@ -554,14 +558,22 @@ export const useEconomyStore = create<EconomyState>()(
             ...quest,
             progress: Math.min(newProgress, quest.target),
             completed,
+            _justCompleted: completed,
           }
         })
 
         // Начисляем токены за завершённые квесты
+        // Y3.13: используем todayQuestsCompleted для проверки повторного начисления
         let tokensEarned = 0
+        const newCompleted: QuestDifficulty[] = [...state.todayQuestsCompleted]
         for (const quest of updatedQuests) {
-          if (quest.completed && !quests.find(q => q.trigger === quest.trigger && q.completed)) {
+          if (quest.completed && !quest._justCompleted) {
+            // Уже был в старом состоянии — не начисляем
+            continue
+          }
+          if (!state.todayQuestsCompleted.includes(quest.difficulty)) {
             tokensEarned += quest.reward
+            newCompleted.push(quest.difficulty)
             console.log(`[Economy] Quest completed (${quest.difficulty}): +${quest.reward} tokens`)
           }
         }
@@ -570,6 +582,7 @@ export const useEconomyStore = create<EconomyState>()(
           set({
             todayQuests: updatedQuests,
             tokens: state.tokens + tokensEarned,
+            todayQuestsCompleted: newCompleted,
           })
         } else {
           set({ todayQuests: updatedQuests })

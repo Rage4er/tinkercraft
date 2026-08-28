@@ -15,6 +15,7 @@ import LeftPanel from "./components/LeftPanel";
 import PropertiesPanel from "./components/PropertiesPanel";
 import EconomyHUD from "./components/EconomyHUD";
 import QuestPanel from "./components/QuestPanel";
+import EconomyShop from "./components/EconomyShop";
 import { useDocumentStore } from "./store/document-store";
 import { useUiStore } from "./store/ui-store";
 import { useEconomyStore } from "./store/economy-store";
@@ -735,6 +736,9 @@ export default function App() {
 
           {/* Ежедневные квесты */}
           <QuestPanel />
+
+          {/* Магазин экономики (аренда + подписки) */}
+          <EconomyShop />
         </div>
       </div>
 
