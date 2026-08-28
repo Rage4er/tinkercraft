@@ -222,11 +222,11 @@ export default function App() {
   }, [])
 
   // Выполнить экспорт после выбора в модалке
-  const handleExportExecute = useCallback((method: 'tokens' | 'ad' | 'free') => {
+  const handleExportExecute = useCallback((method: 'tokens' | 'ad') => {
     if (method === 'ad') {
       // Реклама уже показана в модалке
     }
-    // tokens и free — просто экспортим
+    // tokens — просто экспортим
     exportStl()
     // Квесты V2: evaluateQuests вызывается в exportStl
   }, [exportStl])

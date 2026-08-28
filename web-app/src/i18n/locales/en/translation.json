@@ -169,8 +169,7 @@
     "description": "Choose how to export your model:",
     "cashbackInfo": "Cashback up to {{cashback}} tokens → final price: {{netCost}}",
     "payTokens": "Pay {{cost}} tokens",
-    "watchAd": "Watch ad ({{count}}/3 watched)",
-    "free": "Free export"
+    "watchAd": "Watch ad ({{count}}/3 watched)"
   },
   "leftPanel": {
     "shapes": "Shapes",

@@ -3,7 +3,7 @@ import { useCallback, useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useEconomyStore } from '../store/economy-store'
 import { ECONOMY_COSTS, calculateCashback } from '../store/economy-config'
-import { ExportIcon, TokenIcon, AdFilmIcon, PlayIcon } from './icons'
+import { ExportIcon, TokenIcon, AdFilmIcon } from './icons'
 
 export default function ExportModal({
   objects,
@@ -14,7 +14,7 @@ export default function ExportModal({
   objects: Record<string, { shapeType: string }>
   operations: Array<{ type: string }>
   onClose: () => void
-  onExport: (method: 'tokens' | 'ad' | 'free') => void
+  onExport: (method: 'tokens' | 'ad') => void
 }) {
   const { t } = useTranslation()
   const tokens = useEconomyStore((s) => s.tokens)
