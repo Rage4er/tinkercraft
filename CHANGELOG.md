@@ -9,6 +9,17 @@
 
 ## [Unreleased]
 
+### Added
+- **Y2.0 Кэшбэк V2** — формула коэффициентов (§2.1 ECONOMY.md v2.0): `min(25, 1 + Масштаб + РазнообразиеФигур + КолИнструментов + РазнообразиеИнструментов)` (`store/economy-config.ts`, `store/economy-store.ts`)
+- **Y2.0 scanForCashback()** — общий сканер дерева документов для кэшбэка и квестов (`store/economy-config.ts`)
+- **Y2.0 IconBadge.tsx** — бейджи на кнопках инструментов: 💰 токены, 📺 реклама, ⏱ таймер, 👑 подписка (`components/IconBadge.tsx`)
+- **Y2.0 Кнопка скрытия баннера** — два места: на баннере + в панели EconomyShop (§6.3) (`components/EconomyShop.tsx`)
+- **Y2.0 i18n подписи** — tooltip для всех элементов экономики (§6.6): токены, бонус, реклама, квесты, баннер, подписка, кэшбэк (`i18n/locales/*/translation.json`)
+
+### Changed
+- **Y2.0 calculateAndClaimCashback()** — теперь принимает scanResult вместо objectCount/csgOps (`store/economy-store.ts`, `store/document-store.ts`)
+- **Y2.0 ECONOMY.md** — обновлён до v2.0 с полной UI-спецификацией, политикой хранения и IAP-расчётом (`ECONOMY.md`)
+
 ### Fixed
 - **Y3.1 Токены за действия** — `earnActionToken()` добавлен в `addShape`, `addRawMesh`, `addTextMesh`, `importStl` — теперь +1 начисляется при добавлении фигуры (лимит 30/день, кулдаун 5с) (`store/document-store.ts`)
 - **Y3.2 Кэшбэк за экспорт** — `calculateAndClaimCashback()` добавлен в `exportStl` с расчётом `objectCount` и `csgOps` — кэшбэк +5…+25 токенов теперь начисляется (`store/document-store.ts`)
