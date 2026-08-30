@@ -405,6 +405,15 @@
       "adLimit": "Daily limit",
       "quests": "Reward granted on save or export",
       "bannerOff": "Hide banner for 24h for 50 💎 or 1 ad"
+    },
+    "subscriptions": {
+      "weekly": "Weekly",
+      "monthly": "Monthly",
+      "perDay7": "≈ $100/day",
+      "perDay30": "≈ $67/day"
+    },
+    "common": {
+      "expired": "Expired"
     }
   }
 }

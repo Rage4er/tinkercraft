@@ -213,8 +213,8 @@ function EconomyPanel() {
   ]
 
   const subsConfig = [
-    { key: 'weekly' as const, label: 'Недельная', cost: 700, days: 7, perDay: '≈ 100/день' },
-    { key: 'monthly' as const, label: 'Месячная', cost: 2000, days: 30, perDay: '≈ 67/день' },
+    { key: 'weekly' as const, label: t('economy.subscriptions.weekly'), cost: 700, days: 7, perDay: t('economy.subscriptions.perDay7') },
+    { key: 'monthly' as const, label: t('economy.subscriptions.monthly'), cost: 2000, days: 30, perDay: t('economy.subscriptions.perDay30') },
   ]
 
   const rentalsSection = (

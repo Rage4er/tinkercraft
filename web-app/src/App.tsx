@@ -510,7 +510,7 @@ export default function App() {
       <ToastContainer />
 
       {/* ── ЭКОНОМИКА: онбординг (§6.7) ── */}
-      <EconomyOnboarding />
+      {getPlatform() && <EconomyOnboarding />}
 
       {/* ── Ruler distance display ── */}
       {rulerDist !== null && (
@@ -607,9 +607,11 @@ export default function App() {
       />
 
       {/* ── ЭКОНОМИКА: баннер (yandex-only, §6.3) ── */}
-      <div style={{ padding: '0 16px' }}>
-        <EconomyBanner />
-      </div>
+      {getPlatform() && (
+        <div style={{ padding: '0 16px' }}>
+          <EconomyBanner />
+        </div>
+      )}
 
       {/* ── MAIN ── */}
       <div className="main">
