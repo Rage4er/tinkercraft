@@ -343,6 +343,7 @@ export const useEconomyStore = create<EconomyState>()(
           todayActions: state.todayActions + 1,
           lastActionTimestamp: serverTime,
         }))
+        void get().syncToCloud()
         return true
       },
 
@@ -359,6 +360,7 @@ export const useEconomyStore = create<EconomyState>()(
           tokens: state.tokens + cashback,
           todayCashbacks: state.todayCashbacks + 1,
         }))
+        void get().syncToCloud()
         console.log(`[Economy] Cashback V2 claimed: +${cashback}`)
         return cashback
       },
@@ -462,6 +464,7 @@ export const useEconomyStore = create<EconomyState>()(
         } else {
           set({ todayQuests: updated })
         }
+        void get().syncToCloud()
       },
 
       // ── Инициализация квестов на новый день (§5 серверное время) ──
@@ -635,6 +638,11 @@ export const useEconomyStore = create<EconomyState>()(
           if (data.rentals) set({ rentals: data.rentals as Record<RentalKey, number | null> })
           if (data.todayQuests) set({ todayQuests: data.todayQuests as QuestV2[] })
           if (data.todayQuestsCompleted) set({ todayQuestsCompleted: data.todayQuestsCompleted as QuestDifficulty[] })
+          // Daily-счётчики
+          if (data.todayAdsWatched) set({ todayAdsWatched: data.todayAdsWatched as number })
+          if (data.todayActions) set({ todayActions: data.todayActions as number })
+          if (data.todayCashbacks) set({ todayCashbacks: data.todayCashbacks as number })
+          if (data.questTriggers) set({ questTriggers: data.questTriggers as Record<QuestTrigger, number> })
         } catch (error) {
           console.error('[Economy] Load from cloud failed:', error)
         }
@@ -653,6 +661,11 @@ export const useEconomyStore = create<EconomyState>()(
           rentals: get().rentals,
           todayQuests: get().todayQuests,
           todayQuestsCompleted: get().todayQuestsCompleted,
+          // Daily-счётчики — сохраняем для восстановления после перезагрузки
+          todayAdsWatched: get().todayAdsWatched,
+          todayActions: get().todayActions,
+          todayCashbacks: get().todayCashbacks,
+          questTriggers: get().questTriggers,
         }
 
         // Не сохраняем, если данные не изменились с последней синхронизации
@@ -683,6 +696,11 @@ export const useEconomyStore = create<EconomyState>()(
         rentals: state.rentals,
         todayQuests: state.todayQuests,
         todayQuestsCompleted: state.todayQuestsCompleted,
+        // Daily-счётчики — кэшируем в localStorage
+        todayAdsWatched: state.todayAdsWatched,
+        todayActions: state.todayActions,
+        todayCashbacks: state.todayCashbacks,
+        questTriggers: state.questTriggers,
       }),
     }
   )
