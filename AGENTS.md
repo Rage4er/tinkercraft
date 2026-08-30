@@ -25,7 +25,10 @@ pnpm dev          # dev-сервер (порт 5000)
 pnpm build        # production-сборка
 pnpm test         # запуск тестов (205 тестов)
 pnpm typecheck    # tsc --noEmit
+pnpm verify       # полная проверка: typecheck + test + build + build:yandex
 ```
+
+> **После любой правки** (экономика, сохранения, i18n, platform, действия) запускайте `pnpm verify` и проверяйте чек-лист в `docs/PRE_COMMIT_CHECKLIST.md`.
 
 ## Архитектура (data flow)
 
@@ -200,3 +203,4 @@ Worker НЕ центрирует геометрию. Центрирование 
 - `ARCHITECTURE.md` — описание архитектуры
 - `CHANGELOG.md` — история изменений
 - `web-app/NODEJS_SETUP.md` — настройка Node.js, pnpm, проверка typecheck и тестов
+- `docs/PRE_COMMIT_CHECKLIST.md` — чек-лист пост-рефакторинга (обязателен перед коммитом)

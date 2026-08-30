@@ -15,7 +15,8 @@
     "test:dev": "concurrently -k -n \"VITE,PROXY\" -c \"bgBlue.bold,bgMagenta.bold\" \"pnpm dev:yandex\" \"npx @yandex-games/sdk-dev-proxy -h http://localhost:5173 --dev-mode=true\"",
     "test:prod": "concurrently -k -n \"VITE,PROXY\" -c \"bgBlue.bold,bgMagenta.bold\" \"pnpm dev:yandex\" \"npx @yandex-games/sdk-dev-proxy -h http://localhost:5173 --app-id=572445\"",
     "test:prod:debug": "concurrently -k -n \"VITE,PROXY\" -c \"bgBlue.bold,bgMagenta.bold\" \"pnpm dev:yandex\" \"npx @yandex-games/sdk-dev-proxy -h http://localhost:5173 --app-id=572445 --csp\"",
-    "build:all": "pnpm build && pnpm build:yandex"
+    "build:all": "pnpm build && pnpm build:yandex",
+    "verify": "pnpm typecheck && pnpm test && pnpm build && pnpm build:yandex"
   },
   "dependencies": {
     "i18next": "^26.3.6",
