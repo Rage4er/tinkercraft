@@ -247,11 +247,41 @@ class YandexPlatform implements IPlatform {
     }
   }
 
+  /** Серверное время (§5 ECONOMY.md v2.0) — кэшируем на 30 секунд */
+  private _serverTimeCache: number | null = null
+  private _serverTimeCacheTime: number = 0
+  private readonly SERVER_TIME_CACHE_MS = 30_000
+
+  async getServerTime(): Promise<number> {
+    // Возвращаем кэш если свежий
+    if (this._serverTimeCache && Date.now() - this._serverTimeCacheTime < this.SERVER_TIME_CACHE_MS) {
+      return this._serverTimeCache
+    }
+
+    if (!this.ysdk) {
+      console.warn('[Yandex] getServerTime: SDK not initialized')
+      return Date.now() // fallback на локальное время
+    }
+
+    try {
+      const serverTime = await this.ysdk.serverTime()
+      this._serverTimeCache = serverTime
+      this._serverTimeCacheTime = Date.now()
+      console.log('[Yandex] Server time:', serverTime, '(cached for 30s)')
+      return serverTime
+    } catch (err) {
+      console.warn('[Yandex] getServerTime failed, using local:', err)
+      return Date.now() // fallback
+    }
+  }
+
   dispose(): void {
     this.ysdk = null
     this.player = null
     this.initialized = false
     this.initError = null
+    this._serverTimeCache = null
+    this._serverTimeCacheTime = 0
   }
 }
 

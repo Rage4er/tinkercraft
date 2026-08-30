@@ -31,6 +31,9 @@ export interface IPlatform {
   startGameplay(): void
   stopGameplay(): void
 
+  // Серверное время (§5 ECONOMY.md v2.0)
+  getServerTime(): Promise<number>
+
   // Очистка
   dispose(): void
 }

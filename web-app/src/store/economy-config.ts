@@ -101,11 +101,17 @@ export const ACTION_COOLDOWN_MS = LIMITS.actionCooldownMs
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000
 
-/** Проверить, прошёл ли день с момента (по локальной дате устройства) */
-export function isDayPassed(timestamp: number | null): boolean {
+/**
+ * Проверить, прошёл ли день с момента (§5 ECONOMY.md v2.0)
+ * Использует серверное время для защиты от накруток переводом часов.
+ */
+export async function isDayPassed(timestamp: number | null): Promise<boolean> {
   if (!timestamp) return true
   const last = new Date(timestamp)
-  const now = new Date()
+  // Получаем серверное время
+  const { getServerTime } = await import('../platform/server-time')
+  const serverTime = await getServerTime()
+  const now = new Date(serverTime)
   return (
     last.getFullYear() < now.getFullYear() ||
     last.getMonth() < now.getMonth() ||
@@ -113,10 +119,15 @@ export function isDayPassed(timestamp: number | null): boolean {
   )
 }
 
-/** Проверить, прошёл ли кулдаун (мс) */
-export function isCooldownPassed(timestamp: number | null, ms: number): boolean {
+/**
+ * Проверить, прошёл ли кулдаун (мс) (§5 ECONOMY.md v2.0)
+ * Использует серверное время для защиты от накруток.
+ */
+export async function isCooldownPassed(timestamp: number | null, ms: number): Promise<boolean> {
   if (!timestamp) return true
-  return Date.now() - timestamp >= ms
+  const { getServerTime } = await import('../platform/server-time')
+  const serverTime = await getServerTime()
+  return serverTime - timestamp >= ms
 }
 
 /**

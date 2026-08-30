@@ -113,7 +113,7 @@ interface EconomyState {
   // ── Доход ──
   claimDailyBonus(): Promise<boolean>
   watchAdForTokens(): Promise<boolean>
-  earnActionToken(): boolean
+  earnActionToken(): Promise<boolean>
   calculateAndClaimCashback(scanResult: { objectCount: number; uniqueShapeTypes: number; toolsCount: number; toolCategories: number }): number
 
   // ── Подписки ──
@@ -266,24 +266,29 @@ export const useEconomyStore = create<EconomyState>()(
         return true
       },
 
-      // ── Ежедневный бонус: +50, 1 раз в день ──
+      // ── Ежедневный бонус: +50, 1 раз в день (§5 серверное время) ──
       claimDailyBonus: async () => {
         const state = get()
-        if (!isDayPassed(state.lastDailyBonus)) {
+        const passed = await isDayPassed(state.lastDailyBonus)
+        if (!passed) {
           console.warn('[Economy] Daily bonus already claimed today')
           return false
         }
 
+        // Сохраняем серверное время
+        const { getServerTime } = await import('../platform/server-time')
+        const serverTime = await getServerTime()
+
         set({
           tokens: get().tokens + EARNINGS_DAILY_BONUS,
-          lastDailyBonus: Date.now(),
+          lastDailyBonus: serverTime,
         })
         await get().syncToCloud()
         console.log(`[Economy] Daily bonus claimed: +${EARNINGS_DAILY_BONUS}`)
         return true
       },
 
-      // ── Реклама за токены: +50, ≤ 3/день, кулдаун 5 мин ──
+      // ── Реклама за токены: +50, ≤ 3/день, кулдаун 5 мин (§5 серверное время) ──
       watchAdForTokens: async () => {
         const state = get()
 
@@ -292,7 +297,8 @@ export const useEconomyStore = create<EconomyState>()(
           return false
         }
 
-        if (!isCooldownPassed(state.lastAdTimestamp, AD_COOLDOWN_MS)) {
+        const passed = await isCooldownPassed(state.lastAdTimestamp, AD_COOLDOWN_MS)
+        if (!passed) {
           console.warn('[Economy] Ad cooldown not passed')
           return false
         }
@@ -306,27 +312,36 @@ export const useEconomyStore = create<EconomyState>()(
         const rewarded = await platform.showRewardedVideo()
         if (!rewarded) return false
 
+        // Сохраняем серверное время
+        const { getServerTime } = await import('../platform/server-time')
+        const serverTime = await getServerTime()
+
         set((state) => ({
           tokens: state.tokens + EARNINGS_AD_REWARDED,
           todayAdsWatched: state.todayAdsWatched + 1,
-          lastAdTimestamp: Date.now(),
+          lastAdTimestamp: serverTime,
         }))
         await get().syncToCloud()
         console.log(`[Economy] Ad rewarded: +${EARNINGS_AD_REWARDED}`)
         return true
       },
 
-      // ── Бонус за действия: +1, ≤ 30/день, кулдаун 5 с ──
-      earnActionToken: () => {
+      // ── Бонус за действия: +1, ≤ 30/день, кулдаун 5 с (§5 серверное время) ──
+      earnActionToken: async () => {
         const state = get()
 
         if (isLimitReached(state.todayActions, LIMITS.actionsPerDay)) return false
-        if (!isCooldownPassed(state.lastActionTimestamp, ACTION_COOLDOWN_MS)) return false
+        const passed = await isCooldownPassed(state.lastActionTimestamp, ACTION_COOLDOWN_MS)
+        if (!passed) return false
+
+        // Сохраняем серверное время
+        const { getServerTime } = await import('../platform/server-time')
+        const serverTime = await getServerTime()
 
         set((state) => ({
           tokens: state.tokens + EARNINGS_ACTION,
           todayActions: state.todayActions + 1,
-          lastActionTimestamp: Date.now(),
+          lastActionTimestamp: serverTime,
         }))
         return true
       },
@@ -449,21 +464,35 @@ export const useEconomyStore = create<EconomyState>()(
         }
       },
 
-      // ── Инициализация квестов на новый день ──
-      initDailyQuests: () => {
+      // ── Инициализация квестов на новый день (§5 серверное время) ──
+      initDailyQuests: async () => {
         const state = get()
-        if (state.todayQuests.length > 0 && !isDayPassed(state.lastDailyBonus)) {
-          // Уже есть квесты и день не сменился
-          return
+        if (state.todayQuests.length > 0) {
+          const passed = await isDayPassed(state.lastDailyBonus)
+          if (passed) {
+            // День сменился — сбрасываем всё
+            set({
+              todayQuests: generateDailyQuestsV2(),
+              todayQuestsCompleted: [],
+              todayAdsWatched: 0,
+              todayActions: 0,
+              todayCashbacks: 0,
+              questTriggers: {} as Record<QuestTrigger, number>,
+            })
+            console.log('[Economy] New day detected — quests and counters reset')
+          }
+          // Уже есть квесты и день не сменился — ничего не делаем
+        } else {
+          // Первый запуск — генерируем квесты
+          set({
+            todayQuests: generateDailyQuestsV2(),
+            todayQuestsCompleted: [],
+            todayAdsWatched: 0,
+            todayActions: 0,
+            todayCashbacks: 0,
+            questTriggers: {} as Record<QuestTrigger, number>,
+          })
         }
-        set({
-          todayQuests: generateDailyQuestsV2(),
-          todayQuestsCompleted: [],
-          todayAdsWatched: 0,
-          todayActions: 0,
-          todayCashbacks: 0,
-          questTriggers: {} as Record<QuestTrigger, number>,
-        })
       },
 
       // ── Оценка квестов V2 по состоянию проекта ──

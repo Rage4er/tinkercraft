@@ -88,6 +88,33 @@
 
 ---
 
+## 🕐 ФИКС СЕРВЕРНОГО ВРЕМЕНИ (§5) — 2026-08-28
+
+| Метрика | Значение |
+|---------|----------|
+| Проверено по ECONOMY.md v2.0 | §5 Серверное время |
+| Было | 0 вызовов `ysdk.serverTime()` |
+| **Статус** | **✅ Внедрено** |
+
+### Проблема
+Все проверки времени (`isDayPassed`, `isCooldownPassed`, кулдауны рекламы) использовали `Date.now()` и `new Date()` — локальное время устройства. Пользователь мог перевести часы назад и получить повторные награды.
+
+### Исправлено
+- ✅ `platform/types.ts` — добавлен метод `getServerTime(): Promise<number>`
+- ✅ `platform/yandex.ts` — реализация с кэшем на 30 секунд
+- ✅ `platform/clean.ts` — fallback на `Date.now()` для clean-версии
+- ✅ `platform/server-time.ts` — модуль-обёртка с кэшем
+- ✅ `economy-config.ts` — `isDayPassed()`, `isCooldownPassed()` теперь async и используют серверное время
+- ✅ `economy-store.ts` — `claimDailyBonus`, `watchAdForTokens`, `earnActionToken`, `initDailyQuests` сохраняют серверное время
+- ✅ `EconomyHUD.tsx` — кулдаун рекламы и проверка бонуса через серверное время
+- ✅ `PropertiesPanel.tsx` — кулдаун рекламы и проверка бонуса через серверное время
+- ✅ `document-store.ts` — вызовы `earnActionToken()` помечены как async
+
+### Новые файлы
+- `platform/server-time.ts` — модуль-обёртка с кэшем на 30 секунд
+
+---
+
 ## 🎮 РЕЛИЗ Y.2 — Экономика V12 — 2026-08-23 (текущий)
 
 | Метрика | Значение |

@@ -36,13 +36,22 @@ function formatCooldown(ms: number): string {
   return `${min}:${sec.toString().padStart(2, '0')}`
 }
 
-/** Рассчитать оставшееся время кулдауна рекламы (мс) */
-function getAdCooldownRemaining(): number {
+/** Рассчитать оставшееся время кулдауна рекламы (мс) — использует серверное время (§5) */
+async function getAdCooldownRemaining(): Promise<number> {
   const { lastAdTimestamp } = useEconomyStore.getState()
   if (!lastAdTimestamp) return 0
   const AD_COOLDOWN_MS = 5 * 60 * 1000
-  const elapsed = Date.now() - lastAdTimestamp
+  const { getServerTime } = await import('../platform/server-time')
+  const serverTime = await getServerTime()
+  const elapsed = serverTime - lastAdTimestamp
   return Math.max(0, AD_COOLDOWN_MS - elapsed)
+}
+
+/** Проверить, прошёл ли день (§5 серверное время) */
+async function checkBonusAvailable(lastDailyBonus: number | null): Promise<boolean> {
+  if (!lastDailyBonus) return true
+  const { isDayPassed } = await import('../store/economy-config')
+  return await isDayPassed(lastDailyBonus)
 }
 
 // ─── Экономика: панель (yandex-only, §6.2 ECONOMY.md v2.0) ──────────
@@ -66,14 +75,24 @@ function EconomyPanel() {
   const hasRental = useEconomyStore((s) => s.hasRental)
 
   const [busy, setBusy] = useState<string | null>(null)
-  const [cooldownMs, setCooldownMs] = useState(getAdCooldownRemaining())
+  const [cooldownMs, setCooldownMs] = useState(0)
+  const [canClaimBonus, setCanClaimBonus] = useState(true)
 
+  // Загружаем состояние при монтировании и обновляем каждую секунду
   useEffect(() => {
-    const iv = setInterval(() => setCooldownMs(getAdCooldownRemaining()), 1000)
+    const update = async () => {
+      const cd = await getAdCooldownRemaining()
+      setCooldownMs(cd)
+      const bonus = await checkBonusAvailable(lastDailyBonus)
+      setCanClaimBonus(bonus)
+    }
+    void update()
+    const iv = setInterval(() => {
+      void update()
+    }, 1000)
     return () => clearInterval(iv)
-  }, [])
+  }, [lastDailyBonus])
 
-  const canClaimBonus = lastDailyBonus ? new Date(lastDailyBonus).getDate() !== new Date().getDate() : true
   const canWatchAd = todayAdsWatched < 3 && cooldownMs === 0
 
   const handleBuyRental = async (key: RentalKey) => {

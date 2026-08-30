@@ -28,6 +28,7 @@
 
 ### Fixed
 - **SDK автолокализация** — убран жёстко заданный `lang="ru"` из `index.html`: при неработающем SDK язык браузера (`navigator.language`) определялся как "ru" из-за атрибута `<html lang="ru">`. Теперь приоритет: 1) SDK `ysdk.environment.i18n.lang`, 2) `navigator.language`, 3) `navigator.languages[0]`, 4) `document.documentElement.lang`, 5) fallback → 'en'. Улучшено логирование: `[SDK] environment` и `[i18n] [SDK]` / `[navigator]` / `[document]` для отладки модерации. (`index.html`, `i18n/init.ts`, `platform/sdk.ts`)
+- **Y5.0 Серверное время (§5)** — `isDayPassed()`, `isCooldownPassed()`, `getAdCooldownRemaining()` теперь используют `ysdk.serverTime()` вместо `Date.now()` для защиты от накруток переводом часов. Кэш серверного времени на 30 сек. (`platform/server-time.ts`, `platform/yandex.ts`, `economy-config.ts`, `economy-store.ts`, `EconomyHUD.tsx`, `PropertiesPanel.tsx`)
 - **UI экономики §6.2** — экономика интегрирована в PropertiesPanel (токены, бонус, квесты, аренда, подписки, баннер off) вместо отдельных компонентов EconomyHUD/QuestPanel/EconomyShop. Добавлена проверка `isYandex` — экономика скрывается в clean-версии. Убраны дублирующие компоненты из App.tsx. (`PropertiesPanel.tsx`, `App.tsx`, `i18n/locales/*`)
 
 ### Added

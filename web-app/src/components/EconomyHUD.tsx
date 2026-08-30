@@ -1,25 +1,20 @@
 // src/components/EconomyHUD.tsx — HUD экономики (токены + ежедневный бонус)
 // §6.1 ECONOMY.md v2.0: [💎 240] [🎁 +50] [📺 +50·2/3]
+// §5 Серверное время для защиты от накруток
 import { useState, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useEconomyStore } from '../store/economy-store'
 import { ECONOMY_UI } from '../store/economy-ui-config'
 
-/** Рассчитать оставшееся время кулдауна рекламы (мс) */
-function getAdCooldownRemaining(): number {
+/** Рассчитать оставшееся время кулдауна рекламы (мс) — использует серверное время */
+async function getAdCooldownRemaining(): Promise<number> {
   const { lastAdTimestamp } = useEconomyStore.getState()
   if (!lastAdTimestamp) return 0
   const AD_COOLDOWN_MS = 5 * 60 * 1000
-  const elapsed = Date.now() - lastAdTimestamp
+  const { getServerTime } = await import('../platform/server-time')
+  const serverTime = await getServerTime()
+  const elapsed = serverTime - lastAdTimestamp
   return Math.max(0, AD_COOLDOWN_MS - elapsed)
-}
-
-/** Рассчитать время до полуночи (мс) */
-function getTimeToMidnight(): number {
-  const now = new Date()
-  const midnight = new Date(now)
-  midnight.setHours(24, 0, 0, 0)
-  return midnight.getTime() - now.getTime()
 }
 
 /** Форматировать ms → "5:00" */
@@ -30,12 +25,11 @@ function formatCooldown(ms: number): string {
   return `${min}:${sec.toString().padStart(2, '0')}`
 }
 
-/** Форматировать ms → "23:45" (до полуночи) */
-function formatTimeToMidnight(ms: number): string {
-  const totalMin = Math.ceil(ms / 60000)
-  const hours = Math.floor(totalMin / 60)
-  const mins = totalMin % 60
-  return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`
+/** Проверить, прошёл ли день с последнего бонуса (§5 серверное время) */
+async function checkBonusAvailable(lastDailyBonus: number | null): Promise<boolean> {
+  if (!lastDailyBonus) return true
+  const { isDayPassed } = await import('../store/economy-config')
+  return await isDayPassed(lastDailyBonus)
 }
 
 export default function EconomyHUD() {
@@ -47,20 +41,24 @@ export default function EconomyHUD() {
   const lastDailyBonus = useEconomyStore((s) => s.lastDailyBonus)
 
   // Локальный стейт для таймеров (обновление каждую секунду)
-  const [cooldownMs, setCooldownMs] = useState(getAdCooldownRemaining())
-  const [midnightMs, setMidnightMs] = useState(getTimeToMidnight())
+  const [cooldownMs, setCooldownMs] = useState(0)
+  const [canClaimBonus, setCanClaimBonus] = useState(true)
 
-  // Обновляем таймеры каждую секунду
+  // Загружаем состояние при монтировании и обновляем каждую секунду
   useEffect(() => {
+    const update = async () => {
+      const cd = await getAdCooldownRemaining()
+      setCooldownMs(cd)
+      const bonus = await checkBonusAvailable(lastDailyBonus)
+      setCanClaimBonus(bonus)
+    }
+    void update()
     const iv = setInterval(() => {
-      setCooldownMs(getAdCooldownRemaining())
-      setMidnightMs(getTimeToMidnight())
+      void update()
     }, 1000)
     return () => clearInterval(iv)
-  }, [])
+  }, [lastDailyBonus])
 
-  // Бонус доступен?
-  const canClaimBonus = lastDailyBonus ? new Date(lastDailyBonus).getDate() !== new Date().getDate() : true
   // Реклама доступна?
   const canWatchAd = todayAdsWatched < 3 && cooldownMs === 0
 
@@ -75,13 +73,13 @@ export default function EconomyHUD() {
     return `${todayAdsWatched}/3`
   }, [cooldownMs, todayAdsWatched, t])
 
-  // Метка бонуса: "+50" или "до 23:45"
+  // Метка бонуса: "+50" или "уже получено"
   const bonusStateLabel = useMemo(() => {
     if (!canClaimBonus) {
-      return `до ${formatTimeToMidnight(midnightMs)}`
+      return 'уже получено'
     }
     return t('economy.bonusLabel')
-  }, [canClaimBonus, midnightMs, t])
+  }, [canClaimBonus, t])
 
   return (
     <div className="economy-hud" style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '10px 14px', flexWrap: 'wrap' }}>

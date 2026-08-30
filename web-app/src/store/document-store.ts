@@ -225,8 +225,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true, busy: false, lastCsgMs: ms })
       cacheSnapshotWithTree(newOps.length, newObjects)
       invalidateMirrorCache()
-      // Y3.1: начисление токена за действие (лимит 30/день, кулдаун 5с)
-      useEconomyStore.getState().earnActionToken()
+      // Y3.1: начисление токена за действие (лимит 30/день, кулдаун 5с, серверное время)
+      void useEconomyStore.getState().earnActionToken()
     } catch (e) { set({ busy: false }); console.error('addShape:', e); notify(i18n.t('errors.createShapeFailed'), 'error') }
   },
 
@@ -251,8 +251,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, selectedIds: [id], modified: true, busy: false, lastCsgMs: ms })
       cacheSnapshotWithTree(newOps.length, newObjects)
       invalidateMirrorCache()
-      // Y3.1: начисление токена за действие (лимит 30/день, кулдаун 5с)
-      useEconomyStore.getState().earnActionToken()
+      // Y3.1: начисление токена за действие (серверное время)
+      void useEconomyStore.getState().earnActionToken()
     } catch (e) { set({ busy: false }); console.error('addRawMesh:', e); notify(i18n.t('errors.importMeshFailed'), 'error') }
   },
 
@@ -277,8 +277,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, selectedIds: [id], modified: true, busy: false, lastCsgMs: ms })
       cacheSnapshotWithTree(newOps.length, newObjects)
       invalidateMirrorCache()
-      // Y3.1: начисление токена за действие (лимит 30/день, кулдаун 5с)
-      useEconomyStore.getState().earnActionToken()
+      // Y3.1: начисление токена за действие (серверное время)
+      void useEconomyStore.getState().earnActionToken()
     } catch (e) { set({ busy: false }); console.error('addTextMesh:', e); notify(i18n.t('errors.createShapeFailed'), 'error') }
   },
 
@@ -309,8 +309,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, selectedIds: [id], modified: true, busy: false, lastCsgMs: ms })
       cacheSnapshotWithTree(newOps.length, newObjects)
       invalidateMirrorCache()
-      // Y3.1: начисление токена за действие (лимит 30/день, кулдаун 5с)
-      useEconomyStore.getState().earnActionToken()
+      // Y3.1: начисление токена за действие (серверное время)
+      void useEconomyStore.getState().earnActionToken()
       // Y3.4: событийный квест — импорт STL
       useEconomyStore.getState().completeEventQuest('import_stl')
     } catch (e) { set({ busy: false }); notify(i18n.t('errors.stlImportFailed') + ': ' + e, 'error') }

@@ -58,6 +58,11 @@ export const platform: IPlatform = {
     // no-op
   },
 
+  /** Clean-версия: локальное время (fallback) */
+  async getServerTime(): Promise<number> {
+    return Date.now()
+  },
+
   dispose() {
     // no-op
   },

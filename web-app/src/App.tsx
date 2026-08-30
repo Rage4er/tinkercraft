@@ -200,7 +200,7 @@ export default function App() {
 
     const loadEconomy = async () => {
       await useEconomyStore.getState().loadFromCloud()
-      useEconomyStore.getState().initDailyQuests()
+      await useEconomyStore.getState().initDailyQuests()
       useEconomyStore.getState().checkSubscriptionExpiry()
     }
     void loadEconomy()
