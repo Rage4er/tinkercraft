@@ -20,6 +20,10 @@
 - **Toolbar бейджи** — бейджи на кнопках экспорта (💎 50) и импорта (💎 100) (§6.4) (`components/Toolbar.tsx`)
 - **EconomyShop.tsx** — исправлен bug: хук в цикле заменён на `getState()` (`components/EconomyShop.tsx`)
 - **i18n** — дополнены ключи export.cashbackBreakdown (RU/EN), adLabel убран из статического значения (`i18n/locales/*/translation.json`)
+- **Баннер реклама** — кнопка «📺 1» теперь вызывает `watchAdForBanner()` вместо `watchAdForTokens()` (лимиты 3/день) и `buyRental()` (тратит 50 TC). Независимая операция: показать рекламу → скрыть баннер на 24ч, без влияния на лимиты рекламы за токены (§3.2, §6.3) (`store/economy-store.ts`, `components/EconomyBanner.tsx`, `components/EconomyShop.tsx`, `components/PropertiesPanel.tsx`)
+- **Toolbar бейджи реклама** — добавлены бейджи 📺1 на экспорт и 📺2 на импорт (§6.4). Исправлена логика: `exportActive` = только подписка (аренда текста не влияет на экспорт) (`components/Toolbar.tsx`)
+- **ImportModal.tsx** — модалка оплаты импорта STL: 100 TC ИЛИ 2 просмотра рекламы (§3.1). Интегрирован в App.tsx с i18n EN/RU (`components/ImportModal.tsx`, `i18n/locales/*/translation.json`)
+- **Квест export_stl_large** — при экспорте модели с ≥10 объектов вызывается `completeEventQuest('export_stl_large')` (§4 квесты) (`store/document-store.ts`)
 
 ### Changed
 - **EconomyHUD** — переписан с SVG-иконками, динамическими счётчиками и состояниями (`components/EconomyHUD.tsx`)

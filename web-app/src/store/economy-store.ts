@@ -113,6 +113,7 @@ interface EconomyState {
   // ── Доход ──
   claimDailyBonus(): Promise<boolean>
   watchAdForTokens(): Promise<boolean>
+  watchAdForBanner(): Promise<{ ok: boolean }>
   earnActionToken(): Promise<boolean>
   calculateAndClaimCashback(scanResult: { objectCount: number; uniqueShapeTypes: number; toolsCount: number; toolCategories: number }): number
 
@@ -324,6 +325,29 @@ export const useEconomyStore = create<EconomyState>()(
         await get().syncToCloud()
         console.log(`[Economy] Ad rewarded: +${EARNINGS_AD_REWARDED}`)
         return true
+      },
+
+      // ── Реклама для баннера: 1 просмотр → скрыть баннер на 24ч (§3.2, §6.3) ──
+      // Независимо от лимитов рекламы за токены
+      watchAdForBanner: async () => {
+        const platform = getPlatform()
+        if (!platform) {
+          console.warn('[Economy] No platform for banner ad')
+          return { ok: false }
+        }
+
+        const watched = await platform.showRewardedVideo()
+        if (!watched) return { ok: false }
+
+        const { getServerTime } = await import('../platform/server-time')
+        const serverTime = await getServerTime()
+
+        set((state) => ({
+          rentals: { ...state.rentals, disableBanner: serverTime + ONE_DAY_MS },
+        }))
+        await get().syncToCloud()
+        console.log('[Economy] Banner ad watched — disableBanner rental activated')
+        return { ok: true }
       },
 
       // ── Бонус за действия: +1, ≤ 30/день, кулдаун 5 с (§5 серверное время) ──

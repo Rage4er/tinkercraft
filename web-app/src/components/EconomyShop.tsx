@@ -50,6 +50,16 @@ export default function EconomyShop() {
     }
   }
 
+  const handleWatchAdForBanner = async () => {
+    if (busyRental) return
+    setBusyRental('bannerAd')
+    const result = await useEconomyStore.getState().watchAdForBanner()
+    setBusyRental(null)
+    if (result.ok) {
+      setBannerVisible(false)
+    }
+  }
+
   // Обработчики подписок
   const handleBuySub = async (type: 'weekly' | 'monthly') => {
     if (busySub) return
@@ -206,8 +216,8 @@ export default function EconomyShop() {
             </button>
             <button
               className="btn btn-compact btn-sm"
-              disabled={busyRental === 'disableBanner'}
-              onClick={() => handleBuyRental('disableBanner')}
+              disabled={busyRental === 'bannerAd'}
+              onClick={handleWatchAdForBanner}
               style={{ fontSize: '11px', padding: '4px 8px', display: 'flex', alignItems: 'center', gap: '3px' }}
             >
               <AdFilmIcon width={12} height={12} /> 1

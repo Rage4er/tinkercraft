@@ -3,15 +3,14 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useEconomyStore } from '../store/economy-store'
-import { getPlatform } from '../platform'
 
 export default function EconomyBanner() {
   const { t } = useTranslation()
   const tokens = useEconomyStore((s) => s.tokens)
   const buyRental = useEconomyStore((s) => s.buyRental)
+  const watchAdForBanner = useEconomyStore((s) => s.watchAdForBanner)
   const setBannerVisible = useEconomyStore((s) => s.setBannerVisible)
   const bannerVisible = useEconomyStore((s) => s.bannerVisible)
-  const watchAdForTokens = useEconomyStore((s) => s.watchAdForTokens)
 
   const [busy, setBusy] = useState<string | null>(null)
 
@@ -37,8 +36,8 @@ export default function EconomyBanner() {
   const handleWatchAd = async () => {
     if (busy) return
     setBusy('ad')
-    const rewarded = await watchAdForTokens()
-    if (rewarded) {
+    const result = await watchAdForBanner()
+    if (result.ok) {
       // После показа рекламы — скрываем баннер
       setBannerVisible(false)
     }

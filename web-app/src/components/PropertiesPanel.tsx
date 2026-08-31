@@ -61,6 +61,7 @@ function EconomyPanel() {
   const tokens = useEconomyStore((s) => s.tokens)
   const claimDailyBonus = useEconomyStore((s) => s.claimDailyBonus)
   const watchAdForTokens = useEconomyStore((s) => s.watchAdForTokens)
+  const watchAdForBanner = useEconomyStore((s) => s.watchAdForBanner)
   const todayAdsWatched = useEconomyStore((s) => s.todayAdsWatched)
   const lastDailyBonus = useEconomyStore((s) => s.lastDailyBonus)
   const todayQuests = useEconomyStore((s) => s.todayQuests)
@@ -101,6 +102,14 @@ function EconomyPanel() {
     const result = await buyRental(key)
     setBusy(null)
     if (result.ok && key === 'disableBanner') setBannerVisible(false)
+  }
+
+  const handleWatchAdForBanner = async () => {
+    if (busy) return
+    setBusy('bannerAd')
+    const result = await watchAdForBanner()
+    setBusy(null)
+    if (result.ok) setBannerVisible(false)
   }
 
   const handleBuySub = async (type: 'weekly' | 'monthly') => {
@@ -304,8 +313,8 @@ function EconomyPanel() {
           style={{ fontSize: '10px', padding: '2px 6px' }}>
           <TokenIcon width={10} height={10} /> 50
         </button>
-        <button className="btn btn-compact btn-sm" disabled={busy === 'disableBanner'}
-          onClick={() => handleBuyRental('disableBanner')}
+        <button className="btn btn-compact btn-sm" disabled={busy === 'bannerAd'}
+          onClick={handleWatchAdForBanner}
           style={{ fontSize: '10px', padding: '2px 6px' }}>
           <AdFilmIcon width={10} height={10} /> 1
         </button>

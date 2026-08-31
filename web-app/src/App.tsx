@@ -10,6 +10,7 @@ import ToastContainer from "./components/ToastContainer";
 import Toolbar from "./components/Toolbar";
 import TextModal from "./components/TextModal";
 import ExportModal from "./components/ExportModal";
+import ImportModal from "./components/ImportModal";
 import EconomyBanner from "./components/EconomyBanner";
 import EconomyOnboarding from "./components/EconomyOnboarding";
 import StatusBar from "./components/StatusBar";
@@ -82,6 +83,7 @@ export default function App() {
 
   // Export modal state
   const [showExportModal, setShowExportModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
 
   const fitViewRef = useRef<(() => void) | null>(null);
   const resetViewRef = useRef<(() => void) | null>(null);
@@ -230,6 +232,16 @@ export default function App() {
     exportStl()
     // Квесты V2: evaluateQuests вызывается в exportStl
   }, [exportStl])
+
+  // Обёртка importStl — открывает модалку выбора способа оплаты (§3.1)
+  const handleImportStl = useCallback(() => {
+    setShowImportModal(true)
+  }, [])
+
+  // Выполнить импорт после оплаты в модалке
+  const handleImportExecute = useCallback(() => {
+    importStl()
+  }, [importStl])
 
   // Подписка на изменения для оценки квестов (живой прогресс в UI)
   useEffect(() => {
@@ -545,6 +557,14 @@ export default function App() {
         />
       )}
 
+      {/* ── Import Modal ── */}
+      {showImportModal && (
+        <ImportModal
+          onClose={() => setShowImportModal(false)}
+          onImport={handleImportExecute}
+        />
+      )}
+
       {/* ── Project Manager Modal ── */}
       {showPM && (
         <ProjectManagerModal
@@ -578,7 +598,7 @@ export default function App() {
         onOpen={openDoodle}
         onSave={saveDoodle}
         onExportStl={handleExportStl}
-        onImportStl={importStl}
+        onImportStl={handleImportStl}
         onShowProjects={() => setShowPM(true)}
         onUndo={undo}
         onRedo={redo}

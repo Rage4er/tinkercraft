@@ -142,6 +142,12 @@
     "adNotAvailable": "Лимит рекламы на сегодня",
     "notEnoughTokens": "Не хватает токенов"
   },
+  "import": {
+    "title": "Импорт STL",
+    "description": "Выберите способ импорта модели:",
+    "payTokens": "Оплатить {{cost}} токенов",
+    "watchAd": "Посмотреть рекламу ({{count}}/{{max}}, нужно {{adsNeeded}})"
+  },
   "leftPanel": {
     "shapes": "Фигуры",
     "searchPlaceholder": "Поиск фигуры…",

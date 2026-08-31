@@ -118,14 +118,16 @@ export default function Toolbar({
   // Проверка: нужен ли бейдж на экспорте
   const state = useEconomyStore.getState()
   const hasActiveSub = state.hasActiveSubscription()
-  const hasRentalText3d = state.hasRental('text3d')
+  const hasActiveRentalText3d = state.hasRental('text3d')
+  const hasActiveRentalPalette = state.hasRental('extendedPalette')
 
-  // Проверка: нужен ли бейдж на импорте
+  // Экспорт: бейдж если нет подписки (аренда текста не влияет)
+  const exportActive = hasActiveSub
   const exportLocked = !hasActiveSub && tokens < 50
-  const exportActive = hasActiveSub || hasRentalText3d
 
-  const importLocked = !hasActiveSub && tokens < 100
+  // Импорт: бейдж только с подпиской (аренды для импорта нет)
   const importActive = hasActiveSub
+  const importLocked = !hasActiveSub && tokens < 100
   // Определяем группы для алгоритма
   const groups: ToolbarGroup[] = [
     { id: "file", buttonCount: 5 },
@@ -166,10 +168,12 @@ export default function Toolbar({
           <div key="export" style={{ position: 'relative' }}>
             <IconButton icon={<ExportIcon size={32} />} label="STL" onClick={onExportStl} disabled={objectCount === 0} tooltip={TOOLTIP_DATA.export_stl} />
             <Badge type="tokens" value="50" isActive={exportActive} />
+            <Badge type="ad" value="1" isActive={exportActive} />
           </div>,
           <div key="import" style={{ position: 'relative' }}>
             <IconButton icon={<ImportIcon size={32} />} label={t("actions.import")} onClick={onImportStl} disabled={busy} tooltip={TOOLTIP_DATA.import_stl} />
             <Badge type="tokens" value="100" isActive={importActive} />
+            <Badge type="ad" value="2" isActive={importActive} />
           </div>,
           <IconButton key="projects" icon={<FolderIcon size={32} />} label={t("properties.projectManager")} onClick={onShowProjects} tooltip={TOOLTIP_DATA.projects} />,
         ]}

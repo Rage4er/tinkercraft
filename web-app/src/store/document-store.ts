@@ -1035,6 +1035,10 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     useEconomyStore.getState().evaluateQuests(objects, operations)
     // Y3.4: событийный квест — экспорт STL
     useEconomyStore.getState().completeEventQuest('export_stl')
+    // Y3.5: событийный квест — экспорт ≥10 объектов (§4 квесты)
+    if (objectCount >= 10) {
+      useEconomyStore.getState().completeEventQuest('export_stl_large')
+    }
   },
 
   // ── Resize dims ──
