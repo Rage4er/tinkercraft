@@ -190,7 +190,26 @@ export default function App() {
 
   // ── Инициализация платформы (Yandex SDK) ──
   useEffect(() => {
-    initPlatform().catch((err) => console.error('[App] Platform init failed:', err))
+    const initPlatformAndBanner = async () => {
+      const ok = await initPlatform().catch((err) => {
+        console.error('[App] Platform init failed:', err)
+        return false
+      })
+      // ✅ Показать баннер сразу после инициализации
+      // (sticky_adv_disabled_on_start может быть true, поэтому вызываем явно)
+      if (ok) {
+        const platform = getPlatform()
+        if (platform?.ysdk?.adv) {
+          try {
+            await platform.showBannerAdv()
+            console.log('[App] Banner shown after init')
+          } catch (e) {
+            console.log('[App] Banner show deferred (may be dashboard-controlled):', e)
+          }
+        }
+      }
+    }
+    initPlatformAndBanner()
   }, [])
 
   // ── Экономика: инициализация и синхронизация ──

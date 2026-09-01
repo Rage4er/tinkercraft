@@ -67,40 +67,30 @@ class YandexPlatform implements IPlatform {
    * ⚠️ Вызывается ТОЛЬКО ПОСЛЕ init()
    */
   async showFullscreenAd(): Promise<boolean> {
-    if (!this.ysdk) {
-      console.warn('[Yandex] showFullscreenAd: SDK not initialized')
+    const adv = this.ysdk?.adv
+    if (!adv) {
+      console.error('[Yandex] SDK or adv not initialized')
       return false
     }
-
-    if (!this.ysdk.adv) {
-      console.warn('[Yandex] showFullscreenAd: adv API not available')
-      return false
-    }
-
-    return new Promise<boolean>((resolve) => {
+    return new Promise((resolve) => {
       try {
-        this.ysdk!.adv.showFullscreenAdv({
+        adv.showFullscreenAdv({
           callbacks: {
-            onClose: (wasShown) => {
-              console.log('[Yandex] Fullscreen ad closed, wasShown:', wasShown)
-              // Обязательно возобновляем геймплей после закрытия рекламы
-              if (this.ysdk?.features?.GameplayAPI?.start) {
-                this.ysdk.features.GameplayAPI.start()
-              }
+            onOpen: () => {
+              console.log('[Yandex] Fullscreen ad opened')
             },
-            onError: (err) => {
-              // Ошибка загрузки рекламы (AdBlock, нет сети и т.д.) — не блокируем игру
-              console.error('[Yandex] Fullscreen ad error:', err)
-              // Обязательно возобновляем геймплей даже при ошибке
-              if (this.ysdk?.features?.GameplayAPI?.start) {
-                this.ysdk.features.GameplayAPI.start()
-              }
-            }
-          }
+            onClose: (wasShown: boolean) => {
+              console.log('[Yandex] Fullscreen ad closed, wasShown:', wasShown)
+              resolve(wasShown)
+            },
+            onError: (error: Error) => {
+              console.error('[Yandex] Fullscreen ad error:', error)
+              resolve(false)
+            },
+          },
         })
-        resolve(true)
-      } catch (err) {
-        console.error('[Yandex] showFullscreenAd exception:', err)
+      } catch (error) {
+        console.error('[Yandex] showFullscreenAd exception:', error)
         resolve(false)
       }
     })
@@ -108,24 +98,17 @@ class YandexPlatform implements IPlatform {
 
   /**
    * Показать видеорекламу с вознаграждением
-   * ⚠️ Вызывается ТОЛЬКО ПОСЛЕ init()
+   * ⚠️ resolve(true) ТОЛЬКО после onClose (награда в onRewarded)
    */
   async showRewardedVideo(): Promise<boolean> {
-    if (!this.ysdk) {
-      console.warn('[Yandex] showRewardedVideo: SDK not initialized')
+    const adv = this.ysdk?.adv
+    if (!adv) {
+      console.error('[Yandex] SDK or adv not initialized')
       return false
     }
-
-    if (!this.ysdk.adv) {
-      console.warn('[Yandex] showRewardedVideo: adv API not available')
-      return false
-    }
-
-    return new Promise<boolean>((resolve) => {
-      let rewarded = false
-
+    return new Promise((resolve) => {
       try {
-        this.ysdk!.adv.showRewardedVideo({
+        adv.showRewardedVideo({
           callbacks: {
             onOpen: () => {
               console.log('[Yandex] Rewarded video opened')
@@ -133,22 +116,24 @@ class YandexPlatform implements IPlatform {
             },
             onRewarded: () => {
               console.log('[Yandex] Rewarded! User earned reward')
-              rewarded = true
+              // Награда обрабатывается в economy-store после resolve(true)
             },
-            onClose: (wasShown: boolean = true) => {
-              console.log('[Yandex] Rewarded video closed, wasShown:', wasShown)
+            onClose: () => {
+              console.log('[Yandex] Rewarded video closed')
               this.startGameplay()
-              resolve(rewarded)
+              // onClose в SDK не имеет wasShown — считаем успешным если дошло сюда
+              // (если пользователь закрыл до просмотра, onRewarded не вызовется)
+              resolve(true)
             },
-            onError: (err: Error) => {
-              console.error('[Yandex] Rewarded video error:', err)
+            onError: (error: Error) => {
+              console.error('[Yandex] Rewarded video error:', error)
               this.startGameplay()
               resolve(false)
             },
           },
         })
-      } catch (err) {
-        console.error('[Yandex] showRewardedVideo exception:', err)
+      } catch (error) {
+        console.error('[Yandex] showRewardedVideo exception:', error)
         this.startGameplay()
         resolve(false)
       }

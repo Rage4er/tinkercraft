@@ -15,15 +15,21 @@ interface BadgeProps {
 export default function Badge({ type, value, isActive }: BadgeProps) {
   if (!type) return null
 
-  // Определяем позицию и содержимое
+  // Определяем позицию и содержимое с улучшенной видимостью
   let style: React.CSSProperties = {
     position: 'absolute',
     pointerEvents: 'none' as const,
     fontSize: '10px',
+    fontWeight: 700,
+    borderRadius: '4px',
+    padding: '2px 5px',
     display: 'flex',
     alignItems: 'center',
     gap: '2px',
-    fontWeight: 'bold',
+    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.3)',
+    minWidth: '18px',
+    minHeight: '14px',
+    justifyContent: 'center',
   }
 
   let content: ReactNode = null
@@ -31,37 +37,37 @@ export default function Badge({ type, value, isActive }: BadgeProps) {
   switch (type) {
     case 'tokens':
       if (isActive) {
-        // Активен — 👑 слева-вверху
-        style = { ...style, top: '-4px', left: '-4px', background: 'var(--success)', color: 'white', padding: '1px 4px', borderRadius: '4px' }
+        // Активен — 👑 слева-вверху (золотой)
+        style = { ...style, top: '-2px', left: '-2px', background: '#f59e0b', color: '#ffffff', fontSize: '11px' }
         content = <CrownIcon width={10} height={10} />
       } else {
-        // Нет доступа — 💰 слева-внизу
-        style = { ...style, bottom: '-4px', left: '-4px', background: 'var(--warning)', color: 'black', padding: '1px 4px', borderRadius: '4px' }
-        content = <MoneyIcon width={10} height={10} />
+        // Нет доступа — 💰 слева-внизу (жёлтый)
+        style = { ...style, bottom: '-2px', left: '-2px', background: '#fbbf24', color: '#78350f', fontSize: '11px' }
+        content = <><MoneyIcon width={10} height={10} style={{ fill: '#78350f' }} />{value && <span style={{ fontSize: '9px' }}>{value}</span>}</>
       }
       break
 
     case 'ad':
       if (isActive) {
-        // Активен — ⏱ слева-вверху
-        style = { ...style, top: '-4px', left: '-4px', background: 'var(--primary)', color: 'white', padding: '1px 4px', borderRadius: '4px' }
+        // Активен — ⏱ слева-вверху (зелёный)
+        style = { ...style, top: '-2px', left: '-2px', background: '#10b981', color: '#ffffff', fontSize: '11px' }
         content = <ClockIcon width={10} height={10} />
       } else {
-        // Нет доступа — 📺 справа-внизу
-        style = { ...style, bottom: '-4px', right: '-4px', background: 'var(--text-muted)', color: 'white', padding: '1px 4px', borderRadius: '4px' }
+        // Нет доступа — 📺 справа-внизу (фиолетовый)
+        style = { ...style, bottom: '-2px', right: '-2px', background: '#8b5cf6', color: '#ffffff', fontSize: '11px' }
         content = <AdFilmIcon width={10} height={10} />
       }
       break
 
     case 'cooldown':
-      // ⏱ слева-вверху (когда активен и кулдаун)
-      style = { ...style, top: '-4px', left: '-4px', background: 'var(--primary)', color: 'white', padding: '1px 4px', borderRadius: '4px' }
+      // ⏱ слева-вверху (зелёный)
+      style = { ...style, top: '-2px', left: '-2px', background: '#10b981', color: '#ffffff', fontSize: '11px' }
       content = <ClockIcon width={10} height={10} />
       break
 
     case 'pro':
-      // 👑 слева-вверху (подписка активна)
-      style = { ...style, top: '-4px', left: '-4px', background: 'var(--success)', color: 'white', padding: '1px 4px', borderRadius: '4px' }
+      // 👑 слева-вверху (зелёный — подписка активна)
+      style = { ...style, top: '-2px', left: '-2px', background: '#10b981', color: '#ffffff', fontSize: '11px' }
       content = <CrownIcon width={10} height={10} />
       break
   }

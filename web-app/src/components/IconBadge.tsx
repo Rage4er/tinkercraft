@@ -12,21 +12,30 @@ export interface BadgeProps {
   label?: string
 }
 
+/** Цветовая схема для каждого типа бейджа */
+const badgeStyles: Record<BadgeType, { bg: string; color: string }> = {
+  tokens: { bg: '#fbbf24', color: '#78350f' },    // жёлтый + тёмно-коричневый
+  ad: { bg: '#8b5cf6', color: '#ffffff' },    // фиолетовый + белый
+  timer: { bg: '#10b981', color: '#ffffff' },    // зелёный + белый
+  crown: { bg: '#f59e0b', color: '#ffffff' },    // золотой + белый
+}
+
 /** Бейдж ¼ кнопки, pointer-events:none */
 export default function IconBadge({ type, label }: BadgeProps) {
   const size = 16
+  const style = badgeStyles[type]
 
   // Иконка в зависимости от типа
   const icon = (() => {
     switch (type) {
       case 'tokens':
-        return <TokenIcon width={size} height={size} style={{ fill: 'currentColor' }} />
+        return <TokenIcon width={size} height={size} style={{ fill: style.color }} />
       case 'ad':
-        return <AdFilmIcon width={size} height={size} style={{ fill: 'currentColor' }} />
+        return <AdFilmIcon width={size} height={size} style={{ fill: style.color }} />
       case 'timer':
-        return <ClockIcon width={size} height={size} />
+        return <ClockIcon width={size} height={size} style={{ fill: style.color }} />
       case 'crown':
-        return <CrownIcon width={size} height={size} />
+        return <CrownIcon width={size} height={size} style={{ fill: style.color }} />
     }
   })()
 
@@ -41,13 +50,20 @@ export default function IconBadge({ type, label }: BadgeProps) {
         alignItems: 'center',
         justifyContent: 'center',
         pointerEvents: 'none',
-        color: 'var(--text-muted)',
-        opacity: 0.9,
+        background: style.bg,
+        color: style.color,
+        fontSize: '11px',
+        fontWeight: 700,
+        borderRadius: 4,
+        padding: '3px 5px',
+        minWidth: 20,
+        minHeight: 16,
+        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.3)',
       }}
     >
       {icon}
       {label && (
-        <span style={{ fontSize: '8px', marginLeft: '1px' }}>{label}</span>
+        <span style={{ fontSize: '9px', marginLeft: '1px', lineHeight: 1 }}>{label}</span>
       )}
     </div>
   )

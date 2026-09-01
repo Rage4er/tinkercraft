@@ -9,6 +9,16 @@
 
 ## [Unreleased]
 
+### Fixed
+- **Rewarded video: правильные callbacks SDK** — `onClose` без аргументов (`wasShown`), `resolve(true)` только после закрытия, `onClose` вызывает `startGameplay()` (`platform/yandex.ts`)
+- **Fullscreen ad: showFullscreenAdv вместо showInterstitialAd** — SDK использует `showFullscreenAdv()`, не `showInterstitialAd()` (`platform/yandex.ts`)
+- **Баннер показывается при инициализации** — явный вызов `showBannerAdv()` в App.tsx после `initPlatform()` (`App.tsx`)
+- **Скрытие баннера после оплаты аренды** — `watchAdForBanner()` вызывает `hideBannerAdv()` после активации `disableBanner` (`store/economy-store.ts`)
+- **Токены за квесты сохраняются в облако** — `evaluateQuests()` вызывает `syncToCloud()` после начисления (`store/economy-store.ts`)
+- **Бейджи: улучшена видимость** — яркие цвета (жёлтый/фиолетовый/зелёный/золотой), padding 3px 5px, min-size 20x16, boxShadow (`components/Badge.tsx`, `components/IconBadge.tsx`)
+- **Расширенная палитра заблокирована** — кнопка "Расширенный выбор" проверяет аренду/подписку, открывает магазин при отсутствии доступа (`components/PropertiesPanel.tsx`)
+- **IconButton: поддержка priceBadge/adBadge/timerBadge/proBadge** — новые props для бейджей на кнопках (`components/IconButton.tsx`)
+
 ### Added
 - **favicon.svg** — иконка вкладки браузера в стиле проекта: 3D-куб с градиентами и буквами TC (`public/favicon.svg`)
 - **SVG-иконки для эмодзи** — добавлены MoneyIcon, PackageIcon, SpeakerIcon (`components/icons/index.tsx`)

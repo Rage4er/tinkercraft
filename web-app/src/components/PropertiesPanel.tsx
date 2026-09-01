@@ -7,6 +7,7 @@ import ColorPalette from "./ColorPalette";
 import type { ShapeParams, SceneObject } from "../csg/types";
 import { EyeIcon, EyeOffIcon, FilletIcon, FolderIcon, SaveIcon, TokenIcon, GiftIcon, AdFilmIcon, CrownIcon, ClockIcon, SparkIcon, StarIcon, TrophyIcon, TextIcon, ColorIcon } from "./icons";
 import { useEconomyStore, type QuestDifficulty, type RentalKey } from "../store/economy-store";
+import { useUiStore } from "../store/ui-store";
 import { getPlatform } from "../platform";
 import { ECONOMY_UI, DIFFICULTY_ICON, ICON_REGISTRY } from "../store/economy-ui-config";
 
@@ -418,6 +419,14 @@ export default function PropertiesPanel({
   // Toggle: показывать ли нативный color picker вместо палитры
   const [showNativePicker, setShowNativePicker] = useState(false);
 
+  // ✅ Проверка доступа к расширенной палитре
+  const hasExtendedPaletteRental = useEconomyStore(s =>
+    s.rentals.extendedPalette !== null && Date.now() < s.rentals.extendedPalette!
+  )
+  const hasActiveSub = useEconomyStore(s => s.hasActiveSubscription())
+  const canUseExtendedPicker = hasExtendedPaletteRental || hasActiveSub
+  const setActiveTab = useUiStore(s => s.setActiveTab)
+
   const commitDraftColor = () => {
     const targetId = draftTargetIdRef.current;
     const base = baseColorRef.current;
@@ -561,13 +570,21 @@ export default function PropertiesPanel({
           <button
             className="btn btn-compact btn-full"
             onClick={() => {
-              setShowNativePicker(!showNativePicker);
-              setDraftColor(null);
-              draftTargetIdRef.current = null;
-              baseColorRef.current = null;
+              if (!canUseExtendedPicker) {
+                // 🔒 Нет доступа — открыть магазин
+                setActiveTab('objects')
+                return
+              }
+              setShowNativePicker(!showNativePicker)
+              setDraftColor(null)
+              draftTargetIdRef.current = null
+              baseColorRef.current = null
             }}
           >
             {showNativePicker ? t("properties.palette") : t("properties.advancedPicker")}
+            {!canUseExtendedPicker && (
+              <span style={{ marginLeft: '4px', fontSize: '10px', color: 'var(--warning)' }}>🔒 75</span>
+            )}
           </button>
         </div>
       </div>

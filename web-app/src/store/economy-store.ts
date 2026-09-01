@@ -345,6 +345,13 @@ export const useEconomyStore = create<EconomyState>()(
         set((state) => ({
           rentals: { ...state.rentals, disableBanner: serverTime + ONE_DAY_MS },
         }))
+        // ✅ Скрыть баннер после оплаты
+        try {
+          await platform.hideBannerAdv()
+          console.log('[Economy] Banner hidden after rental purchase')
+        } catch (e) {
+          console.log('[Economy] Banner hide failed (may be dashboard-controlled):', e)
+        }
         await get().syncToCloud()
         console.log('[Economy] Banner ad watched — disableBanner rental activated')
         return { ok: true }
@@ -650,6 +657,9 @@ export const useEconomyStore = create<EconomyState>()(
             tokens: state.tokens + tokensEarned,
             todayQuestsCompleted: newCompleted,
           })
+          // ✅ Явный syncToCloud после начисления токенов за квесты
+          void get().syncToCloud()
+          console.log('[Economy] Quest rewards synced to cloud')
         } else {
           set({ todayQuests: updatedQuests })
         }
