@@ -155,6 +155,11 @@ export default function ExportModal({
           >
             <TokenIcon size={32} /> {t('export.payTokens', { cost: netCost })}
           </button>
+          {tokens < netCost && (
+            <div className="modal-hint" style={{ textAlign: 'center', fontSize: '12px', color: 'var(--text-muted)' }}>
+              {t('economy.notEnoughTokens', { n: netCost - tokens })}
+            </div>
+          )}
 
           {/* Вариант 2: посмотреть рекламу */}
           <button
@@ -165,6 +170,11 @@ export default function ExportModal({
           >
             <AdFilmIcon size={32} /> {t('export.watchAd', { count: todayAdsWatched, max: 3 })}
           </button>
+          {todayAdsWatched >= 3 && (
+            <div className="modal-hint" style={{ textAlign: 'center', fontSize: '12px', color: 'var(--text-muted)' }}>
+              {t('economy.adLimit')}
+            </div>
+          )}
 
           <button className="btn" onClick={onClose}>
             {t('textModal.cancel')}

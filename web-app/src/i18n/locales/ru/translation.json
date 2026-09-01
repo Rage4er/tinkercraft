@@ -421,6 +421,8 @@
     },
     "common": {
       "expired": "Истекла"
-    }
+    },
+    "notEnoughTokens": "Не хватает {{n}} 💎",
+    "adLimit": "Лимит дня"
   }
 }

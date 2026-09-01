@@ -16,41 +16,9 @@
 - **Серверное время в аренде/подписках** — `buyRental()` и `buySubscription()` теперь используют `getServerTime()` вместо `Date.now()` для защиты от накруток (§5) (`store/economy-store.ts`)
 - **Бейджи для текста 3D** — кнопка «Текст» в Toolbar с бейджем 💎 75, проверка аренды (§6.4) (`components/Toolbar.tsx`, `constants.ts`)
 - **Реактивный EconomyBanner** — `hasActiveSub` и `hasRentalDisable` перенесены в `useSelector` вместо `getState()` (`components/EconomyBanner.tsx`)
-
-### Fixed
-- **Bux token icon** — буква C на токене заменена с полного круга на кривую Безье (та же форма, что в TCLogoIcon) — теперь это настоящая буква C с разрывом справа (`components/icons/index.tsx`)
-- **Эмодзи → SVG** — заменены все эмодзи в UI на SVG-иконки: Badge.tsx, EconomyOnboarding.tsx, IconBadge.tsx, EconomyShop.tsx, PropertiesPanel.tsx, EconomyBanner.tsx, EconomyHUD.tsx
-- **Стандартизация иконок** — приведены к единому stroke-стилю (SW=3, currentColor): TokenIcon (с goldFace helper), GiftIcon (обновлённый бант), FolderIcon (outline-only), CrownIcon (stroke вместо fill), ClockIcon (stroke вместо отдельного svg) (`components/icons/index.tsx`)
-- **HUD реклама** — кнопка рекламы теперь всегда видна (disabled если лимит), метка «лимит дня» показывается всегда (§6.1) (`components/EconomyHUD.tsx`)
-- **Серверное время** — `buyRental` и `buySubscription` используют серверное время Яндекса вместо локального (§5) (`store/economy-store.ts`)
-- **EconomyBanner реактивность** — исправлен bug: хуки `hasActiveSub`/`hasRentalDisable` перенесены из `getState()` в `useSelector` (`components/EconomyBanner.tsx`)
-
-### Changed
-- **EconomyHUD v2** — счётчик `+50 · N/3`, таймер кулдауна "ждём 4:32", состояние "до 23:45" для бонуса (§6.1) (`components/EconomyHUD.tsx`)
-- **EconomyBanner.tsx** — рекламный баннер с кнопкой скрытия (§6.3 место 1): [💎 50] [📺 1] (`components/EconomyBanner.tsx`)
-- **Badge.tsx** — компонент бейджей на кнопках: 💰/📺 слева-внизу, ⏱/👑 слева-вверху (§6.4) (`components/Badge.tsx`)
-- **EconomyOnboarding.tsx** — онбординг экономики 3 шага: ХУД → бейджи → панель, флаг в облако (§6.7) (`components/EconomyOnboarding.tsx`)
-- **ExportModal cashback breakdown** — разбивка кэшбэка V2 в модалке экспорта: база, масштаб, фигуры, инструменты (§6.5) (`components/ExportModal.tsx`)
-
-### Fixed
-- **Toolbar бейджи** — бейджи на кнопках экспорта (💎 50) и импорта (💎 100) (§6.4) (`components/Toolbar.tsx`)
-- **EconomyShop.tsx** — исправлен bug: хук в цикле заменён на `getState()` (`components/EconomyShop.tsx`)
-- **i18n** — дополнены ключи export.cashbackBreakdown (RU/EN), adLabel убран из статического значения (`i18n/locales/*/translation.json`)
-- **Баннер реклама** — кнопка «📺 1» теперь вызывает `watchAdForBanner()` вместо `watchAdForTokens()` (лимиты 3/день) и `buyRental()` (тратит 50 TC). Независимая операция: показать рекламу → скрыть баннер на 24ч, без влияния на лимиты рекламы за токены (§3.2, §6.3) (`store/economy-store.ts`, `components/EconomyBanner.tsx`, `components/EconomyShop.tsx`, `components/PropertiesPanel.tsx`)
-- **Toolbar бейджи реклама** — добавлены бейджи 📺1 на экспорт и 📺2 на импорт (§6.4). Исправлена логика: `exportActive` = только подписка (аренда текста не влияет на экспорт) (`components/Toolbar.tsx`)
-- **ImportModal.tsx** — модалка оплаты импорта STL: 100 TC ИЛИ 2 просмотра рекламы (§3.1). Интегрирован в App.tsx с i18n EN/RU (`components/ImportModal.tsx`, `i18n/locales/*/translation.json`)
-- **Квест export_stl_large** — при экспорте модели с ≥10 объектов вызывается `completeEventQuest('export_stl_large')` (§4 квесты) (`store/document-store.ts`)
-
-### Changed
-- **EconomyHUD** — переписан с SVG-иконками, динамическими счётчиками и состояниями (`components/EconomyHUD.tsx`)
-- **ExportModal** — используется scanForCashback() для точной разбивки кэшбэка (`components/ExportModal.tsx`)
-- **App.tsx** — добавлен EconomyBanner и EconomyOnboarding, экономика интегрирована (§6.3, §6.7)
-
-### Fixed
-- **SDK автолокализация** — убран жёстко заданный `lang="ru"` из `index.html`: при неработающем SDK язык браузера (`navigator.language`) определялся как "ru" из-за атрибута `<html lang="ru">`. Теперь приоритет: 1) SDK `ysdk.environment.i18n.lang`, 2) `navigator.language`, 3) `navigator.languages[0]`, 4) `document.documentElement.lang`, 5) fallback → 'en'. Улучшено логирование: `[SDK] environment` и `[i18n] [SDK]` / `[navigator]` / `[document]` для отладки модерации. (`index.html`, `i18n/init.ts`, `platform/sdk.ts`)
-- **Y5.0 Серверное время (§5)** — `isDayPassed()`, `isCooldownPassed()`, `getAdCooldownRemaining()` теперь используют `ysdk.serverTime()` вместо `Date.now()` для защиты от накруток переводом часов. Кэш серверного времени на 30 сек. (`platform/server-time.ts`, `platform/yandex.ts`, `economy-config.ts`, `economy-store.ts`, `EconomyHUD.tsx`, `PropertiesPanel.tsx`)
-- **Y6.0 syncToCloud() — критические баги** — `earnActionToken()`, `calculateAndClaimCashback()`, `completeEventQuest()` теперь вызывают `syncToCloud()`. `syncToCloud()` теперь сохраняет daily-счётчики: `todayAdsWatched`, `todayActions`, `todayCashbacks`, `questTriggers`. `loadFromCloud()` и `partialize()` обновлены для загрузки этих полей. (`economy-store.ts`)
-- **UI экономики §6.2** — экономика интегрирована в PropertiesPanel (токены, бонус, квесты, аренда, подписки, баннер off) вместо отдельных компонентов EconomyHUD/QuestPanel/EconomyShop. Добавлена проверка `isYandex` — экономика скрывается в clean-версии. Убраны дублирующие компоненты из App.tsx. (`PropertiesPanel.tsx`, `App.tsx`, `i18n/locales/*`)
+- **Подписи-причины disabled-кнопок** — ExportModal/ImportModal показывают «Не хватает N 💎» и «Лимит дня» под серыми кнопками (§6.5 UX) (`components/ExportModal.tsx`, `components/ImportModal.tsx`, `i18n/locales/*/translation.json`)
+- **Debounce evaluateQuests** — подписка на изменения документа теперь debounced 400 мс — живой прогресс квестов без просадок FPS на слабых устройствах (§4) (`App.tsx`)
+- **ECONOMY.md §6.3** — обновлено: кнопка скрытия баннера в трёх местах (баннер, панель, магазин) (`ECONOMY.md`)
 
 ### Added
 - **Y2.0 Кэшбэк V2** — формула коэффициентов (§2.1 ECONOMY.md v2.0): `min(25, 1 + Масштаб + РазнообразиеФигур + КолИнструментов + РазнообразиеИнструментов)` (`store/economy-config.ts`, `store/economy-store.ts`)

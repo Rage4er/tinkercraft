@@ -243,14 +243,17 @@ export default function App() {
     importStl()
   }, [importStl])
 
-  // Подписка на изменения для оценки квестов (живой прогресс в UI)
+  // Подписка на изменения для оценки квестов (дебаунс 400 мс — живой прогресс без просадок FPS)
   useEffect(() => {
+    let timer: number | undefined
     const unsubscribe = useDocumentStore.subscribe((state) => {
-      // Вызываем evaluateQuests при каждом изменении для обновления прогресса в UI
-      evaluateQuests(state.objects, state.operations)
+      window.clearTimeout(timer)
+      timer = window.setTimeout(() => evaluateQuests(state.objects, state.operations), 400)
     })
-
-    return () => unsubscribe()
+    return () => {
+      unsubscribe()
+      window.clearTimeout(timer)
+    }
   }, [evaluateQuests])
 
   useEffect(() => {

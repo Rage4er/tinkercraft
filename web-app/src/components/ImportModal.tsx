@@ -89,6 +89,11 @@ export default function ImportModal({
           >
             <TokenIcon size={32} /> {t('import.payTokens', { cost: importCost })}
           </button>
+          {tokens < importCost && (
+            <div className="modal-hint" style={{ textAlign: 'center', fontSize: '12px', color: 'var(--text-muted)' }}>
+              {t('economy.notEnoughTokens', { n: importCost - tokens })}
+            </div>
+          )}
 
           {/* Вариант 2: посмотреть рекламу 2 раза */}
           <button
@@ -99,6 +104,11 @@ export default function ImportModal({
           >
             <AdFilmIcon size={32} /> {t('import.watchAd', { count: todayAdsWatched, max: 3, adsNeeded: adCost })}
           </button>
+          {todayAdsWatched + adCost > 3 && (
+            <div className="modal-hint" style={{ textAlign: 'center', fontSize: '12px', color: 'var(--text-muted)' }}>
+              {t('economy.adLimit')}
+            </div>
+          )}
 
           <button className="btn" onClick={onClose}>
             {t('textModal.cancel')}

@@ -420,6 +420,8 @@
     },
     "common": {
       "expired": "Expired"
-    }
+    },
+    "notEnoughTokens": "{{n}} 💎 short",
+    "adLimit": "Daily limit"
   }
 }
