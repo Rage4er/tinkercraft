@@ -87,9 +87,11 @@ export const ImportIcon = (p: any) => (
   </Icon>
 )
 
+/* ===== 📁 Папка проекта ===== */
 export const FolderIcon = (p: any) => (
   <Icon {...p}>
-    <Shape d="M8 16h16l5 6h27v28H8Z" />
+    <path d="M10 20a4 4 0 0 1 4-4h10l6 6h20a4 4 0 0 1 4 4v20a4 4 0 0 1-4 4H14a4 4 0 0 1-4-4Z"
+      fill="none" stroke="currentColor" strokeWidth={SW} strokeLinejoin="round" />
   </Icon>
 )
 
@@ -502,49 +504,35 @@ export const TextIcon = (p: any) => (
 )
 
 /* ===== Группа 12 · Игры (Yandex) — токены, бонусы, реклама ===== */
+
+// Helper для золотых граней токена
+const goldFace = (opacity: number) => ({ fill: `rgba(251, 191, 36, ${opacity})` })
+
+/* ===== 💎 Токен: золотой изометрический куб TC ===== */
 export const TokenIcon = (p: any) => (
   <Icon {...p}>
-    {/* Верхняя грань — золотая, самая светлая */}
-    <path
-      d="M32 12 50 21l-18 9-18-9Z"
-      fill="rgba(251, 191, 36, 0.95)"
-    />
-    {/* Левая грань */}
-    <path
-      d="M14 21l18 9v22l-18-9Z"
-      fill="rgba(251, 191, 36, 0.7)"
-    />
-    {/* Правая грань */}
-    <path
-      d="M50 21l-18 9v22l18-9Z"
-      fill="rgba(251, 191, 36, 0.45)"
-    />
-    {/* Свечение — тонкая обводка */}
-    <path
-      d="M32 12 50 21l-18 9-18-9Z"
-      fill="none"
-      stroke="#fcd34d"
-      strokeWidth={1}
-      opacity={0.6}
-    />
-    {/* Буква TC на левой грани */}
+    <path d="M32 12 50 21l-18 9-18-9Z" {...goldFace(0.95)} />
+    <path d="M14 21l18 9v22l-18-9Z" {...goldFace(0.7)} />
+    <path d="M50 21l-18 9v22l18-9Z" {...goldFace(0.45)} />
+    <path d="M32 12 50 21l-18 9-18-9Z" fill="none" stroke="#fcd34d" strokeWidth={1} opacity={0.6} />
     <g fill="none" stroke="#78350f" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
       <path d="M20 28h8" />
       <path d="M24 28v10" />
-    </g>
-    {/* Буква C на правой грани */}
-    <g fill="none" stroke="#78350f" strokeWidth={1.5} strokeLinecap="round">
       <path d="M38 32a6 6 0 0 1 0 12 6 6 0 0 1-6-6 6 6 0 0 1 6-6" />
     </g>
   </Icon>
 )
 
+/* ===== 🎁 Подарок: коробка + крышка + бант ===== */
 export const GiftIcon = (p: any) => (
   <Icon {...p}>
-    <path d="M16 28h32v24H16Z" {...face(0.25)} />
-    <path {...line} d="M16 28h32M18 28v-6h28v6M32 28v24" />
-    <path d="M32 22c-4 0-10-6-8-10 1.6-3 6.4-2 8 4 1.6-6 6.4-7 8-4 2 4-4 10-8 10Z" {...face(0.4)} />
-    <path {...line} d="M32 22c-4 0-10-6-8-10 1.6-3 6.4-2 8 4 1.6-6 6.4-7 8-4 2 4-4 10-8 10Z" />
+    <g fill="none" stroke="currentColor" strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+      <rect x="12" y="26" width="40" height="26" rx="4" />
+      <rect x="9" y="18" width="46" height="8" rx="3" />
+      <path d="M32 18v34" />
+      <path d="M32 18c-8 0-12-3-12-7 0-3 2-5 5-5 5 0 7 6 7 12Z" />
+      <path d="M32 18c8 0 12-3 12-7 0-3-2-5-5-5-5 0-7 6-7 12Z" />
+    </g>
   </Icon>
 )
 
@@ -627,20 +615,60 @@ export const TrophyIcon = (p: any) => (
   </Icon>
 )
 
-/* ===== Y.3 — Экономика магазин ===== */
+/* ===== 👑 Pro-подписка: корона ===== */
 export const CrownIcon = (p: any) => (
-  <svg viewBox="0 0 64 64" fill="none" {...p}>
-    <path d="M8 44h48v8H8z" fill="currentColor" opacity="0.3" />
-    <path d="M12 44l8-24 12 12 12-12 8 24H12z" fill="currentColor" />
-    <circle cx="20" cy="16" r="3" fill="currentColor" opacity="0.6" />
-    <circle cx="32" cy="14" r="3" fill="currentColor" opacity="0.6" />
-    <circle cx="44" cy="16" r="3" fill="currentColor" opacity="0.6" />
-  </svg>
+  <Icon {...p}>
+    <g fill="none" stroke="currentColor" strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 44 10 22l12 8 10-14 10 14 12-8-2 22Z" />
+      <path d="M12 50h40" />
+    </g>
+  </Icon>
 )
 
+/* ===== ⏱ Активная аренда: часы ===== */
 export const ClockIcon = (p: any) => (
-  <svg viewBox="0 0 64 64" fill="none" {...p}>
-    <circle cx="32" cy="32" r="22" stroke="currentColor" strokeWidth="4" fill="none" />
-    <path d="M32 16v16l10 6" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
-  </svg>
+  <Icon {...p}>
+    <g fill="none" stroke="currentColor" strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="32" cy="32" r="20" />
+      <path d="M32 20v12l8 6" />
+    </g>
+  </Icon>
+)
+
+/* ===== Экономика: деньги, упаковка, динамика ===== */
+export const MoneyIcon = (p: any) => (
+  <Icon {...p}>
+    <circle cx="32" cy="32" r="20" {...face(0.25)} />
+    <path {...line} d="M32 12v40" />
+    <path
+      d="M40 24c0-3-3-5-8-5s-8 2-8 5 3 5 8 5 8-2 8-5"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={SW}
+    />
+    <path
+      d="M40 36c0 3-3 5-8 5s-8-2-8-5 3-5 8-5 8 2 8 5"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={SW}
+    />
+    <path {...line} d="M28 29.5h8M28 34.5h8" />
+  </Icon>
+)
+
+export const PackageIcon = (p: any) => (
+  <Icon {...p}>
+    <path d="M8 24l24-12 24 12v24l-24 12-24-12Z" {...face(0.22)} />
+    <path {...line} d="M8 24l24-12 24 12M32 12v40" />
+    <path {...line} d="M8 24l24 12 24-12" />
+  </Icon>
+)
+
+export const SpeakerIcon = (p: any) => (
+  <Icon {...p}>
+    <path d="M10 24h12l14-12v40L22 40H10a4 4 0 0 1-4-4V28a4 4 0 0 1 4-4Z" {...face(0.22)} />
+    <path {...line} d="M10 24h12l14-12v40L22 40H10a4 4 0 0 1-4-4V28a4 4 0 0 1 4-4Z" />
+    <path d="M38 24a8 8 0 0 1 0 16" fill="none" stroke="currentColor" strokeWidth={SW} strokeLinecap="round" />
+    <path d="M44 18a16 16 0 0 1 0 28" fill="none" stroke="currentColor" strokeWidth={SW} strokeLinecap="round" />
+  </Icon>
 )

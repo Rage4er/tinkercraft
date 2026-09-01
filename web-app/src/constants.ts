@@ -177,8 +177,11 @@ export const TOOLTIP_DATA: Record<string, TooltipData> = {
   csg_intersect: { labelKey: 'csg.intersect', shortcut: 'I', descriptionKey: 'tooltips.csgIntersect' },
 
   // --- Theme ---
-  theme_toggle: { labelKey: 'theme.toggle', descriptionKey: 'tooltips.themeToggle' },
+  theme_toggle: { labelKey: 'theme.toggle', descriptionKey: 'tooltips.theme' },
 
-  // --- Clear ---
+  // --- 3D Text ---
+  text3d: { labelKey: 'leftPanel.text3d', descriptionKey: 'tooltips.text3d' },
+
+  // --- Clear scene ---
   clear_scene: { labelKey: 'actions.clearScene', descriptionKey: 'tooltips.clearScene' },
 }

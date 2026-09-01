@@ -2,6 +2,7 @@
 // 💰 слева-внизу / 📺 справа-внизу — когда нет доступа
 // ⏱/👑 слева-вверху — когда активен
 import type { ReactNode } from 'react'
+import { MoneyIcon, AdFilmIcon, ClockIcon, CrownIcon } from './icons'
 
 export type BadgeType = 'tokens' | 'ad' | 'cooldown' | 'pro'
 
@@ -32,11 +33,11 @@ export default function Badge({ type, value, isActive }: BadgeProps) {
       if (isActive) {
         // Активен — 👑 слева-вверху
         style = { ...style, top: '-4px', left: '-4px', background: 'var(--success)', color: 'white', padding: '1px 4px', borderRadius: '4px' }
-        content = '👑'
+        content = <CrownIcon width={10} height={10} />
       } else {
         // Нет доступа — 💰 слева-внизу
         style = { ...style, bottom: '-4px', left: '-4px', background: 'var(--warning)', color: 'black', padding: '1px 4px', borderRadius: '4px' }
-        content = '💰'
+        content = <MoneyIcon width={10} height={10} />
       }
       break
 
@@ -44,24 +45,24 @@ export default function Badge({ type, value, isActive }: BadgeProps) {
       if (isActive) {
         // Активен — ⏱ слева-вверху
         style = { ...style, top: '-4px', left: '-4px', background: 'var(--primary)', color: 'white', padding: '1px 4px', borderRadius: '4px' }
-        content = '⏱'
+        content = <ClockIcon width={10} height={10} />
       } else {
         // Нет доступа — 📺 справа-внизу
         style = { ...style, bottom: '-4px', right: '-4px', background: 'var(--text-muted)', color: 'white', padding: '1px 4px', borderRadius: '4px' }
-        content = `📺${value ?? ''}`
+        content = <AdFilmIcon width={10} height={10} />
       }
       break
 
     case 'cooldown':
       // ⏱ слева-вверху (когда активен и кулдаун)
       style = { ...style, top: '-4px', left: '-4px', background: 'var(--primary)', color: 'white', padding: '1px 4px', borderRadius: '4px' }
-      content = `⏱${value ?? ''}`
+      content = <ClockIcon width={10} height={10} />
       break
 
     case 'pro':
       // 👑 слева-вверху (подписка активна)
       style = { ...style, top: '-4px', left: '-4px', background: 'var(--success)', color: 'white', padding: '1px 4px', borderRadius: '4px' }
-      content = '👑'
+      content = <CrownIcon width={10} height={10} />
       break
   }
 

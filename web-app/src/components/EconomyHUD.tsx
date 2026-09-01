@@ -5,6 +5,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useEconomyStore } from '../store/economy-store'
 import { ECONOMY_UI } from '../store/economy-ui-config'
+import { TokenIcon, GiftIcon, AdFilmIcon, ClockIcon } from './icons'
 
 /** Рассчитать оставшееся время кулдауна рекламы (мс) — использует серверное время */
 async function getAdCooldownRemaining(): Promise<number> {
@@ -85,11 +86,7 @@ export default function EconomyHUD() {
     <div className="economy-hud" style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '10px 14px', flexWrap: 'wrap' }}>
       {/* 💎 Токены */}
       <div className="economy-tokens" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-        <svg width="40" height="40" viewBox="0 0 64 64" fill="none" className="economy-icon">
-          <path d="M32 12 50 21l-18 9-18-9Z" fill="rgba(251, 191, 36, 0.95)" />
-          <path d="M14 21l18 9v22l-18-9Z" fill="rgba(251, 191, 36, 0.7)" />
-          <path d="M50 21l-18 9v22l18-9Z" fill="rgba(251, 191, 36, 0.45)" />
-        </svg>
+        <TokenIcon width={40} height={40} />
         <span className="economy-value" style={{ fontWeight: 'bold', fontSize: '22px' }}>
           {tokens}
         </span>
@@ -104,49 +101,40 @@ export default function EconomyHUD() {
           style={{ fontSize: '18px', padding: '12px 24px', display: 'flex', alignItems: 'center', gap: '10px' }}
           title={t('economy.tooltip.bonus')}
         >
-          <svg width="28" height="28" viewBox="0 0 64 64" fill="none">
-            <path d="M16 28h32v24H16Z" fill="currentColor" fillOpacity="0.25" />
-            <path d="M16 28h32M18 28v-6h28v6M32 28v24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-            <path d="M32 22c-4 0-10-6-8-10 1.6-3 6.4-2 8 4 1.6-6 6.4-7 8-4 2 4-4 10-8 10Z" fill="currentColor" fillOpacity="0.4" />
-          </svg>
+          <GiftIcon width={28} height={28} />
           {bonusStateLabel}
         </button>
       )}
 
       {/* 📺 Реклама за токены */}
-      {ECONOMY_UI.showAdButton && canWatchAd && (
-        <button
-          className="btn btn-compact btn-sm economy-ad-btn"
-          onClick={watchAdForTokens}
-          style={{ fontSize: '18px', padding: '12px 24px', display: 'flex', alignItems: 'center', gap: '10px' }}
-          title={t('economy.tooltip.ad')}
-        >
-          <svg width="28" height="28" viewBox="0 0 64 64" fill="none">
-            <rect x="10" y="16" width="44" height="32" rx="4" fill="none" stroke="currentColor" strokeWidth="3" strokeLinejoin="round" />
-            <rect x="14.5" y="20" width="4" height="5" rx="1" fill="currentColor" />
-            <rect x="14.5" y="29.5" width="4" height="5" rx="1" fill="currentColor" />
-            <rect x="14.5" y="39" width="4" height="5" rx="1" fill="currentColor" />
-            <rect x="45.5" y="20" width="4" height="5" rx="1" fill="currentColor" />
-            <rect x="45.5" y="29.5" width="4" height="5" rx="1" fill="currentColor" />
-            <rect x="45.5" y="39" width="4" height="5" rx="1" fill="currentColor" />
-            <path d="M28 24v16l14-8Z" fill="currentColor" />
-          </svg>
-          {t('economy.adLabel')} · {adStateLabel}
-        </button>
-      )}
+      {ECONOMY_UI.showAdButton && (
+        <>
+          {canWatchAd && (
+            <button
+              className="btn btn-compact btn-sm economy-ad-btn"
+              onClick={watchAdForTokens}
+              style={{ fontSize: '18px', padding: '12px 24px', display: 'flex', alignItems: 'center', gap: '10px' }}
+              title={t('economy.tooltip.ad')}
+            >
+              <AdFilmIcon width={28} height={28} />
+              {t('economy.adLabel')} · {adStateLabel}
+            </button>
+          )}
 
-      {/* Таймер кулдауна рекламы */}
-      {ECONOMY_UI.showAdButton && todayAdsWatched < 3 && cooldownMs > 0 && (
-        <div style={{ fontSize: '16px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-          ⏱ {formatCooldown(cooldownMs)}
-        </div>
-      )}
+          {/* Таймер кулдауна рекламы */}
+          {todayAdsWatched < 3 && cooldownMs > 0 && (
+            <div style={{ fontSize: '16px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <ClockIcon width={16} height={16} /> {formatCooldown(cooldownMs)}
+            </div>
+          )}
 
-      {/* Лимит рекламы */}
-      {ECONOMY_UI.showAdButton && todayAdsWatched >= 3 && (
-        <div style={{ fontSize: '14px', color: 'var(--text-muted)' }}>
-          {t('economy.tooltip.adLimit')}
-        </div>
+          {/* Лимит рекламы — показываем всегда, даже когда лимит достигнут */}
+          {todayAdsWatched >= 3 && (
+            <div style={{ fontSize: '14px', color: 'var(--text-muted)' }}>
+              {t('economy.tooltip.adLimit')}
+            </div>
+          )}
+        </>
       )}
     </div>
   )

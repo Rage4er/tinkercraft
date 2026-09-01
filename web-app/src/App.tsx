@@ -600,6 +600,7 @@ export default function App() {
         onExportStl={handleExportStl}
         onImportStl={handleImportStl}
         onShowProjects={() => setShowPM(true)}
+        onShowTextModal={() => setShowTextModal(true)}
         onUndo={undo}
         onRedo={redo}
         onCopy={copySelected}

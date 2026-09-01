@@ -34,6 +34,11 @@ export interface IPlatform {
   // Серверное время (§5 ECONOMY.md v2.0)
   getServerTime(): Promise<number>
 
+  // Стики-баннер (§6.3, §SDK)
+  showBannerAdv(): Promise<{ stickyAdvIsShowing: boolean; reason?: string }>
+  hideBannerAdv(): Promise<{ stickyAdvIsShowing: boolean }>
+  getBannerAdvStatus(): Promise<{ stickyAdvIsShowing: boolean; reason?: string }>
+
   // Очистка
   dispose(): void
 }

@@ -408,10 +408,14 @@ export const useEconomyStore = create<EconomyState>()(
           return { ok: false, code: 'not_enough' }
         }
 
+        // §5: используем серверное время для защиты от накруток
+        const { getServerTime } = await import('../platform/server-time')
+        const serverTime = await getServerTime()
+
         set((state) => ({
           tokens: state.tokens - config.tokens,
           activeSubscription: type,
-          subscriptionExpiresAt: Date.now() + config.days * ONE_DAY_MS,
+          subscriptionExpiresAt: serverTime + config.days * ONE_DAY_MS,
         }))
         await get().syncToCloud()
         console.log(`[Economy] Subscription ${type} purchased: ${config.tokens} tokens, ${config.days} days`)
@@ -445,9 +449,13 @@ export const useEconomyStore = create<EconomyState>()(
           return { ok: false, code: 'not_enough' }
         }
 
+        // §5: используем серверное время для защиты от накруток
+        const { getServerTime } = await import('../platform/server-time')
+        const serverTime = await getServerTime()
+
         set((state) => ({
           tokens: state.tokens - config,
-          rentals: { ...state.rentals, [key]: Date.now() + ONE_DAY_MS },
+          rentals: { ...state.rentals, [key]: serverTime + ONE_DAY_MS },
         }))
         await get().syncToCloud()
         console.log(`[Economy] Rental ${key} purchased: ${config} tokens, 24h`)

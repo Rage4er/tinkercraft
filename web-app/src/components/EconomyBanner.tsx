@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useEconomyStore } from '../store/economy-store'
+import { TokenIcon, AdFilmIcon, SpeakerIcon } from './icons'
 
 export default function EconomyBanner() {
   const { t } = useTranslation()
@@ -11,12 +12,10 @@ export default function EconomyBanner() {
   const watchAdForBanner = useEconomyStore((s) => s.watchAdForBanner)
   const setBannerVisible = useEconomyStore((s) => s.setBannerVisible)
   const bannerVisible = useEconomyStore((s) => s.bannerVisible)
+  const hasActiveSub = useEconomyStore((s) => s.hasActiveSubscription())
+  const hasRentalDisable = useEconomyStore((s) => s.hasRental('disableBanner'))
 
   const [busy, setBusy] = useState<string | null>(null)
-
-  // Проверка: баннер скрыт подпиской или арендой
-  const hasActiveSub = useEconomyStore.getState().hasActiveSubscription()
-  const hasRentalDisable = useEconomyStore.getState().hasRental('disableBanner')
 
   // Если баннер уже скрыт — не показываем
   if (!bannerVisible) return null
@@ -56,8 +55,9 @@ export default function EconomyBanner() {
       fontSize: '13px',
       gap: '12px',
     }}>
-      <span style={{ fontWeight: 'bold' }}>
-        📢 {t('economy.triggers.bannerOff', { defaultValue: 'Нет баннера на 24 ч' })}
+      <span style={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '6px' }}>
+        <SpeakerIcon width={16} height={16} />
+        {t('economy.triggers.bannerOff', { defaultValue: 'Нет баннера на 24 ч' })}
       </span>
 
       <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -68,7 +68,7 @@ export default function EconomyBanner() {
           onClick={handleBuyRental}
           style={{ fontSize: '12px', padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '4px' }}
         >
-          💎 50
+          <TokenIcon width={14} height={14} /> 50
         </button>
 
         {/* Кнопка рекламы */}
@@ -78,7 +78,7 @@ export default function EconomyBanner() {
           onClick={handleWatchAd}
           style={{ fontSize: '12px', padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '4px' }}
         >
-          📺 1
+          <AdFilmIcon width={14} height={14} /> 1
         </button>
       </div>
     </div>

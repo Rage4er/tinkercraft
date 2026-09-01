@@ -34,6 +34,11 @@ class YandexPlatform implements IPlatform {
       try {
         const bannerStatus = await ysdk.adv.getBannerAdvStatus()
         console.log('[Yandex] Banner status:', bannerStatus)
+        // Показываем стики-баннер если API включено (§SDK)
+        if (bannerStatus.stickyAdvIsShowing === false && bannerStatus.reason !== 'ADV_IS_NOT_CONNECTED') {
+          await ysdk.adv.showBannerAdv()
+          console.log('[Yandex] Sticky banner shown')
+        }
       } catch (e) {
         console.log('[Yandex] Banner not available (may be dashboard-controlled):', e)
       }
@@ -151,15 +156,48 @@ class YandexPlatform implements IPlatform {
   }
 
   /**
+   * Показать стики-баннер (§6.3, §SDK)
+   * Управление через API — баннер показывается справа на десктопе
+   */
+  async showBannerAdv(): Promise<{ stickyAdvIsShowing: boolean; reason?: string }> {
+    if (!this.ysdk?.adv) {
+      return { stickyAdvIsShowing: false, reason: 'ADV_IS_NOT_CONNECTED' }
+    }
+    try {
+      // SDK returns { reason? } but our interface needs stickyAdvIsShowing
+      await this.ysdk.adv.showBannerAdv()
+      return { stickyAdvIsShowing: true }
+    } catch (err) {
+      console.error('[Yandex] showBannerAdv error:', err)
+      return { stickyAdvIsShowing: false, reason: 'UNKNOWN' }
+    }
+  }
+
+  /**
+   * Скрыть стики-баннер (§6.3)
+   */
+  async hideBannerAdv(): Promise<{ stickyAdvIsShowing: boolean }> {
+    if (!this.ysdk?.adv) {
+      return { stickyAdvIsShowing: false }
+    }
+    try {
+      return await this.ysdk.adv.hideBannerAdv()
+    } catch (err) {
+      console.error('[Yandex] hideBannerAdv error:', err)
+      return { stickyAdvIsShowing: false }
+    }
+  }
+
+  /**
    * Проверить статус sticky banner
    */
   async getBannerAdvStatus(): Promise<{ stickyAdvIsShowing: boolean; reason?: string }> {
     if (!this.ysdk?.adv) {
       return { stickyAdvIsShowing: false, reason: 'ADV_IS_NOT_CONNECTED' }
     }
-
     try {
-      return await this.ysdk.adv.getBannerAdvStatus()
+      const status = await this.ysdk.adv.getBannerAdvStatus()
+      return { stickyAdvIsShowing: status.stickyAdvIsShowing, reason: status.reason }
     } catch (err) {
       console.error('[Yandex] getBannerAdvStatus error:', err)
       return { stickyAdvIsShowing: false, reason: 'UNKNOWN' }

@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useEconomyStore } from '../store/economy-store'
 import Section from './Section'
-import { TokenIcon, CrownIcon, ClockIcon, AdFilmIcon } from './icons'
+import { TokenIcon, CrownIcon, ClockIcon, AdFilmIcon, TextIcon, ColorIcon } from './icons'
 
 /** Форматировать оставшееся время аренды */
 function formatRentalRemaining(expiresAt: number): string {
@@ -71,11 +71,11 @@ export default function EconomyShop() {
     }
   }
 
-  // Конфиг аренды
+  // Конфиг аренды с SVG-иконками
   const rentalsConfig = [
-    { key: 'text3d' as const, label: '3D-текст', cost: 75, icon: '🔤', desc: 'Создание 3D-текста' },
-    { key: 'extendedPalette' as const, label: 'Расширенная палитра', cost: 75, icon: '🎨', desc: 'Дополнительные цвета' },
-    { key: 'disableBanner' as const, label: 'Отключение баннера', cost: 50, icon: '🚫', desc: 'Без рекламы на 24ч' },
+    { key: 'text3d' as const, label: '3D-текст', cost: 75, icon: <TextIcon width={18} height={18} />, desc: 'Создание 3D-текста' },
+    { key: 'extendedPalette' as const, label: 'Расширенная палитра', cost: 75, icon: <ColorIcon width={18} height={18} />, desc: 'Дополнительные цвета' },
+    { key: 'disableBanner' as const, label: 'Отключение баннера', cost: 50, icon: <AdFilmIcon width={18} height={18} />, desc: 'Без рекламы на 24ч' },
   ]
 
   // Конфиг подписок
@@ -114,7 +114,7 @@ export default function EconomyShop() {
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ fontSize: '18px' }}>{r.icon}</span>
+                    <div style={{ color: 'var(--text-primary)' }}>{r.icon}</div>
                     <div>
                       <div style={{ fontSize: '13px', fontWeight: 'bold' }}>{r.label}</div>
                       <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>

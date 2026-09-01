@@ -4,21 +4,25 @@ import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useEconomyStore } from '../store/economy-store'
 import { getPlatform } from '../platform'
+import { TokenIcon, PackageIcon } from './icons'
 
 const STEPS = [
   {
     key: 'hud',
-    title: '💎 Токены',
+    icon: <TokenIcon width={32} height={32} />,
+    title: 'Токены',
     text: 'Это ваша внутренняя валюта. Тратьте на экспорт, аренду и подписку.',
   },
   {
     key: 'badges',
-    title: '📦 Экспорт и импорт',
-    text: 'Экспорт стоит 50 💎, импорт — 100 💎. Бейджи показывают стоимость.',
+    icon: <PackageIcon width={32} height={32} />,
+    title: 'Экспорт и импорт',
+    text: 'Экспорт стоит 50 токенов, импорт — 100 токенов. Бейджи показывают стоимость.',
   },
   {
     key: 'quests',
-    title: '📋 Задания дня',
+    icon: null,
+    title: 'Задания дня',
     text: 'Постройте модель и сохраните проект — задания засчитаются!',
   },
 ] as const
@@ -106,6 +110,11 @@ export default function EconomyOnboarding() {
 
         {/* Контент шага */}
         <div style={{ textAlign: 'center', padding: '16px 0' }}>
+          {currentStep.icon && (
+            <div style={{ marginBottom: '12px' }}>
+              {currentStep.icon}
+            </div>
+          )}
           <div style={{ fontSize: '20px', fontWeight: 'bold', marginBottom: '12px' }}>
             {currentStep.title}
           </div>

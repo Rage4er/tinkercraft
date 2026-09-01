@@ -58,6 +58,19 @@ export const platform: IPlatform = {
     // no-op
   },
 
+  /** Стики-баннер — no-op для clean-версии */
+  async showBannerAdv() {
+    return { stickyAdvIsShowing: false, reason: 'ADV_IS_NOT_CONNECTED' }
+  },
+
+  async hideBannerAdv() {
+    return { stickyAdvIsShowing: false }
+  },
+
+  async getBannerAdvStatus() {
+    return { stickyAdvIsShowing: false, reason: 'ADV_IS_NOT_CONNECTED' }
+  },
+
   /** Clean-версия: локальное время (fallback) */
   async getServerTime(): Promise<number> {
     return Date.now()

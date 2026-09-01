@@ -1,6 +1,6 @@
 // src/components/IconBadge.tsx — Бейджи на кнопках инструментов (§6.4 ECONOMY.md v2.0)
 import type { SVGProps } from 'react'
-import { TokenIcon, AdFilmIcon } from './icons'
+import { TokenIcon, AdFilmIcon, ClockIcon, CrownIcon } from './icons'
 
 /** Типы бейджей */
 export type BadgeType = 'tokens' | 'ad' | 'timer' | 'crown'
@@ -24,9 +24,9 @@ export default function IconBadge({ type, label }: BadgeProps) {
       case 'ad':
         return <AdFilmIcon width={size} height={size} style={{ fill: 'currentColor' }} />
       case 'timer':
-        return <span style={{ fontSize: '10px' }}>⏱</span>
+        return <ClockIcon width={size} height={size} />
       case 'crown':
-        return <span style={{ fontSize: '10px' }}>👑</span>
+        return <CrownIcon width={size} height={size} />
     }
   })()
 

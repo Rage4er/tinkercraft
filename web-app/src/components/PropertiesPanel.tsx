@@ -5,7 +5,7 @@ import AlignButtons from "./AlignButtons";
 import CsgButtons from "./CsgButtons";
 import ColorPalette from "./ColorPalette";
 import type { ShapeParams, SceneObject } from "../csg/types";
-import { EyeIcon, EyeOffIcon, FilletIcon, FolderIcon, SaveIcon, TokenIcon, GiftIcon, AdFilmIcon, CrownIcon, ClockIcon, SparkIcon, StarIcon, TrophyIcon } from "./icons";
+import { EyeIcon, EyeOffIcon, FilletIcon, FolderIcon, SaveIcon, TokenIcon, GiftIcon, AdFilmIcon, CrownIcon, ClockIcon, SparkIcon, StarIcon, TrophyIcon, TextIcon, ColorIcon } from "./icons";
 import { useEconomyStore, type QuestDifficulty, type RentalKey } from "../store/economy-store";
 import { getPlatform } from "../platform";
 import { ECONOMY_UI, DIFFICULTY_ICON, ICON_REGISTRY } from "../store/economy-ui-config";
@@ -157,7 +157,7 @@ function EconomyPanel() {
       )}
       {ECONOMY_UI.showAdButton && todayAdsWatched < 3 && cooldownMs > 0 && (
         <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-          ⏱ {formatCooldown(cooldownMs)}
+          <ClockIcon width={12} height={12} /> {formatCooldown(cooldownMs)}
         </span>
       )}
       {ECONOMY_UI.showAdButton && todayAdsWatched >= 3 && cooldownMs === 0 && (
@@ -201,7 +201,7 @@ function EconomyPanel() {
                   <div style={{ height: '100%', width: `${progress * 100}%`, background: isCompleted ? 'var(--success)' : 'var(--primary)', borderRadius: '2px', transition: 'width 0.3s ease' }} />
                 </div>
                 <div style={{ fontSize: '10px', marginTop: '2px', color: 'var(--text-muted)' }}>
-                  +{quest.reward} 💎
+                  +{quest.reward}
                 </div>
               </div>
             )
@@ -216,9 +216,9 @@ function EconomyPanel() {
 
   // ── Аренда и подписки ──
   const rentalsConfig = [
-    { key: 'text3d' as const, label: '3D-текст', cost: 75, icon: '🔤', desc: 'Создание 3D-текста' },
-    { key: 'extendedPalette' as const, label: 'Расширенная палитра', cost: 75, icon: '🎨', desc: 'Дополнительные цвета' },
-    { key: 'disableBanner' as const, label: 'Отключение баннера', cost: 50, icon: '🚫', desc: 'Без рекламы на 24ч' },
+    { key: 'text3d' as const, label: '3D-текст', cost: 75, icon: <TextIcon width={14} height={14} />, desc: 'Создание 3D-текста' },
+    { key: 'extendedPalette' as const, label: 'Расширенная палитра', cost: 75, icon: <ColorIcon width={14} height={14} />, desc: 'Дополнительные цвета' },
+    { key: 'disableBanner' as const, label: 'Отключение баннера', cost: 50, icon: <AdFilmIcon width={14} height={14} />, desc: 'Без рекламы на 24ч' },
   ]
 
   const subsConfig = [
@@ -246,7 +246,7 @@ function EconomyPanel() {
               opacity: isActive ? 0.7 : 1,
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ fontSize: '14px' }}>{r.icon}</span>
+                <div style={{ color: 'var(--text-primary)' }}>{r.icon}</div>
                 <div>
                   <div style={{ fontSize: '11px', fontWeight: 'bold' }}>{r.label}</div>
                   <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>

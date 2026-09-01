@@ -10,6 +10,21 @@
 ## [Unreleased]
 
 ### Added
+- **favicon.svg** — иконка вкладки браузера в стиле проекта: 3D-куб с градиентами и буквами TC (`public/favicon.svg`)
+- **SVG-иконки для эмодзи** — добавлены MoneyIcon, PackageIcon, SpeakerIcon (`components/icons/index.tsx`)
+- **Стики-баннер SDK** — автопоказ при инициализации Yandex SDK через `ysdk.adv.showBannerAdv()`, управление через API (§SDK, §6.3) (`platform/yandex.ts`, `platform/types.ts`, `platform/clean.ts`)
+- **Серверное время в аренде/подписках** — `buyRental()` и `buySubscription()` теперь используют `getServerTime()` вместо `Date.now()` для защиты от накруток (§5) (`store/economy-store.ts`)
+- **Бейджи для текста 3D** — кнопка «Текст» в Toolbar с бейджем 💎 75, проверка аренды (§6.4) (`components/Toolbar.tsx`, `constants.ts`)
+- **Реактивный EconomyBanner** — `hasActiveSub` и `hasRentalDisable` перенесены в `useSelector` вместо `getState()` (`components/EconomyBanner.tsx`)
+
+### Fixed
+- **Эмодзи → SVG** — заменены все эмодзи в UI на SVG-иконки: Badge.tsx, EconomyOnboarding.tsx, IconBadge.tsx, EconomyShop.tsx, PropertiesPanel.tsx, EconomyBanner.tsx, EconomyHUD.tsx
+- **Стандартизация иконок** — приведены к единому stroke-стилю (SW=3, currentColor): TokenIcon (с goldFace helper), GiftIcon (обновлённый бант), FolderIcon (outline-only), CrownIcon (stroke вместо fill), ClockIcon (stroke вместо отдельного svg) (`components/icons/index.tsx`)
+- **HUD реклама** — кнопка рекламы теперь всегда видна (disabled если лимит), метка «лимит дня» показывается всегда (§6.1) (`components/EconomyHUD.tsx`)
+- **Серверное время** — `buyRental` и `buySubscription` используют серверное время Яндекса вместо локального (§5) (`store/economy-store.ts`)
+- **EconomyBanner реактивность** — исправлен bug: хуки `hasActiveSub`/`hasRentalDisable` перенесены из `getState()` в `useSelector` (`components/EconomyBanner.tsx`)
+
+### Changed
 - **EconomyHUD v2** — счётчик `+50 · N/3`, таймер кулдауна "ждём 4:32", состояние "до 23:45" для бонуса (§6.1) (`components/EconomyHUD.tsx`)
 - **EconomyBanner.tsx** — рекламный баннер с кнопкой скрытия (§6.3 место 1): [💎 50] [📺 1] (`components/EconomyBanner.tsx`)
 - **Badge.tsx** — компонент бейджей на кнопках: 💰/📺 слева-внизу, ⏱/👑 слева-вверху (§6.4) (`components/Badge.tsx`)
