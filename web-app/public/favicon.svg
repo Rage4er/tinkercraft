@@ -10,11 +10,14 @@
 <stop offset="0%" stop-color="#1e40af"/><stop offset="100%" stop-color="#1e3a8a"/>
 </linearGradient>
 </defs>
-<path d="M32 6 L58 20 L32 34 L6 20 Z" fill="url(#top)"/>
-<path d="M6 20 L32 34 L32 58 L6 44 Z" fill="url(#left)"/>
-<path d="M58 20 L32 34 L32 58 L58 44 Z" fill="url(#right)"/>
+<!-- Куб идентичной геометрии как TCLogoIcon -->
+<path d="M32 12 50 21l-18 9-18-9Z" fill="url(#top)"/>
+<path d="M14 21l18 9v22l-18-9Z" fill="url(#left)"/>
+<path d="M50 21l-18 9v22l18-9Z" fill="url(#right)"/>
+<!-- Буквы TC как в логотипе -->
 <g fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-<path d="M14 18 h10 M19 18 v10"/>
-<path d="M32 20 a7 7 0 0 1 7 7 a7 7 0 0 1 -7 7 a7 7 0 0 1 -7 -7 a7 7 0 0 1 7 -7"/>
+<path d="M17 27.5 29 33.5"/>
+<path d="M23 30.5v13"/>
+<path d="M44.7 38.9C42.4 42.4 38.6 44.3 36.3 43.1 33.9 41.9 33.9 38.1 36.3 34.6 38.6 31.1 42.4 29.2 44.7 30.4"/>
 </g>
 </svg>
