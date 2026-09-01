@@ -518,7 +518,7 @@ export const TokenIcon = (p: any) => (
     <g fill="none" stroke="#78350f" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
       <path d="M20 28h8" />
       <path d="M24 28v10" />
-      <path d="M38 32a6 6 0 0 1 0 12 6 6 0 0 1-6-6 6 6 0 0 1 6-6" />
+      <path d="M44.7 38.9C42.4 42.4 38.6 44.3 36.3 43.1 33.9 41.9 33.9 38.1 36.3 34.6 38.6 31.1 42.4 29.2 44.7 30.4" />
     </g>
   </Icon>
 )

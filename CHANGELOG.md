@@ -18,6 +18,7 @@
 - **Реактивный EconomyBanner** — `hasActiveSub` и `hasRentalDisable` перенесены в `useSelector` вместо `getState()` (`components/EconomyBanner.tsx`)
 
 ### Fixed
+- **Bux token icon** — буква C на токене заменена с полного круга на кривую Безье (та же форма, что в TCLogoIcon) — теперь это настоящая буква C с разрывом справа (`components/icons/index.tsx`)
 - **Эмодзи → SVG** — заменены все эмодзи в UI на SVG-иконки: Badge.tsx, EconomyOnboarding.tsx, IconBadge.tsx, EconomyShop.tsx, PropertiesPanel.tsx, EconomyBanner.tsx, EconomyHUD.tsx
 - **Стандартизация иконок** — приведены к единому stroke-стилю (SW=3, currentColor): TokenIcon (с goldFace helper), GiftIcon (обновлённый бант), FolderIcon (outline-only), CrownIcon (stroke вместо fill), ClockIcon (stroke вместо отдельного svg) (`components/icons/index.tsx`)
 - **HUD реклама** — кнопка рекламы теперь всегда видна (disabled если лимит), метка «лимит дня» показывается всегда (§6.1) (`components/EconomyHUD.tsx`)
