@@ -97,8 +97,9 @@ class YandexPlatform implements IPlatform {
   }
 
   /**
+  /**
    * Показать видеорекламу с вознаграждением
-   * ⚠️ resolve(true) ТОЛЬКО после onClose (награда в onRewarded)
+   * ⚠️ resolve(true) ТОЛЬКО если onRewarded был вызван (пользователь досмотрел)
    */
   async showRewardedVideo(): Promise<boolean> {
     const adv = this.ysdk?.adv
@@ -107,6 +108,14 @@ class YandexPlatform implements IPlatform {
       return false
     }
     return new Promise((resolve) => {
+      let rewarded = false
+      let settled = false
+      const settle = (v: boolean) => {
+        if (!settled) {
+          settled = true
+          resolve(v)
+        }
+      }
       try {
         adv.showRewardedVideo({
           callbacks: {
@@ -116,26 +125,24 @@ class YandexPlatform implements IPlatform {
             },
             onRewarded: () => {
               console.log('[Yandex] Rewarded! User earned reward')
-              // Награда обрабатывается в economy-store после resolve(true)
+              rewarded = true
             },
             onClose: () => {
-              console.log('[Yandex] Rewarded video closed')
+              console.log('[Yandex] Rewarded video closed, rewarded:', rewarded)
               this.startGameplay()
-              // onClose в SDK не имеет wasShown — считаем успешным если дошло сюда
-              // (если пользователь закрыл до просмотра, onRewarded не вызовется)
-              resolve(true)
+              settle(rewarded)
             },
             onError: (error: Error) => {
               console.error('[Yandex] Rewarded video error:', error)
               this.startGameplay()
-              resolve(false)
+              settle(false)
             },
           },
         })
       } catch (error) {
         console.error('[Yandex] showRewardedVideo exception:', error)
         this.startGameplay()
-        resolve(false)
+        settle(false)
       }
     })
   }

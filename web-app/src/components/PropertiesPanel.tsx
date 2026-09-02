@@ -546,26 +546,49 @@ export default function PropertiesPanel({
       <div className="props-row">
         <span className="props-label">{t("properties.color")}</span>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          {showNativePicker ? (
-            <div className="flex-row-6">
-              <div
-                className="color-swatch"
-                style={{ background: draftColor || firstSelected.color }}
-              />
-              <input
-                type="color"
-                value={draftColor || firstSelected.color}
-                className="color-input"
-                onChange={(e) => handleColorChange(e.target.value)}
+          {canUseExtendedPicker ? (
+            showNativePicker ? (
+              <div className="flex-row-6">
+                <div
+                  className="color-swatch"
+                  style={{ background: draftColor || firstSelected.color }}
+                />
+                <input
+                  type="color"
+                  value={draftColor || firstSelected.color}
+                  className="color-input"
+                  onChange={(e) => handleColorChange(e.target.value)}
+                  onBlur={applyDraftColor}
+                />
+              </div>
+            ) : (
+              <ColorPalette
+                selectedColor={draftColor || firstSelected.color}
+                onChange={(color) => handleColorChange(color)}
                 onBlur={applyDraftColor}
               />
-            </div>
+            )
           ) : (
-            <ColorPalette
-              selectedColor={draftColor || firstSelected.color}
-              onChange={(color) => handleColorChange(color)}
-              onBlur={applyDraftColor}
-            />
+            // 🔒 Заблокированная палитра
+            <div style={{
+              padding: '8px',
+              borderRadius: '4px',
+              background: 'var(--bg-tertiary)',
+              border: '1px solid var(--border)',
+              opacity: 0.5,
+              textAlign: 'center',
+              fontSize: '12px',
+              color: 'var(--text-muted)'
+            }}>
+              {t('properties.lockedExtended', { defaultValue: '🔒 Расширенная палитра' })}<br />
+              <button
+                className="btn btn-compact btn-sm"
+                onClick={() => setActiveTab('objects')}
+                style={{ marginTop: '4px' }}
+              >
+                {t('properties.buyFor', { defaultValue: 'Купить за 75 💎' })}
+              </button>
+            </div>
           )}
           <button
             className="btn btn-compact btn-full"

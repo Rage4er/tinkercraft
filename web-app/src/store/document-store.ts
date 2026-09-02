@@ -1005,8 +1005,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const blob = await serializeDoodle(opsToSave)
     downloadBlob(blob, (fileName ?? 'untitled') + (fileName?.endsWith('.doodle') ? '' : '.doodle'))
     set({ modified: false })
-    // Квесты V2: оценка по состоянию проекта при сохранении
-    useEconomyStore.getState().evaluateQuests(objects, operations)
+    // Квесты V2: коммит токенов при сохранении
+    await useEconomyStore.getState().commitQuests()
   },
 
   // ── Export STL ──
@@ -1031,8 +1031,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     }
 
     downloadStl(objectList, (fileName?.replace(/\.doodle$/, '') ?? i18n.t('app.name')) + '.stl')
-    // Квесты V2: оценка по состоянию проекта
-    useEconomyStore.getState().evaluateQuests(objects, operations)
+    // Квесты V2: коммит токенов при экспорте
+    void useEconomyStore.getState().commitQuests()
     // Y3.4: событийный квест — экспорт STL
     useEconomyStore.getState().completeEventQuest('export_stl')
     // Y3.5: событийный квест — экспорт ≥10 объектов (§4 квесты)

@@ -99,6 +99,7 @@ interface EconomyState {
   completeEventQuest(trigger: QuestTrigger): void
   initDailyQuests(): void
   evaluateQuests(objects: Record<string, SceneObject>, operations: TinkerCraftOperation[]): void
+  commitQuests(): Promise<void>
 
   // ── Хэш модели для кэшбэка ──
   lastExportHash: string | null
@@ -472,6 +473,29 @@ export const useEconomyStore = create<EconomyState>()(
       // ── Квесты V2: completeQuest удалён, используется evaluateQuests() ──
       // Старый метод completeQuest удалён — квесты теперь оцениваются по состоянию проекта
 
+      /** Коммитить токены за завершённые квесты (вызывается при save/export) */
+      commitQuests: async () => {
+        const state = get()
+        const quests = state.todayQuests
+        let tokensEarned = 0
+        const newCompleted: QuestDifficulty[] = [...state.todayQuestsCompleted]
+        for (const quest of quests) {
+          if (quest.completed && !state.todayQuestsCompleted.includes(quest.difficulty)) {
+            tokensEarned += quest.reward
+            newCompleted.push(quest.difficulty)
+            console.log(`[Economy] Quest committed (${quest.difficulty}): +${quest.reward} tokens`)
+          }
+        }
+        if (tokensEarned > 0) {
+          set({
+            tokens: state.tokens + tokensEarned,
+            todayQuestsCompleted: newCompleted,
+          })
+          await get().syncToCloud()
+          console.log('[Economy] Quest rewards committed to cloud')
+        }
+      },
+
       getTodayQuests: () => {
         const state = get()
         return state.todayQuests
@@ -635,34 +659,9 @@ export const useEconomyStore = create<EconomyState>()(
           }
         })
 
-        // Начисляем токены за завершённые квесты
-        // Y3.13: используем todayQuestsCompleted для проверки повторного начисления
-        let tokensEarned = 0
-        const newCompleted: QuestDifficulty[] = [...state.todayQuestsCompleted]
-        for (const quest of updatedQuests) {
-          if (quest.completed && !quest._justCompleted) {
-            // Уже был в старом состоянии — не начисляем
-            continue
-          }
-          if (!state.todayQuestsCompleted.includes(quest.difficulty)) {
-            tokensEarned += quest.reward
-            newCompleted.push(quest.difficulty)
-            console.log(`[Economy] Quest completed (${quest.difficulty}): +${quest.reward} tokens`)
-          }
-        }
-
-        if (tokensEarned > 0) {
-          set({
-            todayQuests: updatedQuests,
-            tokens: state.tokens + tokensEarned,
-            todayQuestsCompleted: newCompleted,
-          })
-          // ✅ Явный syncToCloud после начисления токенов за квесты
-          void get().syncToCloud()
-          console.log('[Economy] Quest rewards synced to cloud')
-        } else {
-          set({ todayQuests: updatedQuests })
-        }
+        // Обновляем прогресс квестов (без начисления токенов)
+        // Токены начисляются только через commitQuests() при save/export
+        set({ todayQuests: updatedQuests })
       },
 
       // ── Синхронизация ──

@@ -55,7 +55,6 @@ export default function Toolbar({
   onExportStl,
   onImportStl,
   onShowProjects,
-  onShowTextModal,
   onUndo,
   onRedo,
   onCopy,
@@ -94,7 +93,6 @@ export default function Toolbar({
   onExportStl: () => void;
   onImportStl: () => void;
   onShowProjects: () => void;
-  onShowTextModal: () => void;
   onUndo: () => void;
   onRedo: () => void;
   onCopy: () => void;
@@ -136,12 +134,9 @@ export default function Toolbar({
   const textActive = hasActiveSub || hasActiveRentalText3d
   const textLocked = !textActive && tokens < 75
 
-  // Палитра: аренда 75 TC
-  const paletteActive = hasActiveSub || hasActiveRentalPalette
-  const paletteLocked = !paletteActive && tokens < 75
   // Определяем группы для алгоритма
   const groups: ToolbarGroup[] = [
-    { id: "file", buttonCount: 6 },
+    { id: "file", buttonCount: 5 },
     { id: "edit1", buttonCount: 2 },
     { id: "edit2", buttonCount: 3 },
     { id: "view", buttonCount: 3 },
@@ -185,10 +180,6 @@ export default function Toolbar({
             <IconButton icon={<ImportIcon size={32} />} label={t("actions.import")} onClick={onImportStl} disabled={busy} tooltip={TOOLTIP_DATA.import_stl} />
             <Badge type="tokens" value="100" isActive={importActive} />
             <Badge type="ad" value="2" isActive={importActive} />
-          </div>,
-          <div key="text3d" style={{ position: 'relative' }}>
-            <IconButton icon={<TextIcon size={32} />} label="Текст" onClick={onShowTextModal} disabled={busy} tooltip={TOOLTIP_DATA.text3d} />
-            <Badge type="tokens" value="75" isActive={textActive} />
           </div>,
           <IconButton key="projects" icon={<FolderIcon size={32} />} label={t("properties.projectManager")} onClick={onShowProjects} tooltip={TOOLTIP_DATA.projects} />,
         ]}

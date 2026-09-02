@@ -235,7 +235,8 @@ export default function App() {
   }, [])
 
   // ── Триггеры квестов V2 — оценка по состоянию проекта ──
-  const evaluateQuests = useEconomyStore((s) => s.evaluateQuests)
+  // evaluateQuests теперь только обновляет прогресс (без начисления токенов)
+  // Токены начисляются через commitQuests() при save/export в document-store
 
   // Обёртка exportStl — открывает модалку выбора способа экспорта
   const handleExportStl = useCallback(() => {
@@ -249,7 +250,6 @@ export default function App() {
     }
     // tokens — просто экспортим
     exportStl()
-    // Квесты V2: evaluateQuests вызывается в exportStl
   }, [exportStl])
 
   // Обёртка importStl — открывает модалку выбора способа оплаты (§3.1)
@@ -261,19 +261,6 @@ export default function App() {
   const handleImportExecute = useCallback(() => {
     importStl()
   }, [importStl])
-
-  // Подписка на изменения для оценки квестов (дебаунс 400 мс — живой прогресс без просадок FPS)
-  useEffect(() => {
-    let timer: number | undefined
-    const unsubscribe = useDocumentStore.subscribe((state) => {
-      window.clearTimeout(timer)
-      timer = window.setTimeout(() => evaluateQuests(state.objects, state.operations), 400)
-    })
-    return () => {
-      unsubscribe()
-      window.clearTimeout(timer)
-    }
-  }, [evaluateQuests])
 
   useEffect(() => {
     if (workerOk) return;
@@ -622,7 +609,6 @@ export default function App() {
         onExportStl={handleExportStl}
         onImportStl={handleImportStl}
         onShowProjects={() => setShowPM(true)}
-        onShowTextModal={() => setShowTextModal(true)}
         onUndo={undo}
         onRedo={redo}
         onCopy={copySelected}
@@ -665,7 +651,15 @@ export default function App() {
           workerOk={workerOk}
           busy={busy}
           onAddShape={addShape}
-          onShowTextModal={() => setShowTextModal(true)}
+          onShowTextModal={() => {
+            const state = useEconomyStore.getState()
+            const hasAccess = state.hasActiveSubscription() || (state.rentals.text3d !== null && Date.now() < state.rentals.text3d!)
+            if (!hasAccess) {
+              setActiveTab('objects')
+              return
+            }
+            setShowTextModal(true)
+          }}
           objectList={objectList}
           selSet={selSet}
           activeTab={activeTab}
