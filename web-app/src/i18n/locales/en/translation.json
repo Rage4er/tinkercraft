@@ -298,7 +298,9 @@
     "saveFailed": "Failed to save project"
   },
   "toolbar": {
-    "label": "Toolbar"
+    "label": "Toolbar",
+    "stl": "STL",
+    "text": "Text"
   },
   "language": {
     "switch": "🌐 {{lang}}",
@@ -386,7 +388,6 @@
     "bonusLabel": "+50",
     "adLabel": "+50",
     "quests": "Daily quests",
-    "rentals": "Rentals",
     "subscription": "Pro",
     "difficulty": {
       "easy": "Easy",
@@ -420,8 +421,32 @@
       "perDay7": "≈ $100/day",
       "perDay30": "≈ $67/day"
     },
-    "common": {
-      "expired": "Expired"
+    "status": {
+      "active": "Active",
+      "expired": "Expired",
+      "proActive": "Pro active · "
+    },
+    "time": {
+      "hoursMins": "{{h}}h {{m}}m",
+      "daysHours": "{{d}}d {{h}}h"
+    },
+    "rentals": {
+      "title": "24h Rentals",
+      "text3d": {
+        "label": "3D Text",
+        "desc": "Create 3D text"
+      },
+      "extendedPalette": {
+        "label": "Extended Palette",
+        "desc": "Additional colors"
+      },
+      "disableBanner": {
+        "label": "Disable Banner",
+        "desc": "No ads for 24h"
+      }
+    },
+    "palette": {
+      "locked": "🔒 {{price}}"
     },
     "notEnoughTokens": "{{n}} 💎 short",
     "adLimit": "Daily limit"

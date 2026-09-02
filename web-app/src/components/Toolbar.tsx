@@ -172,7 +172,7 @@ export default function Toolbar({
           <IconButton key="open" icon={<OpenIcon size={32} />} label={t("actions.open")} onClick={onOpen} tooltip={TOOLTIP_DATA.open} />,
           <IconButton key="save" icon={<SaveIcon size={32} />} label={t("actions.save")} onClick={onSave} tooltip={TOOLTIP_DATA.save} />,
           <div key="export" style={{ position: 'relative' }}>
-            <IconButton icon={<ExportIcon size={32} />} label="STL" onClick={onExportStl} disabled={objectCount === 0} tooltip={TOOLTIP_DATA.export_stl} />
+            <IconButton icon={<ExportIcon size={32} />} label={t('toolbar.stl')} onClick={onExportStl} disabled={objectCount === 0} tooltip={TOOLTIP_DATA.export_stl} />
             <Badge type="tokens" value="50" isActive={exportActive} />
             <Badge type="ad" value="1" isActive={exportActive} />
           </div>,

@@ -299,7 +299,9 @@
     "saveFailed": "Ошибка сохранения проекта"
   },
   "toolbar": {
-    "label": "Панель инструментов"
+    "label": "Панель инструментов",
+    "stl": "STL",
+    "text": "Текст"
   },
   "language": {
     "switch": "🌐 {{lang}}",
@@ -387,7 +389,6 @@
     "bonusLabel": "+50",
     "adLabel": "+50",
     "quests": "Задания дня",
-    "rentals": "Аренда",
     "subscription": "Pro",
     "difficulty": {
       "easy": "Лёгкое",
@@ -421,8 +422,32 @@
       "perDay7": "≈ 100/день",
       "perDay30": "≈ 67/день"
     },
-    "common": {
-      "expired": "Истекла"
+    "status": {
+      "active": "Активно",
+      "expired": "Истекла",
+      "proActive": "Pro активна · "
+    },
+    "time": {
+      "hoursMins": "{{h}}ч {{m}}м",
+      "daysHours": "{{d}}д {{h}}ч"
+    },
+    "rentals": {
+      "title": "Аренда 24ч",
+      "text3d": {
+        "label": "3D-текст",
+        "desc": "Создание 3D-текста"
+      },
+      "extendedPalette": {
+        "label": "Расширенная палитра",
+        "desc": "Дополнительные цвета"
+      },
+      "disableBanner": {
+        "label": "Отключение баннера",
+        "desc": "Без рекламы на 24ч"
+      }
+    },
+    "palette": {
+      "locked": "🔒 {{price}}"
     },
     "notEnoughTokens": "Не хватает {{n}} 💎",
     "adLimit": "Лимит дня"

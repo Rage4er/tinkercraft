@@ -12,21 +12,21 @@ import { getPlatform } from "../platform";
 import { ECONOMY_UI, DIFFICULTY_ICON, ICON_REGISTRY } from "../store/economy-ui-config";
 
 /** Форматировать оставшееся время аренды (ч м) */
-function formatRentalRemaining(expiresAt: number): string {
+function formatRentalRemaining(expiresAt: number, t: any): string {
   const remaining = expiresAt - Date.now()
-  if (remaining <= 0) return 'Истекла'
+  if (remaining <= 0) return t('economy.status.expired')
   const hours = Math.floor(remaining / (1000 * 60 * 60))
   const mins = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60))
-  return `${hours}ч ${mins}м`
+  return t('economy.time.hoursMins', { h: hours, m: mins })
 }
 
 /** Форматировать оставшееся время подписки (дн ч) */
-function formatSubRemaining(expiresAt: number): string {
+function formatSubRemaining(expiresAt: number, t: any): string {
   const remaining = expiresAt - Date.now()
-  if (remaining <= 0) return 'Истекла'
+  if (remaining <= 0) return t('economy.status.expired')
   const days = Math.floor(remaining / (1000 * 60 * 60 * 24))
   const hours = Math.floor((remaining % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
-  return `${days}д ${hours}ч`
+  return t('economy.time.daysHours', { d: days, h: hours })
 }
 
 /** Форматировать ms → "5:00" */
@@ -217,9 +217,9 @@ function EconomyPanel() {
 
   // ── Аренда и подписки ──
   const rentalsConfig = [
-    { key: 'text3d' as const, label: '3D-текст', cost: 75, icon: <TextIcon width={14} height={14} />, desc: 'Создание 3D-текста' },
-    { key: 'extendedPalette' as const, label: 'Расширенная палитра', cost: 75, icon: <ColorIcon width={14} height={14} />, desc: 'Дополнительные цвета' },
-    { key: 'disableBanner' as const, label: 'Отключение баннера', cost: 50, icon: <AdFilmIcon width={14} height={14} />, desc: 'Без рекламы на 24ч' },
+    { key: 'text3d' as const, cost: 75, icon: <TextIcon width={14} height={14} />, label: t('economy.rentals.text3d.label'), desc: t('economy.rentals.text3d.desc') },
+    { key: 'extendedPalette' as const, cost: 75, icon: <ColorIcon width={14} height={14} />, label: t('economy.rentals.extendedPalette.label'), desc: t('economy.rentals.extendedPalette.desc') },
+    { key: 'disableBanner' as const, cost: 50, icon: <AdFilmIcon width={14} height={14} />, label: t('economy.rentals.disableBanner.label'), desc: t('economy.rentals.disableBanner.desc') },
   ]
 
   const subsConfig = [
@@ -231,13 +231,13 @@ function EconomyPanel() {
     <div>
       <div style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '6px', color: 'var(--text-muted)' }}>
         <ClockIcon width={14} height={14} style={{ display: 'inline-block', verticalAlign: 'middle', marginRight: '4px' }} />
-        Аренда 24ч
+        {t('economy.rentals.title')}
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
         {rentalsConfig.map((r) => {
           const isActive = hasRental(r.key)
           const rentalExpires = rentals[r.key]
-          const remaining = rentalExpires !== null ? formatRentalRemaining(rentalExpires) : null
+          const remaining = rentalExpires !== null ? formatRentalRemaining(rentalExpires, t) : null
           return (
             <div key={r.key} style={{
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -256,7 +256,7 @@ function EconomyPanel() {
                 </div>
               </div>
               {isActive ? (
-                <span style={{ fontSize: '10px', color: 'var(--success)' }}>Активно</span>
+                <span style={{ fontSize: '10px', color: 'var(--success)' }}>{t('economy.status.active')}</span>
               ) : (
                 <button className="btn btn-compact btn-sm" disabled={tokens < r.cost || busy === r.key}
                   onClick={() => handleBuyRental(r.key)}
@@ -280,7 +280,7 @@ function EconomyPanel() {
             padding: '4px 8px', borderRadius: '4px', background: 'var(--bg-secondary)',
             border: '1px solid var(--border-success)', fontSize: '11px', color: 'var(--success)'
           }}>
-            Pro активна · {formatSubRemaining(subscriptionExpiresAt)}
+            {t('economy.status.proActive')}{formatSubRemaining(subscriptionExpiresAt, t)}
           </div>
         ) : (
           <div style={{ display: 'flex', gap: '4px' }}>
@@ -606,7 +606,7 @@ export default function PropertiesPanel({
           >
             {showNativePicker ? t("properties.palette") : t("properties.advancedPicker")}
             {!canUseExtendedPicker && (
-              <span style={{ marginLeft: '4px', fontSize: '10px', color: 'var(--warning)' }}>🔒 75</span>
+              <span style={{ marginLeft: '4px', fontSize: '10px', color: 'var(--warning)' }}>{t('economy.palette.locked', { price: 75 })}</span>
             )}
           </button>
         </div>

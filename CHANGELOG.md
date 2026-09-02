@@ -9,6 +9,9 @@
 
 ## [Unreleased]
 
+### Changed
+- **Локализация: убран хардкод строк в экономике** — `formatRentalRemaining`/`formatSubRemaining` принимают `t()`, `rentalsConfig` label/desc через `t()`, "Аренда 24ч"/"Активно"/"Pro активна · "/"🔒 75"/"STL" переведены через i18n (`components/PropertiesPanel.tsx`, `components/Toolbar.tsx`, `i18n/locales/*/translation.json`)
+
 ### Fixed
 - **Rewarded video: правильные callbacks SDK** — `onClose` без аргументов (`wasShown`), `resolve(true)` только после закрытия, `onClose` вызывает `startGameplay()` (`platform/yandex.ts`)
 - **Fullscreen ad: showFullscreenAdv вместо showInterstitialAd** — SDK использует `showFullscreenAdv()`, не `showInterstitialAd()` (`platform/yandex.ts`)
