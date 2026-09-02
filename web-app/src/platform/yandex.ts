@@ -33,11 +33,16 @@ class YandexPlatform implements IPlatform {
       // Инициализируем sticky banner (правый верхний угол)
       try {
         const bannerStatus = await ysdk.adv.getBannerAdvStatus()
-        console.log('[Yandex] Banner status:', bannerStatus)
-        // Показываем стики-баннер если API включено (§SDK)
-        if (bannerStatus.stickyAdvIsShowing === false && bannerStatus.reason !== 'ADV_IS_NOT_CONNECTED') {
+        console.log('[Yandex] Banner status:', JSON.stringify(bannerStatus))
+        // Показываем стики-баннер если API включено и не отключено в консоли (§SDK)
+        const reason = String(bannerStatus.reason ?? '')
+        const isDisabled = bannerStatus.stickyAdvIsShowing === false &&
+          (reason === 'ADV_IS_NOT_CONNECTED' || reason === 'ADV_DISABLED_ON_START')
+        if (!isDisabled) {
           await ysdk.adv.showBannerAdv()
           console.log('[Yandex] Sticky banner shown')
+        } else {
+          console.log('[Yandex] Banner skipped:', bannerStatus.reason)
         }
       } catch (e) {
         console.log('[Yandex] Banner not available (may be dashboard-controlled):', e)
