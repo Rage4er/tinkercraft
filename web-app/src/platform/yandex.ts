@@ -31,19 +31,12 @@ class YandexPlatform implements IPlatform {
       console.log('[Yandex] SDK initialized successfully')
 
       // Инициализируем sticky banner (правый верхний угол)
+      // Всегда показываем при загрузке, игнорируя ADV_DISABLED_ON_START
       try {
         const bannerStatus = await ysdk.adv.getBannerAdvStatus()
         console.log('[Yandex] Banner status:', JSON.stringify(bannerStatus))
-        // Показываем стики-баннер если API включено и не отключено в консоли (§SDK)
-        const reason = String(bannerStatus.reason ?? '')
-        const isDisabled = bannerStatus.stickyAdvIsShowing === false &&
-          (reason === 'ADV_IS_NOT_CONNECTED' || reason === 'ADV_DISABLED_ON_START')
-        if (!isDisabled) {
-          await ysdk.adv.showBannerAdv()
-          console.log('[Yandex] Sticky banner shown')
-        } else {
-          console.log('[Yandex] Banner skipped:', bannerStatus.reason)
-        }
+        await ysdk.adv.showBannerAdv()
+        console.log('[Yandex] Sticky banner shown')
       } catch (e) {
         console.log('[Yandex] Banner not available (may be dashboard-controlled):', e)
       }
@@ -128,9 +121,16 @@ class YandexPlatform implements IPlatform {
               console.log('[Yandex] Rewarded video opened')
               this.stopGameplay()
             },
-            onRewarded: () => {
+            onRewarded: async () => {
               console.log('[Yandex] Rewarded! User earned reward')
               rewarded = true
+              // Скрываем баннер после просмотра rewarded-рекламы
+              try {
+                await this.ysdk?.adv.hideBannerAdv()
+                console.log('[Yandex] Banner hidden after rewarded')
+              } catch (e) {
+                console.log('[Yandex] Banner hide after rewarded failed:', e)
+              }
             },
             onClose: () => {
               console.log('[Yandex] Rewarded video closed, rewarded:', rewarded)
