@@ -91,6 +91,7 @@ interface EconomyState {
   lastActionTimestamp: number | null
   todayCashbacks: number
   todayQuestsCompleted: QuestDifficulty[]
+  lastQuestCommitDate: number | null // Y3.15: защита от двойного commitQuests за день
 
   // ── Квесты ──
   todayQuests: QuestV2[]
@@ -106,6 +107,9 @@ interface EconomyState {
 
   // ── Для предотвращения дубликатов setData ──
   lastSavedData: string
+
+  // ── Debounce для syncToCloud (§5 SDK: лимит 100 setData / 5 мин) ──
+  pendingSync: boolean
 
   // ── Actions ──
   addTokens(amount: number): void
@@ -249,10 +253,12 @@ export const useEconomyStore = create<EconomyState>()(
       lastActionTimestamp: null,
       todayCashbacks: 0,
       todayQuestsCompleted: [],
+      lastQuestCommitDate: null, // Y3.15: защита от двойного commitQuests
       todayQuests: [],
       questTriggers: {} as Record<QuestTrigger, number>,
       lastExportHash: null,
       lastSavedData: '' as string,
+      pendingSync: false, // Y3.16: debounce для syncToCloud
       bannerVisible: false,
 
       // ── Actions ──
@@ -474,11 +480,17 @@ export const useEconomyStore = create<EconomyState>()(
       // Старый метод completeQuest удалён — квесты теперь оцениваются по состоянию проекта
 
       /** Коммитить токены за завершённые квесты (вызывается при save/export) */
+      // ── Коммит квестов: начисление токенов при save/export (§4 ECONOMY.md) ──
+      // Y3.15: защита от двойного вызова — один коммит в день
       commitQuests: async () => {
         const state = get()
         const quests = state.todayQuests
+        const now = Date.now()
+        // Если уже коммитили сегодня — пропускаем
+        if (state.lastQuestCommitDate && now - state.lastQuestCommitDate < ONE_DAY_MS) return
+
         let tokensEarned = 0
-        const newCompleted: QuestDifficulty[] = [...state.todayQuestsCompleted]
+        const newCompleted: QuestDifficulty[] = []
         for (const quest of quests) {
           if (quest.completed && !state.todayQuestsCompleted.includes(quest.difficulty)) {
             tokensEarned += quest.reward
@@ -489,7 +501,8 @@ export const useEconomyStore = create<EconomyState>()(
         if (tokensEarned > 0) {
           set({
             tokens: state.tokens + tokensEarned,
-            todayQuestsCompleted: newCompleted,
+            todayQuestsCompleted: [...state.todayQuestsCompleted, ...newCompleted],
+            lastQuestCommitDate: now,
           })
           await get().syncToCloud()
           console.log('[Economy] Quest rewards committed to cloud')
@@ -503,7 +516,7 @@ export const useEconomyStore = create<EconomyState>()(
 
       // ── Событийный квест: отметить выполнение по триггеру ──
       // Y3.4: export_stl, import_stl — срабатывают при действии, не по состоянию
-      // Y3.13: используем todayQuestsCompleted для проверки повторного начисления
+      // Y3.13: начисление токенов только через commitQuests() при save/export
       completeEventQuest: (trigger: QuestTrigger) => {
         const state = get()
         const quests = state.todayQuests
@@ -512,21 +525,8 @@ export const useEconomyStore = create<EconomyState>()(
           // Событийный квест выполнен при наступлении события
           return { ...q, completed: true, progress: q.target, _justCompleted: true }
         })
-        // Y3.13: начисляем токены только если эта сложность ещё не в completed
-        let tokensEarned = 0
-        const newCompleted: QuestDifficulty[] = [...state.todayQuestsCompleted]
-        for (const q of updated) {
-          if (q.completed && q._justCompleted && !state.todayQuestsCompleted.includes(q.difficulty)) {
-            tokensEarned += q.reward
-            newCompleted.push(q.difficulty)
-            console.log(`[Economy] Event quest completed (${q.trigger}, ${q.difficulty}): +${q.reward} tokens`)
-          }
-        }
-        if (tokensEarned > 0) {
-          set({ todayQuests: updated, tokens: state.tokens + tokensEarned, todayQuestsCompleted: newCompleted })
-        } else {
-          set({ todayQuests: updated })
-        }
+        // Только обновляем прогресс — токены начисляются через commitQuests()
+        set({ todayQuests: updated })
         void get().syncToCloud()
       },
 
@@ -587,27 +587,25 @@ export const useEconomyStore = create<EconomyState>()(
           }
         }
 
-        // Y3.5: CSG с детьми — считаем CSG-объекты у которых есть дети в operations
-        const childOfCsg = new Set<string>()
+        // Y3.5: CSG с детьми — считаем CSG-объекты у которых >= 3 детей в operations
+        const csgIds = new Set<string>()
+        for (const obj of Object.values(objects)) {
+          if (obj.shapeType === 'csg') csgIds.add(obj.id)
+        }
+        // Для каждого CSG считаем количество операций group, где он участвует как родитель
+        const csgChildrenCount = new Map<string, number>()
         for (const op of operations) {
-          if (op.type === 'group' && op.ids) {
-            for (const childId of op.ids) {
-              childOfCsg.add(childId)
+          if (op.type === 'group' && op.ids && op.ids.length >= 2) {
+            // Первая операция group с CSG = parent, остальные = children
+            for (const id of op.ids) {
+              if (csgIds.has(id)) {
+                csgChildrenCount.set(id, op.ids.length - 1) // минус сам parent
+              }
             }
           }
         }
-        for (const obj of Object.values(objects)) {
-          if (obj.shapeType === 'csg' && childOfCsg.has(obj.id)) {
-            // Проверяем сколько детей у этого CSG
-            let childCount = 0
-            for (const op of operations) {
-              if (op.type === 'group' && op.ids && op.ids.includes(obj.id)) {
-                childCount = op.ids.length
-                break
-              }
-            }
-            if (childCount >= 3) csgWithChildren++
-          }
+        for (const [csgId, children] of csgChildrenCount) {
+          if (children >= 3) csgWithChildren++
         }
 
         // Обновляем прогресс квестов
@@ -690,8 +688,15 @@ export const useEconomyStore = create<EconomyState>()(
       },
 
       syncToCloud: async () => {
+        const state = get()
+        if (state.pendingSync) return // Y3.16: debounce — пропускаем если уже висит pending
+        set({ pendingSync: true })
+
         const platform = getPlatform()
-        if (!platform) return
+        if (!platform) {
+          set({ pendingSync: false })
+          return
+        }
 
         const currentData = {
           tokens: get().tokens,
@@ -711,13 +716,17 @@ export const useEconomyStore = create<EconomyState>()(
 
         // Не сохраняем, если данные не изменились с последней синхронизации
         const dataHash = JSON.stringify(currentData)
-        if (get().lastSavedData === dataHash) return
+        if (get().lastSavedData === dataHash) {
+          set({ pendingSync: false })
+          return
+        }
 
         try {
           await platform.saveData(currentData)
-          set({ lastSavedData: dataHash })
+          set({ lastSavedData: dataHash, pendingSync: false })
         } catch (error) {
           console.error('[Economy] Sync to cloud failed:', error)
+          set({ pendingSync: false })
         }
       },
 
@@ -737,6 +746,7 @@ export const useEconomyStore = create<EconomyState>()(
         rentals: state.rentals,
         todayQuests: state.todayQuests,
         todayQuestsCompleted: state.todayQuestsCompleted,
+        lastQuestCommitDate: state.lastQuestCommitDate, // Y3.15
         // Daily-счётчики — кэшируем в localStorage
         todayAdsWatched: state.todayAdsWatched,
         todayActions: state.todayActions,

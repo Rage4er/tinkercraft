@@ -190,27 +190,18 @@ export default function App() {
   }, [theme]);
 
   // ── Инициализация платформы (Yandex SDK) ──
+  // Y3.16: показ баннера перенесён в yandex.ts (init) — избегаем дубля
   useEffect(() => {
-    const initPlatformAndBanner = async () => {
+    const initPlatformOnly = async () => {
       const ok = await initPlatform().catch((err) => {
         console.error('[App] Platform init failed:', err)
         return false
       })
-      // ✅ Показать баннер сразу после инициализации
-      // (sticky_adv_disabled_on_start может быть true, поэтому вызываем явно)
-      if (ok) {
-        const platform = getPlatform()
-        if (platform?.ysdk?.adv) {
-          try {
-            await platform.showBannerAdv()
-            console.log('[App] Banner shown after init')
-          } catch (e) {
-            console.log('[App] Banner show deferred (may be dashboard-controlled):', e)
-          }
-        }
+      if (!ok) {
+        console.warn('[App] Platform init returned false — running in clean mode')
       }
     }
-    initPlatformAndBanner()
+    initPlatformOnly()
   }, [])
 
   // ── Экономика: инициализация и синхронизация ──

@@ -95,7 +95,6 @@ class YandexPlatform implements IPlatform {
   }
 
   /**
-  /**
    * Показать видеорекламу с вознаграждением
    * ⚠️ resolve(true) ТОЛЬКО если onRewarded был вызван (пользователь досмотрел)
    */
