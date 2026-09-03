@@ -28,7 +28,7 @@
 |------|--------|-----------|
 | **Y.1 Фундамент SDK** | ✅ 21.08.2026 | P0 |
 | **Y.2 Экономика V12** | ✅ 28.08.2026 | P0 |
-| **Y.3 Релиз в Яндекс.Игры** | ✅ Y3.14-16 — аудит ECONOMY.md + бейджи (§6.4) | P0 |
+| **Y.3 Релиз в Яндекс.Игры** | ✅ Y3.14-17 — критические исправления экономики v3.0 (rewarded, квесты, debounce, csgChildren) | P0 |
 | **Фаза 8 — Параметрическая история** | 🔲 После Y.3 | P1 |
 | **Импорт SVG (2D → 3D)** | 🔲 Отложено | P3 |
 
@@ -738,6 +738,43 @@ pnpm test
 - `previewMirror` проверяет кэш перед `syncObjectsForOperation` — skip sync при hover без изменений
 - `invalidateMirrorCache()` вызывается в 14 мутирующих методах
 - **Результат:** 0 дублирующих history-записей, 0 лишних sync-при hover
+
+---
+
+## Y3.17 — Критические исправления экономики v3.0 ✅ ЗАВЕРШЕНО
+
+**Дата:** 2026-09-03
+**Цель:** Исправить критические баги экономики, блокирующие релиз.
+
+### Y3.17.1 — completeEventQuest: убрать начисление токенов ✅
+- `completeEventQuest` теперь только устанавливает флаг `completed`, не начисляет токены
+- Токены начисляются ТОЛЬКО через `commitQuests()` при save/export (§4 ECONOMY.md)
+- **Файл:** `store/economy-store.ts`
+
+### Y3.17.2 — commitQuests: защита от двойного коммита ✅
+- Добавлено `lastQuestCommitDate` — один коммит в день
+- Добавлено в `EconomyState` и `partialize` persist
+- **Файл:** `store/economy-store.ts`
+
+### Y3.17.3 — syncToCloud: debounce защита от лимита SDK ✅
+- Добавлен `pendingSync` флаг — пропускает повторные вызовы пока висит pending
+- Защищает от лимита 100 setData / 5 мин SDK
+- **Файл:** `store/economy-store.ts`
+
+### Y3.17.4 — csgWithChildren: исправить логику подсчёта ✅
+- Раньше: считал сам CSG как ребёнка, `childCount = op.ids.length` (включая parent)
+- Теперь: собирает все CSG-IDs, для каждой group-операции считает детей (ids - 1)
+- **Файл:** `store/economy-store.ts`
+
+### Y3.17.5 — Убрать дубль showBannerAdv ✅
+- Раньше: показывался в `yandex.ts init()` + `App.tsx` (двойной вызов)
+- Теперь: только в `yandex.ts init()`
+- **Файл:** `App.tsx`, `platform/yandex.ts`
+
+### Y3.17.6 — Убрать дубль комментария /** ✅
+- **Файл:** `platform/yandex.ts`
+
+**Результат:** typecheck 0 ошибок, 236/236 тестов, build успешен. Готово к релизу.
 
 ---
 
