@@ -258,10 +258,27 @@ function EconomyPanel() {
               {isActive ? (
                 <span style={{ fontSize: '10px', color: 'var(--success)' }}>{t('economy.status.active')}</span>
               ) : (
-                <button className="btn btn-compact btn-sm" disabled={tokens < r.cost || busy === r.key}
+                <button
+                  className="btn btn-compact btn-sm"
+                  disabled={tokens < r.cost || busy === r.key}
                   onClick={() => handleBuyRental(r.key)}
-                  style={{ fontSize: '10px', padding: '2px 6px' }}>
+                  style={{
+                    fontSize: '10px', padding: '2px 6px',
+                    position: 'relative',
+                    display: 'flex', alignItems: 'center', gap: '2px',
+                  }}
+                >
                   <TokenIcon width={10} height={10} /> {r.cost}
+                  {/* Y3.16: бейдж 💰 на кнопках аренды (§6.4) */}
+                  <span style={{
+                    position: 'absolute', bottom: '-2px', left: '-2px',
+                    background: '#fbbf24', color: '#78350f', fontSize: '8px',
+                    fontWeight: 700, borderRadius: '3px', padding: '1px 3px',
+                    boxShadow: '0 1px 2px rgba(0,0,0,0.3)',
+                    pointerEvents: 'none',
+                  }}>
+                    💎{r.cost}
+                  </span>
                 </button>
               )}
             </div>
@@ -285,10 +302,27 @@ function EconomyPanel() {
         ) : (
           <div style={{ display: 'flex', gap: '4px' }}>
             {subsConfig.map((s) => (
-              <button key={s.key} className="btn btn-compact btn-sm" disabled={tokens < s.cost || busy === s.key}
+              <button
+                key={s.key}
+                className="btn btn-compact btn-sm"
+                disabled={tokens < s.cost || busy === s.key}
                 onClick={() => handleBuySub(s.key)}
-                style={{ fontSize: '10px', padding: '2px 6px' }}>
+                style={{
+                  fontSize: '10px', padding: '2px 6px',
+                  position: 'relative', display: 'flex', alignItems: 'center', gap: '2px',
+                }}
+              >
                 <TokenIcon width={10} height={10} /> {s.cost}
+                {/* Y3.16: бейдж 💰 на кнопках подписок (§6.4) */}
+                <span style={{
+                  position: 'absolute', bottom: '-2px', left: '-2px',
+                  background: '#fbbf24', color: '#78350f', fontSize: '8px',
+                  fontWeight: 700, borderRadius: '3px', padding: '1px 3px',
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.3)',
+                  pointerEvents: 'none',
+                }}>
+                  💎{s.cost}
+                </span>
               </button>
             ))}
           </div>
@@ -309,15 +343,47 @@ function EconomyPanel() {
         <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{t('economy.tooltip.bannerOff')}</div>
       </div>
       <div style={{ display: 'flex', gap: '4px' }}>
-        <button className="btn btn-compact btn-sm" disabled={tokens < 50 || busy === 'disableBanner'}
+        <button
+          className="btn btn-compact btn-sm"
+          disabled={tokens < 50 || busy === 'disableBanner'}
           onClick={() => handleBuyRental('disableBanner')}
-          style={{ fontSize: '10px', padding: '2px 6px' }}>
+          style={{
+            fontSize: '10px', padding: '2px 6px',
+            position: 'relative', display: 'flex', alignItems: 'center', gap: '2px',
+          }}
+        >
           <TokenIcon width={10} height={10} /> 50
+          {/* Y3.16: бейдж 💰50 (§6.4) */}
+          <span style={{
+            position: 'absolute', bottom: '-2px', left: '-2px',
+            background: '#fbbf24', color: '#78350f', fontSize: '8px',
+            fontWeight: 700, borderRadius: '3px', padding: '1px 3px',
+            boxShadow: '0 1px 2px rgba(0,0,0,0.3)',
+            pointerEvents: 'none',
+          }}>
+            💎50
+          </span>
         </button>
-        <button className="btn btn-compact btn-sm" disabled={busy === 'bannerAd'}
+        <button
+          className="btn btn-compact btn-sm"
+          disabled={busy === 'bannerAd'}
           onClick={handleWatchAdForBanner}
-          style={{ fontSize: '10px', padding: '2px 6px' }}>
+          style={{
+            fontSize: '10px', padding: '2px 6px',
+            position: 'relative', display: 'flex', alignItems: 'center', gap: '2px',
+          }}
+        >
           <AdFilmIcon width={10} height={10} /> 1
+          {/* Y3.16: бейдж 📺1 (§6.4) */}
+          <span style={{
+            position: 'absolute', bottom: '-2px', right: '-2px',
+            background: '#8b5cf6', color: '#ffffff', fontSize: '8px',
+            fontWeight: 700, borderRadius: '3px', padding: '1px 3px',
+            boxShadow: '0 1px 2px rgba(0,0,0,0.3)',
+            pointerEvents: 'none',
+          }}>
+            📺1
+          </span>
         </button>
       </div>
     </div>
@@ -602,10 +668,27 @@ export default function PropertiesPanel({
               draftTargetIdRef.current = null
               baseColorRef.current = null
             }}
+            style={{ position: 'relative' }}
           >
             {showNativePicker ? t("properties.palette") : t("properties.advancedPicker")}
             {!canUseExtendedPicker && (
-              <span style={{ marginLeft: '4px', fontSize: '10px', color: 'var(--warning)' }}>{t('economy.palette.locked', { price: 75 })}</span>
+              <>
+                <span style={{ marginLeft: '4px', fontSize: '10px', color: 'var(--warning)' }}>{t('economy.palette.locked', { price: 75 })}</span>
+                {/* Y3.16: бейдж 💰75 на кнопке палитры (§6.4) */}
+                <span style={{
+                  position: 'absolute', bottom: '-2px', left: '-2px',
+                  background: '#fbbf24', color: '#78350f', fontSize: '11px',
+                  fontWeight: 700, borderRadius: '4px', padding: '2px 5px',
+                  display: 'flex', alignItems: 'center', gap: '2px',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+                  minWidth: '18px', minHeight: '14px', justifyContent: 'center',
+                  pointerEvents: 'none',
+                }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '1px' }}>
+                    💎 <span style={{ fontSize: '9px' }}>75</span>
+                  </span>
+                </span>
+              </>
             )}
           </button>
         </div>

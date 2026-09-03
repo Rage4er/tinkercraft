@@ -12,6 +12,7 @@
 ### Fixed
 - **Y3.14 evaluateQuests() вызывается после мутаций сцены** — функция добавлена в 14 мутающих методов document-store.ts: csgBoolean, addShape, applyFillet, importStl, pasteClipboard, deleteSelected, mirrorSelected, csgAlign, resizeObject, undo, redo, loadFromDoodle, loadFromProject, createTextMesh. Квесты по состоянию проекта (12 из 15 в пуле) теперь обновляются при каждом изменении сцены (`store/document-store.ts`, `store/economy-store.ts`)
 - **Y3.15 EconomyShop подключён в App.tsx** — компонент подключён в левую панель как точка продаж (§6.3 ECONOMY.md: 3 места скрытия баннера: баннер, панель, магазин) (`components/EconomyShop.tsx`, `App.tsx`)
+- **Y3.16 Бейджи на кнопках экономики (§6.4)** — добавлены бейджи 💰/📺 на все платные кнопки: PropertiesPanel (палитра, аренда, подписки, баннер off), EconomyBanner (баннер off), EconomyShop (аренда, подписки, баннер off). Бейдж = 💰 слева-внизу (цена) / 📺 справа-внизу (реклама) (`components/PropertiesPanel.tsx`, `components/EconomyBanner.tsx`, `components/EconomyShop.tsx`)
 
 ### Changed
 - **Проверка соответствия ECONOMY.md v2.0** — аудит выявил 2 проблемы: evaluateQuests() не вызывалась, EconomyShop не был подключён. Обе исправлены. (`CODE_REVIEW.md`)

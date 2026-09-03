@@ -66,9 +66,21 @@ export default function EconomyBanner() {
           className="btn btn-compact btn-sm"
           disabled={tokens < 50 || busy !== null}
           onClick={handleBuyRental}
-          style={{ fontSize: '12px', padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '4px' }}
+          style={{ fontSize: '12px', padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '4px', position: 'relative' }}
         >
           <TokenIcon width={14} height={14} /> 50
+          {/* Y3.16: бейдж 💰50 (§6.4) */}
+          <span style={{
+            position: 'absolute', bottom: '-2px', left: '-2px',
+            background: '#fbbf24', color: '#78350f', fontSize: '11px',
+            fontWeight: 700, borderRadius: '4px', padding: '2px 5px',
+            display: 'flex', alignItems: 'center', gap: '2px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+            minWidth: '18px', minHeight: '14px', justifyContent: 'center',
+            pointerEvents: 'none',
+          }}>
+            💎 50
+          </span>
         </button>
 
         {/* Кнопка рекламы */}
@@ -76,9 +88,21 @@ export default function EconomyBanner() {
           className="btn btn-compact btn-sm"
           disabled={busy !== null}
           onClick={handleWatchAd}
-          style={{ fontSize: '12px', padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '4px' }}
+          style={{ fontSize: '12px', padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '4px', position: 'relative' }}
         >
           <AdFilmIcon width={14} height={14} /> 1
+          {/* Y3.16: бейдж 📺1 (§6.4) */}
+          <span style={{
+            position: 'absolute', bottom: '-2px', right: '-2px',
+            background: '#8b5cf6', color: '#ffffff', fontSize: '11px',
+            fontWeight: 700, borderRadius: '4px', padding: '2px 5px',
+            display: 'flex', alignItems: 'center', gap: '2px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+            minWidth: '18px', minHeight: '14px', justifyContent: 'center',
+            pointerEvents: 'none',
+          }}>
+            📺 1
+          </span>
         </button>
       </div>
     </div>

@@ -130,9 +130,24 @@ export default function EconomyShop() {
                       className="btn btn-compact btn-sm"
                       disabled={tokens < r.cost || busyRental === r.key}
                       onClick={() => handleBuyRental(r.key)}
-                      style={{ fontSize: '12px', padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                      style={{
+                        fontSize: '12px', padding: '4px 10px',
+                        display: 'flex', alignItems: 'center', gap: '4px',
+                        position: 'relative',
+                      }}
                     >
                       <TokenIcon width={14} height={14} /> {r.cost}
+                      {/* Y3.16: бейдж 💰 на кнопках аренды (§6.4) */}
+                      <span style={{
+                        position: 'absolute', bottom: '-2px', left: '-2px',
+                        background: '#fbbf24', color: '#78350f', fontSize: '10px',
+                        fontWeight: 700, borderRadius: '4px', padding: '2px 5px',
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+                        minWidth: '18px', minHeight: '14px', justifyContent: 'center',
+                        pointerEvents: 'none',
+                      }}>
+                        💎{r.cost}
+                      </span>
                     </button>
                   )}
                 </div>
@@ -181,9 +196,24 @@ export default function EconomyShop() {
                     className="btn btn-compact btn-sm"
                     disabled={tokens < s.cost || busySub === s.key}
                     onClick={() => handleBuySub(s.key)}
-                    style={{ fontSize: '12px', padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                    style={{
+                      fontSize: '12px', padding: '4px 10px',
+                      display: 'flex', alignItems: 'center', gap: '4px',
+                      position: 'relative',
+                    }}
                   >
                     <TokenIcon width={14} height={14} /> {s.cost}
+                    {/* Y3.16: бейдж 💰 на кнопках подписок (§6.4) */}
+                    <span style={{
+                      position: 'absolute', bottom: '-2px', left: '-2px',
+                      background: '#fbbf24', color: '#78350f', fontSize: '10px',
+                      fontWeight: 700, borderRadius: '4px', padding: '2px 5px',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+                      minWidth: '18px', minHeight: '14px', justifyContent: 'center',
+                      pointerEvents: 'none',
+                    }}>
+                      💎{s.cost}
+                    </span>
                   </button>
                 </div>
               ))}
@@ -210,17 +240,47 @@ export default function EconomyShop() {
               className="btn btn-compact btn-sm"
               disabled={tokens < 50 || busyRental === 'disableBanner'}
               onClick={() => handleBuyRental('disableBanner')}
-              style={{ fontSize: '11px', padding: '4px 8px', display: 'flex', alignItems: 'center', gap: '3px' }}
+              style={{
+                fontSize: '11px', padding: '4px 8px',
+                display: 'flex', alignItems: 'center', gap: '3px',
+                position: 'relative',
+              }}
             >
               <TokenIcon width={12} height={12} /> 50
+              {/* Y3.16: бейдж 💰50 (§6.4) */}
+              <span style={{
+                position: 'absolute', bottom: '-2px', left: '-2px',
+                background: '#fbbf24', color: '#78350f', fontSize: '9px',
+                fontWeight: 700, borderRadius: '4px', padding: '2px 5px',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+                minWidth: '18px', minHeight: '14px', justifyContent: 'center',
+                pointerEvents: 'none',
+              }}>
+                💎50
+              </span>
             </button>
             <button
               className="btn btn-compact btn-sm"
               disabled={busyRental === 'bannerAd'}
               onClick={handleWatchAdForBanner}
-              style={{ fontSize: '11px', padding: '4px 8px', display: 'flex', alignItems: 'center', gap: '3px' }}
+              style={{
+                fontSize: '11px', padding: '4px 8px',
+                display: 'flex', alignItems: 'center', gap: '3px',
+                position: 'relative',
+              }}
             >
               <AdFilmIcon width={12} height={12} /> 1
+              {/* Y3.16: бейдж 📺1 (§6.4) */}
+              <span style={{
+                position: 'absolute', bottom: '-2px', right: '-2px',
+                background: '#8b5cf6', color: '#ffffff', fontSize: '9px',
+                fontWeight: 700, borderRadius: '4px', padding: '2px 5px',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+                minWidth: '18px', minHeight: '14px', justifyContent: 'center',
+                pointerEvents: 'none',
+              }}>
+                📺1
+              </span>
             </button>
           </div>
         </div>
