@@ -96,8 +96,8 @@
     "color": "Цвет",
     "palette": "Wad's Optimum 16",
     "advancedPicker": "Расширенный выбор",
-    "lockedExtended": "🔒 Расширенная палитра",
-    "buyFor": "Купить за {{n}} 💎",
+    "lockedExtended": "Расширенная палитра",
+    "buyFor": "Купить за {{n}}",
     "visible": "Видим",
     "yes": "Да",
     "no": "Нет",
@@ -385,7 +385,7 @@
     "success": "Разблокировано!"
   },
   "economy": {
-    "tokensLabel": "💎 Токены",
+    "tokensLabel": "Токены",
     "bonusLabel": "+50",
     "adLabel": "+50",
     "quests": "Задания дня",
@@ -414,7 +414,7 @@
       "ad": "До 3 просмотров в день, пауза 5 минут",
       "adLimit": "Лимит дня",
       "quests": "Награда придёт при сохранении проекта или экспорте",
-      "bannerOff": "Скрыть баннер на сутки за 50 💎 или 1 просмотр"
+      "bannerOff": "Скрыть баннер на сутки за 50 токенов или 1 просмотр"
     },
     "subscriptions": {
       "weekly": "Недельная",
@@ -447,9 +447,11 @@
       }
     },
     "palette": {
-      "locked": "🔒 {{price}}"
+      "locked": "Нет доступа"
     },
-    "notEnoughTokens": "Не хватает {{n}} 💎",
-    "adLimit": "Лимит дня"
+    "notEnoughTokens": "Не хватает {{n}}",
+    "adLimit": "Лимит дня",
+    "cooldown": "ждём {{time}}",
+    "bonusClaimed": "уже получено"
   }
 }

@@ -1,5 +1,5 @@
 // src/components/EconomyHUD.tsx — HUD экономики (токены + ежедневный бонус)
-// §6.1 ECONOMY.md v2.0: [💎 240] [🎁 +50] [📺 +50·2/3]
+// §6.1 ECONOMY.md v2.0: [240 tokens] [+50 bonus] [+50 ad 2/3]
 // §5 Серверное время для защиты от накруток
 import { useState, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -66,7 +66,7 @@ export default function EconomyHUD() {
   // Метка рекламы: "+50 · 2/3" или "ждём 4:32" или "лимит дня"
   const adStateLabel = useMemo(() => {
     if (cooldownMs > 0) {
-      return `ждём ${formatCooldown(cooldownMs)}`
+      return t('economy.cooldown', { time: formatCooldown(cooldownMs) })
     }
     if (todayAdsWatched >= 3) {
       return t('economy.tooltip.adLimit')
@@ -77,14 +77,14 @@ export default function EconomyHUD() {
   // Метка бонуса: "+50" или "уже получено"
   const bonusStateLabel = useMemo(() => {
     if (!canClaimBonus) {
-      return 'уже получено'
+      return t('economy.bonusClaimed')
     }
     return t('economy.bonusLabel')
   }, [canClaimBonus, t])
 
   return (
     <div className="economy-hud" style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '10px 14px', flexWrap: 'wrap' }}>
-      {/* 💎 Токены */}
+      {/* Tokens */}
       <div className="economy-tokens" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
         <TokenIcon width={40} height={40} />
         <span className="economy-value" style={{ fontWeight: 'bold', fontSize: '22px' }}>
@@ -92,7 +92,7 @@ export default function EconomyHUD() {
         </span>
       </div>
 
-      {/* 🎁 Ежедневный бонус */}
+      {/* Daily bonus */}
       {ECONOMY_UI.showDailyBonus && (
         <button
           className="btn btn-compact btn-sm economy-bonus-btn"
@@ -106,7 +106,7 @@ export default function EconomyHUD() {
         </button>
       )}
 
-      {/* 📺 Реклама за токены */}
+      {/* Ad for tokens */}
       {ECONOMY_UI.showAdButton && (
         <>
           {canWatchAd && (

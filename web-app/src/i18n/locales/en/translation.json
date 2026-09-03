@@ -96,8 +96,8 @@
     "color": "Color",
     "palette": "Wad's Optimum 16",
     "advancedPicker": "Advanced picker",
-    "lockedExtended": "🔒 Extended palette",
-    "buyFor": "Buy for {{n}} 💎",
+    "lockedExtended": "Extended palette",
+    "buyFor": "Buy for {{n}}",
     "visible": "Visible",
     "yes": "Yes",
     "no": "No",
@@ -384,7 +384,7 @@
     "success": "Unlocked!"
   },
   "economy": {
-    "tokensLabel": "💎 Tokens",
+    "tokensLabel": "Tokens",
     "bonusLabel": "+50",
     "adLabel": "+50",
     "quests": "Daily quests",
@@ -413,7 +413,7 @@
       "ad": "Up to 3 views per day, 5 min cooldown",
       "adLimit": "Daily limit",
       "quests": "Reward granted on save or export",
-      "bannerOff": "Hide banner for 24h for 50 💎 or 1 ad"
+      "bannerOff": "Hide banner for 24h for 50 tokens or 1 ad"
     },
     "subscriptions": {
       "weekly": "Weekly",
@@ -446,9 +446,11 @@
       }
     },
     "palette": {
-      "locked": "🔒 {{price}}"
+      "locked": "Locked"
     },
-    "notEnoughTokens": "{{n}} 💎 short",
-    "adLimit": "Daily limit"
+    "notEnoughTokens": "{{n}} short",
+    "adLimit": "Daily limit",
+    "cooldown": "waiting {{time}}",
+    "bonusClaimed": "already claimed"
   }
 }

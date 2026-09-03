@@ -569,7 +569,6 @@ export default function PropertiesPanel({
               />
             )
           ) : (
-            // 🔒 Заблокированная палитра
             <div style={{
               padding: '8px',
               borderRadius: '4px',
@@ -580,13 +579,13 @@ export default function PropertiesPanel({
               fontSize: '12px',
               color: 'var(--text-muted)'
             }}>
-              {t('properties.lockedExtended', { defaultValue: '🔒 Расширенная палитра' })}<br />
+              {t('properties.lockedExtended')}<br />
               <button
                 className="btn btn-compact btn-sm"
                 onClick={() => setActiveTab('objects')}
                 style={{ marginTop: '4px' }}
               >
-                {t('properties.buyFor', { defaultValue: 'Купить за 75 💎' })}
+                {t('properties.buyFor', { n: 75 })}
               </button>
             </div>
           )}
@@ -610,7 +609,7 @@ export default function PropertiesPanel({
             )}
           </button>
         </div>
-      </div>
+      </div >
 
       <div className="props-row">
         <span className="props-label">{t("properties.visible")}</span>
@@ -703,82 +702,67 @@ export default function PropertiesPanel({
       />
 
       {/* Resize dims — только для примитивов и CSG результатов */}
-      {canResize && firstSelected.shapeType !== "import_mesh" && (
-        <div className="csg-group">
-          <div className="csg-group-title">{t("properties.dimensions")}</div>
-          {firstSelected.shapeType === "cube" && !firstSelected.params.width && firstSelected.originalBboxSize ? (
-            // CSG result: show real bbox dimensions in mm
-            <>
-              <NumInput
-                label={t("properties.width")}
-                min={0.1}
-                value={Math.round(firstSelected.originalBboxSize.x * 100) / 100}
-                disabled={busy}
-                onChange={(v) => onResizeObject(firstSelected.id, { width: v })}
-              />
-              <NumInput
-                label={t("properties.height")}
-                min={0.1}
-                value={Math.round(firstSelected.originalBboxSize.y * 100) / 100}
-                disabled={busy}
-                onChange={(v) => onResizeObject(firstSelected.id, { height: v })}
-              />
-              <NumInput
-                label={t("properties.depth")}
-                min={0.1}
-                value={Math.round(firstSelected.originalBboxSize.z * 100) / 100}
-                disabled={busy}
-                onChange={(v) => onResizeObject(firstSelected.id, { depth: v })}
-              />
-            </>
-          ) : firstSelected.shapeType === "cube" && firstSelected.params.width ? (
-            // Regular cube: show params
-            <>
-              <NumInput
-                label={t("properties.width")}
-                min={0.1}
-                value={firstSelected.params.width ?? 20}
-                disabled={busy}
-                onChange={(v) => onResizeDim("width", v)}
-              />
-              <NumInput
-                label={t("properties.height")}
-                min={0.1}
-                value={firstSelected.params.height ?? 20}
-                disabled={busy}
-                onChange={(v) => onResizeDim("height", v)}
-              />
-              <NumInput
-                label={t("properties.depth")}
-                min={0.1}
-                value={firstSelected.params.depth ?? 20}
-                disabled={busy}
-                onChange={(v) => onResizeDim("depth", v)}
-              />
-            </>
-          ) : null}
-          {firstSelected.shapeType === "sphere" && (
-            <>
-              <NumInput
-                label={t("properties.radius")}
-                min={0.1}
-                value={firstSelected.params.radius ?? 12}
-                disabled={busy}
-                onChange={(v) =>
-                  onResizeObject(firstSelected.id, {
-                    radius: Math.max(0.1, v),
-                  })
-                }
-              />
-            </>
-          )}
-          {(firstSelected.shapeType === "cylinder" ||
-            firstSelected.shapeType === "cone") && (
+      {
+        canResize && firstSelected.shapeType !== "import_mesh" && (
+          <div className="csg-group">
+            <div className="csg-group-title">{t("properties.dimensions")}</div>
+            {firstSelected.shapeType === "cube" && !firstSelected.params.width && firstSelected.originalBboxSize ? (
+              // CSG result: show real bbox dimensions in mm
+              <>
+                <NumInput
+                  label={t("properties.width")}
+                  min={0.1}
+                  value={Math.round(firstSelected.originalBboxSize.x * 100) / 100}
+                  disabled={busy}
+                  onChange={(v) => onResizeObject(firstSelected.id, { width: v })}
+                />
+                <NumInput
+                  label={t("properties.height")}
+                  min={0.1}
+                  value={Math.round(firstSelected.originalBboxSize.y * 100) / 100}
+                  disabled={busy}
+                  onChange={(v) => onResizeObject(firstSelected.id, { height: v })}
+                />
+                <NumInput
+                  label={t("properties.depth")}
+                  min={0.1}
+                  value={Math.round(firstSelected.originalBboxSize.z * 100) / 100}
+                  disabled={busy}
+                  onChange={(v) => onResizeObject(firstSelected.id, { depth: v })}
+                />
+              </>
+            ) : firstSelected.shapeType === "cube" && firstSelected.params.width ? (
+              // Regular cube: show params
+              <>
+                <NumInput
+                  label={t("properties.width")}
+                  min={0.1}
+                  value={firstSelected.params.width ?? 20}
+                  disabled={busy}
+                  onChange={(v) => onResizeDim("width", v)}
+                />
+                <NumInput
+                  label={t("properties.height")}
+                  min={0.1}
+                  value={firstSelected.params.height ?? 20}
+                  disabled={busy}
+                  onChange={(v) => onResizeDim("height", v)}
+                />
+                <NumInput
+                  label={t("properties.depth")}
+                  min={0.1}
+                  value={firstSelected.params.depth ?? 20}
+                  disabled={busy}
+                  onChange={(v) => onResizeDim("depth", v)}
+                />
+              </>
+            ) : null}
+            {firstSelected.shapeType === "sphere" && (
               <>
                 <NumInput
                   label={t("properties.radius")}
                   min={0.1}
-                  value={firstSelected.params.radius ?? 10}
+                  value={firstSelected.params.radius ?? 12}
                   disabled={busy}
                   onChange={(v) =>
                     onResizeObject(firstSelected.id, {
@@ -786,108 +770,129 @@ export default function PropertiesPanel({
                     })
                   }
                 />
-                <NumInput
-                  label={t("properties.height")}
-                  min={0.1}
-                  value={firstSelected.params.height ?? 30}
-                  disabled={busy}
-                  onChange={(v) =>
-                    onResizeObject(firstSelected.id, {
-                      height: Math.max(0.1, v),
-                    })
-                  }
-                />
               </>
             )}
-          {firstSelected.shapeType === "torus" && (
-            <>
-              <NumInput
-                label={t("properties.torusRadius")}
-                min={1}
-                value={firstSelected.params.torusRadius ?? 15}
-                disabled={busy}
-                onChange={(v) =>
-                  onResizeObject(firstSelected.id, { torusRadius: Math.max(1, v) })
-                }
-              />
-              <NumInput
-                label={t("properties.tubeRadius")}
-                min={0.5}
-                value={firstSelected.params.tubeRadius ?? 4}
-                disabled={busy}
-                onChange={(v) =>
-                  onResizeObject(firstSelected.id, { tubeRadius: Math.max(0.5, v) })
-                }
-              />
-            </>
-          )}
-          {(firstSelected.shapeType === "prism" ||
-            firstSelected.shapeType === "pyramid") && (
+            {(firstSelected.shapeType === "cylinder" ||
+              firstSelected.shapeType === "cone") && (
+                <>
+                  <NumInput
+                    label={t("properties.radius")}
+                    min={0.1}
+                    value={firstSelected.params.radius ?? 10}
+                    disabled={busy}
+                    onChange={(v) =>
+                      onResizeObject(firstSelected.id, {
+                        radius: Math.max(0.1, v),
+                      })
+                    }
+                  />
+                  <NumInput
+                    label={t("properties.height")}
+                    min={0.1}
+                    value={firstSelected.params.height ?? 30}
+                    disabled={busy}
+                    onChange={(v) =>
+                      onResizeObject(firstSelected.id, {
+                        height: Math.max(0.1, v),
+                      })
+                    }
+                  />
+                </>
+              )}
+            {firstSelected.shapeType === "torus" && (
               <>
                 <NumInput
-                  label={t("properties.radius")}
+                  label={t("properties.torusRadius")}
+                  min={1}
+                  value={firstSelected.params.torusRadius ?? 15}
+                  disabled={busy}
+                  onChange={(v) =>
+                    onResizeObject(firstSelected.id, { torusRadius: Math.max(1, v) })
+                  }
+                />
+                <NumInput
+                  label={t("properties.tubeRadius")}
                   min={0.5}
-                  value={firstSelected.params.radius ?? 12}
+                  value={firstSelected.params.tubeRadius ?? 4}
                   disabled={busy}
                   onChange={(v) =>
-                    onResizeObject(firstSelected.id, { radius: Math.max(0.5, v) })
-                  }
-                />
-                <NumInput
-                  label={t("properties.height")}
-                  min={0.1}
-                  value={firstSelected.params.height ?? 20}
-                  disabled={busy}
-                  onChange={(v) =>
-                    onResizeObject(firstSelected.id, { height: Math.max(0.1, v) })
-                  }
-                />
-                <NumInput
-                  label={t("properties.sides")}
-                  unit=""
-                  min={3}
-                  value={firstSelected.params.sides ?? (firstSelected.shapeType === "prism" ? 6 : 4)}
-                  disabled={busy}
-                  onChange={(v) =>
-                    onResizeObject(firstSelected.id, { sides: Math.max(3, Math.round(v)) })
+                    onResizeObject(firstSelected.id, { tubeRadius: Math.max(0.5, v) })
                   }
                 />
               </>
             )}
-        </div>
-      )}
+            {(firstSelected.shapeType === "prism" ||
+              firstSelected.shapeType === "pyramid") && (
+                <>
+                  <NumInput
+                    label={t("properties.radius")}
+                    min={0.5}
+                    value={firstSelected.params.radius ?? 12}
+                    disabled={busy}
+                    onChange={(v) =>
+                      onResizeObject(firstSelected.id, { radius: Math.max(0.5, v) })
+                    }
+                  />
+                  <NumInput
+                    label={t("properties.height")}
+                    min={0.1}
+                    value={firstSelected.params.height ?? 20}
+                    disabled={busy}
+                    onChange={(v) =>
+                      onResizeObject(firstSelected.id, { height: Math.max(0.1, v) })
+                    }
+                  />
+                  <NumInput
+                    label={t("properties.sides")}
+                    unit=""
+                    min={3}
+                    value={firstSelected.params.sides ?? (firstSelected.shapeType === "prism" ? 6 : 4)}
+                    disabled={busy}
+                    onChange={(v) =>
+                      onResizeObject(firstSelected.id, { sides: Math.max(3, Math.round(v)) })
+                    }
+                  />
+                </>
+              )}
+          </div>
+        )
+      }
 
       {/* Fillet — только для кубов (не для CSG результатов) */}
-      {canFillet && firstSelected.shapeType === 'cube' && (
-        <div className="csg-group">
-          <div className="csg-group-title">{t("properties.filletTitle")}</div>
-          <NumInput
-            label={t("properties.radius")}
-            unit="мм"
-            min={0}
-            value={filletRadius}
-            onChange={onSetFilletRadius}
-          />
-          <button
-            className="btn primary"
-            disabled={!canFillet}
-            onClick={() => onApplyFillet(firstSelected.id, filletRadius)}
-          >
-            <FilletIcon size={32} /> {t("actions.apply")}
-          </button>
-        </div>
-      )}
+      {
+        canFillet && firstSelected.shapeType === 'cube' && (
+          <div className="csg-group">
+            <div className="csg-group-title">{t("properties.filletTitle")}</div>
+            <NumInput
+              label={t("properties.radius")}
+              unit="мм"
+              min={0}
+              value={filletRadius}
+              onChange={onSetFilletRadius}
+            />
+            <button
+              className="btn primary"
+              disabled={!canFillet}
+              onClick={() => onApplyFillet(firstSelected.id, filletRadius)}
+            >
+              <FilletIcon size={32} /> {t("actions.apply")}
+            </button>
+          </div>
+        )
+      }
 
       {/* Extrude — скрыто в свойствах, доступно на панели инструментов */}
       {/* Mirror — скрыто в свойствах, доступно на панели инструментов */}
 
       {/* CSG + Align */}
-      {selectedIds.length === 2 && (
-        <>
-          <CsgButtons disabled={!canCsg} onCsg={onCsg} variant="full" nonManifoldSelected={nonManifoldSelected} />
-          <AlignButtons disabled={!canAlign} onAlign={onAlign} variant="full" />
-        </>
-      )}
+      {
+        selectedIds.length === 2 && (
+          <>
+            <CsgButtons disabled={!canCsg} onCsg={onCsg} variant="full" nonManifoldSelected={nonManifoldSelected} />
+            <AlignButtons disabled={!canAlign} onAlign={onAlign} variant="full" />
+          </>
+        )
+      }
     </>
   );
 }

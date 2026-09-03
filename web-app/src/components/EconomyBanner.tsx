@@ -1,5 +1,5 @@
 // src/components/EconomyBanner.tsx — Рекламный баннер (§6.3 ECONOMY.md v2.0)
-// Компактная кнопка [📺 1 / 💎 50 — скрыть на 24 ч]
+// Компактная кнопка [📺 1 / 50 токенов — скрыть на 24 ч]
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useEconomyStore } from '../store/economy-store'

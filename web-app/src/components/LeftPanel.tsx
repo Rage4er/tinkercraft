@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import Section from "./Section";
 import Timeline from "./Timeline";
 import ComponentTree from "./ComponentTree";
+import Badge from "./Badge";
 import { ALL_SHAPES } from "../constants.tsx";
 import { OP_FILTER_LABELS } from "../constants";
 import type { ShapeType, TinkerCraftOperation, SceneObject } from "../csg/types";
@@ -16,6 +17,8 @@ function getShapeLabel(obj: SceneObject, t: (key: string) => string): string {
   if (obj.shapeType === 'text3d') return t('leftPanel.text3d')
   return t(`shapes.${obj.shapeType}`)
 }
+
+import { useEconomyStore } from "../store/economy-store";
 
 export default function LeftPanel({
   shapeSearch,
@@ -59,6 +62,12 @@ export default function LeftPanel({
   onJumpHistory: (index: number) => void;
 }) {
   const { t } = useTranslation();
+  const { tokens, hasActiveSubscription } = useEconomyStore(s => ({
+    tokens: s.tokens,
+    hasActiveSubscription: s.hasActiveSubscription(),
+  }));
+  const textActive = hasActiveSubscription;
+  const textLocked = !textActive && tokens < 75;
 
   // FIX (LOW-18-31): Remove useMemo — ALL_SHAPES has only 8 elements, memo overhead > benefit
   const filteredShapes = shapeSearch.trim()
@@ -94,18 +103,30 @@ export default function LeftPanel({
               {t("leftPanel.notFound")}
             </div>
           )}
-          {filteredShapes.map((s) => (
-            <button
-              key={s.type}
-              className="shape-btn"
-              title={t('leftPanel.addShape', { label: t(s.labelKey) })}
-              disabled={!workerOk || busy}
-              onClick={() => handleShapeClick(s.type as ShapeType)}
-            >
-              <span className="shape-icon">{s.icon({ size: 32 })}</span>
-              <span className="shape-lbl">{t(s.labelKey)}</span>
-            </button>
-          ))}
+          {filteredShapes.map((s) => {
+            const isText3d = s.type === 'text3d'
+            return (
+              <button
+                key={s.type}
+                className="shape-btn"
+                title={t('leftPanel.addShape', { label: t(s.labelKey) })}
+                disabled={!workerOk || busy}
+                onClick={() => {
+                  if (isText3d) {
+                    onShowTextModal()
+                    return
+                  }
+                  handleShapeClick(s.type as ShapeType)
+                }}
+              >
+                <span className="shape-icon">{s.icon({ size: 32 })}</span>
+                <span className="shape-lbl">{t(s.labelKey)}</span>
+                {isText3d && !textActive && (
+                  <Badge type="tokens" value="75" />
+                )}
+              </button>
+            )
+          })}
         </div>
       </Section>
 
