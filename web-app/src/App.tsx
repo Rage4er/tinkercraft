@@ -13,6 +13,7 @@ import ExportModal from "./components/ExportModal";
 import ImportModal from "./components/ImportModal";
 import EconomyBanner from "./components/EconomyBanner";
 import EconomyOnboarding from "./components/EconomyOnboarding";
+import EconomyShop from "./components/EconomyShop";
 import StatusBar from "./components/StatusBar";
 import LeftPanel from "./components/LeftPanel";
 import PropertiesPanel from "./components/PropertiesPanel";

@@ -19,6 +19,8 @@ function getShapeLabel(obj: SceneObject, t: (key: string) => string): string {
 }
 
 import { useEconomyStore } from "../store/economy-store";
+import { getPlatform } from "../platform";
+import EconomyShop from "./EconomyShop";
 
 export default function LeftPanel({
   shapeSearch,
@@ -49,8 +51,8 @@ export default function LeftPanel({
   onShowTextModal: () => void;
   objectList: SceneObject[];
   selSet: Set<string>;
-  activeTab: "objects" | "tree";
-  onTabChange: (tab: "objects" | "tree") => void;
+  activeTab: "objects" | "tree" | "shop";
+  onTabChange: (tab: "objects" | "tree" | "shop") => void;
   onSelect: (id: string | null, add: boolean) => void;
   onRename: (id: string, name: string) => void;
   onToggleVis: (id: string) => void;
@@ -145,6 +147,14 @@ export default function LeftPanel({
           >
             {t("leftPanel.tree")}
           </button>
+          {getPlatform() && (
+            <button
+              className={`tab-btn${activeTab === "shop" ? " active" : ""}`}
+              onClick={() => onTabChange("shop")}
+            >
+              {t("leftPanel.shop")}
+            </button>
+          )}
         </div>
 
         {activeTab === "objects" ? (
@@ -185,6 +195,7 @@ export default function LeftPanel({
             onDelete={onDeleteObject}
           />
         )}
+        {activeTab === "shop" && <EconomyShop />}
       </Section>
 
       {/* История */}

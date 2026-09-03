@@ -34,6 +34,11 @@ import { autosaveSession, restoreSession } from '../io/autosave'
 import i18n from '../i18n'
 import { useEconomyStore, createExportHash, scanForCashback } from './economy-store'
 
+/** Обновить прогресс квестов V2 по состоянию сцены (после каждой мутации) */
+function evaluateQuestsAfterMutation(objects: Record<string, SceneObject>, operations: TinkerCraftOperation[]): void {
+  useEconomyStore.getState().evaluateQuests(objects, operations)
+}
+
 export { computeAABB, extractAndCenterInPlace, extractAndCenterGetAABB, computeWorldAABB } from './helpers'
 import { computeAABB, extractAndCenterInPlace, extractAndCenterGetAABB, computeWorldAABB, makeObject, nextId, colorForIndex } from './helpers'
 import type { ClipEntry } from './helpers'
@@ -81,6 +86,8 @@ async function jumpToHistoryInner(newIdx: number, actionName: string): Promise<v
     }
     setState({ historyIndex: newIdx, objects: newObjects, selectedIds: [], busy: false, lastCsgMs: performance.now() - t0 })
     invalidateMirrorCache()
+    // Y3.14: квесты по состоянию проекта
+    evaluateQuestsAfterMutation(newObjects, getState().operations.slice(0, newIdx))
   } catch (e) { setState({ busy: false }); console.error(actionName + ':', e); notify(i18n.t('errors.operationFailed', { name: actionName.toLowerCase() }), 'error') }
 }
 
@@ -253,6 +260,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       invalidateMirrorCache()
       // Y3.1: начисление токена за действие (серверное время)
       void useEconomyStore.getState().earnActionToken()
+      // Y3.14: квесты по состоянию проекта
+      evaluateQuestsAfterMutation(newObjects, newOps)
     } catch (e) { set({ busy: false }); console.error('addRawMesh:', e); notify(i18n.t('errors.importMeshFailed'), 'error') }
   },
 
@@ -279,6 +288,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       invalidateMirrorCache()
       // Y3.1: начисление токена за действие (серверное время)
       void useEconomyStore.getState().earnActionToken()
+      // Y3.14: квесты по состоянию проекта
+      evaluateQuestsAfterMutation(newObjects, newOps)
     } catch (e) { set({ busy: false }); console.error('addTextMesh:', e); notify(i18n.t('errors.createShapeFailed'), 'error') }
   },
 
@@ -313,6 +324,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       void useEconomyStore.getState().earnActionToken()
       // Y3.4: событийный квест — импорт STL
       useEconomyStore.getState().completeEventQuest('import_stl')
+      // Y3.14: квесты по состоянию проекта
+      evaluateQuestsAfterMutation(newObjects, newOps)
     } catch (e) { set({ busy: false }); notify(i18n.t('errors.stlImportFailed') + ': ' + e, 'error') }
   },
 
@@ -347,6 +360,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       })
       cacheSnapshotWithTree(newOps.length, newObjects)
       invalidateMirrorCache()
+      // Y3.14: квесты по состоянию проекта
+      evaluateQuestsAfterMutation(newObjects, newOps)
     } catch (e) { set({ busy: false }); console.error('applyFillet:', e); notify(i18n.t('errors.filletFailed'), 'error') }
   },
 
@@ -434,6 +449,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, selectedIds: pastedIds, modified: true, busy: false, lastCsgMs: ms })
       cacheSnapshotWithTree(newOps.length, newObjects)
       invalidateMirrorCache()
+      // Y3.14: квесты по состоянию проекта
+      evaluateQuestsAfterMutation(newObjects, newOps)
     } catch (e) {
       set({ busy: false })
       // Clean up partially created objects from worker cache
@@ -469,6 +486,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, selectedIds: [], modified: true })
     cacheSnapshotWithTree(newOps.length, newObjects)
     invalidateMirrorCache()
+    // Y3.14: квесты по состоянию проекта
+    evaluateQuestsAfterMutation(newObjects, newOps)
   },
 
   selectObjects: (ids, add) => {
@@ -586,6 +605,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       invalidateMirrorCache()
       // Rebuild tree node to cache the mesh in history-tree
       rebuildNode(resultId).catch(e => console.error('[csgBoolean] rebuildNode failed:', e))
+      // Y3.14: квесты по состоянию проекта
+      evaluateQuestsAfterMutation(newObjects, newOps)
     } catch (e) { set({ busy: false }); console.error('csgBoolean:', e); notify(i18n.t('errors.csgFailed'), 'error') }
   },
 
@@ -822,6 +843,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         lastCsgMs: performance.now() - t0,
       })
       cacheSnapshotWithTree(newOps.length, { ...objects, ...newObjects })
+      // Y3.14: квесты по состоянию проекта
+      evaluateQuestsAfterMutation({ ...objects, ...newObjects }, newOps)
     } catch (e) { set({ busy: false }); console.error('mirrorSelected:', e); notify(i18n.t('errors.mirrorFailed'), 'error') }
   },
   alignSelected: async (axis, anchor) => {
@@ -918,6 +941,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const newOps = [...operations.slice(0, historyIndex), op]
       set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true, busy: false, lastCsgMs: performance.now() - t0 })
       cacheSnapshotWithTree(newOps.length, newObjects)
+      // Y3.14: квесты по состоянию проекта
+      evaluateQuestsAfterMutation(newObjects, newOps)
       invalidateMirrorCache()
       devLog('ALIGN:done', { durationMs: performance.now() - t0, anchorId, targetIds })
     } catch (e) { set({ busy: false }); console.error('alignSelected:', e); notify(i18n.t('errors.alignFailed'), 'error') }
@@ -995,6 +1020,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       set({ operations: doc.operations, historyIndex: doc.operations.length, objects: newObjects, selectedIds: [], fileName: picked.file.name, modified: false, busy: false, lastCsgMs: performance.now() - t0, currentProjectId: null, currentProjectName: null })
       cacheSnapshotWithTree(doc.operations.length, newObjects)
       invalidateMirrorCache()
+      // Y3.14: квесты по состоянию проекта
+      evaluateQuestsAfterMutation(newObjects, doc.operations)
     } catch (e) { set({ busy: false }); notify(i18n.t('errors.openFailed', { error: e }), 'error') }
   },
 
@@ -1099,6 +1126,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         devLog('resizeObject', { id, newParams: mergedParams })
         cacheSnapshotWithTree(newOps.length, newObjects)
         invalidateMirrorCache()
+        // Y3.14: квесты по состоянию проекта
+        evaluateQuestsAfterMutation(newObjects, newOps)
       } catch (e) { set({ busy: false }); console.error('resizeObject:', e); notify(i18n.t('errors.resizeFailed'), 'error') }
     }
     // Для CSG результатов: используем scale трансформацию
@@ -1152,6 +1181,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         devLog('resizeObject', { id, newTransform })
         cacheSnapshotWithTree(newOps.length, newObjects)
         invalidateMirrorCache()
+        // Y3.14: квесты по состоянию проекта
+        evaluateQuestsAfterMutation(newObjects, newOps)
       } catch (e) { set({ busy: false }); console.error('resizeObject (CSG):', e); notify(i18n.t('errors.resizeCsgFailed'), 'error') }
     }
   },
@@ -1293,6 +1324,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       rebuildBuildTree(record.operations, newObjects)
       set({ operations: record.operations, historyIndex: record.operations.length, objects: newObjects, selectedIds: [], fileName: null, modified: false, busy: false, lastCsgMs: performance.now() - t0, currentProjectId: id, currentProjectName: record.name })
       cacheSnapshotWithTree(record.operations.length, newObjects)
+      // Y3.14: квесты по состоянию проекта
+      evaluateQuestsAfterMutation(newObjects, record.operations)
     } catch (e) { set({ busy: false }); console.error('loadFromProject:', e); notify(i18n.t('errors.loadProjectFailed'), 'error') }
   },
 

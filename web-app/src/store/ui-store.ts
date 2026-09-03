@@ -68,8 +68,8 @@ export interface UiStore {
   setMirrorPreviewPlane: (plane: 'XY' | 'XZ' | 'YZ' | null) => void
 
   // Panels
-  activeTab: 'objects' | 'tree'
-  setActiveTab: (v: 'objects' | 'tree') => void
+  activeTab: 'objects' | 'tree' | 'shop'
+  setActiveTab: (v: 'objects' | 'tree' | 'shop') => void
   cameraMode: 'perspective' | 'orthographic'
   setCameraMode: (v: 'perspective' | 'orthographic' | ((prev: 'perspective' | 'orthographic') => 'perspective' | 'orthographic')) => void
 }
@@ -126,7 +126,7 @@ export const useUiStore = create<UiStore>((set) => ({
   extrudeDepth: 10,
   setExtrudeDepth: (v) => set({ extrudeDepth: v }),
 
-  activeTab: 'objects',
+  activeTab: 'objects' as const,
   setActiveTab: (v) => set({ activeTab: v }),
   cameraMode: 'perspective',
   setCameraMode: (v) =>
