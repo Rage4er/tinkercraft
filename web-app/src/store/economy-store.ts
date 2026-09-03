@@ -501,7 +501,7 @@ export const useEconomyStore = create<EconomyState>()(
         if (tokensEarned > 0) {
           set({
             tokens: state.tokens + tokensEarned,
-            todayQuestsCompleted: [...state.todayQuestsCompleted, ...newCompleted],
+            todayQuestsCompleted: [...new Set([...state.todayQuestsCompleted, ...newCompleted])], // Y3.17: дедуп
             lastQuestCommitDate: now,
           })
           await get().syncToCloud()

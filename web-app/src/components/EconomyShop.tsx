@@ -6,21 +6,21 @@ import Section from './Section'
 import { TokenIcon, CrownIcon, ClockIcon, AdFilmIcon, TextIcon, ColorIcon } from './icons'
 
 /** Форматировать оставшееся время аренды */
-function formatRentalRemaining(expiresAt: number): string {
+function formatRentalRemaining(expiresAt: number, t: (key: string, params?: Record<string, unknown>) => string): string {
   const remaining = expiresAt - Date.now()
-  if (remaining <= 0) return 'Истекла'
+  if (remaining <= 0) return t('economy.status.expired')
   const hours = Math.floor(remaining / (1000 * 60 * 60))
   const mins = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60))
-  return `${hours}ч ${mins}м`
+  return t('economy.time.hoursMins', { h: hours, m: mins })
 }
 
 /** Форматировать оставшееся время подписки */
-function formatSubRemaining(expiresAt: number): string {
+function formatSubRemaining(expiresAt: number, t: (key: string, params?: Record<string, unknown>) => string): string {
   const remaining = expiresAt - Date.now()
-  if (remaining <= 0) return 'Истекла'
+  if (remaining <= 0) return t('economy.status.expired')
   const days = Math.floor(remaining / (1000 * 60 * 60 * 24))
   const hours = Math.floor((remaining % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
-  return `${days}д ${hours}ч`
+  return t('economy.time.daysHours', { d: days, h: hours })
 }
 
 export default function EconomyShop() {
@@ -73,9 +73,9 @@ export default function EconomyShop() {
 
   // Конфиг аренды с SVG-иконками
   const rentalsConfig = [
-    { key: 'text3d' as const, label: '3D-текст', cost: 75, icon: <TextIcon width={18} height={18} />, desc: 'Создание 3D-текста' },
-    { key: 'extendedPalette' as const, label: 'Расширенная палитра', cost: 75, icon: <ColorIcon width={18} height={18} />, desc: 'Дополнительные цвета' },
-    { key: 'disableBanner' as const, label: 'Отключение баннера', cost: 50, icon: <AdFilmIcon width={18} height={18} />, desc: 'Без рекламы на 24ч' },
+    { key: 'text3d' as const, label: t('economy.rentals.text3d.label'), cost: 75, icon: <TextIcon width={18} height={18} />, desc: t('economy.rentals.text3d.desc') },
+    { key: 'extendedPalette' as const, label: t('economy.rentals.extendedPalette.label'), cost: 75, icon: <ColorIcon width={18} height={18} />, desc: t('economy.rentals.extendedPalette.desc') },
+    { key: 'disableBanner' as const, label: t('economy.rentals.disableBanner.label'), cost: 50, icon: <AdFilmIcon width={18} height={18} />, desc: t('economy.rentals.disableBanner.desc') },
   ]
 
   // Конфиг подписок
@@ -97,7 +97,7 @@ export default function EconomyShop() {
             {rentalsConfig.map((r) => {
               const isActive = useEconomyStore.getState().hasRental(r.key)
               const rentalExpires = rentals[r.key]
-              const remaining = rentalExpires !== null ? formatRentalRemaining(rentalExpires) : null
+              const remaining = rentalExpires !== null ? formatRentalRemaining(rentalExpires, t) : null
 
               return (
                 <div
@@ -171,7 +171,7 @@ export default function EconomyShop() {
               fontSize: '13px',
               color: 'var(--success)',
             }}>
-              Pro активна • {formatSubRemaining(subscriptionExpiresAt)}
+              Pro активна • {formatSubRemaining(subscriptionExpiresAt, t)}
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
