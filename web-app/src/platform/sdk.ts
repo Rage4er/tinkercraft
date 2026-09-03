@@ -76,10 +76,9 @@ export function initSdk(): Promise<SDK | null> {
         ysdk.features.LoadingAPI.ready()
       }
 
-      // GameplayAPI.start() — начинаем отслеживание геймплея
-      if (ysdk?.features?.GameplayAPI?.start) {
-        ysdk.features.GameplayAPI.start()
-      }
+      // ⚠️ НЕ вызываем GameplayAPI.start() здесь — это ломает React-обёртку
+      // платформы Yandex (error #185). Start вызывается в App.tsx через
+      // useEffect с пустыми зависимостями — после полной загрузки React.
 
       return ysdk
     } catch (e) {

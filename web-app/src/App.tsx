@@ -305,6 +305,7 @@ export default function App() {
 
   // ── Yandex Gameplay API — обязательное требование модерации ──
   // При открытии модальных окон — stopGameplay(), при закрытии — startGameplay()
+  // При монтировании (все модалки false) — автоматически вызывает startGameplay()
   useEffect(() => {
     const platform = getPlatform()
     if (!platform) return

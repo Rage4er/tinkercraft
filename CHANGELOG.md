@@ -10,6 +10,7 @@
 ## [Unreleased]
 
 ### Fixed
+- **Yandex Games SDK: React error #185 при запуске** — `GameplayAPI.start()` перемещён из `sdk.ts` в `App.tsx` (useEffect с зависимостями от модалок). Раньше вызов происходил в async `initSdk()` до полной загрузки React, что вызывало `postMessage` → React error #185 в обёртке платформы Yandex → зависание игры. Теперь `GameplayAPI.start()` вызывается React-хуком после полного монтирования приложения (`platform/sdk.ts`, `App.tsx`)
 - **Y3.14 evaluateQuests() вызывается после мутаций сцены** — функция добавлена в 14 мутающих методов document-store.ts: csgBoolean, addShape, applyFillet, importStl, pasteClipboard, deleteSelected, mirrorSelected, csgAlign, resizeObject, undo, redo, loadFromDoodle, loadFromProject, createTextMesh. Квесты по состоянию проекта (12 из 15 в пуле) теперь обновляются при каждом изменении сцены (`store/document-store.ts`, `store/economy-store.ts`)
 - **Y3.15 EconomyShop подключён в App.tsx** — компонент подключён в левую панель как точка продаж (§6.3 ECONOMY.md: 3 места скрытия баннера: баннер, панель, магазин) (`components/EconomyShop.tsx`, `App.tsx`)
 - **Y3.16 Бейджи на кнопках экономики (§6.4)** — добавлены бейджи 💰/📺 на все платные кнопки: PropertiesPanel (палитра, аренда, подписки, баннер off), EconomyBanner (баннер off), EconomyShop (аренда, подписки, баннер off). Бейдж = 💰 слева-внизу (цена) / 📺 справа-внизу (реклама) (`components/PropertiesPanel.tsx`, `components/EconomyBanner.tsx`, `components/EconomyShop.tsx`)
