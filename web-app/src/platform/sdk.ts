@@ -64,6 +64,11 @@ export function initSdk(): Promise<SDK | null> {
       return null
     }
 
+    // ⚠️ ВАЖНО: откладываем YaGames.init() на следующий тик event loop,
+    // чтобы избежать React error #185. Сам YaGames.init() делает postMessage
+    // в iframe Yandex, и React не может обработать setState до стабилизации.
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
     try {
       const ysdk = await (window as any).YaGames.init()
       _ysdk = ysdk
