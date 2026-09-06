@@ -189,10 +189,16 @@ export default function App() {
     document.documentElement.setAttribute("data-theme", theme);
   }, [theme]);
 
-  // ── Инициализация платформы (Yandex SDK) ──
-  // Y3.16: показ баннера перенесён в yandex.ts (init) — избегаем дубля
+  // ── Инициализация платформы + экономика (объединено) ──
+  // ⚠️ ВАЖНО: loadEconomy() вызывается ПОСЛЕ platform.init(),
+  // потому что loadFromCloud() → platform.loadData() → ysdk.player.getData()
+  // вызывает postMessage, который ломается в iframe Yandex (error #185).
+  // RAF в platform.init() завершается только ПОСЛЕ стабилизации React-дерева.
+  const economyInitialized = useRef(false)
+
   useEffect(() => {
-    const initPlatformOnly = async () => {
+    const bootstrap = async () => {
+      // 1. Инициализируем платформу (включает RAF-вызовы SDK)
       const ok = await initPlatform().catch((err) => {
         console.error('[App] Platform init failed:', err)
         return false
@@ -200,30 +206,27 @@ export default function App() {
       if (!ok) {
         console.warn('[App] Platform init returned false — running in clean mode')
       }
+
+      // 2. Только ПОСЛЕ platform.init() загружаем экономику
+      if (!economyInitialized.current) {
+        economyInitialized.current = true
+        try {
+          await useEconomyStore.getState().loadFromCloud()
+          await useEconomyStore.getState().initDailyQuests()
+          useEconomyStore.getState().checkSubscriptionExpiry()
+        } catch (e) {
+          console.error('[App] Economy init failed:', e)
+        }
+
+        // Периодическая синхронизация экономики (каждые 30 сек)
+        const syncInterval = setInterval(() => {
+          void useEconomyStore.getState().syncToCloud()
+        }, 30000)
+
+        return () => clearInterval(syncInterval)
+      }
     }
-    initPlatformOnly()
-  }, [])
-
-  // ── Экономика: инициализация и синхронизация ──
-  const economyInitialized = useRef(false)
-
-  useEffect(() => {
-    if (economyInitialized.current) return
-    economyInitialized.current = true
-
-    const loadEconomy = async () => {
-      await useEconomyStore.getState().loadFromCloud()
-      await useEconomyStore.getState().initDailyQuests()
-      useEconomyStore.getState().checkSubscriptionExpiry()
-    }
-    void loadEconomy()
-
-    // Периодическая синхронизация экономики (каждые 30 сек)
-    const syncInterval = setInterval(() => {
-      void useEconomyStore.getState().syncToCloud()
-    }, 30000)
-
-    return () => clearInterval(syncInterval)
+    bootstrap()
   }, [])
 
   // ── Триггеры квестов V2 — оценка по состоянию проекта ──

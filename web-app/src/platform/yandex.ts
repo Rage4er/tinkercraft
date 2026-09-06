@@ -32,42 +32,46 @@ class YandexPlatform implements IPlatform {
 
       // ⚠️ ВАЖНО: все SDK-вызовы оборачиваем в requestAnimationFrame
       // чтобы избежать React error #185 (postMessage в iframe Yandex)
-      requestAnimationFrame(() => {
-        (async () => {
-          try {
-            // LoadingAPI.ready() — обязательно для модерации (§1.2 SDK)
-            if (ysdk?.features?.LoadingAPI?.ready) {
-              ysdk.features.LoadingAPI.ready()
-            }
-
-            // Инициализируем sticky banner (правый верхний угол)
+      // ⚠️ Возвращаем Promise, который резолвится когда RAF завершится,
+      // чтобы caller (App.tsx) ждал завершения инициализации
+      return new Promise<boolean>((resolve) => {
+        requestAnimationFrame(() => {
+          (async () => {
             try {
-              const bannerStatus = await ysdk.adv.getBannerAdvStatus()
-              console.log('[Yandex] Banner status:', JSON.stringify(bannerStatus))
-              await ysdk.adv.showBannerAdv()
-              console.log('[Yandex] Sticky banner shown')
+              // LoadingAPI.ready() — обязательно для модерации (§1.2 SDK)
+              if (ysdk?.features?.LoadingAPI?.ready) {
+                ysdk.features.LoadingAPI.ready()
+              }
+
+              // Инициализируем sticky banner (правый верхний угол)
+              try {
+                const bannerStatus = await ysdk.adv.getBannerAdvStatus()
+                console.log('[Yandex] Banner status:', JSON.stringify(bannerStatus))
+                await ysdk.adv.showBannerAdv()
+                console.log('[Yandex] Sticky banner shown')
+              } catch (e) {
+                console.log('[Yandex] Banner not available (may be dashboard-controlled):', e)
+              }
+
+              // Пробуем получить игрока
+              try {
+                this.player = await ysdk.getPlayer()
+                console.log('[Yandex] Player loaded, authorized:', this.player?.isAuthorized?.())
+              } catch {
+                console.warn('[Yandex] Player not authorized yet, guest mode')
+                this.player = null
+              }
+
+              this.initialized = true
+              resolve(true)
             } catch (e) {
-              console.log('[Yandex] Banner not available (may be dashboard-controlled):', e)
+              console.error('[Yandex] RAF init error:', e)
+              this.initialized = true
+              resolve(false)
             }
-
-            // Пробуем получить игрока
-            try {
-              this.player = await ysdk.getPlayer()
-              console.log('[Yandex] Player loaded, authorized:', this.player?.isAuthorized?.())
-            } catch {
-              console.warn('[Yandex] Player not authorized yet, guest mode')
-              this.player = null
-            }
-
-            this.initialized = true
-          } catch (e) {
-            console.error('[Yandex] RAF init error:', e)
-            this.initialized = true
-          }
-        })()
+          })()
+        })
       })
-
-      return true
     } catch (e) {
       this.initError = (e as Error).message
       this.initialized = true
