@@ -88,6 +88,8 @@ export default defineConfig(({ mode }) => {
     base: yandex ? './' : '/tinkercraft/',
     define: {
       __PLATFORM__: JSON.stringify(yandex ? 'yandex' : 'clean'),
+      // VITE_PLATFORM для import.meta.env.VITE_PLATFORM в platform/index.ts
+      'import.meta.env.VITE_PLATFORM': JSON.stringify(yandex ? 'yandex' : 'clean'),
     },
     build: {
       outDir: yandex ? 'dist-yandex' : 'dist',
