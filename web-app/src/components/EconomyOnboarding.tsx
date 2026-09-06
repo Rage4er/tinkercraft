@@ -10,20 +10,20 @@ const STEPS = [
   {
     key: 'hud',
     icon: <TokenIcon width={32} height={32} />,
-    title: 'Токены',
-    text: 'Это ваша внутренняя валюта. Тратьте на экспорт, аренду и подписку.',
+    title: 'onboarding.steps.hud.title',
+    text: 'onboarding.steps.hud.text',
   },
   {
     key: 'badges',
     icon: <PackageIcon width={32} height={32} />,
-    title: 'Экспорт и импорт',
-    text: 'Экспорт стоит 50 токенов, импорт — 100 токенов. Бейджи показывают стоимость.',
+    title: 'onboarding.steps.badges.title',
+    text: 'onboarding.steps.badges.text',
   },
   {
     key: 'quests',
     icon: null,
-    title: 'Задания дня',
-    text: 'Постройте модель и сохраните проект — задания засчитаются!',
+    title: 'onboarding.steps.quests.title',
+    text: 'onboarding.steps.quests.text',
   },
 ] as const
 
@@ -116,10 +116,10 @@ export default function EconomyOnboarding() {
             </div>
           )}
           <div style={{ fontSize: '20px', fontWeight: 'bold', marginBottom: '12px' }}>
-            {currentStep.title}
+            {t(currentStep.title)}
           </div>
           <div style={{ fontSize: '15px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-            {currentStep.text}
+            {t(currentStep.text)}
           </div>
         </div>
 
@@ -128,15 +128,15 @@ export default function EconomyOnboarding() {
           {step < STEPS.length - 1 ? (
             <>
               <button className="btn primary" onClick={handleNext}>
-                Далее
+                {t('onboarding.next')}
               </button>
               <button className="btn" onClick={handleDone}>
-                Пропустить
+                {t('onboarding.skip')}
               </button>
             </>
           ) : (
             <button className="btn primary" onClick={handleDone}>
-              Готово!
+              {t('onboarding.done')}
             </button>
           )}
         </div>

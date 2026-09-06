@@ -453,5 +453,29 @@
     "adLimit": "Daily limit",
     "cooldown": "waiting {{time}}",
     "bonusClaimed": "already claimed"
+  },
+  "onboarding": {
+    "steps": {
+      "hud": {
+        "title": "Tokens",
+        "text": "This is your internal currency. Spend on export, rentals, and subscriptions."
+      },
+      "badges": {
+        "title": "Export & Import",
+        "text": "Export costs 50 tokens, import costs 100 tokens. Badges show the cost."
+      },
+      "quests": {
+        "title": "Daily Quests",
+        "text": "Build a model and save your project — quests will be tracked!"
+      }
+    },
+    "next": "Next",
+    "skip": "Skip",
+    "done": "Done!"
+  },
+  "webgl": {
+    "unavailable": "WebGL unavailable",
+    "msg": "This environment does not support WebGL (headless or software rendering). Open the app in a browser with hardware acceleration for full 3D visualization.",
+    "hint": "CSG engine and remaining UI work correctly."
   }
 }

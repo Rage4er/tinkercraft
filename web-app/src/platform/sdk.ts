@@ -71,10 +71,8 @@ export function initSdk(): Promise<SDK | null> {
       console.log('[SDK] environment:', JSON.stringify(ysdk?.environment))
       console.log('[SDK] i18n.lang:', ysdk?.environment?.i18n?.lang)
 
-      // LoadingAPI.ready() — обязательно для модерации
-      if (ysdk?.features?.LoadingAPI?.ready) {
-        ysdk.features.LoadingAPI.ready()
-      }
+      // ⚠️ LoadingAPI.ready() вызывается в yandex.ts внутри requestAnimationFrame
+      // чтобы избежать React error #185 (postMessage в iframe Yandex)
 
       // ⚠️ НЕ вызываем GameplayAPI.start() здесь — это ломает React-обёртку
       // платформы Yandex (error #185). Start вызывается в App.tsx через

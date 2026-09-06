@@ -91,7 +91,7 @@ export default function EconomyShop() {
         <div>
           <div style={{ fontSize: '13px', fontWeight: 'bold', marginBottom: '8px', color: 'var(--text-muted)' }}>
             <ClockIcon width={16} height={16} style={{ display: 'inline-block', verticalAlign: 'middle', marginRight: '4px' }} />
-            Аренда 24ч
+            {t('economy.rentals.title')}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             {rentalsConfig.map((r) => {
@@ -124,7 +124,7 @@ export default function EconomyShop() {
                     </div>
                   </div>
                   {isActive ? (
-                    <span style={{ fontSize: '12px', color: 'var(--success)' }}>Активно</span>
+                    <span style={{ fontSize: '12px', color: 'var(--success)' }}>{t('economy.status.active')}</span>
                   ) : (
                     <button
                       className="btn btn-compact btn-sm"
@@ -171,7 +171,7 @@ export default function EconomyShop() {
               fontSize: '13px',
               color: 'var(--success)',
             }}>
-              Pro активна • {formatSubRemaining(subscriptionExpiresAt, t)}
+              {t('economy.status.proActive')} • {formatSubRemaining(subscriptionExpiresAt, t)}
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
