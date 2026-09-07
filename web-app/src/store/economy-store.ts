@@ -105,6 +105,9 @@ interface EconomyState {
   // ── Хэш модели для кэшбэка ──
   lastExportHash: string | null
 
+  // ── Дата последнего сброса квестов (E7: независима от бонуса) ──
+  lastQuestResetDate: number | null
+
   // ── Для предотвращения дубликатов setData ──
   lastSavedData: string
 
@@ -114,6 +117,8 @@ interface EconomyState {
   // ── Actions ──
   addTokens(amount: number): void
   spendTokens(amount: number): boolean
+  /** E6: зафиксировать хэш экспортированной модели (через set, с persist) */
+  setExportHash(hash: string): void
 
   // ── Доход ──
   claimDailyBonus(): Promise<boolean>
@@ -257,6 +262,7 @@ export const useEconomyStore = create<EconomyState>()(
       todayQuests: [],
       questTriggers: {} as Record<QuestTrigger, number>,
       lastExportHash: null,
+      lastQuestResetDate: null, // E7: дата последнего сброса квестов
       lastSavedData: '' as string,
       pendingSync: false, // Y3.16: debounce для syncToCloud
       bannerVisible: false,
@@ -272,6 +278,11 @@ export const useEconomyStore = create<EconomyState>()(
         set((state) => ({ tokens: state.tokens - amount }))
         void get().syncToCloud()
         return true
+      },
+
+      // E6: хэш экспорта фиксируется через set() — попадает в persist/cloud
+      setExportHash: (hash) => {
+        set({ lastExportHash: hash })
       },
 
       // ── Ежедневный бонус: +50, 1 раз в день (§5 серверное время) ──
@@ -335,8 +346,18 @@ export const useEconomyStore = create<EconomyState>()(
       },
 
       // ── Реклама для баннера: 1 просмотр → скрыть баннер на 24ч (§3.2, §6.3) ──
-      // Независимо от лимитов рекламы за токены
+      // Независимо от лимитов рекламы за токены, но с общим кулдауном 5 мин
+      // между rewarded-просмотрами (E4: требование Яндекса — пауза между рекламой)
       watchAdForBanner: async () => {
+        const state = get()
+
+        // E4: общий кулдаун rewarded-рекламы (токен-реклама и баннер делят паузу)
+        const cooldownPassed = await isCooldownPassed(state.lastAdTimestamp, AD_COOLDOWN_MS)
+        if (!cooldownPassed) {
+          console.warn('[Economy] Banner ad cooldown not passed')
+          return { ok: false }
+        }
+
         const platform = getPlatform()
         if (!platform) {
           console.warn('[Economy] No platform for banner ad')
@@ -351,6 +372,7 @@ export const useEconomyStore = create<EconomyState>()(
 
         set((state) => ({
           rentals: { ...state.rentals, disableBanner: serverTime + ONE_DAY_MS },
+          lastAdTimestamp: serverTime, // E4: баннер-реклама тоже открывает кулдаун
         }))
         // ✅ Скрыть баннер после оплаты
         try {
@@ -531,12 +553,20 @@ export const useEconomyStore = create<EconomyState>()(
       },
 
       // ── Инициализация квестов на новый день (§5 серверное время) ──
+      // E7: день определяется по lastQuestResetDate (НЕ по lastDailyBonus —
+      // иначе у игрока, не берущего бонус, квесты пересоздавались бы при
+      // каждом запуске и прогресс терялся между сессиями)
       initDailyQuests: async () => {
         const state = get()
+        const dayPassed = state.lastQuestResetDate !== null
+          ? await isDayPassed(state.lastQuestResetDate)
+          : true
+
         if (state.todayQuests.length > 0) {
-          const passed = await isDayPassed(state.lastDailyBonus)
-          if (passed) {
+          if (dayPassed) {
             // День сменился — сбрасываем всё
+            const { getServerTime } = await import('../platform/server-time')
+            const serverTime = await getServerTime()
             set({
               todayQuests: generateDailyQuestsV2(),
               todayQuestsCompleted: [],
@@ -544,12 +574,15 @@ export const useEconomyStore = create<EconomyState>()(
               todayActions: 0,
               todayCashbacks: 0,
               questTriggers: {} as Record<QuestTrigger, number>,
+              lastQuestResetDate: serverTime,
             })
             console.log('[Economy] New day detected — quests and counters reset')
           }
           // Уже есть квесты и день не сменился — ничего не делаем
         } else {
           // Первый запуск — генерируем квесты
+          const { getServerTime } = await import('../platform/server-time')
+          const serverTime = await getServerTime()
           set({
             todayQuests: generateDailyQuestsV2(),
             todayQuestsCompleted: [],
@@ -557,6 +590,7 @@ export const useEconomyStore = create<EconomyState>()(
             todayActions: 0,
             todayCashbacks: 0,
             questTriggers: {} as Record<QuestTrigger, number>,
+            lastQuestResetDate: serverTime,
           })
         }
       },
@@ -682,6 +716,8 @@ export const useEconomyStore = create<EconomyState>()(
           if (data.todayActions) set({ todayActions: data.todayActions as number })
           if (data.todayCashbacks) set({ todayCashbacks: data.todayCashbacks as number })
           if (data.questTriggers) set({ questTriggers: data.questTriggers as Record<QuestTrigger, number> })
+          if (data.lastExportHash !== undefined) set({ lastExportHash: data.lastExportHash as string | null })
+          if (data.lastQuestResetDate) set({ lastQuestResetDate: data.lastQuestResetDate as number })
         } catch (error) {
           console.error('[Economy] Load from cloud failed:', error)
         }
@@ -712,6 +748,8 @@ export const useEconomyStore = create<EconomyState>()(
           todayActions: get().todayActions,
           todayCashbacks: get().todayCashbacks,
           questTriggers: get().questTriggers,
+          lastExportHash: get().lastExportHash,
+          lastQuestResetDate: get().lastQuestResetDate,
         }
 
         // Не сохраняем, если данные не изменились с последней синхронизации
@@ -752,6 +790,8 @@ export const useEconomyStore = create<EconomyState>()(
         todayActions: state.todayActions,
         todayCashbacks: state.todayCashbacks,
         questTriggers: state.questTriggers,
+        lastExportHash: state.lastExportHash, // E6
+        lastQuestResetDate: state.lastQuestResetDate, // E7
       }),
     }
   )

@@ -64,12 +64,12 @@ export default function LeftPanel({
   onJumpHistory: (index: number) => void;
 }) {
   const { t } = useTranslation();
-  const { tokens, hasActiveSubscription } = useEconomyStore(s => ({
+  // E1: доступ к 3D-тексту — подписка ИЛИ аренда text3d (бейдж скрывается
+  // при любом активном доступе, а не только при подписке)
+  const { tokens, textActive } = useEconomyStore(s => ({
     tokens: s.tokens,
-    hasActiveSubscription: s.hasActiveSubscription(),
+    textActive: s.hasActiveSubscription() || (s.rentals.text3d !== null && Date.now() < s.rentals.text3d),
   }));
-  const textActive = hasActiveSubscription;
-  const textLocked = !textActive && tokens < 75;
 
   // FIX (LOW-18-31): Remove useMemo — ALL_SHAPES has only 8 elements, memo overhead > benefit
   const filteredShapes = shapeSearch.trim()

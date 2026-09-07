@@ -1053,7 +1053,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const scan = scanForCashback(objects, operations)
       const cashback = useEconomyStore.getState().calculateAndClaimCashback(scan)
       if (cashback > 0) {
-        useEconomyStore.getState().lastExportHash = hash
+        // E6: через action (set) — попадает в persist и облако
+        useEconomyStore.getState().setExportHash(hash)
       }
     }
 

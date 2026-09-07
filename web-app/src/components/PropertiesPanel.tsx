@@ -10,6 +10,7 @@ import { useEconomyStore, type QuestDifficulty, type RentalKey } from "../store/
 import { useUiStore } from "../store/ui-store";
 import { getPlatform } from "../platform";
 import { ECONOMY_UI, DIFFICULTY_ICON, ICON_REGISTRY } from "../store/economy-ui-config";
+import Badge from "./Badge";
 
 /** Форматировать оставшееся время аренды (ч м) */
 function formatRentalRemaining(expiresAt: number, t: any): string {
@@ -269,16 +270,8 @@ function EconomyPanel() {
                   }}
                 >
                   <TokenIcon width={10} height={10} /> {r.cost}
-                  {/* Y3.16: бейдж 💰 на кнопках аренды (§6.4) */}
-                  <span style={{
-                    position: 'absolute', bottom: '-2px', left: '-2px',
-                    background: '#fbbf24', color: '#78350f', fontSize: '8px',
-                    fontWeight: 700, borderRadius: '3px', padding: '1px 3px',
-                    boxShadow: '0 1px 2px rgba(0,0,0,0.3)',
-                    pointerEvents: 'none',
-                  }}>
-                    💎{r.cost}
-                  </span>
+                  {/* Бейдж 💰 → SVG-иконка (§6.4, без эмодзи) */}
+                  <Badge type="tokens" value={String(r.cost)} />
                 </button>
               )}
             </div>
@@ -313,16 +306,8 @@ function EconomyPanel() {
                 }}
               >
                 <TokenIcon width={10} height={10} /> {s.cost}
-                {/* Y3.16: бейдж 💰 на кнопках подписок (§6.4) */}
-                <span style={{
-                  position: 'absolute', bottom: '-2px', left: '-2px',
-                  background: '#fbbf24', color: '#78350f', fontSize: '8px',
-                  fontWeight: 700, borderRadius: '3px', padding: '1px 3px',
-                  boxShadow: '0 1px 2px rgba(0,0,0,0.3)',
-                  pointerEvents: 'none',
-                }}>
-                  💎{s.cost}
-                </span>
+                {/* Бейдж 💰 → SVG-иконка (§6.4, без эмодзи) */}
+                <Badge type="tokens" value={String(s.cost)} />
               </button>
             ))}
           </div>
@@ -353,16 +338,8 @@ function EconomyPanel() {
           }}
         >
           <TokenIcon width={10} height={10} /> 50
-          {/* Y3.16: бейдж 💰50 (§6.4) */}
-          <span style={{
-            position: 'absolute', bottom: '-2px', left: '-2px',
-            background: '#fbbf24', color: '#78350f', fontSize: '8px',
-            fontWeight: 700, borderRadius: '3px', padding: '1px 3px',
-            boxShadow: '0 1px 2px rgba(0,0,0,0.3)',
-            pointerEvents: 'none',
-          }}>
-            💎50
-          </span>
+          {/* Бейдж 💰50 → SVG-иконка (§6.4, без эмодзи) */}
+          <Badge type="tokens" value="50" />
         </button>
         <button
           className="btn btn-compact btn-sm"
@@ -374,16 +351,8 @@ function EconomyPanel() {
           }}
         >
           <AdFilmIcon width={10} height={10} /> 1
-          {/* Y3.16: бейдж 📺1 (§6.4) */}
-          <span style={{
-            position: 'absolute', bottom: '-2px', right: '-2px',
-            background: '#8b5cf6', color: '#ffffff', fontSize: '8px',
-            fontWeight: 700, borderRadius: '3px', padding: '1px 3px',
-            boxShadow: '0 1px 2px rgba(0,0,0,0.3)',
-            pointerEvents: 'none',
-          }}>
-            📺1
-          </span>
+          {/* Бейдж 📺1 → SVG-иконка (§6.4, без эмодзи) */}
+          <Badge type="ad" value="1" />
         </button>
       </div>
     </div>
@@ -674,20 +643,8 @@ export default function PropertiesPanel({
             {!canUseExtendedPicker && (
               <>
                 <span style={{ marginLeft: '4px', fontSize: '10px', color: 'var(--warning)' }}>{t('economy.palette.locked', { price: 75 })}</span>
-                {/* Y3.16: бейдж 💰75 на кнопке палитры (§6.4) */}
-                <span style={{
-                  position: 'absolute', bottom: '-2px', left: '-2px',
-                  background: '#fbbf24', color: '#78350f', fontSize: '11px',
-                  fontWeight: 700, borderRadius: '4px', padding: '2px 5px',
-                  display: 'flex', alignItems: 'center', gap: '2px',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
-                  minWidth: '18px', minHeight: '14px', justifyContent: 'center',
-                  pointerEvents: 'none',
-                }}>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '1px' }}>
-                    💎 <span style={{ fontSize: '9px' }}>75</span>
-                  </span>
-                </span>
+                {/* Бейдж 💰75 → SVG-иконка (§6.4, без эмодзи) */}
+                <Badge type="tokens" value="75" />
               </>
             )}
           </button>

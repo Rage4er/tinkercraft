@@ -1,6 +1,6 @@
 // src/components/ImportModal.tsx — Модалка выбора способа оплаты импорта STL
 // §3.1 ECONOMY.md v2.0: Импорт STL — 100 TC ИЛИ 2 просмотра рекламы
-import { useCallback, useState, useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useEconomyStore } from '../store/economy-store'
 import { ECONOMY_COSTS } from '../store/economy-config'
@@ -24,11 +24,19 @@ export default function ImportModal({
   const importCost = ECONOMY_COSTS.importSTL
   const adCost = 2
 
-  // Если есть подписка — импорт сразу
-  if (hasActiveSub) {
-    onImport()
-    return null
-  }
+  // E3: bypass подписки — через useEffect, НЕ в render-фазе
+  // (side-effect в теле компонента вызывался дважды в StrictMode)
+  const subBypassDone = useRef(false)
+  useEffect(() => {
+    if (hasActiveSub && !subBypassDone.current) {
+      subBypassDone.current = true
+      onClose()
+      onImport()
+    }
+  }, [hasActiveSub, onClose, onImport])
+
+  // Подписка активна — модалка не нужна (bypass обрабатывается в useEffect)
+  if (hasActiveSub) return null
 
   const handlePayTokens = useCallback(async () => {
     if (busy) return

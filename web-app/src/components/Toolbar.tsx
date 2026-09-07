@@ -114,25 +114,18 @@ export default function Toolbar({
   const { t } = useTranslation();
 
   // Экономика: бейджи на кнопках (§6.4)
-  const tokens = useEconomyStore((s) => s.tokens)
+  // Реактивные селекторы — бейджи обновляются при покупке подписки/аренды
+  const hasActiveSub = useEconomyStore((s) => s.hasActiveSubscription())
+  const hasActiveRentalText3d = useEconomyStore((s) => s.hasRental('text3d'))
 
-  // Проверка: нужен ли бейдж на экспорте
-  const state = useEconomyStore.getState()
-  const hasActiveSub = state.hasActiveSubscription()
-  const hasActiveRentalText3d = state.hasRental('text3d')
-  const hasActiveRentalPalette = state.hasRental('extendedPalette')
-
-  // Экспорт: бейдж если нет подписки (аренда текста не влияет)
+  // Экспорт/импорт: бейджи скрываются при активной подписке.
+  // E2: мёртвые exportLocked/importLocked/textLocked удалены — блокировка
+  // оплаты выполняется в модалках (ExportModal/ImportModal показывают причину)
   const exportActive = hasActiveSub
-  const exportLocked = !hasActiveSub && tokens < 50
-
-  // Импорт: бейдж только с подпиской (аренды для импорта нет)
   const importActive = hasActiveSub
-  const importLocked = !hasActiveSub && tokens < 100
 
   // Текст 3D: аренда 75 TC
   const textActive = hasActiveSub || hasActiveRentalText3d
-  const textLocked = !textActive && tokens < 75
 
   // Определяем группы для алгоритма
   const groups: ToolbarGroup[] = [

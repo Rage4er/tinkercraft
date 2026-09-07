@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useEconomyStore } from '../store/economy-store'
 import Section from './Section'
+import Badge from './Badge'
 import { TokenIcon, CrownIcon, ClockIcon, AdFilmIcon, TextIcon, ColorIcon } from './icons'
 
 /** Форматировать оставшееся время аренды */
@@ -137,17 +138,8 @@ export default function EconomyShop() {
                       }}
                     >
                       <TokenIcon width={14} height={14} /> {r.cost}
-                      {/* Y3.16: бейдж 💰 на кнопках аренды (§6.4) */}
-                      <span style={{
-                        position: 'absolute', bottom: '-2px', left: '-2px',
-                        background: '#fbbf24', color: '#78350f', fontSize: '10px',
-                        fontWeight: 700, borderRadius: '4px', padding: '2px 5px',
-                        boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
-                        minWidth: '18px', minHeight: '14px', justifyContent: 'center',
-                        pointerEvents: 'none',
-                      }}>
-                        💎{r.cost}
-                      </span>
+                      {/* Бейдж 💰 → SVG-иконка (§6.4, без эмодзи) */}
+                      <Badge type="tokens" value={String(r.cost)} />
                     </button>
                   )}
                 </div>
@@ -203,17 +195,8 @@ export default function EconomyShop() {
                     }}
                   >
                     <TokenIcon width={14} height={14} /> {s.cost}
-                    {/* Y3.16: бейдж 💰 на кнопках подписок (§6.4) */}
-                    <span style={{
-                      position: 'absolute', bottom: '-2px', left: '-2px',
-                      background: '#fbbf24', color: '#78350f', fontSize: '10px',
-                      fontWeight: 700, borderRadius: '4px', padding: '2px 5px',
-                      boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
-                      minWidth: '18px', minHeight: '14px', justifyContent: 'center',
-                      pointerEvents: 'none',
-                    }}>
-                      💎{s.cost}
-                    </span>
+                    {/* Бейдж 💰 → SVG-иконка (§6.4, без эмодзи) */}
+                    <Badge type="tokens" value={String(s.cost)} />
                   </button>
                 </div>
               ))}
@@ -247,17 +230,8 @@ export default function EconomyShop() {
               }}
             >
               <TokenIcon width={12} height={12} /> 50
-              {/* Y3.16: бейдж 💰50 (§6.4) */}
-              <span style={{
-                position: 'absolute', bottom: '-2px', left: '-2px',
-                background: '#fbbf24', color: '#78350f', fontSize: '9px',
-                fontWeight: 700, borderRadius: '4px', padding: '2px 5px',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
-                minWidth: '18px', minHeight: '14px', justifyContent: 'center',
-                pointerEvents: 'none',
-              }}>
-                💎50
-              </span>
+              {/* Бейдж 💰50 → SVG-иконка (§6.4, без эмодзи) */}
+              <Badge type="tokens" value="50" />
             </button>
             <button
               className="btn btn-compact btn-sm"
@@ -270,17 +244,8 @@ export default function EconomyShop() {
               }}
             >
               <AdFilmIcon width={12} height={12} /> 1
-              {/* Y3.16: бейдж 📺1 (§6.4) */}
-              <span style={{
-                position: 'absolute', bottom: '-2px', right: '-2px',
-                background: '#8b5cf6', color: '#ffffff', fontSize: '9px',
-                fontWeight: 700, borderRadius: '4px', padding: '2px 5px',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
-                minWidth: '18px', minHeight: '14px', justifyContent: 'center',
-                pointerEvents: 'none',
-              }}>
-                📺1
-              </span>
+              {/* Бейдж 📺1 → SVG-иконка (§6.4, без эмодзи) */}
+              <Badge type="ad" value="1" />
             </button>
           </div>
         </div>
