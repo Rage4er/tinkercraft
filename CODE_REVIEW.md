@@ -29,6 +29,40 @@
 
 ---
 
+## 🔍 Ревью цепочки загрузки Yandex SDK (2026-09-07)
+
+**Симптом:** SDK загружается, стартовая реклама и баннер отображаются, но игра не запускается.
+
+| # | Приоритет | Проблема | Статус |
+|---|-----------|----------|--------|
+| 1 | 🔴 КРИТИЧНО | SDK-dev-proxy во всех тест-скриптах указывал на порт **5173**, а Vite слушает **5000** (`vite.config.ts`). Прокси показывает свой SDK-мок (реклама + баннер), но iframe игры грузится с мёртвого порта → игра не стартует | ✅ ИСПРАВЛЕНО (`package.json`, `start-dev.bat`, `start-prod.sh`) |
+| 2 | 🔴 КРИТИЧНО | `main.tsx` блокирует рендер React на `await initSdk()`, а `YaGames.init()` не имел таймаута — зависший init (postMessage/timing в iframe) = игра никогда не стартует | ✅ ИСПРАВЛЕНО — таймаут 10с через `Promise.race` (`platform/sdk.ts`) |
+| 3 | 🟡 СРЕДНЕ | `GameplayAPI.start()` не вызывался при старте: effect модалок срабатывает раньше, чем `initPlatform()` резолвится (`getPlatform()` === null) | ✅ ИСПРАВЛЕНО — вызов после `initPlatform()` в bootstrap-effect (`App.tsx`) |
+| 4 | 🟡 СРЕДНЕ | Cleanup `clearInterval(syncInterval)` возвращался из async `bootstrap()` и терялся — интервал syncToCloud не очищался при unmount (утечка, дубль в StrictMode) | ✅ ИСПРАВЛЕНО (`App.tsx`) |
+
+### Рекомендации из ревью — все реализованы (2026-09-07)
+
+| # | Приоритет | Рекомендация | Статус |
+|---|-----------|--------------|--------|
+| R1 | 🟡 СРЕДНЕ | Рендер не должен блокироваться SDK: `main.tsx` ждал `await initSdk()` до `createRoot()` (худший случай — чёрный экран 15с) | ✅ ИСПРАВЛЕНО — i18n по языку браузера → рендер сразу → SDK параллельно; язык из SDK через `applySdkLanguage()`/`i18n.changeLanguage()` (`main.tsx`, `i18n/init.ts`) |
+| R2 | 🟡 СРЕДНЕ | `EconomyOnboarding` вызывал `platform.loadData()` на монтировании вне RAF — postMessage-гонка (паттерн error #185) | ✅ ИСПРАВЛЕНО — ждёт `initPlatform()` (идемпотентен) перед `loadData()`, флаг `cancelled` при unmount (`components/EconomyOnboarding.tsx`) |
+| R3 | 🟡 СРЕДНЕ | `LoadingAPI.ready()` вызывался до готовности CSG-воркера — противоречие чек-листу A.1 («нет экранов загрузки» в момент Game Ready) | ✅ ИСПРАВЛЕНО — новый `IPlatform.loadingReady()`, вызов из App.tsx при `workerOk`, fallback-таймер 15с в `yandex.ts` (`platform/types.ts`, `platform/yandex.ts`, `platform/clean.ts`, `App.tsx`) |
+| R4 | 🟡 СРЕДНЕ | `getPlayer()` в `yandex.ts init()` без таймаута — зависший getPlayer блокировал init() и загрузку экономики | ✅ ИСПРАВЛЕНО — `Promise.race` с таймаутом 5с → guest mode (`platform/yandex.ts`) |
+
+### Текущий порядок загрузки (после исправлений)
+
+```
+1. i18n (язык браузера, мгновенно)          — main.tsx
+2. React render (НЕ ждёт SDK)               — main.tsx
+3. initSdk() параллельно (таймаут 10с)      — platform/sdk.ts
+   ├─ applySdkLanguage() — язык из SDK      — i18n/init.ts
+   └─ initPlatform() → RAF: banner, getPlayer (таймаут 5с) — platform/yandex.ts
+4. App.tsx bootstrap: initPlatform() → GameplayAPI.start() → economy load
+5. CSG-воркер готов (workerOk) → LoadingAPI.ready() (fallback 15с)
+```
+
+---
+
 ## 📌 Будущие направления
 
 Следующие направления для будущих итераций (не являются активными проблемами):

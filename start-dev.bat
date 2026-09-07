@@ -8,7 +8,7 @@ echo "════════════════════════�
 echo "  TinkerCraft — Yandex SDK (Dev-режим)"
 echo "═══════════════════════════════════════════"
 echo ""
-echo "  1. Запускаю Vite (порт 5173)..."
+echo "  1. Запускаю Vite (порт 5000)..."
 echo "  2. Запускаю Yandex SDK Proxy (порт 8080)..."
 echo ""
 echo "  Браузер откроется автоматически."
@@ -21,4 +21,4 @@ concurrently ^
   -n "VITE,PROXY" ^
   -c "bgBlue.bold,bgMagenta.bold" ^
   "pnpm dev:yandex" ^
-  "npx @yandex-games/sdk-dev-proxy -h http://localhost:5173 --dev-mode=true"
+  "npx @yandex-games/sdk-dev-proxy -h http://localhost:5000 --dev-mode=true"

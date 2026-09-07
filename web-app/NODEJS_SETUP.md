@@ -10,10 +10,16 @@ TinkerCraft Web — фронтенд-приложение на React + TypeScrip
 
 | Компонент | Версия | Статус |
 |-----------|--------|--------|
-| **Node.js** | v24.11.0 | ✅ Установлен |
+| **Node.js** | v24.19.0 (Windows, winget) / v24.11.0 (Linux-сервер) | ✅ Установлен |
 | **pnpm** | 11.13.1 | ✅ Установлен |
-| **npm** | 11.6.1 | ✅ Установлен (fallback) |
+| **npm** | 11.17.0 (Windows) / 11.6.1 (Linux) | ✅ Установлен (fallback) |
 | **TypeScript** | 5.9.3 | ✅ Установлен |
+
+### Windows-специфика
+
+- **Скрипты `dev:yandex`/`build:yandex`** используют `cross-env` — bash-синтаксис `VITE_PLATFORM=yandex ...` в cmd/PowerShell не работает
+- **pnpm** доступен как `pnpm.cmd` (`%APPDATA%\npm\pnpm.cmd`); `pnpm.ps1` может блокироваться ExecutionPolicy
+- **Проверено:** `pnpm typecheck` (0 ошибок), `pnpm test` (236/236), `pnpm build`, `pnpm build:yandex` — все прошли на Windows (2026-09-07)
 
 ---
 
@@ -152,6 +158,8 @@ pnpm dev          # порт 5000
 | 2025-08-01 | Документация создана — фактическое состояние проверено |
 | 2026-08-24 | Добавлена секция «Сборка для Яндекс Игр» — создание ZIP-архива |
 | 2026-08-24 | Эмодзи заменены на SVG-иконки в едином stroke-стиле |
+| 2026-09-07 | Чек-лист SDK обновлён: `LoadingAPI.ready()` после готовности CSG-воркера; рендер не блокируется SDK |
+| 2026-09-07 | Node.js v24.19.0 установлен на Windows (winget); `dev:yandex`/`build:yandex` переведены на cross-env; полный verify прошёл на Windows |
 
 ---
 
@@ -205,7 +213,7 @@ grep "sdk.js" dist-yandex/index.html
 | SDK загружен синхронно через `<script src="/sdk.js">` | ✅ |
 | SDK подключён ДО app code | ✅ |
 | `YaGames.init()` вызывается в `sdk.ts` | ✅ |
-| `LoadingAPI.ready()` вызывается после init | ✅ |
+| `LoadingAPI.ready()` вызывается после init + готовности CSG-воркера (`workerOk`) | ✅ |
 | `GameplayAPI.start()` вызывается после init | ✅ |
 | Реклама вызывается ТОЛЬКО через `ysdk.adv.*` | ✅ |
 | `stopGameplay()` при открытии рекламы | ✅ |

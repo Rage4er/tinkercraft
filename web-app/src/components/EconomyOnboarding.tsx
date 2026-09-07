@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useEconomyStore } from '../store/economy-store'
-import { getPlatform } from '../platform'
+import { getPlatform, initPlatform } from '../platform'
 import { TokenIcon, PackageIcon } from './icons'
 
 const STEPS = [
@@ -37,23 +37,34 @@ export default function EconomyOnboarding() {
 
   // Проверяем, показывали ли онбординг ранее
   useEffect(() => {
-    const platform = getPlatform()
-    if (!platform) return
+    let cancelled = false
 
     // Проверяем флаг в облаке
     const checkOnboarding = async () => {
+      // ⚠️ Ждём initPlatform() (идемпотентен) — loadData() вызывает
+      // postMessage в iframe Yandex, который ДО завершения RAF-инициализации
+      // платформы ломал React (error #185, см. историю коммитов)
+      await initPlatform().catch(() => false)
+      if (cancelled) return
+
+      // ok=false допустим (clean-режим — loadData читает localStorage, безопасно)
+      const platform = getPlatform()
+      if (!platform) return
+
       try {
         const data = await platform.loadData()
+        if (cancelled) return
         if (data.onboardingDone) {
           return // Уже показывали
         }
       } catch {
         // Если ошибка — показываем онбординг
       }
-      setVisible(true)
+      if (!cancelled) setVisible(true)
     }
 
     checkOnboarding()
+    return () => { cancelled = true }
   }, [])
 
   const handleNext = () => {

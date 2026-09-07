@@ -8,6 +8,11 @@ export const platform: IPlatform = {
     return false
   },
 
+  /** Clean-версия: нет LoadingAPI — no-op */
+  loadingReady() {
+    // no-op
+  },
+
   async showFullscreenAd() {
     return false
   },

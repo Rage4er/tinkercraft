@@ -103,3 +103,30 @@ export async function initI18n(): Promise<typeof i18n> {
   console.log(`[i18n] Initialized with lang="${lang}"`)
   return i18n
 }
+
+/**
+ * Применить язык из Yandex SDK ПОСЛЕ инициализации i18n.
+ * Вызывается из main.tsx сразу после initSdk() — рендер React к этому
+ * моменту уже выполнен (не блокируется SDK), поэтому смена языка
+ * происходит до первого взаимодействия игрока (п. 2.14).
+ */
+export function applySdkLanguage(): void {
+  const ysdk = getSdk()
+  if (!ysdk?.environment?.i18n?.lang) return
+
+  const raw = ysdk.environment.i18n.lang
+  const lang = normalizeLang(raw)
+  if (!lang) return
+
+  if (i18n.language === lang) {
+    console.log(`[i18n] [SDK] language already "${lang}", no change`)
+    return
+  }
+
+  console.log(`[i18n] [SDK] switching language: "${i18n.language}" → "${lang}" (from i18n.lang="${raw}")`)
+  void i18n.changeLanguage(lang)
+
+  // Обновить title на новом языке
+  const name = i18n.t('app.name')
+  document.title = `TC — ${name}`
+}

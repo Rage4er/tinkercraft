@@ -8,6 +8,11 @@ export interface IPlatform {
   // Инициализация
   init(): Promise<boolean>
 
+  // LoadingAPI.ready() — сообщить платформе, что игра загрузилась (§1.2 SDK).
+  // Вызывается ПОСЛЕ полной готовности вьюпорта (CSG-воркер готов),
+  // с внутренним fallback-таймером на случай зависшей загрузки.
+  loadingReady(): void
+
   // Реклама
   showFullscreenAd(): Promise<boolean>
   showRewardedVideo(): Promise<boolean>

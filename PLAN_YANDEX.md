@@ -1005,13 +1005,13 @@ pnpm build:yandex
 ```bash
 cd web-app
 pnpm dev:yandex
-# Сервер на http://localhost:5173
+# Сервер на http://localhost:5000 (см. server.port в vite.config.ts)
 ```
 
 #### Шаг 2: Запуск прокси Яндекса
 
 ```bash
-npx @yandex-games/sdk-dev-proxy -h http://localhost:5173 --dev-mode=true
+npx @yandex-games/sdk-dev-proxy -h http://localhost:5000 --dev-mode=true
 # Откроет браузер на http://localhost:8080
 ```
 

@@ -11,6 +11,9 @@ let _ysdk: SDK | null = null
 let _initPromise: Promise<SDK | null> | null = null
 let _waitForSdk: Promise<void> | null = null
 
+/** Таймаут YaGames.init() — зависший init не должен блокировать запуск игры */
+const INIT_TIMEOUT_MS = 10_000
+
 /**
  * Дождаться загрузки SDK в DOM (если ещё не загружен).
  * SDK загружается синхронно через <script src="/sdk.js"> в index.html.
@@ -70,14 +73,24 @@ export function initSdk(): Promise<SDK | null> {
     await new Promise((resolve) => setTimeout(resolve, 200))
 
     try {
-      const ysdk = await (window as any).YaGames.init()
+      // ⚠️ Защита от зависшего init(): если YaGames.init() не резолвится
+      // (postMessage/timing проблемы в iframe Yandex), игра всё равно
+      // запустится в clean-режиме через INIT_TIMEOUT_MS.
+      const ysdk = await Promise.race([
+        (window as any).YaGames.init(),
+        new Promise<null>((resolve) => setTimeout(() => {
+          console.warn(`[SDK] YaGames.init() timeout (${INIT_TIMEOUT_MS}ms) — continuing without SDK`)
+          resolve(null)
+        }, INIT_TIMEOUT_MS)),
+      ])
+      if (!ysdk) return null
       _ysdk = ysdk
       console.log('[SDK] YaGames.init() OK')
       console.log('[SDK] environment:', JSON.stringify(ysdk?.environment))
       console.log('[SDK] i18n.lang:', ysdk?.environment?.i18n?.lang)
 
-      // ⚠️ LoadingAPI.ready() вызывается в yandex.ts внутри requestAnimationFrame
-      // чтобы избежать React error #185 (postMessage в iframe Yandex)
+      // ⚠️ LoadingAPI.ready() вызывается из App.tsx (loadingReady()) когда
+      // CSG-воркер готов — НЕ здесь и НЕ внутри RAF (§A.1 чек-листа)
 
       // ⚠️ НЕ вызываем GameplayAPI.start() здесь — это ломает React-обёртку
       // платформы Yandex (error #185). Start вызывается в App.tsx через

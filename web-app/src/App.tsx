@@ -197,15 +197,24 @@ export default function App() {
   const economyInitialized = useRef(false)
 
   useEffect(() => {
+    let disposed = false
+    let syncInterval: ReturnType<typeof setInterval> | null = null
     const bootstrap = async () => {
       // 1. Инициализируем платформу (включает RAF-вызовы SDK)
       const ok = await initPlatform().catch((err) => {
         console.error('[App] Platform init failed:', err)
         return false
       })
+      if (disposed) return
       if (!ok) {
         console.warn('[App] Platform init returned false — running in clean mode')
       }
+
+      // 1.5 GameplayAPI.start() — ПОСЛЕ init платформы. Эффект с зависимостями
+      // от модалок срабатывает на монтировании раньше, чем initPlatform()
+      // резолвится (getPlatform() ещё null), поэтому старт сессии геймплея
+      // вызываем здесь (требование модерации Yandex).
+      getPlatform()?.startGameplay()
 
       // 2. Только ПОСЛЕ platform.init() загружаем экономику
       if (!economyInitialized.current) {
@@ -217,16 +226,21 @@ export default function App() {
         } catch (e) {
           console.error('[App] Economy init failed:', e)
         }
+        if (disposed) return
 
         // Периодическая синхронизация экономики (каждые 30 сек)
-        const syncInterval = setInterval(() => {
+        syncInterval = setInterval(() => {
           void useEconomyStore.getState().syncToCloud()
         }, 30000)
-
-        return () => clearInterval(syncInterval)
       }
     }
     bootstrap()
+    // Cleanup: интервал синхронизации обязан очищаться при unmount
+    // (раньше cleanup возвращался из async bootstrap() и терялся — утечка)
+    return () => {
+      disposed = true
+      if (syncInterval) clearInterval(syncInterval)
+    }
   }, [])
 
   // ── Триггеры квестов V2 — оценка по состоянию проекта ──
@@ -269,6 +283,15 @@ export default function App() {
       m.workerClearAll().catch(() => { }),
     );
     return () => clearInterval(iv);
+  }, [workerOk]);
+
+  // ── LoadingAPI.ready() — ПОСЛЕ полной готовности вьюпорта (§A.1 чек-листа) ──
+  // Игра готова к взаимодействию, когда CSG-воркер поднялся и экран
+  // "Загрузка CSG (WASM)…" исчез. В yandex.ts есть fallback-таймер 15с
+  // на случай, если воркер так и не поднялся.
+  useEffect(() => {
+    if (!workerOk) return
+    getPlatform()?.loadingReady()
   }, [workerOk]);
 
 

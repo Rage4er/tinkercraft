@@ -24,7 +24,7 @@ sleep 3
 echo "  Запускаю Yandex SDK Proxy..."
 
 # Запускаю прокси, ловлю ссылку
-PROXY_OUTPUT=$(npx @yandex-games/sdk-dev-proxy -h http://localhost:5173 --dev-mode=true 2>&1 &)
+PROXY_OUTPUT=$(npx @yandex-games/sdk-dev-proxy -h http://localhost:5000 --dev-mode=true 2>&1 &)
 sleep 2
 
 echo ""

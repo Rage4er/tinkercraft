@@ -13,6 +13,13 @@ class YandexPlatform implements IPlatform {
   private player: Player | null = null
   private initialized = false
   private initError: string | null = null
+  private readyCalled = false
+
+  /** Таймаут getPlayer() — зависший getPlayer не должен блокировать init() */
+  private static readonly GET_PLAYER_TIMEOUT_MS = 5_000
+
+  /** Fallback: LoadingAPI.ready() не позже этого срока, даже если воркер не готов */
+  private static readonly READY_FALLBACK_MS = 15_000
 
   async init(): Promise<boolean> {
     if (this.initialized) return this.ysdk !== null
@@ -38,10 +45,16 @@ class YandexPlatform implements IPlatform {
         requestAnimationFrame(() => {
           (async () => {
             try {
-              // LoadingAPI.ready() — обязательно для модерации (§1.2 SDK)
-              if (ysdk?.features?.LoadingAPI?.ready) {
-                ysdk.features.LoadingAPI.ready()
-              }
+              // ⚠️ LoadingAPI.ready() больше НЕ вызывается здесь — игра ещё
+              // грузит CSG-воркер (экран "Загрузка CSG (WASM)…"). Вызов перенесён
+              // в loadingReady() (App.tsx по факту готовности воркера, §A.1).
+              // Fallback-таймер гарантирует ready() даже при сбое воркера.
+              setTimeout(() => {
+                if (!this.readyCalled) {
+                  console.warn(`[Yandex] LoadingAPI.ready() fallback (${YandexPlatform.READY_FALLBACK_MS}ms) — worker not confirmed ready`)
+                  this.loadingReady()
+                }
+              }, YandexPlatform.READY_FALLBACK_MS)
 
               // Инициализируем sticky banner (правый верхний угол)
               try {
@@ -53,9 +66,16 @@ class YandexPlatform implements IPlatform {
                 console.log('[Yandex] Banner not available (may be dashboard-controlled):', e)
               }
 
-              // Пробуем получить игрока
+              // Пробуем получить игрока (с таймаутом — зависший getPlayer
+              // не должен блокировать init() и загрузку экономики)
               try {
-                this.player = await ysdk.getPlayer()
+                this.player = await Promise.race([
+                  ysdk.getPlayer(),
+                  new Promise<null>((resolve) => setTimeout(() => {
+                    console.warn(`[Yandex] getPlayer() timeout (${YandexPlatform.GET_PLAYER_TIMEOUT_MS}ms) — guest mode`)
+                    resolve(null)
+                  }, YandexPlatform.GET_PLAYER_TIMEOUT_MS)),
+                ])
                 console.log('[Yandex] Player loaded, authorized:', this.player?.isAuthorized?.())
               } catch {
                 console.warn('[Yandex] Player not authorized yet, guest mode')
@@ -77,6 +97,23 @@ class YandexPlatform implements IPlatform {
       this.initialized = true
       console.error('[Yandex] SDK init error:', e)
       return false
+    }
+  }
+
+  /**
+   * Сообщить платформе, что игра загрузилась (§1.2 SDK).
+   * Вызывается из App.tsx когда CSG-воркер готов (workerOk === true).
+   * Вызывается ОДИН РАЗ; повторные вызовы игнорируются.
+   */
+  loadingReady(): void {
+    if (this.readyCalled) return
+    if (!this.ysdk?.features?.LoadingAPI?.ready) return
+    this.readyCalled = true
+    try {
+      this.ysdk.features.LoadingAPI.ready()
+      console.log('[Yandex] LoadingAPI.ready() sent')
+    } catch (e) {
+      console.error('[Yandex] LoadingAPI.ready() error:', e)
     }
   }
 
@@ -334,6 +371,7 @@ class YandexPlatform implements IPlatform {
     this.player = null
     this.initialized = false
     this.initError = null
+    this.readyCalled = false
     this._serverTimeCache = null
     this._serverTimeCacheTime = 0
   }

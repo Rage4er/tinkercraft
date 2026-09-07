@@ -25,7 +25,7 @@ sleep 3
 echo "  Запускаю Yandex SDK Proxy..."
 
 # Запускаю прокси в фоне
-npx @yandex-games/sdk-dev-proxy -h http://localhost:5173 --app-id=572445 2>&1 &
+npx @yandex-games/sdk-dev-proxy -h http://localhost:5000 --app-id=572445 2>&1 &
 
 sleep 2
 
