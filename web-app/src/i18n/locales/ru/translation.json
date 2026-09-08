@@ -143,7 +143,10 @@
     },
     "adNotAvailable": "Лимит рекламы на сегодня",
     "notEnoughTokens": "Не хватает {{n}} токенов",
-    "adNotRentable": "Рекламой не открывается"
+    "adNotRentable": "Рекламой не открывается",
+    "bonusCooldown": "До {{time}}",
+    "bonusClaimed": "Уже получено",
+    "adLimitReached": "Лимит рекламы"
   },
   "import": {
     "title": "Импорт STL",

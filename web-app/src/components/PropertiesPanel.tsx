@@ -146,25 +146,31 @@ function EconomyPanel() {
 
   const bonusSection = (
     <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-      {ECONOMY_UI.showDailyBonus && canClaimBonus && (
-        <button className="btn btn-compact btn-sm" onClick={claimDailyBonus} disabled={!!busy}
-          title={t('economy.tooltip.bonus')}>
-          {renderIcon('gift', 14, 14)} {t('economy.bonusLabel')}
-        </button>
+      {ECONOMY_UI.showDailyBonus && (
+        canClaimBonus ? (
+          <button className="btn btn-compact btn-sm" onClick={claimDailyBonus} disabled={!!busy}
+            title={t('economy.tooltip.bonus')}>
+            {renderIcon('gift', 14, 14)} {t('economy.bonusLabel')}
+          </button>
+        ) : (
+          <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <ClockIcon width={12} height={12} /> {t('economy.bonusClaimed')}
+          </span>
+        )
       )}
-      {ECONOMY_UI.showAdButton && canWatchAd && (
-        <button className="btn btn-compact btn-sm" onClick={watchAdForTokens} disabled={!!busy}
-          title={t('economy.tooltip.ad')}>
-          {renderIcon('ad', 14, 14)} {t('economy.adLabel')}
-        </button>
-      )}
-      {ECONOMY_UI.showAdButton && todayAdsWatched < 3 && cooldownMs > 0 && (
-        <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-          <ClockIcon width={12} height={12} /> {formatCooldown(cooldownMs)}
-        </span>
-      )}
-      {ECONOMY_UI.showAdButton && todayAdsWatched >= 3 && cooldownMs === 0 && (
-        <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{t('economy.tooltip.adLimit')}</span>
+      {ECONOMY_UI.showAdButton && (
+        canWatchAd ? (
+          <button className="btn btn-compact btn-sm" onClick={watchAdForTokens} disabled={!!busy}
+            title={t('economy.tooltip.ad')}>
+            {renderIcon('ad', 14, 14)} {t('economy.adLabel')}
+          </button>
+        ) : cooldownMs > 0 ? (
+          <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <ClockIcon width={12} height={12} /> {formatCooldown(cooldownMs)}
+          </span>
+        ) : (
+          <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{t('economy.adLimitReached')}</span>
+        )
       )}
     </div>
   )

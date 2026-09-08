@@ -35,6 +35,7 @@ export default function EconomyMiniHUD() {
     bonusAvailable = Date.now() - lastDailyBonus > 24 * 60 * 60 * 1000
   }
 
+  // EC17: показываем состояние вместо скрытия
   return (
     <div style={{
       display: 'flex',
@@ -52,27 +53,29 @@ export default function EconomyMiniHUD() {
         <strong>{tokens}</strong>
       </div>
 
-      {/* Бонус */}
-      {ECONOMY_UI.showDailyBonus && bonusAvailable && (
+      {/* Бонус — всегда показываем состояние */}
+      {ECONOMY_UI.showDailyBonus && (
         <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
           <GiftIcon width={14} height={14} />
-          <span style={{ color: 'var(--success)' }}>+50</span>
+          {bonusAvailable ? (
+            <span style={{ color: 'var(--success)' }}>+50</span>
+          ) : (
+            <span style={{ color: 'var(--text-muted)' }}>—</span>
+          )}
         </div>
       )}
 
-      {/* Реклама */}
+      {/* Реклама — всегда показываем состояние */}
       {ECONOMY_UI.showAdButton && (
         <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
           <AdFilmIcon width={14} height={14} />
-          <span style={{ color: canWatchAd ? 'var(--text-primary)' : 'var(--text-muted)' }}>
-            {todayAdsWatched}/3
-          </span>
-          {!canWatchAd && cooldownMs > 0 && (
+          {canWatchAd ? (
+            <span>{todayAdsWatched}/3</span>
+          ) : cooldownMs > 0 ? (
             <span style={{ display: 'flex', alignItems: 'center', gap: '2px', color: 'var(--text-muted)' }}>
               <ClockIcon width={10} height={10} /> {formatCooldown(cooldownMs)}
             </span>
-          )}
-          {!canWatchAd && cooldownMs === 0 && (
+          ) : (
             <span style={{ color: 'var(--text-muted)' }}>—</span>
           )}
         </div>

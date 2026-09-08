@@ -143,7 +143,10 @@
     },
     "adNotAvailable": "Ad limit reached today",
     "notEnoughTokens": "Not enough tokens",
-    "adNotRentable": "Not available with ads"
+    "adNotRentable": "Not available with ads",
+    "bonusCooldown": "Until {{time}}",
+    "bonusClaimed": "Already claimed",
+    "adLimitReached": "Ad limit reached"
   },
   "import": {
     "title": "Import STL",
