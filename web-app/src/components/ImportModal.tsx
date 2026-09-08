@@ -1,9 +1,10 @@
 // src/components/ImportModal.tsx — Модалка выбора способа оплаты импорта STL
 // §3.1 ECONOMY.md v2.0: Импорт STL — 100 TC ИЛИ 2 просмотра рекламы
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useEconomyStore } from '../store/economy-store'
 import { ECONOMY_COSTS } from '../store/economy-config'
+import { notify } from '../store/notifications'
 import { ImportIcon, TokenIcon, AdFilmIcon } from './icons'
 
 export default function ImportModal({
@@ -31,9 +32,9 @@ export default function ImportModal({
     if (hasActiveSub && !subBypassDone.current) {
       subBypassDone.current = true
       onClose()
-      onImport()
+      void onImport()
     }
-  }, [hasActiveSub, onClose, onImport])
+  }, [hasActiveSub])
 
   // Подписка активна — модалка не нужна (bypass обрабатывается в useEffect)
   if (hasActiveSub) return null
@@ -41,27 +42,33 @@ export default function ImportModal({
   const handlePayTokens = useCallback(async () => {
     if (busy) return
     setBusy(true)
-    const ok = spendTokens(importCost)
-    if (ok) {
-      onClose()
-      onImport()
+    try {
+      const ok = spendTokens(importCost)
+      if (ok) {
+        onClose()
+        await onImport()
+      }
+    } finally {
+      setBusy(false)
     }
-    setBusy(false)
   }, [importCost, busy, onClose, onImport, spendTokens])
 
   const handleWatchAd = useCallback(async () => {
     if (busy) return
     setBusy(true)
-    // EC2: одна функция — 2 рекламы подряд без кулдауна между ними
-    const rewarded = await watchAdsForImport(2)
-    if (!rewarded) {
+    try {
+      // EC2: одна функция — 2 рекламы подряд без кулдауна между ними
+      const rewarded = await watchAdsForImport(2)
+      if (!rewarded) {
+        notify(t('import.adFailed'), 'error')
+        return
+      }
+      onClose()
+      await onImport()
+    } finally {
       setBusy(false)
-      return
     }
-    onClose()
-    onImport()
-    setBusy(false)
-  }, [busy, watchAdsForImport, onClose, onImport])
+  }, [busy, watchAdsForImport, onClose, onImport, t])
 
   return (
     <div className="text-modal-backdrop" onClick={onClose}>

@@ -33,7 +33,7 @@ export default function ExportModal({
       onClose()
       onExport('ad') // метод не важен — подписка даёт безлимит
     }
-  }, [hasActiveSub, onClose, onExport])
+  }, [hasActiveSub])
 
   // Подписка активна — модалка не нужна
   if (hasActiveSub) return null

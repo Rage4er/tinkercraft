@@ -152,7 +152,8 @@
     "title": "Import STL",
     "description": "Choose how to import your model:",
     "payTokens": "Pay {{cost}} tokens",
-    "watchAd": "Watch ads ({{count}}/{{max}} watched, need {{adsNeeded}})"
+    "watchAd": "Watch ads ({{count}}/{{max}} watched, need {{adsNeeded}})",
+    "adFailed": "Couldn't show ads. Try paying with tokens."
   },
   "leftPanel": {
     "shapes": "Shapes",
