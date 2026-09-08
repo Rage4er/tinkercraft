@@ -13,8 +13,9 @@ export default function EconomyBanner() {
   const watchAdForBanner = useEconomyStore((s) => s.watchAdForBanner)
   const setBannerVisible = useEconomyStore((s) => s.setBannerVisible)
   const bannerVisible = useEconomyStore((s) => s.bannerVisible)
-  const hasActiveSub = useEconomyStore((s) => s.hasActiveSubscription())
-  const hasRentalDisable = useEconomyStore((s) => s.hasRental('disableBanner'))
+  const hasActiveSub = useEconomyStore((s) => s.hasActiveSubscriptionRO())
+  const hasRentalDisable = useEconomyStore((s) => s.hasRentalRO('disableBanner'))
+  const bannerActive = hasActiveSub || hasRentalDisable
 
   const [busy, setBusy] = useState<string | null>(null)
 
@@ -71,7 +72,7 @@ export default function EconomyBanner() {
         >
           <TokenIcon width={14} height={14} /> 50
           {/* Бейдж 💰50 → SVG-иконка (§6.4, без эмодзи) */}
-          <Badge type="tokens" value="50" />
+          <Badge type="tokens" value="50" isActive={bannerActive} />
         </button>
 
         {/* Кнопка рекламы */}
@@ -83,7 +84,7 @@ export default function EconomyBanner() {
         >
           <AdFilmIcon width={14} height={14} /> 1
           {/* Бейдж 📺1 → SVG-иконка (§6.4, без эмодзи) */}
-          <Badge type="ad" value="1" />
+          <Badge type="ad" value="1" isActive={bannerActive} />
         </button>
       </div>
     </div>

@@ -142,7 +142,8 @@
       "total": "Итого кэшбэк: {{total}}"
     },
     "adNotAvailable": "Лимит рекламы на сегодня",
-    "notEnoughTokens": "Не хватает токенов"
+    "notEnoughTokens": "Не хватает {{n}} токенов",
+    "adNotRentable": "Рекламой не открывается"
   },
   "import": {
     "title": "Импорт STL",

@@ -147,6 +147,12 @@ export interface CashbackScanResult {
   toolCategories: number
 }
 
+/**
+ * Устаревшая функция кэшбэка (v1).
+ * Заменена на calculateCashbackV2 + calculateCashbackBreakdown.
+ * Сохранена для обратной совместимости с тестами.
+ * @deprecated Используйте calculateCashbackV2
+ */
 export function calculateCashbackV2(scan: CashbackScanResult): number {
   // Масштаб: +1 за 5 объектов, кап 6
   const scaleBonus = Math.min(
@@ -171,6 +177,39 @@ export function calculateCashbackV2(scan: CashbackScanResult): number {
     toolsDiversityBonus
 
   return Math.min(total, EARNINGS_CASHBACK.ceiling)
+}
+
+/**
+ * Разбивка кэшбэка для UI-превью (§2.1)
+ * EC5: единая функция для ExportModal и store — формула не расходится.
+ */
+export interface CashbackBreakdown {
+  base: number
+  scale: number
+  shapeDiv: number
+  toolCount: number
+  toolDiv: number
+  total: number
+}
+
+export function calculateCashbackBreakdown(scan: CashbackScanResult): CashbackBreakdown {
+  const scale = Math.min(
+    Math.floor(scan.objectCount / EARNINGS_CASHBACK.perObjectScale),
+    EARNINGS_CASHBACK.maxObjectsBonus
+  )
+  const shapeDiv = Math.min(
+    Math.max(0, scan.uniqueShapeTypes - 1),
+    EARNINGS_CASHBACK.maxShapeTypesBonus
+  )
+  const toolCount = Math.min(scan.toolsCount, EARNINGS_CASHBACK.maxToolsCount)
+  const toolDiv = Math.min(scan.toolCategories, EARNINGS_CASHBACK.maxToolCategories)
+
+  const total = Math.min(
+    EARNINGS_CASHBACK.base + scale + shapeDiv + toolCount + toolDiv,
+    EARNINGS_CASHBACK.ceiling
+  )
+
+  return { base: EARNINGS_CASHBACK.base, scale, shapeDiv, toolCount, toolDiv, total }
 }
 
 /**

@@ -38,7 +38,7 @@ export default function EconomyShop() {
   const [busySub, setBusySub] = useState<string | null>(null)
 
   // Подписка активна
-  const hasActiveSub = useEconomyStore((s) => s.hasActiveSubscription())
+  const hasActiveSub = useEconomyStore((s) => s.hasActiveSubscriptionRO())
 
   // Обработчики аренды
   const handleBuyRental = async (key: 'text3d' | 'extendedPalette' | 'disableBanner') => {
@@ -96,7 +96,7 @@ export default function EconomyShop() {
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             {rentalsConfig.map((r) => {
-              const isActive = useEconomyStore.getState().hasRental(r.key)
+              const isActive = useEconomyStore((s) => s.hasRentalRO(r.key))
               const rentalExpires = rentals[r.key]
               const remaining = rentalExpires !== null ? formatRentalRemaining(rentalExpires, t) : null
 
@@ -139,7 +139,7 @@ export default function EconomyShop() {
                     >
                       <TokenIcon width={14} height={14} /> {r.cost}
                       {/* Бейдж 💰 → SVG-иконка (§6.4, без эмодзи) */}
-                      <Badge type="tokens" value={String(r.cost)} />
+                      <Badge type="tokens" value={String(r.cost)} isActive={isActive} />
                     </button>
                   )}
                 </div>
@@ -196,7 +196,7 @@ export default function EconomyShop() {
                   >
                     <TokenIcon width={14} height={14} /> {s.cost}
                     {/* Бейдж 💰 → SVG-иконка (§6.4, без эмодзи) */}
-                    <Badge type="tokens" value={String(s.cost)} />
+                    <Badge type="tokens" value={String(s.cost)} isActive={hasActiveSub} />
                   </button>
                 </div>
               ))}

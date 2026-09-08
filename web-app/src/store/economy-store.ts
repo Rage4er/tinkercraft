@@ -91,13 +91,12 @@ interface EconomyState {
   lastActionTimestamp: number | null
   todayCashbacks: number
   todayQuestsCompleted: QuestDifficulty[]
-  lastQuestCommitDate: number | null // Y3.15: защита от двойного commitQuests за день
 
   // ── Квесты ──
   todayQuests: QuestV2[]
   questTriggers: Record<QuestTrigger, number>
   getTodayQuests(): QuestV2[]
-  completeEventQuest(trigger: QuestTrigger): void
+  completeEventQuest(trigger: QuestTrigger, objectCount?: number): void
   initDailyQuests(): void
   evaluateQuests(objects: Record<string, SceneObject>, operations: TinkerCraftOperation[]): void
   commitQuests(): Promise<void>
@@ -123,17 +122,21 @@ interface EconomyState {
   // ── Доход ──
   claimDailyBonus(): Promise<boolean>
   watchAdForTokens(): Promise<boolean>
+  /** EC2: N реклам подряд для импорта (без кулдауна между показами) */
+  watchAdsForImport(count: number): Promise<boolean>
   watchAdForBanner(): Promise<{ ok: boolean }>
   earnActionToken(): Promise<boolean>
   calculateAndClaimCashback(scanResult: { objectCount: number; uniqueShapeTypes: number; toolsCount: number; toolCategories: number }): number
 
   // ── Подписки ──
   hasActiveSubscription(): boolean
+  hasActiveSubscriptionRO(): boolean
   buySubscription(type: SubscriptionKey): Promise<{ ok: boolean; code?: string }>
   checkSubscriptionExpiry(): void
 
   // ── Аренда ──
   hasRental(key: RentalKey): boolean
+  hasRentalRO(key: RentalKey): boolean
   buyRental(key: RentalKey): Promise<{ ok: boolean; code?: string }>
 
   // ── Квесты ──
@@ -258,7 +261,6 @@ export const useEconomyStore = create<EconomyState>()(
       lastActionTimestamp: null,
       todayCashbacks: 0,
       todayQuestsCompleted: [],
-      lastQuestCommitDate: null, // Y3.15: защита от двойного commitQuests
       todayQuests: [],
       questTriggers: {} as Record<QuestTrigger, number>,
       lastExportHash: null,
@@ -345,6 +347,49 @@ export const useEconomyStore = create<EconomyState>()(
         return true
       },
 
+      // ── EC2: N рекламы подряд для импорта (§3.1: 2 просмотра) ──
+      // Без кулдауна между показами — кулдаун проверяется только один раз в начале
+      watchAdsForImport: async (count: number): Promise<boolean> => {
+        const state = get()
+
+        if (isLimitReached(state.todayAdsWatched + count, LIMITS.adsPerDay)) {
+          console.warn('[Economy] Ad limit would be exceeded for import')
+          return false
+        }
+
+        const passed = await isCooldownPassed(state.lastAdTimestamp, AD_COOLDOWN_MS)
+        if (!passed) {
+          console.warn('[Economy] Ad cooldown not passed before import ads')
+          return false
+        }
+
+        const platform = getPlatform()
+        if (!platform) {
+          console.warn('[Economy] No platform for ad')
+          return false
+        }
+
+        let rewarded = true
+        let serverTime = state.lastAdTimestamp ?? Date.now()
+        for (let i = 0; i < count && rewarded; i++) {
+          rewarded = await platform.showRewardedVideo()
+        }
+        if (!rewarded) return false
+
+        // Серверное время берём один раз в конце
+        const { getServerTime } = await import('../platform/server-time')
+        serverTime = await getServerTime()
+
+        set((state) => ({
+          tokens: state.tokens + EARNINGS_AD_REWARDED * count,
+          todayAdsWatched: state.todayAdsWatched + count,
+          lastAdTimestamp: serverTime,
+        }))
+        await get().syncToCloud()
+        console.log(`[Economy] Ad rewarded x${count}: +${EARNINGS_AD_REWARDED * count}`)
+        return true
+      },
+
       // ── Реклама для баннера: 1 просмотр → скрыть баннер на 24ч (§3.2, §6.3) ──
       // Независимо от лимитов рекламы за токены, но с общим кулдауном 5 мин
       // между rewarded-просмотрами (E4: требование Яндекса — пауза между рекламой)
@@ -426,6 +471,16 @@ export const useEconomyStore = create<EconomyState>()(
       },
 
       // ── Подписки ──
+      /** Read-only проверка подписки (без мутации, для selector-ов) */
+      hasActiveSubscriptionRO: () => {
+        const state = get()
+        if (!state.activeSubscription) return false
+        if (state.subscriptionExpiresAt && Date.now() > state.subscriptionExpiresAt) {
+          return false
+        }
+        return true
+      },
+      /** Mutingating проверка подписки — очищает истёкшую (для render-фазы) */
       hasActiveSubscription: () => {
         const state = get()
         if (!state.activeSubscription) return false
@@ -466,6 +521,15 @@ export const useEconomyStore = create<EconomyState>()(
       },
 
       // ── Аренда 24ч ──
+      /** Read-only проверка аренды (без мутации, для selector-ов) */
+      hasRentalRO: (key: RentalKey) => {
+        const state = get()
+        const expires = state.rentals[key]
+        if (!expires) return false
+        if (Date.now() > expires) return false
+        return true
+      },
+      /** Mutingating проверка аренды — очищает истёкшую (для render-фазы) */
       hasRental: (key: RentalKey) => {
         const state = get()
         const expires = state.rentals[key]
@@ -502,14 +566,10 @@ export const useEconomyStore = create<EconomyState>()(
       // Старый метод completeQuest удалён — квесты теперь оцениваются по состоянию проекта
 
       /** Коммитить токены за завершённые квесты (вызывается при save/export) */
-      // ── Коммит квестов: начисление токенов при save/export (§4 ECONOMY.md) ──
-      // Y3.15: защита от двойного вызова — один коммит в день
+      // EC10: нет дневного лимита — коммитим при каждом save/export
       commitQuests: async () => {
         const state = get()
         const quests = state.todayQuests
-        const now = Date.now()
-        // Если уже коммитили сегодня — пропускаем
-        if (state.lastQuestCommitDate && now - state.lastQuestCommitDate < ONE_DAY_MS) return
 
         let tokensEarned = 0
         const newCompleted: QuestDifficulty[] = []
@@ -523,8 +583,7 @@ export const useEconomyStore = create<EconomyState>()(
         if (tokensEarned > 0) {
           set({
             tokens: state.tokens + tokensEarned,
-            todayQuestsCompleted: [...new Set([...state.todayQuestsCompleted, ...newCompleted])], // Y3.17: дедуп
-            lastQuestCommitDate: now,
+            todayQuestsCompleted: [...new Set([...state.todayQuestsCompleted, ...newCompleted])],
           })
           await get().syncToCloud()
           console.log('[Economy] Quest rewards committed to cloud')
@@ -539,11 +598,15 @@ export const useEconomyStore = create<EconomyState>()(
       // ── Событийный квест: отметить выполнение по триггеру ──
       // Y3.4: export_stl, import_stl — срабатывают при действии, не по состоянию
       // Y3.13: начисление токенов только через commitQuests() при save/export
-      completeEventQuest: (trigger: QuestTrigger) => {
+      // EC4: target-проверка — не помечать квесты с target > objectCount
+      completeEventQuest: (trigger: QuestTrigger, objectCount?: number) => {
         const state = get()
         const quests = state.todayQuests
         const updated = quests.map((q) => {
           if (q.completed || q.trigger !== trigger) return q
+          // EC4: проверим target для экспорт-квестов
+          if (trigger === 'export_stl' && objectCount !== undefined && objectCount < q.target) return q
+          if (trigger === 'export_stl_large' && objectCount !== undefined && objectCount < q.target) return q
           // Событийный квест выполнен при наступлении события
           return { ...q, completed: true, progress: q.target, _justCompleted: true }
         })
@@ -784,7 +847,6 @@ export const useEconomyStore = create<EconomyState>()(
         rentals: state.rentals,
         todayQuests: state.todayQuests,
         todayQuestsCompleted: state.todayQuestsCompleted,
-        lastQuestCommitDate: state.lastQuestCommitDate, // Y3.15
         // Daily-счётчики — кэшируем в localStorage
         todayAdsWatched: state.todayAdsWatched,
         todayActions: state.todayActions,

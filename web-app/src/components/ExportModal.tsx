@@ -1,9 +1,9 @@
 // src/components/ExportModal.tsx — Модалка выбора способа экспорта STL
 // §6.5 ECONOMY.md v2.0: разбивка кэшбэка и фактическая стоимость
-import { useCallback, useState, useMemo } from 'react'
+import { useCallback, useState, useMemo, useRef, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useEconomyStore, scanForCashback } from '../store/economy-store'
-import { ECONOMY_COSTS } from '../store/economy-config'
+import { ECONOMY_COSTS, calculateCashbackBreakdown } from '../store/economy-config'
 import { ExportIcon, TokenIcon, AdFilmIcon } from './icons'
 
 export default function ExportModal({
@@ -20,24 +20,27 @@ export default function ExportModal({
   const { t } = useTranslation()
   const tokens = useEconomyStore((s) => s.tokens)
   const todayAdsWatched = useEconomyStore((s) => s.todayAdsWatched)
+  const todayCashbacks = useEconomyStore((s) => s.todayCashbacks)
   const watchAdForTokens = useEconomyStore((s) => s.watchAdForTokens)
+  const hasActiveSub = useEconomyStore((s) => s.hasActiveSubscription())
   const [busy, setBusy] = useState(false)
+
+  // EC3: bypass подписки — через useEffect, НЕ в render-фазе
+  const subBypassDone = useRef(false)
+  useEffect(() => {
+    if (hasActiveSub && !subBypassDone.current) {
+      subBypassDone.current = true
+      onClose()
+      onExport('ad') // метод не важен — подписка даёт безлимит
+    }
+  }, [hasActiveSub, onClose, onExport])
+
+  // Подписка активна — модалка не нужна
+  if (hasActiveSub) return null
 
   const exportCost = ECONOMY_COSTS.exportSTL
 
-  // Посчитать объекты (не импортированные)
-  const objectCount = useMemo(
-    () => Object.values(objects).filter((o) => o.shapeType !== 'import_mesh' && o.shapeType !== 'text3d').length,
-    [objects],
-  )
-
-  // Посчитать CSG операции
-  const csgOps = useMemo(
-    () => operations.filter((op) => op.type === 'group').length,
-    [operations],
-  )
-
-  // Сканер для кэшбэка
+  // EC5: общий сканер — scanForCashback из store
   const cashbackScan = useMemo(() => {
     return scanForCashback(
       objects as Record<string, { shapeType: string; color: string; transform: { scaleX: number; scaleY: number; scaleZ: number } }>,
@@ -45,17 +48,15 @@ export default function ExportModal({
     )
   }, [objects, operations])
 
-  // Разбивка кэшбэка
+  // EC5: единая разбивка из config — не дублирует формулу
   const cashbackBreakdown = useMemo(() => {
-    const base = 1
-    const scale = Math.min(6, Math.floor(objectCount / 5))
-    const shapeDiv = Math.min(6, cashbackScan.uniqueShapeTypes > 1 ? cashbackScan.uniqueShapeTypes - 1 : 0)
-    const toolCount = Math.min(6, cashbackScan.toolsCount)
-    const toolDiv = [0, 0, 2, 4, 6][Math.min(4, cashbackScan.toolCategories)] || 0
-    const total = Math.min(25, base + scale + shapeDiv + toolCount + toolDiv)
-    return { base, scale, shapeDiv, toolCount, toolDiv, total }
-  }, [objectCount, cashbackScan])
+    const bd = calculateCashbackBreakdown(cashbackScan)
+    // EC5: если дневной лимит кэшбэка исчерпан — preview показывает 0
+    if (todayCashbacks >= 3) return { ...bd, total: 0 }
+    return bd
+  }, [cashbackScan, todayCashbacks])
 
+  // EC5: netCost не может быть отрицательным
   const netCost = Math.max(0, exportCost - cashbackBreakdown.total)
 
   const handlePayTokens = useCallback(async () => {

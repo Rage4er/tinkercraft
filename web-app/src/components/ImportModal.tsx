@@ -16,7 +16,7 @@ export default function ImportModal({
   const { t } = useTranslation()
   const tokens = useEconomyStore((s) => s.tokens)
   const todayAdsWatched = useEconomyStore((s) => s.todayAdsWatched)
-  const watchAdForTokens = useEconomyStore((s) => s.watchAdForTokens)
+  const watchAdsForImport = useEconomyStore((s) => s.watchAdsForImport)
   const hasActiveSub = useEconomyStore((s) => s.hasActiveSubscription())
   const spendTokens = useEconomyStore((s) => s.spendTokens)
   const [busy, setBusy] = useState(false)
@@ -52,21 +52,16 @@ export default function ImportModal({
   const handleWatchAd = useCallback(async () => {
     if (busy) return
     setBusy(true)
-    // Показываем рекламу 2 раза
-    const rewarded1 = await watchAdForTokens()
-    if (!rewarded1) {
-      setBusy(false)
-      return
-    }
-    const rewarded2 = await watchAdForTokens()
-    if (!rewarded2) {
+    // EC2: одна функция — 2 рекламы подряд без кулдауна между ними
+    const rewarded = await watchAdsForImport(2)
+    if (!rewarded) {
       setBusy(false)
       return
     }
     onClose()
     onImport()
     setBusy(false)
-  }, [busy, watchAdForTokens, onClose, onImport])
+  }, [busy, watchAdsForImport, onClose, onImport])
 
   return (
     <div className="text-modal-backdrop" onClick={onClose}>

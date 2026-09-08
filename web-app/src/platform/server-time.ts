@@ -7,6 +7,10 @@ let cachedAt: number = 0
 const CACHE_MS = 30_000
 
 export async function getServerTime(): Promise<number> {
+  // Сначала попробуем кэш
+  if (cachedTime && Date.now() - cachedAt < CACHE_MS) {
+    return cachedTime
+  }
   const platform = await import('./index').then(m => m.getPlatform())
   if (!platform) {
     return Date.now() // fallback

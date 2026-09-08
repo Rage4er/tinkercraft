@@ -4,6 +4,7 @@ import NumInput from "./NumInput";
 import AlignButtons from "./AlignButtons";
 import CsgButtons from "./CsgButtons";
 import ColorPalette from "./ColorPalette";
+import EconomyMiniHUD from "./EconomyMiniHUD";
 import type { ShapeParams, SceneObject } from "../csg/types";
 import { EyeIcon, EyeOffIcon, FilletIcon, FolderIcon, SaveIcon, TokenIcon, GiftIcon, AdFilmIcon, CrownIcon, ClockIcon, SparkIcon, StarIcon, TrophyIcon, TextIcon, ColorIcon } from "./icons";
 import { useEconomyStore, type QuestDifficulty, type RentalKey } from "../store/economy-store";
@@ -74,8 +75,8 @@ function EconomyPanel() {
   const buyRental = useEconomyStore((s) => s.buyRental)
   const buySubscription = useEconomyStore((s) => s.buySubscription)
   const setBannerVisible = useEconomyStore((s) => s.setBannerVisible)
-  const hasActiveSub = useEconomyStore((s) => s.hasActiveSubscription())
-  const hasRental = useEconomyStore((s) => s.hasRental)
+  const hasActiveSub = useEconomyStore((s) => s.hasActiveSubscriptionRO())
+  const hasRental = useEconomyStore((s) => s.hasRentalRO)
 
   const [busy, setBusy] = useState<string | null>(null)
   const [cooldownMs, setCooldownMs] = useState(0)
@@ -454,11 +455,9 @@ export default function PropertiesPanel({
   // Toggle: показывать ли нативный color picker вместо палитры
   const [showNativePicker, setShowNativePicker] = useState(false);
 
-  // ✅ Проверка доступа к расширенной палитре
-  const hasExtendedPaletteRental = useEconomyStore(s =>
-    s.rentals.extendedPalette !== null && Date.now() < s.rentals.extendedPalette!
-  )
-  const hasActiveSub = useEconomyStore(s => s.hasActiveSubscription())
+  // ✅ Проверка доступа к расширенной палитре — через RO-хелпер
+  const hasExtendedPaletteRental = useEconomyStore(s => s.hasRentalRO('extendedPalette'))
+  const hasActiveSub = useEconomyStore(s => s.hasActiveSubscriptionRO())
   const canUseExtendedPicker = hasExtendedPaletteRental || hasActiveSub
   const setActiveTab = useUiStore(s => s.setActiveTab)
 
@@ -568,6 +567,9 @@ export default function PropertiesPanel({
 
   return (
     <>
+      {/* EC6: мини-HUD баланса при выделенном объекте */}
+      {isYandex && <EconomyMiniHUD />}
+
       <div className="props-row">
         <span className="props-label">{t("properties.type")}</span>
         <span className="props-value">
@@ -615,9 +617,10 @@ export default function PropertiesPanel({
               color: 'var(--text-muted)'
             }}>
               {t('properties.lockedExtended')}<br />
+              <span style={{ fontSize: '11px' }}>{t('economy.adNotRentable')}</span><br />
               <button
                 className="btn btn-compact btn-sm"
-                onClick={() => setActiveTab('objects')}
+                onClick={() => setActiveTab('shop')}
                 style={{ marginTop: '4px' }}
               >
                 {t('properties.buyFor', { n: 75 })}
@@ -629,7 +632,7 @@ export default function PropertiesPanel({
             onClick={() => {
               if (!canUseExtendedPicker) {
                 // 🔒 Нет доступа — открыть магазин
-                setActiveTab('objects')
+                setActiveTab('shop')
                 return
               }
               setShowNativePicker(!showNativePicker)
@@ -640,13 +643,7 @@ export default function PropertiesPanel({
             style={{ position: 'relative' }}
           >
             {showNativePicker ? t("properties.palette") : t("properties.advancedPicker")}
-            {!canUseExtendedPicker && (
-              <>
-                <span style={{ marginLeft: '4px', fontSize: '10px', color: 'var(--warning)' }}>{t('economy.palette.locked', { price: 75 })}</span>
-                {/* Бейдж 💰75 → SVG-иконка (§6.4, без эмодзи) */}
-                <Badge type="tokens" value="75" />
-              </>
-            )}
+            <Badge type="tokens" value="75" isActive={canUseExtendedPicker} />
           </button>
         </div>
       </div >

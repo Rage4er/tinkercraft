@@ -142,7 +142,8 @@
       "total": "Total cashback: {{total}}"
     },
     "adNotAvailable": "Ad limit reached today",
-    "notEnoughTokens": "Not enough tokens"
+    "notEnoughTokens": "Not enough tokens",
+    "adNotRentable": "Not available with ads"
   },
   "import": {
     "title": "Import STL",

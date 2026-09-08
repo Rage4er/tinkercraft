@@ -114,9 +114,9 @@ export default function Toolbar({
   const { t } = useTranslation();
 
   // Экономика: бейджи на кнопках (§6.4)
-  // Реактивные селекторы — бейджи обновляются при покупке подписки/аренды
-  const hasActiveSub = useEconomyStore((s) => s.hasActiveSubscription())
-  const hasActiveRentalText3d = useEconomyStore((s) => s.hasRental('text3d'))
+  // EC11: RO-версии — без мутации state в render
+  const hasActiveSub = useEconomyStore((s) => s.hasActiveSubscriptionRO())
+  const hasActiveRentalText3d = useEconomyStore((s) => s.hasRentalRO('text3d'))
 
   // Экспорт/импорт: бейджи скрываются при активной подписке.
   // E2: мёртвые exportLocked/importLocked/textLocked удалены — блокировка

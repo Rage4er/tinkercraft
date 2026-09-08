@@ -1053,20 +1053,21 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const scan = scanForCashback(objects, operations)
       const cashback = useEconomyStore.getState().calculateAndClaimCashback(scan)
       if (cashback > 0) {
+        // EC12: тост о кэшбэке
+        notify(`Кэшбэк +${cashback} 💎`, 'info')
         // E6: через action (set) — попадает в persist и облако
         useEconomyStore.getState().setExportHash(hash)
       }
     }
 
     downloadStl(objectList, (fileName?.replace(/\.doodle$/, '') ?? i18n.t('app.name')) + '.stl')
-    // Квесты V2: коммит токенов при экспорте
-    void useEconomyStore.getState().commitQuests()
-    // Y3.4: событийный квест — экспорт STL
-    useEconomyStore.getState().completeEventQuest('export_stl')
-    // Y3.5: событийный квест — экспорт ≥10 объектов (§4 квесты)
+    // EC4: событийные квесты ДО коммита — прогресс должен обновиться до начисления токенов
+    useEconomyStore.getState().completeEventQuest('export_stl', objectCount)
     if (objectCount >= 10) {
-      useEconomyStore.getState().completeEventQuest('export_stl_large')
+      useEconomyStore.getState().completeEventQuest('export_stl_large', objectCount)
     }
+    // Квесты V2: коммит токенов при экспорте (после событийных триггеров)
+    void useEconomyStore.getState().commitQuests()
   },
 
   // ── Resize dims ──

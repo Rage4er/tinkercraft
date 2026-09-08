@@ -10,6 +10,20 @@
 ## [Unreleased]
 
 ### Fixed
+- **EC1:** `EconomyBanner` — инициализация `bannerVisible` в App.tsx bootstrap (показ баннера если нет подписки и аренда не активна) (`App.tsx`)
+- **EC2:** `ImportModal` — новая функция `watchAdsForImport(count)` в store — N реклам подряд без кулдауна между ними вместо двух вызовов `watchAdForTokens` с кулдауном 5 мин (`economy-store.ts`, `ImportModal.tsx`)
+- **EC3:** `ExportModal` — bypass подписки через useEffect — подписчики не видят модалку оплаты (`ExportModal.tsx`)
+- **EC4:** `completeEventQuest` — добавлена target-проверка для `export_stl`/`export_stl_large`, порядок вызовов в `exportStl` изменён: триггеры ДО commitQuests (`economy-store.ts`, `document-store.ts`)
+- **EC5:** `calculateCashbackBreakdown` в `economy-config.ts` — единая функция для ExportModal и store; ExportModal использует общий `scanForCashback` и config (не дублирует формулу); учёт дневного лимита 3/день (`economy-config.ts`, `ExportModal.tsx`)
+- **EC6:** `EconomyMiniHUD` — мини-HUD баланса при выделенном объекте в PropertiesPanel (`EconomyMiniHUD.tsx`, `PropertiesPanel.tsx`)
+- **EC7:** `isActive` в бейджи — LeftPanel (text3d), PropertiesPanel (палитра), EconomyShop (аренда/подписки), EconomyBanner — бейджи скрываются при активном доступе (`LeftPanel.tsx`, `PropertiesPanel.tsx`, `EconomyShop.tsx`, `EconomyBanner.tsx`)
+- **EC8+EC11:** чистые Zustand-селекторы — разбивка составных селекторов в LeftPanel, добавлены read-only хелперы `hasActiveSubscriptionRO` и `hasRentalRO` для предотвращения мутаций в render-фазе (`economy-store.ts`, `LeftPanel.tsx`, `PropertiesPanel.tsx`, `Toolbar.tsx`, `EconomyShop.tsx`, `EconomyBanner.tsx`)
+- **EC9:** `setActiveTab('shop')` вместо `'objects'` в PropertiesPanel и App.tsx (`PropertiesPanel.tsx`, `App.tsx`)
+- **EC10+EC15:** `commitQuests` — убран дневной лимит (lastQuestCommitDate), квесты коммитятся при каждом save/export (`economy-store.ts`)
+- **EC12:** тост о кэшбэке через `notify` из document-store (`document-store.ts`)
+- **EC13:** подпись «рекламой не открывается» в i18n, добавлена в PropertiesPanel (locked-секция палитры) и тост в handleAddText (`translation.json`, `PropertiesPanel.tsx`, `App.tsx`)
+- **EC14:** кэш `getServerTime` — проверка кэша перед fetch в `server-time.ts` (`server-time.ts`)
+- **EC16:** удалён мёртвый код `TRIGGER_LABELS`, `showTokensInStatusBar`, `QUEST_LABELS` из `economy-ui-config.ts`; `QuestPanel.tsx` заменён на заглушку (`economy-ui-config.ts`, `QuestPanel.tsx`)
 - **Исправлены все 7 проблем ревью экономики (E1–E7)** — E1: бейдж Текст в LeftPanel учитывает аренду text3d, а не только подписку; E2: мёртвые exportLocked/importLocked/textLocked удалены, бейджи Toolbar переведены на реактивные селекторы; E3: ImportModal — bypass подписки перенесён из render-фазы в useEffect (двойной вызов в StrictMode); E4: watchAdForBanner соблюдает общий кулдаун rewarded 5 мин; E5: EconomyHUD.tsx удалён (мёртвый код), все инлайн emoji-бейджи заменены на SVG-компонент Badge; E6: lastExportHash через action setExportHash() — включён в persist и облако; E7: initDailyQuests сбрасывает день по новому полю lastQuestResetDate (прогресс квестов больше не теряется у игроков без бонуса) (`LeftPanel.tsx`, `Toolbar.tsx`, `ImportModal.tsx`, `economy-store.ts`, `document-store.ts`, `PropertiesPanel.tsx`, `EconomyShop.tsx`, `EconomyBanner.tsx`)
 - **Эмодзи полностью убраны из UI** — все бейджи 💎/📺 заменены на SVG-иконки через единый компонент `Badge` (TokenIcon/MoneyIcon/AdFilmIcon/CrownIcon/ClockIcon). Эмодзи остались только в комментариях и console.log (`Badge.tsx`, `PropertiesPanel.tsx`, `EconomyShop.tsx`, `EconomyBanner.tsx`)
 - **Ревью внедрения экономики ECONOMY.md v2.0** — аудит §1–§7: тарифы, кэшбэк V2, квесты V2, анти-фарм, UI (HUD/панель/бейджи/модалки/i18n/онбординг), хранение — соответствуют спецификации. Найдено 7 открытых пунктов E1–E7 (3 средних: бейдж текста не учитывает аренду, мёртвые locked-переменные, onImport() в render-фазе ImportModal; 4 низких) — задокументированы в CODE_REVIEW.md, не блокируют релиз

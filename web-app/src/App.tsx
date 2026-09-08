@@ -23,6 +23,7 @@ import { useUiStore } from "./store/ui-store";
 import { useEconomyStore } from "./store/economy-store";
 import { useShallow } from "zustand/shallow";
 import { isWorkerReady } from "./csg/worker-client";
+import { notify } from "./store/notifications";
 import { SNAP_VALUES, AUTOSAVE_DELAY_MS } from "./constants";
 import { getPlatform, initPlatform } from "./platform";
 import type {
@@ -223,6 +224,11 @@ export default function App() {
           await useEconomyStore.getState().loadFromCloud()
           await useEconomyStore.getState().initDailyQuests()
           useEconomyStore.getState().checkSubscriptionExpiry()
+          // EC1: показать баннер-оффер если нет подписки и аренда не активна
+          const econ = useEconomyStore.getState()
+          if (!econ.hasActiveSubscription() && !econ.hasRental('disableBanner')) {
+            econ.setBannerVisible(true)
+          }
         } catch (e) {
           console.error('[App] Economy init failed:', e)
         }
@@ -432,6 +438,13 @@ export default function App() {
   }, []);
 
   const handleAddText = useCallback(async () => {
+    // EC13: проверка доступа к 3D-тексту
+    const { hasActiveSubscription, hasRental } = useEconomyStore.getState()
+    if (!hasActiveSubscription() && !(hasRental('text3d') || (useEconomyStore.getState().rentals.text3d !== null && Date.now() < useEconomyStore.getState().rentals.text3d!))) {
+      setActiveTab('shop')
+      notify(t('economy.adNotRentable'), 'warning')
+      return
+    }
     try {
       const [{ FontLoader }, { TextGeometry }] = await Promise.all([
         import("three/examples/jsm/loaders/FontLoader.js"),
@@ -674,7 +687,7 @@ export default function App() {
             const state = useEconomyStore.getState()
             const hasAccess = state.hasActiveSubscription() || (state.rentals.text3d !== null && Date.now() < state.rentals.text3d!)
             if (!hasAccess) {
-              setActiveTab('objects')
+              setActiveTab('shop')
               return
             }
             setShowTextModal(true)

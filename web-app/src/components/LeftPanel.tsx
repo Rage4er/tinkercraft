@@ -64,12 +64,9 @@ export default function LeftPanel({
   onJumpHistory: (index: number) => void;
 }) {
   const { t } = useTranslation();
-  // E1: доступ к 3D-тексту — подписка ИЛИ аренда text3d (бейдж скрывается
-  // при любом активном доступе, а не только при подписке)
-  const { tokens, textActive } = useEconomyStore(s => ({
-    tokens: s.tokens,
-    textActive: s.hasActiveSubscription() || (s.rentals.text3d !== null && Date.now() < s.rentals.text3d),
-  }));
+  // EC8: разбивка составного селектора — useShallow не нужен для двух примитивов
+  const tokens = useEconomyStore(s => s.tokens);
+  const textActive = useEconomyStore(s => s.hasActiveSubscription() || (s.rentals.text3d !== null && Date.now() < s.rentals.text3d));
 
   // FIX (LOW-18-31): Remove useMemo — ALL_SHAPES has only 8 elements, memo overhead > benefit
   const filteredShapes = shapeSearch.trim()
@@ -123,8 +120,8 @@ export default function LeftPanel({
               >
                 <span className="shape-icon">{s.icon({ size: 32 })}</span>
                 <span className="shape-lbl">{t(s.labelKey)}</span>
-                {isText3d && !textActive && (
-                  <Badge type="tokens" value="75" />
+                {isText3d && (
+                  <Badge type="tokens" value="75" isActive={textActive} />
                 )}
               </button>
             )
