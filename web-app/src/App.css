@@ -425,6 +425,7 @@ body {
   color: var(--text-primary);
   cursor: pointer;
   transition: background 0.12s, border-color 0.12s;
+  position: relative;
 }
 
 .shape-btn:hover:not(:disabled) {
