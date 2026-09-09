@@ -11,7 +11,6 @@ import Toolbar from "./components/Toolbar";
 import TextModal from "./components/TextModal";
 import ExportModal from "./components/ExportModal";
 import ImportModal from "./components/ImportModal";
-import EconomyBanner from "./components/EconomyBanner";
 import EconomyOnboarding from "./components/EconomyOnboarding";
 import EconomyShop from "./components/EconomyShop";
 import StatusBar from "./components/StatusBar";
@@ -666,13 +665,6 @@ export default function App() {
         onToggleTheme={() => setTheme(theme === "dark" ? "light" : "dark")}
         onClearScene={clearScene}
       />
-
-      {/* ── ЭКОНОМИКА: баннер (yandex-only, §6.3) ── */}
-      {getPlatform() && (
-        <div style={{ padding: '0 16px' }}>
-          <EconomyBanner />
-        </div>
-      )}
 
       {/* ── MAIN ── */}
       <div className="main">
