@@ -1,12 +1,3 @@
 {
-  "mcpServers": {
-    "puppeteer": {
-      "type": "stdio",
-      "command": "npx",
-      "args": [
-        "-y",
-        "@anthropic-ai/mcp-server-puppeteer-core"
-      ]
-    }
-  }
+  "mcpServers": {}
 }
