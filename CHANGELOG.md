@@ -50,6 +50,7 @@
 - **Проверка соответствия ECONOMY.md v2.0** — аудит выявил 2 проблемы: evaluateQuests() не вызывалась, EconomyShop не был подключён. Обе исправлены. (`CODE_REVIEW.md`)
 
 ### Added
+- **Код-ревью экономики (2026-09-10)** — проведено ревью ECONOMY.md против фактической реализации; полный отчёт в `docs/ECONOMY_CODE_REVIEW.md`: выявлено 22 проблемы (6 P0 / 9 P1 / 7 P2). Критичные P0: анти-фарм кэшбэка, expiry по локальному времени, потеря обновлений syncToCloud, lastSavedData вне partialize, client-side экономика, clean-фолбэк SDK. Статусы в `CODE_REVIEW.md`, технический долг в `DEVELOPMENT_PLAN.md`
 - **Локализация: убран хардкод строк в экономике** — `formatRentalRemaining`/`formatSubRemaining` принимают `t()`, `rentalsConfig` label/desc через `t()`, "Аренда 24ч"/"Активно"/"Pro активна · "/"🔒 75"/"STL" переведены через i18n (`components/PropertiesPanel.tsx`, `components/Toolbar.tsx`, `i18n/locales/*/translation.json`)
 
 ### Fixed
