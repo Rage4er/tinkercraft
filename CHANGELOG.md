@@ -10,6 +10,26 @@
 ## [Unreleased]
 
 ### Fixed
+- **P0-1:** Анти-фарм кэшбэка — хэш модели + список `todayExportHashes[]`, атомарная фиксация хэша до начисления: `calculateAndClaimCashback(scan, hash?)` (`economy-store.ts`, `document-store.ts`)
+- **P0-2:** Expiry аренд/подписок и кулдауны только по серверному времени — `serverTimeNow()` (= `getCachedServerTime() ?? Date.now()`) во всех RO-хелперах (§5) (`economy-store.ts`)
+- **P0-3:** `syncToCloud` с «хвостом» — `syncTailPending`: повторная синхронизация актуальных данных после завершения первой, без потери начислений (`economy-store.ts`)
+- **P0-4:** `lastSavedData` добавлен в `partialize`; восстановление/пересчёт в `loadFromCloud` — облако не перезаписывается старыми данными (`economy-store.ts`)
+- **P0-5:** Клиентская валидация экономики — экспортирована `sanitizeEconomyData()` (clamp токенов [0; 1_000_000], проверка структуры, версия persist → 2), применяется при hydrate / перед syncToCloud / в loadFromCloud (`economy-store.ts`)
+- **P0-6:** Clean-фолбэк SDK полностью отключает экономику (§7) — `IPlatform.isYandexSdkReady()` + `isEconomyAvailable()`; все UI-точки (App, PropertiesPanel, LeftPanel, ExportModal, ImportModal, EconomyOnboarding) переведены на `isEconomyAvailable()` (`platform/index.ts`, `App.tsx`)
+- **P1-1:** Сброс дневных лимитов по серверному времени — `refreshDayRollover()` по хукам visibilitychange/focus + setInterval ~60с (не только при старте) (`economy-store.ts`, `App.tsx`)
+- **P1-2:** Единый подсчёт объектов — `countSceneObjects()` в economy-config.ts для exportStl / scanForCashback / evaluateQuests (все типы объектов) (`economy-config.ts`)
+- **P1-3:** `createExportHash` включает operations — рекурсивный `sortDeep` + `stripHeavyFieldsForHash` (`document-store.ts`)
+- **P1-4:** RO-селекторы вместо мутирующих в render — LeftPanel / ExportModal / ImportModal переведены на `canUseText3dRO` / `hasActiveSubscriptionRO` (`LeftPanel.tsx`, `ExportModal.tsx`, `ImportModal.tsx`)
+- **P1-5:** Единый `canUseText3dRO()` — подписка ИЛИ аренда text3d по серверному времени; используется в App.tsx ×2, LeftPanel, Toolbar (`economy-store.ts`)
+- **P1-6:** `watchAdsForImport` начисляет +50 за каждую показанную рекламу — отказ на второй не теряет первую (`economy-store.ts`)
+- **P1-7:** Баннер-реклама в общем лимите — `watchAdForBanner` учитывает `adsPerDay=3` и увеличивает `todayAdsWatched` (§2) (`economy-store.ts`)
+- **P1-8:** Серверное время в экономике UI — EconomyMiniHUD/PropertiesPanel/EconomyShop на `getServerTime()` (кэш 30с) (`EconomyMiniHUD.tsx`, `PropertiesPanel.tsx`, `EconomyShop.tsx`)
+- **P1-9:** `csg_complex` учитывает все булевы операции — дерево операций + `SceneObject.children` (union/subtract/intersect) (`economy-store.ts`)
+- **P2-3:** Онбординг через store — `onboardingDone` в persist + partialize + sanitize + syncToCloud, action `completeOnboarding()`; EconomyOnboarding вызывает store (`economy-store.ts`, `EconomyOnboarding.tsx`)
+- **P2-5:** Прогресс событийных квестов — PropertiesPanel показывает target/target, `completeEventQuest` ставит `progress=target` (`economy-store.ts`, `PropertiesPanel.tsx`)
+- **P2-6:** Кэшбэк после успешного экспорта STL — try/catch в `exportStl` (кэшбэк только после успешной сериализации), `downloadStlBlob()`; новый i18n-ключ `errors.stlExportFailed` (`document-store.ts`, `stl-export.ts`)
+- **P2-7:** Удалён устаревший `calculateCashback` v1 (`economy-config.ts`)
+- **P2-1/P2-2/P2-4:** документирован безопасный фолбэк `isDayPassed` на `Date.now()` (clean отключает экономику, yandex логирует предупреждение); подтверждены кулдауны рекламы на серверном времени; онбординг скрыт в clean-режиме в рамках P0-6
 - **EC1:** `EconomyBanner` — инициализация `bannerVisible` в App.tsx bootstrap (показ баннера если нет подписки и аренда не активна) (`App.tsx`)
 - **EC2:** `ImportModal` — новая функция `watchAdsForImport(count)` в store — N реклам подряд без кулдауна между ними вместо двух вызовов `watchAdForTokens` с кулдауном 5 мин (`economy-store.ts`, `ImportModal.tsx`)
 - **EC3:** `ExportModal` — bypass подписки через useEffect — подписчики не видят модалку оплаты (`ExportModal.tsx`)
@@ -50,6 +70,9 @@
 - **Проверка соответствия ECONOMY.md v2.0** — аудит выявил 2 проблемы: evaluateQuests() не вызывалась, EconomyShop не был подключён. Обе исправлены. (`CODE_REVIEW.md`)
 
 ### Added
+- **Ревью экономики закрыто (2026-09-11)** — все 22 проблемы ревью от 2026-09-10 (`docs/ECONOMY_CODE_REVIEW.md`) исправлены: 6 P0 (анти-фарм кэшбэка, серверное время expiry/лимитов, хвостовая синхронизация облака, lastSavedData в persist, клиентская валидация, clean-фолбэк SDK), 9 P1, 7 P2. Проверка: `pnpm typecheck` 0 ошибок, `pnpm test` 299/299. Статусы — `CODE_REVIEW.md`, `DEVELOPMENT_PLAN.md`
+- **Тесты экономики** — новый `economy-store.test.ts` (~35 тестов): анти-фарм кэшбэка, лимиты/кулдауны, syncToCloud, sanitizeEconomyData; дополнены `document-store.test.ts`, `economy-config.test.ts`. Итого 299 тестов в 17 файлах (`economy-store.test.ts`, `document-store.test.ts`, `economy-config.test.ts`)
+- **i18n:** новый ключ `errors.stlExportFailed` в en/ru — тост при неудачном экспорте STL (`i18n/locales/en/translation.json`, `i18n/locales/ru/translation.json`)
 - **Код-ревью экономики (2026-09-10)** — проведено ревью ECONOMY.md против фактической реализации; полный отчёт в `docs/ECONOMY_CODE_REVIEW.md`: выявлено 22 проблемы (6 P0 / 9 P1 / 7 P2). Критичные P0: анти-фарм кэшбэка, expiry по локальному времени, потеря обновлений syncToCloud, lastSavedData вне partialize, client-side экономика, clean-фолбэк SDK. Статусы в `CODE_REVIEW.md`, технический долг в `DEVELOPMENT_PLAN.md`
 - **Локализация: убран хардкод строк в экономике** — `formatRentalRemaining`/`formatSubRemaining` принимают `t()`, `rentalsConfig` label/desc через `t()`, "Аренда 24ч"/"Активно"/"Pro активна · "/"🔒 75"/"STL" переведены через i18n (`components/PropertiesPanel.tsx`, `components/Toolbar.tsx`, `i18n/locales/*/translation.json`)
 

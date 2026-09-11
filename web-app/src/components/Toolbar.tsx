@@ -116,7 +116,6 @@ export default function Toolbar({
   // Экономика: бейджи на кнопках (§6.4)
   // EC11: RO-версии — без мутации state в render
   const hasActiveSub = useEconomyStore((s) => s.hasActiveSubscriptionRO())
-  const hasActiveRentalText3d = useEconomyStore((s) => s.hasRentalRO('text3d'))
 
   // Экспорт/импорт: бейджи скрываются при активной подписке.
   // E2: мёртвые exportLocked/importLocked/textLocked удалены — блокировка
@@ -124,8 +123,10 @@ export default function Toolbar({
   const exportActive = hasActiveSub
   const importActive = hasActiveSub
 
-  // Текст 3D: аренда 75 TC
-  const textActive = hasActiveSub || hasActiveRentalText3d
+  // Текст 3D: аренда 75 TC.
+  // P1-5: единый RO-хелпер (подписка ИЛИ аренда text3d по серверному времени)
+  // вместо дублирования hasActiveSubscriptionRO || hasRentalRO('text3d').
+  const textActive = useEconomyStore((s) => s.canUseText3dRO())
 
   // Определяем группы для алгоритма
   const groups: ToolbarGroup[] = [

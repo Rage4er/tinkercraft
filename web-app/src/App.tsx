@@ -24,7 +24,7 @@ import { useShallow } from "zustand/shallow";
 import { isWorkerReady } from "./csg/worker-client";
 import { notify } from "./store/notifications";
 import { SNAP_VALUES, AUTOSAVE_DELAY_MS } from "./constants";
-import { getPlatform, initPlatform } from "./platform";
+import { getPlatform, initPlatform, isEconomyAvailable } from "./platform";
 import type {
   TransformNR,
   ShapeParams,
@@ -89,6 +89,8 @@ export default function App() {
   const fitViewRef = useRef<(() => void) | null>(null);
   const resetViewRef = useRef<(() => void) | null>(null);
   const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // P1-1: cleanup обработчиков смены суток (visibilitychange/focus + setInterval)
+  const cleanupRolloverRef = useRef<(() => void) | null>(null);
 
   // FIX (PERF-R16-3): Use useShallow wrapper to prevent re-renders when
   // only the store's internal reference changes but values are the same.
@@ -237,6 +239,27 @@ export default function App() {
         syncInterval = setInterval(() => {
           void useEconomyStore.getState().syncToCloud()
         }, 30000)
+
+        // ── P1-1: сброс дневных лимитов при смене суток, даже если страница
+        // открыта больше суток. Триггеры:
+        //  • visibilitychange (вкладка стала видимой) и focus — проверяем сразу;
+        //  • setInterval ~60с — страховка, если фокус-события не сработали
+        //    (например, вкладка оставалась видимой через полноэкранный режим).
+        const checkDayRollover = () => {
+          void useEconomyStore.getState().refreshDayRollover()
+        }
+        const onVisibility = () => {
+          if (document.visibilityState === 'visible') checkDayRollover()
+        }
+        const rolloverInterval = setInterval(checkDayRollover, 60_000)
+        document.addEventListener('visibilitychange', onVisibility)
+        window.addEventListener('focus', checkDayRollover)
+        // Очистка обработчиков — храним в замыкании для cleanup ниже
+        cleanupRolloverRef.current = () => {
+          clearInterval(rolloverInterval)
+          document.removeEventListener('visibilitychange', onVisibility)
+          window.removeEventListener('focus', checkDayRollover)
+        }
       }
     }
     bootstrap()
@@ -245,6 +268,7 @@ export default function App() {
     return () => {
       disposed = true
       if (syncInterval) clearInterval(syncInterval)
+      cleanupRolloverRef.current?.()
     }
   }, [])
 
@@ -438,8 +462,8 @@ export default function App() {
 
   const handleAddText = useCallback(async () => {
     // EC13: проверка доступа к 3D-тексту
-    const { hasActiveSubscription, hasRental } = useEconomyStore.getState()
-    if (!hasActiveSubscription() && !(hasRental('text3d') || (useEconomyStore.getState().rentals.text3d !== null && Date.now() < useEconomyStore.getState().rentals.text3d!))) {
+    // P1-5: единый RO-хелпер (подписка ИЛИ аренда text3d по серверному времени)
+    if (!useEconomyStore.getState().canUseText3dRO()) {
       setActiveTab('shop')
       notify(t('economy.adNotRentable'), 'warning')
       return
@@ -562,7 +586,8 @@ export default function App() {
       <ToastContainer />
 
       {/* ── ЭКОНОМИКА: онбординг (§6.7) ── */}
-      {getPlatform() && <EconomyOnboarding />}
+      {/* P0-6: только при реальном Yandex SDK (не clean-фолбэк) */}
+      {isEconomyAvailable() && <EconomyOnboarding />}
 
       {/* ── Ruler distance display ── */}
       {rulerDist !== null && (
@@ -676,9 +701,8 @@ export default function App() {
           busy={busy}
           onAddShape={addShape}
           onShowTextModal={() => {
-            const state = useEconomyStore.getState()
-            const hasAccess = state.hasActiveSubscription() || (state.rentals.text3d !== null && Date.now() < state.rentals.text3d!)
-            if (!hasAccess) {
+            // P1-5: единый RO-хелпер доступа к 3D-тексту (подписка ИЛИ аренда text3d)
+            if (!useEconomyStore.getState().canUseText3dRO()) {
               setActiveTab('shop')
               return
             }

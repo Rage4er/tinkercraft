@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useEconomyStore } from '../store/economy-store'
+import { isEconomyAvailable } from '../platform'
 import { ECONOMY_COSTS } from '../store/economy-config'
 import { notify } from '../store/notifications'
 import { ImportIcon, TokenIcon, AdFilmIcon } from './icons'
@@ -18,9 +19,13 @@ export default function ImportModal({
   const tokens = useEconomyStore((s) => s.tokens)
   const todayAdsWatched = useEconomyStore((s) => s.todayAdsWatched)
   const watchAdsForImport = useEconomyStore((s) => s.watchAdsForImport)
-  const hasActiveSub = useEconomyStore((s) => s.hasActiveSubscription())
+  // P1-4: RO-селектор — без мутации state в render-фазе
+  const hasActiveSub = useEconomyStore((s) => s.hasActiveSubscriptionRO())
   const spendTokens = useEconomyStore((s) => s.spendTokens)
   const [busy, setBusy] = useState(false)
+
+  // P0-6: clean-режим (нет Yandex SDK) — экономика отключена, импорт свободен
+  const economyActive = isEconomyAvailable()
 
   const importCost = ECONOMY_COSTS.importSTL
   const adCost = 2
@@ -29,15 +34,22 @@ export default function ImportModal({
   // (side-effect в теле компонента вызывался дважды в StrictMode)
   const subBypassDone = useRef(false)
   useEffect(() => {
+    if (!economyActive) {
+      // P0-6: без SDK не показываем модалку оплаты — сразу импортируем
+      subBypassDone.current = true
+      onClose()
+      void onImport()
+      return
+    }
     if (hasActiveSub && !subBypassDone.current) {
       subBypassDone.current = true
       onClose()
       void onImport()
     }
-  }, [hasActiveSub])
+  }, [economyActive, hasActiveSub])
 
-  // Подписка активна — модалка не нужна (bypass обрабатывается в useEffect)
-  if (hasActiveSub) return null
+  // Подписка активна — модалка не нужна (bypass в useEffect). Clean-режим — P0-6.
+  if (!economyActive || hasActiveSub) return null
 
   const handlePayTokens = useCallback(async () => {
     if (busy) return

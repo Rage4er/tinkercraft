@@ -1,6 +1,6 @@
 // src/store/economy-config.test.ts — Тесты экономики v2.0 (§2.1)
 import { describe, it, expect } from 'vitest'
-import { calculateCashbackV2, calculateCashbackBreakdown, scanForCashback } from './economy-config'
+import { calculateCashbackV2, calculateCashbackBreakdown, scanForCashback, countSceneObjects } from './economy-config'
 
 describe('calculateCashbackV2', () => {
   it('base case: 1 объект = 1 (base only)', () => {
@@ -96,6 +96,22 @@ describe('calculateCashbackBreakdown', () => {
     expect(calculateCashbackBreakdown({ objectCount: 1, uniqueShapeTypes: 1, toolsCount: 0, toolCategories: 0 }).toolDiv).toBe(0)
     expect(calculateCashbackBreakdown({ objectCount: 1, uniqueShapeTypes: 1, toolsCount: 0, toolCategories: 5 }).toolDiv).toBe(5)
     expect(calculateCashbackBreakdown({ objectCount: 1, uniqueShapeTypes: 1, toolsCount: 0, toolCategories: 10 }).toolDiv).toBe(6)
+  })
+})
+
+describe('countSceneObjects (P1-2 единый подсчёт)', () => {
+  it('считает все объекты сцены, включая import_mesh и text3d', () => {
+    const objects = {
+      '1': { shapeType: 'cube' },
+      '2': { shapeType: 'import_mesh' },
+      '3': { shapeType: 'text3d' },
+      '4': { shapeType: 'csg' },
+    }
+    expect(countSceneObjects(objects)).toBe(4)
+  })
+
+  it('пустая сцена = 0', () => {
+    expect(countSceneObjects({})).toBe(0)
   })
 })
 

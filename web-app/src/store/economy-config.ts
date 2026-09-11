@@ -104,6 +104,17 @@ const ONE_DAY_MS = 24 * 60 * 60 * 1000
 /**
  * Проверить, прошёл ли день с момента (§5 ECONOMY.md v2.0)
  * Использует серверное время для защиты от накруток переводом часов.
+ *
+ * ⚠️ P2-1: ФОЛБЭК НА ЛОКАЛЬНЫЕ ЧАСЫ — документированное отклонение.
+ * `getServerTime()` (platform/server-time.ts) при недоступности платформы
+ * возвращает Date.now(). Это допустимо по двум причинам:
+ *  1. В yandex-режиме серверное время ОБЯЗАТЕЛЬНО: экономика работает только
+ *     при реальном Yandex SDK (isEconomyAvailable() === true). Если SDK не
+ *     инициализирован — yandex.ts сам логирует предупреждение
+ *     («[Yandex] getServerTime: SDK not initialized») и фолбэчит на локальное.
+ *  2. В clean-режиме экономика отключена целиком (isEconomyAvailable() === false),
+ *     поэтому вычисления времени не влияют на начисления.
+ * Фолбэк необходим для работы тестов и dev-окружения без SDK.
  */
 export async function isDayPassed(timestamp: number | null): Promise<boolean> {
   if (!timestamp) return true
@@ -212,34 +223,31 @@ export function calculateCashbackBreakdown(scan: CashbackScanResult): CashbackBr
   return { base: EARNINGS_CASHBACK.base, scale, shapeDiv, toolCount, toolDiv, total }
 }
 
-/**
- * Старая формула кэшбэка (для обратной совместимости)
- * @deprecated Используйте calculateCashbackV2
- */
-export function calculateCashback(
-  objectCount: number,
-  csgOps: number
-): number {
-  const objectsBonus = Math.min(
-    Math.max(0, objectCount - 5) * 1,
-    10
-  )
-  const csgBonus = Math.min(
-    csgOps * 2,
-    10
-  )
-  return Math.min(
-    5 + objectsBonus + csgBonus,
-    25
-  )
-}
-
 /** Проверить, достигнут ли дневной лимит по количеству */
 export function isLimitReached(count: number, limit: number): boolean {
   return count >= limit
 }
 
 // ─── Сканирование дерева для кэшбэка V2 и квестов ───────────────────
+
+/**
+ * P1-2: единое определение «объекта» для целей экспорта, кэшбэка и квестов.
+ *
+ * По спецификации (§2.1: «объекты (примитивы + baked, включая детей CSG)»)
+ * «объектом» считается ЛЮБОЙ объект сцены, попадающий в экспорт STL:
+ * примитивы, CSG-результаты, импортированные меши (`import_mesh`) и
+ * 3D-текст (`text3d` — baked-геометрия). Все они экспортируются в STL
+ * (`downloadStl(objectList, ...)`) и должны учитываться единообразно
+ * в `exportStl`, `scanForCashback` и `evaluateQuests`.
+ *
+ * Единая точка принятия решения: если потребуется исключить какой-то тип
+ * из подсчёта — это делается здесь один раз, а не в трёх местах.
+ */
+export function countSceneObjects(
+  objects: Record<string, { shapeType: string }>
+): number {
+  return Object.values(objects).length
+}
 
 /**
  * Отсканировать объекты и операции для расчёта кэшбэка V2.
@@ -271,7 +279,8 @@ export function scanForCashback(
   if (textCount > 0) toolCategories++ // текст
 
   return {
-    objectCount: Object.keys(objects).length,
+    // P1-2: единый подсчёт — та же функция, что и в exportStl/evaluateQuests
+    objectCount: countSceneObjects(objects),
     uniqueShapeTypes: shapeTypes.size,
     toolsCount: csgCount + mirrorCount + coloredCount + textCount,
     toolCategories,

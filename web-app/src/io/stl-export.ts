@@ -199,7 +199,16 @@ export function exportToStl(objects: SceneObject[]): Blob {
 }
 
 export function downloadStl(objects: SceneObject[], fileName = i18n.t('app.stlDefaultName')): void {
-  const blob = exportToStl(objects)
+  downloadStlBlob(exportToStl(objects), fileName)
+}
+
+/**
+ * P2-6: скачать УЖЕ созданный Blob STL. Отделена от downloadStl(), чтобы
+ * экспортирующий код мог построить Blob (сериализацию) ДО начисления
+ * кэшбэка — успешное создание Blob подтверждает, что экспорт состоялся,
+ * а падение сериализации не приводит к «потерянному» кэшбэку.
+ */
+export function downloadStlBlob(blob: Blob, fileName = i18n.t('app.stlDefaultName')): void {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url

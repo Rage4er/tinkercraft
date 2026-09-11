@@ -9,13 +9,21 @@ import type { ShapeParams, SceneObject } from "../csg/types";
 import { EyeIcon, EyeOffIcon, FilletIcon, FolderIcon, SaveIcon, TokenIcon, GiftIcon, AdFilmIcon, CrownIcon, ClockIcon, SparkIcon, StarIcon, TrophyIcon, TextIcon, ColorIcon } from "./icons";
 import { useEconomyStore, type QuestDifficulty, type RentalKey } from "../store/economy-store";
 import { useUiStore } from "../store/ui-store";
-import { getPlatform } from "../platform";
+import { isEconomyAvailable } from "../platform";
 import { ECONOMY_UI, DIFFICULTY_ICON, ICON_REGISTRY } from "../store/economy-ui-config";
 import Badge from "./Badge";
+import { getCachedServerTime } from "../platform/server-time";
+
+// P1-8: единый источник «сейчас» — серверное время (§5 ECONOMY.md).
+// Форматтеры оставшегося времени аренды/подписки используют кэш серверного
+// времени (30с), а не локальный Date.now() — синхронно с кулдаунами бонуса/рекламы.
+function serverNow(): number {
+  return getCachedServerTime() ?? Date.now() // fallback до первого ответа сервера
+}
 
 /** Форматировать оставшееся время аренды (ч м) */
 function formatRentalRemaining(expiresAt: number, t: any): string {
-  const remaining = expiresAt - Date.now()
+  const remaining = expiresAt - serverNow()
   if (remaining <= 0) return t('economy.status.expired')
   const hours = Math.floor(remaining / (1000 * 60 * 60))
   const mins = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60))
@@ -24,7 +32,7 @@ function formatRentalRemaining(expiresAt: number, t: any): string {
 
 /** Форматировать оставшееся время подписки (дн ч) */
 function formatSubRemaining(expiresAt: number, t: any): string {
-  const remaining = expiresAt - Date.now()
+  const remaining = expiresAt - serverNow()
   if (remaining <= 0) return t('economy.status.expired')
   const days = Math.floor(remaining / (1000 * 60 * 60 * 24))
   const hours = Math.floor((remaining % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
@@ -186,7 +194,14 @@ function EconomyPanel() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
           {todayQuests.map((quest, idx) => {
             const isCompleted = todayQuestsCompleted.includes(quest.difficulty)
-            const progress = Math.min(quest.progress / quest.target, 1)
+            // P2-5: событийные квесты (export_stl/import_stl и др.) не обновляют
+            // progress в evaluateQuests — их прогресс скачет из completeEventQuest,
+            // который ставит progress = target. Для надёжности UI показывает
+            // полный прогресс (target/target), если квест завершён.
+            const displayProgress = isCompleted
+              ? quest.target
+              : Math.min(quest.progress, quest.target)
+            const progress = Math.min(displayProgress / quest.target, 1)
             const iconKey = DIFFICULTY_ICON[quest.difficulty]
             const IconComp = ICON_REGISTRY[iconKey]
             return (
@@ -203,7 +218,7 @@ function EconomyPanel() {
                       quest.difficulty === 'medium' ? t('economy.difficulty.medium') :
                         t('economy.difficulty.hard')}
                   </span>
-                  <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{quest.progress}/{quest.target}</span>
+                  <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{displayProgress}/{quest.target}</span>
                 </div>
                 <div style={{ fontSize: '11px' }}>{getTriggerLabel(quest.trigger, quest.target)}</div>
                 <div style={{ height: '3px', borderRadius: '2px', background: 'var(--bg-secondary)', overflow: 'hidden', marginTop: '3px' }}>
@@ -508,15 +523,15 @@ export default function PropertiesPanel({
     baseColorRef.current = null;
   }, [firstSelected?.id]);
 
-  // Проверка yandex-only
-  const isYandex = getPlatform() !== null
+  // P0-6: экономика рендерится только при реальном Yandex SDK (не clean-фолбэк)
+  const isEconomyActive = isEconomyAvailable()
 
   if (!firstSelected) {
     // ── Нет выделения: показываем экономику (yandex-only) + проект ──
     return (
       <>
-        {/* Экономика — только в yandex-режиме (§6.2) */}
-        {isYandex && <EconomyPanel />}
+        {/* Экономика — только при реальном Yandex SDK (§6.2, P0-6) */}
+        {isEconomyActive && <EconomyPanel />}
 
         <div className="props-empty">
           {t("properties.selectObject")}
@@ -573,8 +588,8 @@ export default function PropertiesPanel({
 
   return (
     <>
-      {/* EC6: мини-HUD баланса при выделенном объекте */}
-      {isYandex && <EconomyMiniHUD />}
+      {/* EC6: мини-HUD баланса при выделенном объекте (P0-6: только при Yandex SDK) */}
+      {isEconomyActive && <EconomyMiniHUD />}
 
       <div className="props-row">
         <span className="props-label">{t("properties.type")}</span>

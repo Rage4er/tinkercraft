@@ -4,6 +4,16 @@ import type { IPlatform } from './types'
 export const platform: IPlatform = {
   ysdk: null,
 
+  /** P0-6: clean-платформа — Yandex SDK отсутствует всегда */
+  isYandexSdkReady() {
+    return false
+  },
+
+  /** P0-6: тип платформы для диагностики/UI */
+  getPlatformType() {
+    return 'clean'
+  },
+
   async init() {
     return false
   },

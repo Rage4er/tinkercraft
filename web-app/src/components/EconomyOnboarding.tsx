@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useEconomyStore } from '../store/economy-store'
-import { getPlatform, initPlatform } from '../platform'
+import { initPlatform, isEconomyAvailable } from '../platform'
 import { TokenIcon, PackageIcon } from './icons'
 
 const STEPS = [
@@ -29,36 +29,39 @@ const STEPS = [
 
 export default function EconomyOnboarding() {
   const { t } = useTranslation()
-  const syncToCloud = useEconomyStore((s) => s.syncToCloud)
+  // P2-3: флаг онбординга и action берём из store — единая точка
+  // персиста/синхронизации (persist + syncToCloud), а не прямой saveData().
+  const onboardingDone = useEconomyStore((s) => s.onboardingDone)
+  const completeOnboarding = useEconomyStore((s) => s.completeOnboarding)
 
   const [step, setStep] = useState(0)
   const [visible, setVisible] = useState(false)
   const [dismissed, setDismissed] = useState(false)
 
-  // Проверяем, показывали ли онбординг ранее
+  // P2-3: флаг уже в store (восстановлен из persist при гидрации и/или
+  // из облака через loadFromCloud в App.bootstrap) — отдельный loadData
+  // в компоненте больше не нужен. Ждём только инициализацию платформы,
+  // чтобы не показывать онбординг до завершения SDK-инициализации.
   useEffect(() => {
     let cancelled = false
 
-    // Проверяем флаг в облаке
     const checkOnboarding = async () => {
-      // ⚠️ Ждём initPlatform() (идемпотентен) — loadData() вызывает
-      // postMessage в iframe Yandex, который ДО завершения RAF-инициализации
-      // платформы ломал React (error #185, см. историю коммитов)
+      // ⚠️ Ждём initPlatform() (идемпотентен) — чтобы изоляция от error #185
+      // сохранялась: при yandex-платформе онбординг рендерится только после
+      // RAF-инициализации платформы (App.tsx рендерит <EconomyOnboarding/>
+      // только при isEconomyAvailable()).
       await initPlatform().catch(() => false)
       if (cancelled) return
 
-      // ok=false допустим (clean-режим — loadData читает localStorage, безопасно)
-      const platform = getPlatform()
-      if (!platform) return
+      // P0-6: без реального Yandex SDK онбординг не показываем
+      if (!isEconomyAvailable()) return
 
-      try {
-        const data = await platform.loadData()
-        if (cancelled) return
-        if (data.onboardingDone) {
-          return // Уже показывали
-        }
-      } catch {
-        // Если ошибка — показываем онбординг
+      // P2-3: проверяем флаг из store (persist/облако синхронизированы
+      // в bootstrap). Если флаг ещё не успел прийти из облака — онбординг
+      // может показаться один раз, но completeOnboarding() запишет флаг
+      // и в persist, и в облако, так что повторно он не появится.
+      if (useEconomyStore.getState().onboardingDone) {
+        return // Уже показывали
       }
       if (!cancelled) setVisible(true)
     }
@@ -66,6 +69,15 @@ export default function EconomyOnboarding() {
     checkOnboarding()
     return () => { cancelled = true }
   }, [])
+
+  // P2-3: если флаг пришёл из облака/локального хранилища во время показа
+  // (синхронизация завершилась позже) — скрываем онбординг.
+  useEffect(() => {
+    if (onboardingDone) {
+      setVisible(false)
+      setDismissed(true)
+    }
+  }, [onboardingDone])
 
   const handleNext = () => {
     if (step < STEPS.length - 1) {
@@ -79,16 +91,11 @@ export default function EconomyOnboarding() {
     setDismissed(true)
     setVisible(false)
 
-    // Сохраняем флаг в облако
-    const platform = getPlatform()
-    if (platform) {
-      try {
-        await platform.saveData({ onboardingDone: true })
-        await syncToCloud()
-      } catch {
-        // Игнорируем ошибки сохранения флага
-      }
-    }
+    // P2-3: флаг сохраняется через store — persist + syncToCloud атомарно.
+    // Прямой platform.saveData() НЕ используется: он мог затереть облачные
+    // поля экономики (saveData перезаписывает весь блоб в Yandex SDK) и
+    // терялся при перезагрузке до синхронизации.
+    completeOnboarding()
   }
 
   if (!visible || dismissed) return null

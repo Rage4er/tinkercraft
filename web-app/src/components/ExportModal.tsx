@@ -3,6 +3,7 @@
 import { useCallback, useState, useMemo, useRef, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useEconomyStore, scanForCashback } from '../store/economy-store'
+import { isEconomyAvailable } from '../platform'
 import { ECONOMY_COSTS, calculateCashbackBreakdown } from '../store/economy-config'
 import { ExportIcon, TokenIcon, AdFilmIcon } from './icons'
 
@@ -22,21 +23,32 @@ export default function ExportModal({
   const todayAdsWatched = useEconomyStore((s) => s.todayAdsWatched)
   const todayCashbacks = useEconomyStore((s) => s.todayCashbacks)
   const watchAdForTokens = useEconomyStore((s) => s.watchAdForTokens)
-  const hasActiveSub = useEconomyStore((s) => s.hasActiveSubscription())
+  // P1-4: RO-селектор — без мутации state в render-фазе
+  const hasActiveSub = useEconomyStore((s) => s.hasActiveSubscriptionRO())
   const [busy, setBusy] = useState(false)
+
+  // P0-6: clean-режим (нет Yandex SDK) — экономика отключена, экспорт свободен
+  const economyActive = isEconomyAvailable()
 
   // EC3: bypass подписки — через useEffect, НЕ в render-фазе
   const subBypassDone = useRef(false)
   useEffect(() => {
+    if (!economyActive) {
+      // P0-6: без SDK не показываем модалку оплаты — сразу экспортируем
+      subBypassDone.current = true
+      onClose()
+      onExport('tokens')
+      return
+    }
     if (hasActiveSub && !subBypassDone.current) {
       subBypassDone.current = true
       onClose()
       onExport('ad') // метод не важен — подписка даёт безлимит
     }
-  }, [hasActiveSub])
+  }, [economyActive, hasActiveSub])
 
-  // Подписка активна — модалка не нужна
-  if (hasActiveSub) return null
+  // Подписка активна — модалка не нужна. Clean-режим — экономика отключена (P0-6).
+  if (!economyActive || hasActiveSub) return null
 
   const exportCost = ECONOMY_COSTS.exportSTL
 

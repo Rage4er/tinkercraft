@@ -280,6 +280,7 @@
     "csgImpossible": "CSG операция невозможна (non-manifold геометрия)",
     "filletFailed": "Ошибка скругления",
     "stlImportFailed": "Ошибка импорта STL",
+    "stlExportFailed": "Ошибка экспорта STL",
     "openFailed": "Ошибка открытия: {{error}}",
     "loadProjectFailed": "Ошибка загрузки проекта",
     "projectNameExists": "Проект \"{{name}}\" уже существует",

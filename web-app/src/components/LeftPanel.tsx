@@ -19,7 +19,7 @@ function getShapeLabel(obj: SceneObject, t: (key: string) => string): string {
 }
 
 import { useEconomyStore } from "../store/economy-store";
-import { getPlatform } from "../platform";
+import { isEconomyAvailable } from "../platform";
 import EconomyShop from "./EconomyShop";
 
 export default function LeftPanel({
@@ -66,7 +66,9 @@ export default function LeftPanel({
   const { t } = useTranslation();
   // EC8: разбивка составного селектора — useShallow не нужен для двух примитивов
   const tokens = useEconomyStore(s => s.tokens);
-  const textActive = useEconomyStore(s => s.hasActiveSubscription() || (s.rentals.text3d !== null && Date.now() < s.rentals.text3d));
+  // P1-4: RO-селектор вместо мутирующего hasActiveSubscription() в render-фазе.
+  // P1-5: единый хелпер доступа к 3D-тексту (подписка ИЛИ аренда text3d по серверному времени).
+  const textActive = useEconomyStore(s => s.canUseText3dRO());
 
   // FIX (LOW-18-31): Remove useMemo — ALL_SHAPES has only 8 elements, memo overhead > benefit
   const filteredShapes = shapeSearch.trim()
@@ -144,7 +146,8 @@ export default function LeftPanel({
           >
             {t("leftPanel.tree")}
           </button>
-          {getPlatform() && (
+          {/* P0-6: магазин только при реальном Yandex SDK (не clean-фолбэк) */}
+          {isEconomyAvailable() && (
             <button
               className={`tab-btn${activeTab === "shop" ? " active" : ""}`}
               onClick={() => onTabChange("shop")}

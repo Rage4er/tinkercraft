@@ -279,6 +279,7 @@
     "csgImpossible": "CSG operation impossible (non-manifold geometry)",
     "filletFailed": "Fillet operation failed",
     "stlImportFailed": "STL import failed",
+    "stlExportFailed": "STL export failed",
     "openFailed": "Open error: {{error}}",
     "loadProjectFailed": "Failed to load project",
     "projectNameExists": "Project \"{{name}}\" already exists",

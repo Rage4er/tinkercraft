@@ -21,6 +21,16 @@ class YandexPlatform implements IPlatform {
   /** Fallback: LoadingAPI.ready() не позже этого срока, даже если воркер не готов */
   private static readonly READY_FALLBACK_MS = 15_000
 
+  /** P0-6: SDK готов только при успешной YaGames.init() */
+  isYandexSdkReady(): boolean {
+    return this.ysdk !== null
+  }
+
+  /** P0-6: тип платформы для диагностики/UI */
+  getPlatformType(): string {
+    return 'yandex'
+  }
+
   async init(): Promise<boolean> {
     if (this.initialized) return this.ysdk !== null
 

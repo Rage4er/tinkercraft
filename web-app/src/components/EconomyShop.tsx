@@ -5,10 +5,16 @@ import { useEconomyStore } from '../store/economy-store'
 import Section from './Section'
 import Badge from './Badge'
 import { TokenIcon, CrownIcon, ClockIcon, AdFilmIcon, TextIcon, ColorIcon } from './icons'
+import { getCachedServerTime } from '../platform/server-time'
+
+// P1-8: единый источник «сейчас» — серверное время (§5 ECONOMY.md)
+function serverNow(): number {
+  return getCachedServerTime() ?? Date.now() // fallback до первого ответа сервера
+}
 
 /** Форматировать оставшееся время аренды */
 function formatRentalRemaining(expiresAt: number, t: (key: string, params?: Record<string, unknown>) => string): string {
-  const remaining = expiresAt - Date.now()
+  const remaining = expiresAt - serverNow()
   if (remaining <= 0) return t('economy.status.expired')
   const hours = Math.floor(remaining / (1000 * 60 * 60))
   const mins = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60))
@@ -17,7 +23,7 @@ function formatRentalRemaining(expiresAt: number, t: (key: string, params?: Reco
 
 /** Форматировать оставшееся время подписки */
 function formatSubRemaining(expiresAt: number, t: (key: string, params?: Record<string, unknown>) => string): string {
-  const remaining = expiresAt - Date.now()
+  const remaining = expiresAt - serverNow()
   if (remaining <= 0) return t('economy.status.expired')
   const days = Math.floor(remaining / (1000 * 60 * 60 * 24))
   const hours = Math.floor((remaining % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))

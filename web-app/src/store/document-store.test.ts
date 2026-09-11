@@ -1,9 +1,45 @@
 // ============================================================
-// Unit tests — document-store: computeAABB, extractAndCenterInPlace
+// Unit tests — document-store: computeAABB, extractAndCenterInPlace,
+// exportStl (P2-6: кэшбэк начисляется ТОЛЬКО после успешного экспорта)
 // ============================================================
 
-import { describe, it, expect } from 'vitest'
-import { computeAABB, extractAndCenterInPlace } from './document-store'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+
+// ─── P2-6: мокаем STL-сериализацию, чтобы проверить цепочку успеха экспорта ───
+const h = vi.hoisted(() => ({
+  exportToStl: vi.fn(),
+  downloadStlBlob: vi.fn(),
+}))
+vi.mock('../io/stl-export', () => ({
+  exportToStl: h.exportToStl,
+  downloadStlBlob: h.downloadStlBlob,
+}))
+
+// Экономика «доступна» — кэшбэк начисляется (проверка анти-фарма внутри
+// calculateAndClaimCashback остаётся настоящей, нам нужен только факт доступности).
+vi.mock('../platform', () => ({
+  getPlatform: () => null,
+  isEconomyAvailable: () => true,
+  getPlatformType: () => 'yandex',
+  initPlatform: async () => true,
+}))
+
+import { computeAABB, extractAndCenterInPlace, useDocumentStore } from './document-store'
+import { useEconomyStore } from './economy-store'
+import type { SceneObject } from '../csg/types'
+
+beforeEach(() => {
+  h.exportToStl.mockReset()
+  h.downloadStlBlob.mockReset()
+  // Стабильное состояние документа/экономики для exportStl
+  useDocumentStore.setState({ objects: {}, operations: [], fileName: null, historyIndex: 0 })
+  useEconomyStore.setState({
+    tokens: 100,
+    lastExportHash: null,
+    todayExportHashes: [],
+    todayCashbacks: 0,
+  })
+})
 
 describe('computeAABB', () => {
   it('computes correct min/max for a simple box', () => {
@@ -115,5 +151,60 @@ describe('extractAndCenterInPlace', () => {
     expect(cz).toBe(0)
     // Vertices should not change
     expect(verts).toEqual(original)
+  })
+})
+
+// ─── P2-6: кэшбэк начисляется ТОЛЬКО после успешного экспорта ───────
+
+describe('exportStl кэшбэк после успеха (P2-6)', () => {
+  const cube = (id: string): SceneObject => ({
+    id,
+    shapeType: 'cube',
+    params: { width: 10, depth: 10, height: 10 },
+    color: '#89b4fa',
+    transform: { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 },
+    visible: true,
+    locked: false,
+    vertices: new Float32Array(),
+    indices: new Uint32Array(),
+  })
+
+  it('начисляет кэшбэк ТОЛЬКО после успешного создания Blob (сериализации)', () => {
+    h.exportToStl.mockReturnValueOnce(new Blob(['stl']))
+    useDocumentStore.setState({
+      objects: { a: cube('a'), b: cube('b') },
+      operations: [],
+      historyIndex: 0,
+      fileName: null,
+    })
+    useEconomyStore.setState({ tokens: 100, lastExportHash: null, todayExportHashes: [], todayCashbacks: 0 })
+
+    useDocumentStore.getState().exportStl()
+
+    expect(h.exportToStl).toHaveBeenCalledTimes(1)
+    expect(h.downloadStlBlob).toHaveBeenCalledTimes(1)
+    // Кэшбэк начислен — токены выросли
+    expect(useEconomyStore.getState().tokens).toBeGreaterThan(100)
+    expect(useEconomyStore.getState().todayCashbacks).toBe(1)
+  })
+
+  it('НЕ начисляет кэшбэк, если сериализация STL упала', () => {
+    h.exportToStl.mockImplementationOnce(() => {
+      throw new Error('worker crashed')
+    })
+    useDocumentStore.setState({
+      objects: { a: cube('a'), b: cube('b') },
+      operations: [],
+      historyIndex: 0,
+      fileName: null,
+    })
+    useEconomyStore.setState({ tokens: 100, lastExportHash: null, todayExportHashes: [], todayCashbacks: 0 })
+
+    useDocumentStore.getState().exportStl()
+
+    // Экспорт не состоялся — кэшбэк НЕ начислен, файл не скачан
+    expect(h.downloadStlBlob).not.toHaveBeenCalled()
+    expect(useEconomyStore.getState().tokens).toBe(100)
+    expect(useEconomyStore.getState().todayCashbacks).toBe(0)
   })
 })

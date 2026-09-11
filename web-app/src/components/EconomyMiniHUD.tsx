@@ -1,8 +1,11 @@
 // src/components/EconomyMiniHUD.tsx — Мини-HUD баланса при выделенном объекте (§6.1)
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useEconomyStore } from '../store/economy-store'
-import { ECONOMY_UI, DIFFICULTY_ICON, ICON_REGISTRY } from '../store/economy-ui-config'
+import { ECONOMY_UI } from '../store/economy-ui-config'
 import { TokenIcon, GiftIcon, AdFilmIcon, ClockIcon } from './icons'
+import { AD_COOLDOWN_MS, LIMITS, isDayPassed } from '../store/economy-config'
+import { getCachedServerTime } from '../platform/server-time'
 
 /** Форматировать ms → "5:00" */
 function formatCooldown(ms: number): string {
@@ -19,21 +22,43 @@ export default function EconomyMiniHUD() {
   const lastAdTimestamp = useEconomyStore((s) => s.lastAdTimestamp)
   const lastDailyBonus = useEconomyStore((s) => s.lastDailyBonus)
 
-  // Кулдаун рекламы
+  // ── P1-8: единый источник времени — серверное (§5 ECONOMY.md).
+  // Синхронизируем с PropertiesPanel: кулдаун/бонус считаем от getServerTime()
+  // (кэш ~30с в platform/server-time), обновляем раз в секунду.
+  const [serverNow, setServerNow] = useState<number | null>(getCachedServerTime())
+
+  useEffect(() => {
+    let mounted = true
+    const update = async () => {
+      const { getServerTime } = await import('../platform/server-time')
+      const t = await getServerTime()
+      if (mounted) setServerNow(t)
+    }
+    void update()
+    const iv = setInterval(() => { void update() }, 1000)
+    return () => { mounted = false; clearInterval(iv) }
+  }, [])
+
+  const now = serverNow ?? Date.now() // fallback до первого ответа сервера
+
+  // Кулдаун рекламы (по серверному времени)
   let cooldownMs = 0
   if (lastAdTimestamp) {
-    const AD_COOLDOWN_MS = 5 * 60 * 1000
-    // Используем Date.now как fallback если SDK не доступен
-    cooldownMs = Math.max(0, AD_COOLDOWN_MS - (Date.now() - lastAdTimestamp))
+    cooldownMs = Math.max(0, AD_COOLDOWN_MS - (now - lastAdTimestamp))
   }
-  const canWatchAd = todayAdsWatched < 3 && cooldownMs === 0
+  const canWatchAd = todayAdsWatched < LIMITS.adsPerDay && cooldownMs === 0
 
-  // Бонус доступен
-  let bonusAvailable = true
-  if (lastDailyBonus) {
-    // Простая проверка: если больше 24ч назад — доступен
-    bonusAvailable = Date.now() - lastDailyBonus > 24 * 60 * 60 * 1000
-  }
+  // Бонус доступен (день сменился по серверной дате)
+  const [bonusAvailable, setBonusAvailable] = useState(true)
+  useEffect(() => {
+    let mounted = true
+    const check = async () => {
+      const ok = await isDayPassed(lastDailyBonus)
+      if (mounted) setBonusAvailable(ok)
+    }
+    void check()
+    return () => { mounted = false }
+  }, [lastDailyBonus])
 
   // EC17: показываем состояние вместо скрытия
   return (

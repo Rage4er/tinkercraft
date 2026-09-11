@@ -28,11 +28,12 @@ import type { MeshResult } from '../csg/worker-handlers'
 import { parseDoodle, serializeDoodle, openDoodleFilePicker, downloadBlob } from '../io/doodle-io'
 import { notify } from './notifications'
 import { saveProject as pmSave, updateProject as pmUpdate, loadProject as pmLoad, listProjects as pmList } from '../io/project-manager'
-import { downloadStl } from '../io/stl-export'
+import { exportToStl, downloadStlBlob } from '../io/stl-export'
 import { openStlFilePicker, parseStlFile } from '../io/stl-import'
 import { autosaveSession, restoreSession } from '../io/autosave'
 import i18n from '../i18n'
 import { useEconomyStore, createExportHash, scanForCashback } from './economy-store'
+import { countSceneObjects } from './economy-config'
 
 /** Обновить прогресс квестов V2 по состоянию сцены (после каждой мутации) */
 function evaluateQuestsAfterMutation(objects: Record<string, SceneObject>, operations: TinkerCraftOperation[]): void {
@@ -95,6 +96,31 @@ async function jumpToHistoryInner(newIdx: number, actionName: string): Promise<v
 
 function isShapeType(v: string): v is ShapeType {
   return ['cube', 'sphere', 'cylinder', 'cone', 'torus', 'prism', 'pyramid', 'import_mesh', 'text3d'].includes(v)
+}
+
+/**
+ * P1-3: облегчить операцию истории для хэша кэшбэка.
+ * Убираем тяжёлые геометрические поля (vertices/indices/normals — мегабайты
+ * на импортах/CSG), оставляя ВСЮ структуру операции: тип, ids, порядок
+ * операндов, resultId, treeOperation, params, transform, цвет и т.д.
+ * Геометрия детерминирована этими полями (либо их отсутствие меняет структуру
+ * хэша незначительно — размер импорта proxy-ируется по числу вершин/индексов).
+ */
+function stripHeavyFieldsForHash(op: TinkerCraftOperation): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(op)) {
+    if (key === 'vertices' || key === 'indices' || key === 'normals') {
+      // Число вершин/индексов — лёгкий proxy «формы» геометрии (детерминирован
+      // от данных, но не раздувает JSON на сотни КБ)
+      if (Array.isArray(value) || ArrayBuffer.isView(value)) {
+        out[key + 'Count'] = (value as { length?: number }).length ?? 0
+      }
+      continue
+    }
+    // Известные скалярные/структурные поля — включаем как есть
+    out[key] = value
+  }
+  return out
 }
 
 // ── Tree snapshot helpers ──
@@ -1040,18 +1066,47 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   exportStl: () => {
     const { objects, fileName, operations } = get()
     const objectList = Object.values(objects)
-    const objectCount = objectList.filter(o => o.shapeType !== 'import_mesh' && o.shapeType !== 'text3d').length
+    // P1-2: единый подсчёт объектов — та же функция, что в scanForCashback/evaluateQuests.
+    // import_mesh и text3d тоже экспортируются в STL (downloadStl(objectList)), поэтому
+    // считаются «объектами» для целей экспорта/квестов/кэшбэка (§2.1 ECONOMY.md).
+    const objectCount = countSceneObjects(objects)
     const csgOps = operations.filter(op => op.type === 'group').length
 
-    // Y3.3: проверка хэша модели для кэшбэка
-    const hash = createExportHash({ objects: objectList.map(o => ({ shapeType: o.shapeType, params: o.params, transform: o.transform })) })
+    // Y3.3: проверка хэша модели для кэшбэка.
+    // P1-3: хэш включает ВСЮ структуру сцены — объекты (shapeType/params/transform)
+    // и операции (историю CSG: группировка, порядок операндов, treeOperation,
+    // перестановки). Изменение CSG-структуры без изменения params теперь даёт
+    // другой хэш. Тяжёлые геометрии (vertices/indices) исключаются — они
+    // детерминированы params/transform либо огромны, а для импортов их размер
+    // учитывается как proxy. Хэш считается только здесь — при экспорте.
+    const hash = createExportHash({
+      objects: objectList.map(o => ({ shapeType: o.shapeType, params: o.params, transform: o.transform })),
+      operations: operations.map(stripHeavyFieldsForHash),
+    })
     const lastHash = useEconomyStore.getState().lastExportHash
     const hashChanged = lastHash === null || lastHash !== hash
 
-    // Y3.2/Y2.0: кэшбэк V2 за экспорт (только если модель изменилась)
+    // P2-6: создаём Blob СТРАТЕГИЧЕСКИ ДО начисления кэшбэка. exportToStl()
+    // синхронно сериализует всю сцену в бинарный STL — если на этом шаге
+    // что-то падает (невалидная геометрия/worker), экспорт фактически не
+    // состоялся, и кэшбэк НЕ начисляется. Начисление перенесено в цепочку
+    // успеха, анти-фарм-проверка хэша сохранена (P0-1).
+    let blob: Blob | null = null
+    try {
+      blob = exportToStl(objectList)
+    } catch (e) {
+      console.error('[Document] STL export failed:', e)
+      notify(i18n.t('errors.stlExportFailed'), 'error')
+      return
+    }
+
+    // Y3.2/Y2.0: кэшбэк V2 за экспорт (только если модель изменилась).
+    // P0-1: hash передаётся ВНУТРЬ calculateAndClaimCashback — проверка анти-фарма
+    // (hash === lastExportHash || входит в todayExportHashes) выполняется ДО начисления.
+    // setExportHash() остаётся как доп. фиксация (атомарно добавляет в todayExportHashes).
     if (hashChanged) {
       const scan = scanForCashback(objects, operations)
-      const cashback = useEconomyStore.getState().calculateAndClaimCashback(scan)
+      const cashback = useEconomyStore.getState().calculateAndClaimCashback(scan, hash)
       if (cashback > 0) {
         // EC12: тост о кэшбэке
         notify(`Кэшбэк +${cashback} 💎`, 'info')
@@ -1060,7 +1115,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       }
     }
 
-    downloadStl(objectList, (fileName?.replace(/\.doodle$/, '') ?? i18n.t('app.name')) + '.stl')
+    downloadStlBlob(blob, (fileName?.replace(/\.doodle$/, '') ?? i18n.t('app.name')) + '.stl')
     // EC4: событийные квесты ДО коммита — прогресс должен обновиться до начисления токенов
     useEconomyStore.getState().completeEventQuest('export_stl', objectCount)
     if (objectCount >= 10) {
