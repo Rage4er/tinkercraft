@@ -12,7 +12,30 @@ let _initPromise: Promise<SDK | null> | null = null
 let _waitForSdk: Promise<void> | null = null
 
 /** Таймаут YaGames.init() — зависший init не должен блокировать запуск игры */
-const INIT_TIMEOUT_MS = 10_000
+export const INIT_TIMEOUT_MS = 10_000
+
+/**
+ * Промис инициализации SDK (для связывания GameplayAPI.start() с init).
+ * Зарезолвится, когда initSdk() завершится (успех ИЛИ clean-фолбэк null),
+ * чтобы старт геймплея не выполнялся ДО завершения инициализации SDK.
+ *
+ * В новом потоке (U10) initSdk() вызывается в main.tsx ДО рендера App,
+ * поэтому к моменту вызова этого геттера _initPromise уже существует
+ * (или уже зарезолвлен). Геттер идемпотентен и потокобезопасен:
+ * если initSdk() ещё не вызван — сам его инициирует (безопасно).
+ */
+let _initDonePromise: Promise<void> | null = null
+
+export function getInitDonePromise(): Promise<void> {
+  if (_initDonePromise) return _initDonePromise
+  _initDonePromise = new Promise<void>((resolve) => {
+    const waitFor = (p: Promise<SDK | null>): void => {
+      p.then(() => resolve()).catch(() => resolve())
+    }
+    waitFor(_initPromise ?? initSdk())
+  })
+  return _initDonePromise
+}
 
 /**
  * Дождаться загрузки SDK в DOM (если ещё не загружен).

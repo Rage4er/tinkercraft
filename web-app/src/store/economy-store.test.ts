@@ -57,7 +57,7 @@ vi.mock('../platform/server-time', () => ({
 }))
 
 // Импорты — ПОСЛЕ vi.mock (vitest поднимает моки)
-import { useEconomyStore, sanitizeEconomyData, createExportHash, MAX_TOKENS, countSceneObjects } from './economy-store'
+import { useEconomyStore, sanitizeEconomyData, createExportHash, MAX_TOKENS, countSceneObjects, emptyAdRewards, type AdRewardKind } from './economy-store'
 import { EARNINGS_AD_REWARDED, LIMITS } from './economy-config'
 import type { TinkerCraftOperation, SceneObject } from '../csg/types'
 
@@ -80,8 +80,8 @@ beforeEach(() => {
         activeSubscription: null,
         subscriptionExpiresAt: null,
         rentals: { text3d: null, extendedPalette: null, disableBanner: null },
-        todayAdsWatched: 0,
-        lastAdTimestamp: null,
+        // U1/U9: per-reward реклама — пустое состояние каждого вида
+        adRewards: emptyAdRewards(),
         todayActions: 0,
         lastActionTimestamp: null,
         todayCashbacks: 0,
@@ -234,7 +234,7 @@ describe('loadFromCloud (P0-4, P0-5)', () => {
             tokens: 5_000_000,              // превышает кап 1_000_000
             activeSubscription: 'hacked',   // некорректный ключ
             rentals: { text3d: 123 },       // частичная структура
-            todayAdsWatched: 999,           // превышает лимит 3/день
+            todayAdsWatched: 999,           // старые поля → миграция в tokens (clamp 3)
             todayExportHashes: ['h1'],
             lastQuestResetDate: 111,
         })
@@ -243,7 +243,10 @@ describe('loadFromCloud (P0-4, P0-5)', () => {
         expect(s.tokens).toBe(MAX_TOKENS)         // кап
         expect(s.activeSubscription).toBeNull()    // некорректный ключ отброшен
         expect(s.rentals).toEqual({ text3d: 123, extendedPalette: null, disableBanner: null })
-        expect(s.todayAdsWatched).toBe(3)          // clamp к лимиту
+        // U1/U9: старые единые счётчики → вид tokens (clamp к лимиту 3/день)
+        expect(s.adRewards.tokens.countToday).toBe(3)
+        expect(s.adRewards.import.countToday).toBe(0)
+        expect(s.adRewards.banner.countToday).toBe(0)
         expect(s.todayExportHashes).toEqual(['h1'])
         expect(s.lastSavedData).not.toBe('')       // P0-4: восстановлен и пересчитан
     })
@@ -288,6 +291,37 @@ describe('sanitizeEconomyData (P0-5 валидация)', () => {
         })
         expect(s?.todayQuests).toHaveLength(1)
         expect(s?.todayQuests?.[0].difficulty).toBe('easy')
+    })
+
+    // U1/U9: миграция старых единых полей рекламы → вид tokens
+    it('мигрирует старые lastAdTimestamp/todayAdsWatched в вид tokens (U1/U9)', () => {
+        const s = sanitizeEconomyData({
+            todayAdsWatched: 2,
+            lastAdTimestamp: 1_700_000_000_000,
+        })
+        expect(s?.adRewards?.tokens.countToday).toBe(2)
+        expect(s?.adRewards?.tokens.lastTimestamp).toBe(1_700_000_000_000)
+        // Импорт/баннер — пустые (их счётчики начинаются с нуля)
+        expect(s?.adRewards?.import.countToday).toBe(0)
+        expect(s?.adRewards?.banner.countToday).toBe(0)
+    })
+
+    // U1/U9: новая структура adRewards валидируется per-reward
+    it('санитизирует adRewards per-reward: clamp лимитов и валидные timestamp', () => {
+        const s = sanitizeEconomyData({
+            adRewards: {
+                tokens: { lastTimestamp: 1_700_000_000_000, countToday: 999 },   // clamp 3
+                import: { lastTimestamp: 'bad', countToday: -5 },                 // null/0
+                banner: { lastTimestamp: 1_700_000_000_000, countToday: 2 },
+                unknown: { lastTimestamp: 1, countToday: 1 },                     // игнор
+            },
+        })
+        expect(s?.adRewards?.tokens.countToday).toBe(3)
+        expect(s?.adRewards?.tokens.lastTimestamp).toBe(1_700_000_000_000)
+        expect(s?.adRewards?.import.lastTimestamp).toBeNull()
+        expect(s?.adRewards?.import.countToday).toBe(0)
+        expect(s?.adRewards?.banner.countToday).toBe(2)
+        expect(s?.adRewards?.banner.lastTimestamp).toBe(1_700_000_000_000)
     })
 })
 
@@ -468,7 +502,12 @@ describe('refreshDayRollover (P1-1)', () => {
             todayQuests: [quest],
             todayQuestsCompleted: ['easy'],
             lastQuestResetDate: 1_700_000_000_000 - 2 * ONE_DAY_MS, // вчера
-            todayAdsWatched: 2,
+            // U1/U9: разные виды с ненулевыми счётчиками — все сбрасываются
+            adRewards: {
+                tokens: { lastTimestamp: 1_700_000_000_000, countToday: 2 },
+                import: { lastTimestamp: 1_700_000_000_000, countToday: 3 },
+                banner: { lastTimestamp: null, countToday: 1 },
+            },
             todayActions: 5,
             todayCashbacks: 2,
             todayExportHashes: ['h1'],
@@ -478,7 +517,10 @@ describe('refreshDayRollover (P1-1)', () => {
         await useEconomyStore.getState().refreshDayRollover()
 
         const s = useEconomyStore.getState()
-        expect(s.todayAdsWatched).toBe(0)
+        // U1/U9: счётчики ВСЕХ видов обнулены
+        expect(s.adRewards.tokens.countToday).toBe(0)
+        expect(s.adRewards.import.countToday).toBe(0)
+        expect(s.adRewards.banner.countToday).toBe(0)
         expect(s.todayActions).toBe(0)
         expect(s.todayCashbacks).toBe(0)
         expect(s.todayExportHashes).toEqual([])
@@ -492,7 +534,11 @@ describe('refreshDayRollover (P1-1)', () => {
             todayQuests: [quest],
             todayQuestsCompleted: ['easy'],
             lastQuestResetDate: 1_700_000_000_000, // сегодня
-            todayAdsWatched: 2,
+            adRewards: {
+                tokens: { lastTimestamp: null, countToday: 2 },
+                import: { lastTimestamp: null, countToday: 1 },
+                banner: { lastTimestamp: null, countToday: 0 },
+            },
             todayActions: 5,
             todayCashbacks: 2,
             todayExportHashes: ['h1'],
@@ -501,11 +547,110 @@ describe('refreshDayRollover (P1-1)', () => {
         await useEconomyStore.getState().refreshDayRollover()
 
         const s = useEconomyStore.getState()
-        expect(s.todayAdsWatched).toBe(2)
+        expect(s.adRewards.tokens.countToday).toBe(2)
+        expect(s.adRewards.import.countToday).toBe(1)
         expect(s.todayActions).toBe(5)
         expect(s.todayCashbacks).toBe(2)
         expect(s.todayExportHashes).toEqual(['h1'])
         expect(s.todayQuests[0].trigger).toBe('count_cubes') // квесты не пересозданы
+    })
+})
+
+// ─── U1/U9: per-reward реклама — кулдауны/лимиты раздельные ──────────
+
+describe('per-reward реклама (U1/U9)', () => {
+    it('кулдаун вида tokens НЕ блокирует import и banner (раздельные кд)', async () => {
+        h.setServerTime(1_700_000_000_000)
+        // tokens: кулдаун активен (последний показ только что)
+        useEconomyStore.setState({
+            tokens: 100,
+            adRewards: {
+                tokens: { lastTimestamp: 1_700_000_000_000, countToday: 1 },
+                import: { lastTimestamp: null, countToday: 0 },
+                banner: { lastTimestamp: null, countToday: 0 },
+            },
+            rentals: { text3d: null, extendedPalette: null, disableBanner: null },
+        })
+        h.platform.showRewardedVideo.mockReset()
+        h.platform.showRewardedVideo
+            .mockResolvedValueOnce(true) // import #1
+            .mockResolvedValueOnce(true) // import #2
+            .mockResolvedValueOnce(true) // banner
+
+        // Импорт работает, несмотря на кулдаун tokens
+        const importOk = await useEconomyStore.getState().watchAdsForImport(2)
+        expect(importOk).toBe(true)
+        expect(useEconomyStore.getState().adRewards.import.countToday).toBe(2)
+
+        // Баннер работает, несмотря на кулдаун tokens и import
+        const bannerRes = await useEconomyStore.getState().watchAdForBanner()
+        expect(bannerRes.ok).toBe(true)
+        expect(useEconomyStore.getState().adRewards.banner.countToday).toBe(1)
+        // tokens НЕ менялся чужими показами
+        expect(useEconomyStore.getState().adRewards.tokens.countToday).toBe(1)
+    })
+
+    it('дневной лимит каждого вида отдельный: исчерпан tokens — import/banner доступны', async () => {
+        h.setServerTime(1_700_000_000_000)
+        useEconomyStore.setState({
+            tokens: 100,
+            adRewards: {
+                tokens: { lastTimestamp: null, countToday: LIMITS.adsPerDay }, // лимит исчерпан
+                import: { lastTimestamp: null, countToday: 0 },
+                banner: { lastTimestamp: null, countToday: 0 },
+            },
+            rentals: { text3d: null, extendedPalette: null, disableBanner: null },
+        })
+        h.platform.showRewardedVideo.mockReset()
+        h.platform.showRewardedVideo
+            .mockResolvedValueOnce(true)
+            .mockResolvedValueOnce(true)
+            .mockResolvedValueOnce(true)
+
+        // tokens-реклама отклонена (лимит вида)
+        const tokensOk = await useEconomyStore.getState().watchAdForTokens()
+        expect(tokensOk).toBe(false)
+
+        // Но импорт и баннер работают — их лимиты не тронуты
+        expect(await useEconomyStore.getState().watchAdsForImport(2)).toBe(true)
+        expect((await useEconomyStore.getState().watchAdForBanner()).ok).toBe(true)
+        expect(useEconomyStore.getState().adRewards.import.countToday).toBe(2)
+        expect(useEconomyStore.getState().adRewards.banner.countToday).toBe(1)
+        expect(useEconomyStore.getState().adRewards.tokens.countToday).toBe(LIMITS.adsPerDay)
+    })
+
+    it('watchAdForTokens увеличивает только вид tokens и ставит его кулдаун', async () => {
+        h.setServerTime(1_700_000_000_000)
+        useEconomyStore.setState({ tokens: 100 })
+        h.platform.showRewardedVideo.mockReset()
+        h.platform.showRewardedVideo.mockResolvedValueOnce(true)
+
+        const ok = await useEconomyStore.getState().watchAdForTokens()
+        expect(ok).toBe(true)
+        const s = useEconomyStore.getState()
+        expect(s.adRewards.tokens.countToday).toBe(1)
+        expect(s.adRewards.tokens.lastTimestamp).toBe(1_700_000_000_000)
+        expect(s.adRewards.import.countToday).toBe(0)
+        expect(s.adRewards.banner.countToday).toBe(0)
+        // Кулдаун tokens активен сразу после показа
+        expect(s.getAdCooldownRemaining('tokens')).toBeGreaterThan(0)
+        expect(s.getAdCooldownRemaining('import')).toBe(0)
+        expect(s.getAdCooldownRemaining('banner')).toBe(0)
+    })
+
+    it('серия импорта (2 ролика) считается в одном виде import без паузы между показами', async () => {
+        h.setServerTime(1_700_000_000_000)
+        useEconomyStore.setState({ tokens: 100 })
+        h.platform.showRewardedVideo.mockReset()
+        h.platform.showRewardedVideo.mockResolvedValue(true)
+
+        const ok = await useEconomyStore.getState().watchAdsForImport(2)
+        expect(ok).toBe(true)
+        const s = useEconomyStore.getState()
+        // Оба показа в рамках одного вызова — общий откат/счётчик вида import
+        expect(s.adRewards.import.countToday).toBe(2)
+        expect(s.adRewards.import.lastTimestamp).toBe(1_700_000_000_000)
+        expect(s.adRewards.tokens.countToday).toBe(0)
     })
 })
 
@@ -514,7 +659,7 @@ describe('refreshDayRollover (P1-1)', () => {
 describe('watchAdsForImport частичная серия (P1-6)', () => {
     it('начисляет +50 за КАЖДЫЙ показанный ролик, даже если серия не завершена', async () => {
         h.setServerTime(1_700_000_000_000)
-        useEconomyStore.setState({ tokens: 100, todayAdsWatched: 0, lastAdTimestamp: null })
+        useEconomyStore.setState({ tokens: 100 })
         h.platform.showRewardedVideo.mockReset()
 
         // 1-я реклама успешно просмотрена, 2-я — отказ
@@ -527,12 +672,12 @@ describe('watchAdsForImport частичная серия (P1-6)', () => {
 
         const s = useEconomyStore.getState()
         expect(s.tokens).toBe(100 + EARNINGS_AD_REWARDED) // первая начислена
-        expect(s.todayAdsWatched).toBe(1) // учтён 1 показ
+        expect(s.adRewards.import.countToday).toBe(1) // учтён 1 показ вида import
     })
 
     it('полная серия (2 показа) — начисляет 2×+50 и возвращает true', async () => {
         h.setServerTime(1_700_000_000_000)
-        useEconomyStore.setState({ tokens: 100, todayAdsWatched: 0, lastAdTimestamp: null })
+        useEconomyStore.setState({ tokens: 100 })
         h.platform.showRewardedVideo.mockReset()
 
         h.platform.showRewardedVideo
@@ -544,23 +689,37 @@ describe('watchAdsForImport частичная серия (P1-6)', () => {
 
         const s = useEconomyStore.getState()
         expect(s.tokens).toBe(100 + EARNINGS_AD_REWARDED * 2)
-        expect(s.todayAdsWatched).toBe(2)
+        expect(s.adRewards.import.countToday).toBe(2)
     })
 
-    it('уважает дневной лимит 3/день: при todayAdsWatched=3 не показывает рекламу', async () => {
-        useEconomyStore.setState({ tokens: 100, todayAdsWatched: LIMITS.adsPerDay, lastAdTimestamp: null })
+    it('уважает дневной лимит 3/день вида import', async () => {
+        useEconomyStore.setState({
+            tokens: 100,
+            adRewards: {
+                tokens: { lastTimestamp: null, countToday: 0 },
+                import: { lastTimestamp: null, countToday: LIMITS.adsPerDay },
+                banner: { lastTimestamp: null, countToday: 0 },
+            },
+        })
         const ok = await useEconomyStore.getState().watchAdsForImport(2)
         expect(ok).toBe(false)
         expect(useEconomyStore.getState().tokens).toBe(100)
     })
 })
 
-// ─── P1-7: реклама баннера и общий лимит 3/день ─────────────────────
+// ─── P1-7 + U1/U9: реклама баннера — свой вид/лимит/кулдаун ──────────
 
-describe('watchAdForBanner лимит (P1-7)', () => {
-    it('увеличивает todayAdsWatched и активирует аренду disableBanner', async () => {
+describe('watchAdForBanner лимит (U1/U9)', () => {
+    it('увеличивает счётчик вида banner и активирует аренду disableBanner', async () => {
         h.setServerTime(1_700_000_000_000)
-        useEconomyStore.setState({ todayAdsWatched: 1, lastAdTimestamp: null, rentals: { text3d: null, extendedPalette: null, disableBanner: null } })
+        useEconomyStore.setState({
+            adRewards: {
+                tokens: { lastTimestamp: null, countToday: 1 },
+                import: { lastTimestamp: null, countToday: 1 },
+                banner: { lastTimestamp: null, countToday: 1 },
+            },
+            rentals: { text3d: null, extendedPalette: null, disableBanner: null },
+        })
 
         h.platform.showRewardedVideo.mockResolvedValueOnce(true)
 
@@ -568,12 +727,21 @@ describe('watchAdForBanner лимит (P1-7)', () => {
         expect(res.ok).toBe(true)
 
         const s = useEconomyStore.getState()
-        expect(s.todayAdsWatched).toBe(2) // учтён в общем лимите 3/день
+        // U1/U9: только вид banner увеличивается; tokens/import НЕ тронуты
+        expect(s.adRewards.banner.countToday).toBe(2)
+        expect(s.adRewards.tokens.countToday).toBe(1)
+        expect(s.adRewards.import.countToday).toBe(1)
         expect(s.rentals.disableBanner).not.toBeNull()
     })
 
-    it('отклоняет рекламу баннера при исчерпанном лимите 3/день', async () => {
-        useEconomyStore.setState({ todayAdsWatched: LIMITS.adsPerDay, lastAdTimestamp: null })
+    it('отклоняет рекламу баннера при исчерпанном лимите вида banner', async () => {
+        useEconomyStore.setState({
+            adRewards: {
+                tokens: { lastTimestamp: null, countToday: 0 },
+                import: { lastTimestamp: null, countToday: 0 },
+                banner: { lastTimestamp: null, countToday: LIMITS.adsPerDay },
+            },
+        })
         h.platform.showRewardedVideo.mockClear() // изолируем от предыдущих тестов
         const res = await useEconomyStore.getState().watchAdForBanner()
         expect(res.ok).toBe(false)

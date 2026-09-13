@@ -19,8 +19,6 @@ function getShapeLabel(obj: SceneObject, t: (key: string) => string): string {
 }
 
 import { useEconomyStore } from "../store/economy-store";
-import { isEconomyAvailable } from "../platform";
-import EconomyShop from "./EconomyShop";
 
 export default function LeftPanel({
   shapeSearch,
@@ -51,8 +49,8 @@ export default function LeftPanel({
   onShowTextModal: () => void;
   objectList: SceneObject[];
   selSet: Set<string>;
-  activeTab: "objects" | "tree" | "shop";
-  onTabChange: (tab: "objects" | "tree" | "shop") => void;
+  activeTab: "objects" | "tree";
+  onTabChange: (tab: "objects" | "tree") => void;
   onSelect: (id: string | null, add: boolean) => void;
   onRename: (id: string, name: string) => void;
   onToggleVis: (id: string) => void;
@@ -105,7 +103,11 @@ export default function LeftPanel({
             </div>
           )}
           {filteredShapes.map((s) => {
-            const isText3d = s.type === 'text3d'
+            // U4: в ALL_SHAPES_DATA фигура 3D-текста объявлена как type: "text",
+            // а в сцене создаётся с shapeType: 'text3d'. Сравниваем именно
+            // "text" — тип из палитры фигур (не переименовываем, чтобы не
+            // сломать создание через addTextMesh).
+            const isText3d = s.type === 'text'
             return (
               <button
                 key={s.type}
@@ -146,15 +148,6 @@ export default function LeftPanel({
           >
             {t("leftPanel.tree")}
           </button>
-          {/* P0-6: магазин только при реальном Yandex SDK (не clean-фолбэк) */}
-          {isEconomyAvailable() && (
-            <button
-              className={`tab-btn${activeTab === "shop" ? " active" : ""}`}
-              onClick={() => onTabChange("shop")}
-            >
-              {t("leftPanel.shop")}
-            </button>
-          )}
         </div>
 
         {activeTab === "objects" ? (
@@ -195,7 +188,6 @@ export default function LeftPanel({
             onDelete={onDeleteObject}
           />
         )}
-        {activeTab === "shop" && <EconomyShop />}
       </Section>
 
       {/* История */}

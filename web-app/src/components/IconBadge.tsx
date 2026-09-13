@@ -22,7 +22,8 @@ const badgeStyles: Record<BadgeType, { bg: string; color: string }> = {
 
 /** Бейдж ¼ кнопки, pointer-events:none */
 export default function IconBadge({ type, label }: BadgeProps) {
-  const size = 16
+  // U7: размер иконки синхронизирован с Badge (16 → 20px)
+  const size = 20
   const style = badgeStyles[type]
 
   // Иконка в зависимости от типа
@@ -52,18 +53,18 @@ export default function IconBadge({ type, label }: BadgeProps) {
         pointerEvents: 'none',
         background: style.bg,
         color: style.color,
-        fontSize: '11px',
+        fontSize: '16px',
         fontWeight: 700,
         borderRadius: 4,
-        padding: '3px 5px',
-        minWidth: 20,
-        minHeight: 16,
+        padding: '4px 6px',
+        minWidth: 24,
+        minHeight: 22,
         boxShadow: '0 1px 3px rgba(0, 0, 0, 0.3)',
       }}
     >
       {icon}
       {label && (
-        <span style={{ fontSize: '9px', marginLeft: '1px', lineHeight: 1 }}>{label}</span>
+        <span style={{ fontSize: '13px', marginLeft: '2px', lineHeight: 1 }}>{label}</span>
       )}
     </div>
   )

@@ -18,9 +18,6 @@ class YandexPlatform implements IPlatform {
   /** Таймаут getPlayer() — зависший getPlayer не должен блокировать init() */
   private static readonly GET_PLAYER_TIMEOUT_MS = 5_000
 
-  /** Fallback: LoadingAPI.ready() не позже этого срока, даже если воркер не готов */
-  private static readonly READY_FALLBACK_MS = 15_000
-
   /** P0-6: SDK готов только при успешной YaGames.init() */
   isYandexSdkReady(): boolean {
     return this.ysdk !== null
@@ -55,16 +52,14 @@ class YandexPlatform implements IPlatform {
         requestAnimationFrame(() => {
           (async () => {
             try {
-              // ⚠️ LoadingAPI.ready() больше НЕ вызывается здесь — игра ещё
-              // грузит CSG-воркер (экран "Загрузка CSG (WASM)…"). Вызов перенесён
+              // ⚠️ LoadingAPI.ready() НЕ вызывается здесь — игра ещё грузит
+              // CSG-воркер (экран "Загрузка CSG (WASM)…"). Вызов перенесён
               // в loadingReady() (App.tsx по факту готовности воркера, §A.1).
-              // Fallback-таймер гарантирует ready() даже при сбое воркера.
-              setTimeout(() => {
-                if (!this.readyCalled) {
-                  console.warn(`[Yandex] LoadingAPI.ready() fallback (${YandexPlatform.READY_FALLBACK_MS}ms) — worker not confirmed ready`)
-                  this.loadingReady()
-                }
-              }, YandexPlatform.READY_FALLBACK_MS)
+              // ⚠️ U10/P1-8: fallback-таймер 15с УБРАН — он мог сработать при
+              // открытом экране "Загрузка CSG (WASM)…" (Game Ready до готовности
+              // UI). Теперь LoadingAPI.ready() вызывается только по факту
+              // готовности (workerOk === true → useEffect в App.tsx), без
+              // временного окна, когда UI ещё грузится.
 
               // Инициализируем sticky banner (правый верхний угол)
               try {

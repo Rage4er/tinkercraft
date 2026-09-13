@@ -20,7 +20,8 @@ export default function ExportModal({
 }) {
   const { t } = useTranslation()
   const tokens = useEconomyStore((s) => s.tokens)
-  const todayAdsWatched = useEconomyStore((s) => s.todayAdsWatched)
+  // U1/U9: экспорт оплачивается рекламой вида `tokens` (свой счётчик/лимит)
+  const tokensAdCount = useEconomyStore((s) => s.adRewards.tokens?.countToday ?? 0)
   const todayCashbacks = useEconomyStore((s) => s.todayCashbacks)
   const watchAdForTokens = useEconomyStore((s) => s.watchAdForTokens)
   // P1-4: RO-селектор — без мутации state в render-фазе
@@ -174,16 +175,16 @@ export default function ExportModal({
             </div>
           )}
 
-          {/* Вариант 2: посмотреть рекламу */}
+          {/* Вариант 2: посмотреть рекламу (вид tokens — свой лимит U9) */}
           <button
             className="btn btn-compact flex-1"
-            disabled={todayAdsWatched >= 3 || busy}
+            disabled={tokensAdCount >= 3 || busy}
             onClick={handleWatchAd}
             style={{ justifyContent: 'center', padding: '16px 24px', fontSize: '20px' }}
           >
-            <AdFilmIcon size={32} /> {t('export.watchAd', { count: todayAdsWatched, max: 3 })}
+            <AdFilmIcon size={32} /> {t('export.watchAd', { count: tokensAdCount, max: 3 })}
           </button>
-          {todayAdsWatched >= 3 && (
+          {tokensAdCount >= 3 && (
             <div className="modal-hint" style={{ textAlign: 'center', fontSize: '12px', color: 'var(--text-muted)' }}>
               {t('economy.adLimit')}
             </div>

@@ -68,8 +68,8 @@ export interface UiStore {
   setMirrorPreviewPlane: (plane: 'XY' | 'XZ' | 'YZ' | null) => void
 
   // Panels
-  activeTab: 'objects' | 'tree' | 'shop'
-  setActiveTab: (v: 'objects' | 'tree' | 'shop') => void
+  activeTab: 'objects' | 'tree'
+  setActiveTab: (v: 'objects' | 'tree') => void
   cameraMode: 'perspective' | 'orthographic'
   setCameraMode: (v: 'perspective' | 'orthographic' | ((prev: 'perspective' | 'orthographic') => 'perspective' | 'orthographic')) => void
 }

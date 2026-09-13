@@ -36,29 +36,32 @@
 | # | Приоритет | Проблема | Статус |
 |---|-----------|----------|--------|
 | 1 | 🔴 КРИТИЧНО | SDK-dev-proxy во всех тест-скриптах указывал на порт **5173**, а Vite слушает **5000** (`vite.config.ts`). Прокси показывает свой SDK-мок (реклама + баннер), но iframe игры грузится с мёртвого порта → игра не стартует | ✅ ИСПРАВЛЕНО (`package.json`, `start-dev.bat`, `start-prod.sh`) |
-| 2 | 🔴 КРИТИЧНО | `main.tsx` блокирует рендер React на `await initSdk()`, а `YaGames.init()` не имел таймаута — зависший init (postMessage/timing в iframe) = игра никогда не стартует | ✅ ИСПРАВЛЕНО — таймаут 10с через `Promise.race` (`platform/sdk.ts`) |
-| 3 | 🟡 СРЕДНЕ | `GameplayAPI.start()` не вызывался при старте: effect модалок срабатывает раньше, чем `initPlatform()` резолвится (`getPlatform()` === null) | ✅ ИСПРАВЛЕНО — вызов после `initPlatform()` в bootstrap-effect (`App.tsx`) |
+| 2 | 🔴 КРИТИЧНО | `main.tsx` блокирует рендер React на `await initSdk()`, а `YaGames.init()` не имел таймаута — зависший init (postMessage/timing в iframe) = игра никогда не стартует | ✅ ИСПРАВЛЕНО — таймаут 10с через `Promise.race`; **U10:** блокировка рендера возвращена, но «чёрный экран» заменён сплэшем со спиннером (`platform/sdk.ts`, `main.tsx`) |
+| 3 | 🟡 СРЕДНЕ | `GameplayAPI.start()` не вызывался при старте: effect модалок срабатывает раньше, чем `initPlatform()` резолвится (`getPlatform()` === null) | ✅ ИСПРАВЛЕНО — вызов после `initPlatform()`; **U10/P1-2:** дополнительно связан с `getInitDonePromise()` — старт геймплея не выполняется до завершения init SDK (`App.tsx`, `platform/sdk.ts`) |
 | 4 | 🟡 СРЕДНЕ | Cleanup `clearInterval(syncInterval)` возвращался из async `bootstrap()` и терялся — интервал syncToCloud не очищался при unmount (утечка, дубль в StrictMode) | ✅ ИСПРАВЛЕНО (`App.tsx`) |
 
 ### Рекомендации из ревью — все реализованы (2026-09-07)
 
 | # | Приоритет | Рекомендация | Статус |
 |---|-----------|--------------|--------|
-| R1 | 🟡 СРЕДНЕ | Рендер не должен блокироваться SDK: `main.tsx` ждал `await initSdk()` до `createRoot()` (худший случай — чёрный экран 15с) | ✅ ИСПРАВЛЕНО — i18n по языку браузера → рендер сразу → SDK параллельно; язык из SDK через `applySdkLanguage()`/`i18n.changeLanguage()` (`main.tsx`, `i18n/init.ts`) |
+| R1 | 🟡 СРЕДНЕ | Рендер не должен блокироваться SDK: `main.tsx` ждал `await initSdk()` до `createRoot()` (худший случай — чёрный экран 15с) | ✅ ИСПРАВЛЕНО — **U10:** блокировка рендера возвращена с заменой «чёрного экрана» на сплэш со спиннером; i18n по языку браузера → `initSdk()` (сплэш) → рендер; язык из SDK через `applySdkLanguage()` (`main.tsx`, `i18n/init.ts`) |
 | R2 | 🟡 СРЕДНЕ | `EconomyOnboarding` вызывал `platform.loadData()` на монтировании вне RAF — postMessage-гонка (паттерн error #185) | ✅ ИСПРАВЛЕНО — ждёт `initPlatform()` (идемпотентен) перед `loadData()`, флаг `cancelled` при unmount (`components/EconomyOnboarding.tsx`) |
-| R3 | 🟡 СРЕДНЕ | `LoadingAPI.ready()` вызывался до готовности CSG-воркера — противоречие чек-листу A.1 («нет экранов загрузки» в момент Game Ready) | ✅ ИСПРАВЛЕНО — новый `IPlatform.loadingReady()`, вызов из App.tsx при `workerOk`, fallback-таймер 15с в `yandex.ts` (`platform/types.ts`, `platform/yandex.ts`, `platform/clean.ts`, `App.tsx`) |
+| R3 | 🟡 СРЕДНЕ | `LoadingAPI.ready()` вызывался до готовности CSG-воркера — противоречие чек-листу A.1 («нет экранов загрузки» в момент Game Ready) | ✅ ИСПРАВЛЕНО — **U10/P1-8:** fallback-таймер 15с УБРАН — `loadingReady()` вызывается только при `workerOk === true` И завершённом init SDK (`App.tsx`, `platform/yandex.ts`) |
 | R4 | 🟡 СРЕДНЕ | `getPlayer()` в `yandex.ts init()` без таймаута — зависший getPlayer блокировал init() и загрузку экономики | ✅ ИСПРАВЛЕНО — `Promise.race` с таймаутом 5с → guest mode (`platform/yandex.ts`) |
 
-### Текущий порядок загрузки (после исправлений)
+### Текущий порядок загрузки (U10, после исправлений)
 
 ```
-1. i18n (язык браузера, мгновенно)          — main.tsx
-2. React render (НЕ ждёт SDK)               — main.tsx
-3. initSdk() параллельно (таймаут 10с)      — platform/sdk.ts
+1. Сплэш-экран со спиннером                 — main.tsx (showSplash)
+2. i18n (язык браузера, мгновенно)          — main.tsx
+3. await initSdk() (таймаут 10с → clean)    — platform/sdk.ts
    ├─ applySdkLanguage() — язык из SDK      — i18n/init.ts
-   └─ initPlatform() → RAF: banner, getPlayer (таймаут 5с) — platform/yandex.ts
-4. App.tsx bootstrap: initPlatform() → GameplayAPI.start() → economy load
-5. CSG-воркер готов (workerOk) → LoadingAPI.ready() (fallback 15с)
+4. React render (ТОЛЬКО после init SDK)     — main.tsx (hideSplash после 2×rAF)
+5. App.tsx bootstrap:
+   ├─ getInitDonePromise() → GameplayAPI.start()  — U10/P1-2: НЕ до init SDK
+   ├─ initPlatform() → RAF: banner, getPlayer (таймаут 5с) — platform/yandex.ts
+   └─ economy load (после initPlatform)
+6. workerOk === true && initDone → LoadingAPI.ready() — U10/P1-8: без fallback 15с
 ```
 
 ---
@@ -240,7 +243,7 @@
 | P1-4 | 🟡 P1 | `LeftPanel.tsx:69` использует мутирующий `hasActiveSubscription()` в render-фазе (связано с EC8/EC11) | ✅ ИСПРАВЛЕНО (2026-09-11) — LeftPanel/ExportModal/ImportModal переведены на RO-селекторы (`canUseText3dRO`/`hasActiveSubscriptionRO`) |
 | P1-5 | 🟡 P1 | Проверка доступа к 3D-тексту дублируется в 4 местах с разной логикой (`App.tsx:441,678`, LeftPanel, Toolbar) | ✅ ИСПРАВЛЕНО (2026-09-11) — единый `canUseText3dRO()` (подписка ИЛИ аренда text3d) в App.tsx ×2, LeftPanel, Toolbar |
 | P1-6 | 🟡 P1 | `watchAdsForImport(2)`: отказ второй рекламы → первая показана, токены не начислены (`economy-store.ts:374`) | ✅ ИСПРАВЛЕНО (2026-09-11) — +50 за каждую показанную рекламу независимо от последующих |
-| P1-7 | 🟡 P1 | `watchAdForBanner` не учитывает лимит 3/день и не тратит `todayAdsWatched` (`economy-store.ts:396`) | ✅ ИСПРАВЛЕНО (2026-09-11) — лимит `adsPerDay=3` + увеличение `todayAdsWatched` (§2) |
+| P1-7 | 🟡 P1 | `watchAdForBanner` не учитывает лимит 3/день и не тратит `todayAdsWatched` (`economy-store.ts:396`) | ✅ ИСПРАВЛЕНО (2026-09-11) — лимит `adsPerDay=3` + увеличение `todayAdsWatched` (§2). **Дополнено (2026-09-12, U9):** счётчик стал раздельным по видам наград — `adRewards['banner'].countToday` вместо общего `todayAdsWatched` (см. реестр отзыва U9) |
 | P1-8 | 🟡 P1 | `EconomyMiniHUD` считает кулдаун/бонус по `Date.now()` — рассинхрон с PropertiesPanel (`EconomyMiniHUD.tsx:27,35`) | ✅ ИСПРАВЛЕНО (2026-09-11) — серверное время `getServerTime()` (кэш 30с) в EconomyMiniHUD/PropertiesPanel/EconomyShop |
 | P1-9 | 🟡 P1 | `csg_complex` считается только для group с ids.length>=2, без subtract/intersect (`economy-store.ts:735`) | ✅ ИСПРАВЛЕНО (2026-09-11) — все булевы операции: дерево операций + `SceneObject.children` |
 | P2-1 | 🟢 P2 | `isDayPassed` фолбэчит на `Date.now()` в clean-режиме (`economy-config.ts:108`) | ✅ ИСПРАВЛЕНО (2026-09-11) — JSDoc: фолбэк безопасен (clean отключает экономику; yandex логирует предупреждение) |
@@ -264,6 +267,30 @@
 ### Вердикт
 
 **✅ Экономика готова к релизу (2026-09-11).** Все 22 проблемы закрыты: 6 P0 (анти-фарм кэшбэка, серверное время expiry/лимитов, хвостовая синхронизация облака, `lastSavedData` в persist, клиентская валидация, clean-фолбэк SDK), 9 P1, 7 P2. Проверка: `pnpm typecheck` — 0 ошибок, `pnpm test` — 299/299 тестов (17 файлов), включая новый `economy-store.test.ts` (~35 тестов). Полный отчёт и итоги — в [`docs/ECONOMY_CODE_REVIEW.md`](docs/ECONOMY_CODE_REVIEW.md).
+
+---
+
+## 🗣️ Реестр отзыва пользователя U1–U10 (закрыт 2026-09-12)
+
+**Источник:** [`docs/USER_FEEDBACK_ECONOMY.md`](docs/USER_FEEDBACK_ECONOMY.md) — отзыв от 2026-09-11 (10 проблем: экономика/UI/платформа).
+
+**Статус:** ✅ ЗАКРЫТО (2026-09-13) — все 10 проблем исправлены в подзадачах; **U3** (дублирование панели экономики) решён: «магазин» = правая панель, ECONOMY.md v2.2.
+
+| # | Приоритет | Итог |
+|---|-----------|------|
+| U1 | 🟡 P1 | ✅ ИСПРАВЛЕНО — раздельные кулдауны per-reward (`adRewards`), ECONOMY.md v2.1 |
+| U2 | 🟡 P1 | ✅ ИСПРАВЛЕНО — «тикающие» таймеры `useAdCooldown()`/`getAdCooldownRemainingMs()` + P2-5 (fallback не кэшируется) |
+| U3 | 🟡 P1 | ✅ ИСПРАВЛЕНО (2026-09-13) — «магазин» = правая панель (`PropertiesPanel` → `EconomyPanel`); вкладка `shop` и `EconomyShop.tsx` удалены; переходы «купить» = `clearSelection()`; ECONOMY.md v2.2 (§6.3 — два места) |
+| U4 | 🟢 P2 | ✅ ИСПРАВЛЕНО — бейдж 3D-текста по реальному типу `type:'text'` + `canUseText3dRO()` |
+| U5 | 🔴 P0 | ✅ ИСПРАВЛЕНО (P0-1) — EconomyBanner подключён, все 3 точки продажи защищены от повторного списания |
+| U6 | 🟡 P1 | ✅ ИСПРАВЛЕНО — палитра Wad's Optimum 16 всегда; расширенный picker за аренду |
+| U7 | 🟢 P2 | ✅ ИСПРАВЛЕНО — иконки бейджей ×2 (10→20px / 16→20px) |
+| U8 | 🔴 P0 | ✅ ИСПРАВЛЕНО (P1-1) — единая модель кэшбэка (`exportStl(method)`), цепочка оплата→скачивание восстановлена |
+| U9 | 🟡 P1 | ✅ ИСПРАВЛЕНО — отдельные дневные счётчики per-reward; лимиты 705/350 |
+| U10 | 🔴 P0 | ✅ ИСПРАВЛЕНО — bootstrap «сплэш → initSdk → App»; `LoadingAPI.ready()` по факту готовности; `GameplayAPI.start()` через `getInitDonePromise()` |
+
+**Проверка:** `pnpm verify` (2026-09-13) — typecheck 0 ошибок, **336/336 тестов (23 файла)**, `build`/`build:yandex` успешны.
+Детали и чек-лист — в [`docs/USER_FEEDBACK_ECONOMY.md`](docs/USER_FEEDBACK_ECONOMY.md); записи — в [`CHANGELOG.md`](CHANGELOG.md) `[Unreleased]`.
 
 ---
 

@@ -8,15 +8,18 @@ import EconomyMiniHUD from "./EconomyMiniHUD";
 import type { ShapeParams, SceneObject } from "../csg/types";
 import { EyeIcon, EyeOffIcon, FilletIcon, FolderIcon, SaveIcon, TokenIcon, GiftIcon, AdFilmIcon, CrownIcon, ClockIcon, SparkIcon, StarIcon, TrophyIcon, TextIcon, ColorIcon } from "./icons";
 import { useEconomyStore, type QuestDifficulty, type RentalKey } from "../store/economy-store";
-import { useUiStore } from "../store/ui-store";
+import { useDocumentStore } from "../store/document-store";
 import { isEconomyAvailable } from "../platform";
 import { ECONOMY_UI, DIFFICULTY_ICON, ICON_REGISTRY } from "../store/economy-ui-config";
 import Badge from "./Badge";
 import { getCachedServerTime } from "../platform/server-time";
+import { useAdCooldown } from "../platform/ad-timers";
 
 // P1-8: единый источник «сейчас» — серверное время (§5 ECONOMY.md).
 // Форматтеры оставшегося времени аренды/подписки используют кэш серверного
 // времени (30с), а не локальный Date.now() — синхронно с кулдаунами бонуса/рекламы.
+// U2: кулдауны рекламы считаются через useAdCooldown() (посекундный тик,
+// привязка к серверному моменту через смещение serverTime − localTime).
 function serverNow(): number {
   return getCachedServerTime() ?? Date.now() // fallback до первого ответа сервера
 }
@@ -39,25 +42,6 @@ function formatSubRemaining(expiresAt: number, t: any): string {
   return t('economy.time.daysHours', { d: days, h: hours })
 }
 
-/** Форматировать ms → "5:00" */
-function formatCooldown(ms: number): string {
-  const totalSec = Math.ceil(ms / 1000)
-  const min = Math.floor(totalSec / 60)
-  const sec = totalSec % 60
-  return `${min}:${sec.toString().padStart(2, '0')}`
-}
-
-/** Рассчитать оставшееся время кулдауна рекламы (мс) — использует серверное время (§5) */
-async function getAdCooldownRemaining(): Promise<number> {
-  const { lastAdTimestamp } = useEconomyStore.getState()
-  if (!lastAdTimestamp) return 0
-  const AD_COOLDOWN_MS = 5 * 60 * 1000
-  const { getServerTime } = await import('../platform/server-time')
-  const serverTime = await getServerTime()
-  const elapsed = serverTime - lastAdTimestamp
-  return Math.max(0, AD_COOLDOWN_MS - elapsed)
-}
-
 /** Проверить, прошёл ли день (§5 серверное время) */
 async function checkBonusAvailable(lastDailyBonus: number | null): Promise<boolean> {
   if (!lastDailyBonus) return true
@@ -73,7 +57,8 @@ function EconomyPanel() {
   const claimDailyBonus = useEconomyStore((s) => s.claimDailyBonus)
   const watchAdForTokens = useEconomyStore((s) => s.watchAdForTokens)
   const watchAdForBanner = useEconomyStore((s) => s.watchAdForBanner)
-  const todayAdsWatched = useEconomyStore((s) => s.todayAdsWatched)
+  // U1/U9: счётчик вида `tokens` для кнопки рекламы за токены
+  const tokensAdCount = useEconomyStore((s) => s.adRewards.tokens?.countToday ?? 0)
   const lastDailyBonus = useEconomyStore((s) => s.lastDailyBonus)
   const todayQuests = useEconomyStore((s) => s.todayQuests)
   const todayQuestsCompleted = useEconomyStore((s) => s.todayQuestsCompleted)
@@ -87,25 +72,28 @@ function EconomyPanel() {
   const hasRental = useEconomyStore((s) => s.hasRentalRO)
 
   const [busy, setBusy] = useState<string | null>(null)
-  const [cooldownMs, setCooldownMs] = useState(0)
   const [canClaimBonus, setCanClaimBonus] = useState(true)
 
-  // Загружаем состояние при монтировании и обновляем каждую секунду
+  // U2: живой посекундный отсчёт кулдауна рекламы (вид `tokens`).
+  // Значение пересчитывается раз в секунду по локальным часам с поправкой
+  // на серверное смещение — «м:сс» тикает, а не стоит на месте 30с.
+  const { remainingMs: cooldownMs, formatted: cooldownLabel } = useAdCooldown('tokens')
+
+  // Бонус доступен (день сменился по серверной дате)
   useEffect(() => {
     const update = async () => {
-      const cd = await getAdCooldownRemaining()
-      setCooldownMs(cd)
       const bonus = await checkBonusAvailable(lastDailyBonus)
       setCanClaimBonus(bonus)
     }
     void update()
     const iv = setInterval(() => {
       void update()
-    }, 1000)
+    }, 60_000)
     return () => clearInterval(iv)
   }, [lastDailyBonus])
 
-  const canWatchAd = todayAdsWatched < 3 && cooldownMs === 0
+  // U1/U9: лимит/кулдаун вида `tokens` (свой у каждого вида награды)
+  const canWatchAd = tokensAdCount < 3 && cooldownMs === 0
 
   const handleBuyRental = async (key: RentalKey) => {
     if (busy) return
@@ -174,7 +162,7 @@ function EconomyPanel() {
           </button>
         ) : cooldownMs > 0 ? (
           <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <ClockIcon width={12} height={12} /> {formatCooldown(cooldownMs)}
+            <ClockIcon width={12} height={12} /> {cooldownLabel}
           </span>
         ) : (
           <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{t('economy.adLimitReached')}</span>
@@ -339,6 +327,11 @@ function EconomyPanel() {
   )
 
   // ── Скрытие баннера (2 место §6.3) ──
+  // U5/P0-1: если аренда disableBanner уже активна — показываем состояние
+  // «активно (баннер скрыт · N ч)» и НЕ даём повторно купить/посмотреть рекламу.
+  const bannerRentalActive = hasRental('disableBanner')
+  const bannerRentalExpires = rentals.disableBanner
+  const bannerRentalRemaining = bannerRentalExpires !== null ? formatRentalRemaining(bannerRentalExpires, t) : null
   const bannerOffSection = (
     <div style={{
       padding: '6px 8px', borderRadius: '4px',
@@ -347,36 +340,44 @@ function EconomyPanel() {
     }}>
       <div>
         <div style={{ fontSize: '11px', fontWeight: 'bold' }}>{t('economy.triggers.bannerOff', { defaultValue: 'Нет баннера на 24 ч' })}</div>
-        <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{t('economy.tooltip.bannerOff')}</div>
+        <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+          {bannerRentalActive && bannerRentalRemaining
+            ? t('economy.status.bannerHidden', { remaining: bannerRentalRemaining })
+            : t('economy.tooltip.bannerOff')}
+        </div>
       </div>
-      <div style={{ display: 'flex', gap: '4px' }}>
-        <button
-          className="btn btn-compact btn-sm"
-          disabled={tokens < 50 || busy === 'disableBanner'}
-          onClick={() => handleBuyRental('disableBanner')}
-          style={{
-            fontSize: '10px', padding: '2px 6px',
-            position: 'relative', display: 'flex', alignItems: 'center', gap: '2px',
-          }}
-        >
-          <TokenIcon width={10} height={10} /> 50
-          {/* Бейдж 💰50 → SVG-иконка (§6.4, без эмодзи) */}
-          <Badge type="tokens" value="50" />
-        </button>
-        <button
-          className="btn btn-compact btn-sm"
-          disabled={busy === 'bannerAd'}
-          onClick={handleWatchAdForBanner}
-          style={{
-            fontSize: '10px', padding: '2px 6px',
-            position: 'relative', display: 'flex', alignItems: 'center', gap: '2px',
-          }}
-        >
-          <AdFilmIcon width={10} height={10} /> 1
-          {/* Бейдж 📺1 → SVG-иконка (§6.4, без эмодзи) */}
-          <Badge type="ad" value="1" />
-        </button>
-      </div>
+      {bannerRentalActive ? (
+        <span style={{ fontSize: '10px', color: 'var(--success)' }}>{t('economy.status.active')}</span>
+      ) : (
+        <div style={{ display: 'flex', gap: '4px' }}>
+          <button
+            className="btn btn-compact btn-sm"
+            disabled={tokens < 50 || busy === 'disableBanner'}
+            onClick={() => handleBuyRental('disableBanner')}
+            style={{
+              fontSize: '10px', padding: '2px 6px',
+              position: 'relative', display: 'flex', alignItems: 'center', gap: '2px',
+            }}
+          >
+            <TokenIcon width={10} height={10} /> 50
+            {/* Бейдж 💰50 → SVG-иконка (§6.4, без эмодзи) */}
+            <Badge type="tokens" value="50" />
+          </button>
+          <button
+            className="btn btn-compact btn-sm"
+            disabled={busy === 'bannerAd'}
+            onClick={handleWatchAdForBanner}
+            style={{
+              fontSize: '10px', padding: '2px 6px',
+              position: 'relative', display: 'flex', alignItems: 'center', gap: '2px',
+            }}
+          >
+            <AdFilmIcon width={10} height={10} /> 1
+            {/* Бейдж 📺1 → SVG-иконка (§6.4, без эмодзи) */}
+            <Badge type="ad" value="1" />
+          </button>
+        </div>
+      )}
     </div>
   )
 
@@ -480,7 +481,9 @@ export default function PropertiesPanel({
   const hasExtendedPaletteRental = useEconomyStore(s => s.hasRentalRO('extendedPalette'))
   const hasActiveSub = useEconomyStore(s => s.hasActiveSubscriptionRO())
   const canUseExtendedPicker = hasExtendedPaletteRental || hasActiveSub
-  const setActiveTab = useUiStore(s => s.setActiveTab)
+  // U3: нет левой вкладки «магазин» — «купить» снимает выделение: экономика
+  // (аренда text3d/extendedPalette и т.д.) показывается в правой панели при пустом выделении.
+  const clearSelection = useDocumentStore(s => s.clearSelection)
 
   const commitDraftColor = () => {
     const targetId = draftTargetIdRef.current;
@@ -604,56 +607,38 @@ export default function PropertiesPanel({
       <div className="props-row">
         <span className="props-label">{t("properties.color")}</span>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          {canUseExtendedPicker ? (
-            showNativePicker ? (
-              <div className="flex-row-6">
-                <div
-                  className="color-swatch"
-                  style={{ background: draftColor || firstSelected.color }}
-                />
-                <input
-                  type="color"
-                  value={draftColor || firstSelected.color}
-                  className="color-input"
-                  onChange={(e) => handleColorChange(e.target.value)}
-                  onBlur={applyDraftColor}
-                />
-              </div>
-            ) : (
-              <ColorPalette
-                selectedColor={draftColor || firstSelected.color}
-                onChange={(color) => handleColorChange(color)}
+          {/* U6: простая палитра Wad's Optimum 16 бесплатна и доступна ВСЕГДА
+              (§3.4 «бесплатно навсегда — ядро редактора»). Аренда extendedPalette
+              открывает ТОЛЬКО расширенный native picker. */}
+          {!showNativePicker && (
+            <ColorPalette
+              selectedColor={draftColor || firstSelected.color}
+              onChange={(color) => handleColorChange(color)}
+              onBlur={applyDraftColor}
+            />
+          )}
+          {showNativePicker && canUseExtendedPicker && (
+            <div className="flex-row-6">
+              <div
+                className="color-swatch"
+                style={{ background: draftColor || firstSelected.color }}
+              />
+              <input
+                type="color"
+                value={draftColor || firstSelected.color}
+                className="color-input"
+                onChange={(e) => handleColorChange(e.target.value)}
                 onBlur={applyDraftColor}
               />
-            )
-          ) : (
-            <div style={{
-              padding: '8px',
-              borderRadius: '4px',
-              background: 'var(--bg-tertiary)',
-              border: '1px solid var(--border)',
-              opacity: 0.5,
-              textAlign: 'center',
-              fontSize: '12px',
-              color: 'var(--text-muted)'
-            }}>
-              {t('properties.lockedExtended')}<br />
-              <span style={{ fontSize: '11px' }}>{t('economy.adNotRentable')}</span><br />
-              <button
-                className="btn btn-compact btn-sm"
-                onClick={() => setActiveTab('shop')}
-                style={{ marginTop: '4px' }}
-              >
-                {t('properties.buyFor', { n: 75 })}
-              </button>
             </div>
           )}
           <button
             className="btn btn-compact btn-full"
             onClick={() => {
               if (!canUseExtendedPicker) {
-                // 🔒 Нет доступа — открыть магазин
-                setActiveTab('shop')
+                // 🔒 Нет доступа к расширенному — раскрыть правую панель экономики
+                // (снять выделение: EconomyPanel рендерится при пустом выделении)
+                clearSelection()
                 return
               }
               setShowNativePicker(!showNativePicker)

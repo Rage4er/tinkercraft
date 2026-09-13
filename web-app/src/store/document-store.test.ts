@@ -24,20 +24,44 @@ vi.mock('../platform', () => ({
   initPlatform: async () => true,
 }))
 
+// P0-2: мокаем Project Manager — saveToProject вызывает pmSave/pmList
+const pm = vi.hoisted(() => ({
+  pmSave: vi.fn(),
+  pmUpdate: vi.fn(),
+  pmLoad: vi.fn(),
+  pmList: vi.fn(),
+}))
+vi.mock('../io/project-manager', () => ({
+  saveProject: pm.pmSave,
+  updateProject: pm.pmUpdate,
+  loadProject: pm.pmLoad,
+  listProjects: pm.pmList,
+}))
+
 import { computeAABB, extractAndCenterInPlace, useDocumentStore } from './document-store'
 import { useEconomyStore } from './economy-store'
+import { calculateCashbackV2, scanForCashback } from './economy-config'
 import type { SceneObject } from '../csg/types'
 
 beforeEach(() => {
   h.exportToStl.mockReset()
   h.downloadStlBlob.mockReset()
+  pm.pmSave.mockReset()
+  pm.pmUpdate.mockReset()
+  pm.pmLoad.mockReset()
+  pm.pmList.mockReset()
+  pm.pmSave.mockResolvedValue({ id: 'proj-1', name: 'Test', objectCount: 0, savedAt: 123 })
+  pm.pmUpdate.mockResolvedValue(undefined)
+  pm.pmList.mockResolvedValue([])
   // Стабильное состояние документа/экономики для exportStl
-  useDocumentStore.setState({ objects: {}, operations: [], fileName: null, historyIndex: 0 })
+  useDocumentStore.setState({ objects: {}, operations: [], fileName: null, historyIndex: 0, currentProjectId: null, currentProjectName: null, modified: false })
   useEconomyStore.setState({
     tokens: 100,
     lastExportHash: null,
     todayExportHashes: [],
     todayCashbacks: 0,
+    todayQuests: [],
+    todayQuestsCompleted: [],
   })
 })
 
@@ -155,8 +179,11 @@ describe('extractAndCenterInPlace', () => {
 })
 
 // ─── P2-6: кэшбэк начисляется ТОЛЬКО после успешного экспорта ───────
+// U8/P1-1: единая модель кэшбэка — кэшбэк начисляется ТОЛЬКО на рекламном
+// пути ('ad'). При оплате токенами он уже учтён в цене модалки (netCost).
+// Хэш модели фиксируется при ЛЮБОМ успешном экспорте (анти-фарм).
 
-describe('exportStl кэшбэк после успеха (P2-6)', () => {
+describe('exportStl кэшбэк после успеха (P2-6 + U8/P1-1)', () => {
   const cube = (id: string): SceneObject => ({
     id,
     shapeType: 'cube',
@@ -169,7 +196,7 @@ describe('exportStl кэшбэк после успеха (P2-6)', () => {
     indices: new Uint32Array(),
   })
 
-  it('начисляет кэшбэк ТОЛЬКО после успешного создания Blob (сериализации)', () => {
+  it('начисляет кэшбэк на рекламном пути ТОЛЬКО после успешного создания Blob', () => {
     h.exportToStl.mockReturnValueOnce(new Blob(['stl']))
     useDocumentStore.setState({
       objects: { a: cube('a'), b: cube('b') },
@@ -179,13 +206,63 @@ describe('exportStl кэшбэк после успеха (P2-6)', () => {
     })
     useEconomyStore.setState({ tokens: 100, lastExportHash: null, todayExportHashes: [], todayCashbacks: 0 })
 
-    useDocumentStore.getState().exportStl()
+    useDocumentStore.getState().exportStl('ad')
 
     expect(h.exportToStl).toHaveBeenCalledTimes(1)
     expect(h.downloadStlBlob).toHaveBeenCalledTimes(1)
     // Кэшбэк начислен — токены выросли
     expect(useEconomyStore.getState().tokens).toBeGreaterThan(100)
     expect(useEconomyStore.getState().todayCashbacks).toBe(1)
+  })
+
+  it('U8: при оплате токенами кэшбэк НЕ начисляется повторно (нет задвоения)', () => {
+    h.exportToStl.mockReturnValueOnce(new Blob(['stl']))
+    useDocumentStore.setState({
+      objects: { a: cube('a'), b: cube('b') },
+      operations: [],
+      historyIndex: 0,
+      fileName: null,
+    })
+    // Модалка уже списала netCost = 50 − кэшбэк (для 2 кубов кэшбэк ≥ 1)
+    useEconomyStore.setState({ tokens: 51, lastExportHash: null, todayExportHashes: [], todayCashbacks: 0 })
+
+    useDocumentStore.getState().exportStl('tokens')
+
+    expect(h.downloadStlBlob).toHaveBeenCalledTimes(1)
+    // Кэшбэк НЕ начислен повторно — токены не выросли
+    expect(useEconomyStore.getState().tokens).toBe(51)
+    expect(useEconomyStore.getState().todayCashbacks).toBe(0)
+    // Анти-фарм: хэш всё равно зафиксирован — повторный экспорт той же
+    // модели (даже рекламой) кэшбэк не даст.
+    expect(useEconomyStore.getState().lastExportHash).not.toBeNull()
+  })
+
+  it('U8: итоговый баланс при токен-оплате = −50 + кэшбэк, а не −50 + 2×кэшбэк', () => {
+    h.exportToStl.mockReturnValueOnce(new Blob(['stl']))
+    useDocumentStore.setState({
+      objects: { a: cube('a'), b: cube('b') },
+      operations: [],
+      historyIndex: 0,
+      fileName: null,
+    })
+    // Считаем кэшбэк для 2 кубов (как в модалке)
+    const scan = scanForCashback(
+      useDocumentStore.getState().objects as never,
+      useDocumentStore.getState().operations as never,
+    )
+    const cashback = calculateCashbackV2(scan)
+    const startTokens = 100
+    useEconomyStore.setState({ tokens: startTokens, lastExportHash: null, todayExportHashes: [], todayCashbacks: 0 })
+
+    // Модалка: spendTokens(50 − cashback)
+    const ok = useEconomyStore.getState().spendTokens(Math.max(0, 50 - cashback))
+    expect(ok).toBe(true)
+    // Экспорт: токен-путь — кэшбэк НЕ начисляется повторно
+    useDocumentStore.getState().exportStl('tokens')
+
+    // Итоговый баланс: 100 − 50 + cashback (скидка один раз), НЕ 100 − 50 + 2×cashback
+    expect(useEconomyStore.getState().tokens).toBe(startTokens - 50 + cashback)
+    expect(useEconomyStore.getState().todayCashbacks).toBe(0)
   })
 
   it('НЕ начисляет кэшбэк, если сериализация STL упала', () => {
@@ -200,11 +277,104 @@ describe('exportStl кэшбэк после успеха (P2-6)', () => {
     })
     useEconomyStore.setState({ tokens: 100, lastExportHash: null, todayExportHashes: [], todayCashbacks: 0 })
 
-    useDocumentStore.getState().exportStl()
+    useDocumentStore.getState().exportStl('ad')
 
     // Экспорт не состоялся — кэшбэк НЕ начислен, файл не скачан
     expect(h.downloadStlBlob).not.toHaveBeenCalled()
     expect(useEconomyStore.getState().tokens).toBe(100)
     expect(useEconomyStore.getState().todayCashbacks).toBe(0)
+  })
+
+  it('U8: повторный экспорт той же модели без изменений — без кэшбэка (анти-фарм)', () => {
+    h.exportToStl.mockReturnValue(new Blob(['stl']))
+    useDocumentStore.setState({
+      objects: { a: cube('a'), b: cube('b') },
+      operations: [],
+      historyIndex: 0,
+      fileName: null,
+    })
+    useEconomyStore.setState({ tokens: 100, lastExportHash: null, todayExportHashes: [], todayCashbacks: 0 })
+
+    // Первый экспорт рекламой — кэшбэк начислен
+    useDocumentStore.getState().exportStl('ad')
+    const tokensAfterFirst = useEconomyStore.getState().tokens
+    const cashbacksAfterFirst = useEconomyStore.getState().todayCashbacks
+    expect(cashbacksAfterFirst).toBe(1)
+
+    // Второй экспорт той же модели рекламой — кэшбэк НЕ начислен (хэш тот же)
+    useDocumentStore.getState().exportStl('ad')
+    expect(useEconomyStore.getState().tokens).toBe(tokensAfterFirst)
+    expect(useEconomyStore.getState().todayCashbacks).toBe(1)
+  })
+})
+
+// ─── P0-2: commitQuests в saveToProject (зачёт наград при сохранении) ───
+
+describe('saveToProject commitQuests (P0-2)', () => {
+  const quest = {
+    difficulty: 'easy' as const,
+    trigger: 'count_cubes' as const,
+    category: 'composition' as const,
+    target: 5,
+    progress: 5,
+    reward: 20,
+    completed: true,
+  }
+
+  it('начисляет награды за завершённые квесты после успешного сохранения', async () => {
+    pm.pmSave.mockResolvedValueOnce({ id: 'proj-1', name: 'Test', objectCount: 0, savedAt: 123 })
+    pm.pmList.mockResolvedValueOnce([])
+    useDocumentStore.setState({
+      objects: {},
+      operations: [],
+      historyIndex: 0,
+      fileName: null,
+      currentProjectId: null,
+      currentProjectName: null,
+      modified: false,
+    })
+    useEconomyStore.setState({
+      tokens: 100,
+      todayQuests: [quest],
+      todayQuestsCompleted: [],
+      lastExportHash: null,
+      todayExportHashes: [],
+      todayCashbacks: 0,
+    })
+
+    await useDocumentStore.getState().saveToProject('Test Project')
+
+    expect(pm.pmSave).toHaveBeenCalledTimes(1)
+    // Награда за квест начислена (easy = 20)
+    expect(useEconomyStore.getState().tokens).toBe(120)
+    expect(useEconomyStore.getState().todayQuestsCompleted).toContain('easy')
+  })
+
+  it('НЕ начисляет награды, если сохранение упало (ошибка) — квесты не засчитываются', async () => {
+    pm.pmList.mockResolvedValueOnce([])
+    pm.pmSave.mockRejectedValueOnce(new Error('IDB full'))
+    useDocumentStore.setState({
+      objects: {},
+      operations: [],
+      historyIndex: 0,
+      fileName: null,
+      currentProjectId: null,
+      currentProjectName: null,
+      modified: false,
+    })
+    useEconomyStore.setState({
+      tokens: 100,
+      todayQuests: [quest],
+      todayQuestsCompleted: [],
+      lastExportHash: null,
+      todayExportHashes: [],
+      todayCashbacks: 0,
+    })
+
+    await useDocumentStore.getState().saveToProject('Test Project')
+
+    // Сохранение не состоялось — квесты НЕ засчитаны, токены не изменились
+    expect(useEconomyStore.getState().tokens).toBe(100)
+    expect(useEconomyStore.getState().todayQuestsCompleted).not.toContain('easy')
   })
 })

@@ -12,11 +12,14 @@ import TextModal from "./components/TextModal";
 import ExportModal from "./components/ExportModal";
 import ImportModal from "./components/ImportModal";
 import EconomyOnboarding from "./components/EconomyOnboarding";
-import EconomyShop from "./components/EconomyShop";
+import EconomyBanner from "./components/EconomyBanner";
 import StatusBar from "./components/StatusBar";
 import LeftPanel from "./components/LeftPanel";
 import PropertiesPanel from "./components/PropertiesPanel";
 // EconomyHUD, QuestPanel, EconomyShop удалены — интегрированы в PropertiesPanel (§6.2 ECONOMY.md)
+// U3: отдельной левой вкладки «магазин» нет; точки продаж — только правая панель
+// (PropertiesPanel → EconomyPanel). Переходы «купить» = clearSelection() — экономика
+// показывается в правой панели при пустом выделении.
 import { useDocumentStore } from "./store/document-store";
 import { useUiStore } from "./store/ui-store";
 import { useEconomyStore } from "./store/economy-store";
@@ -25,6 +28,7 @@ import { isWorkerReady } from "./csg/worker-client";
 import { notify } from "./store/notifications";
 import { SNAP_VALUES, AUTOSAVE_DELAY_MS } from "./constants";
 import { getPlatform, initPlatform, isEconomyAvailable } from "./platform";
+import { getInitDonePromise } from "./platform/sdk";
 import type {
   TransformNR,
   ShapeParams,
@@ -198,11 +202,17 @@ export default function App() {
   // RAF в platform.init() завершается только ПОСЛЕ стабилизации React-дерева.
   const economyInitialized = useRef(false)
 
+  // ⚠️ U10/P1-2: GameplayAPI.start() НЕ вызывается до завершения init SDK.
+  // Старт выполняется в эффекте модалок ниже (getInitDonePromise → start/stop)
+  // — единая точка управления геймплеем, без дублирования.
+
   useEffect(() => {
     let disposed = false
     let syncInterval: ReturnType<typeof setInterval> | null = null
     const bootstrap = async () => {
-      // 1. Инициализируем платформу (включает RAF-вызовы SDK)
+      // 1. Инициализируем платформу (включает RAF-вызовы SDK).
+      // Уже инициализирована из main.tsx (initSdk()) — initPlatform()
+      // вернёт тот же результат без повторной инициализации.
       const ok = await initPlatform().catch((err) => {
         console.error('[App] Platform init failed:', err)
         return false
@@ -211,12 +221,6 @@ export default function App() {
       if (!ok) {
         console.warn('[App] Platform init returned false — running in clean mode')
       }
-
-      // 1.5 GameplayAPI.start() — ПОСЛЕ init платформы. Эффект с зависимостями
-      // от модалок срабатывает на монтировании раньше, чем initPlatform()
-      // резолвится (getPlatform() ещё null), поэтому старт сессии геймплея
-      // вызываем здесь (требование модерации Yandex).
-      getPlatform()?.startGameplay()
 
       // 2. Только ПОСЛЕ platform.init() загружаем экономику
       if (!economyInitialized.current) {
@@ -281,13 +285,12 @@ export default function App() {
     setShowExportModal(true)
   }, [])
 
-  // Выполнить экспорт после выбора в модалке
+  // Выполнить экспорт после выбора в модалке.
+  // U8: method передаётся в exportStl() — от него зависит модель кэшбэка:
+  // при 'tokens' кэшбэк уже учтён в цене модалки (нет повторного начисления),
+  // при 'ad' — начисляется после экспорта (P1-1).
   const handleExportExecute = useCallback((method: 'tokens' | 'ad') => {
-    if (method === 'ad') {
-      // Реклама уже показана в модалке
-    }
-    // tokens — просто экспортим
-    exportStl()
+    exportStl(method)
   }, [exportStl])
 
   // Обёртка importStl — открывает модалку выбора способа оплаты (§3.1)
@@ -314,13 +317,19 @@ export default function App() {
     return () => clearInterval(iv);
   }, [workerOk]);
 
-  // ── LoadingAPI.ready() — ПОСЛЕ полной готовности вьюпорта (§A.1 чек-листа) ──
-  // Игра готова к взаимодействию, когда CSG-воркер поднялся и экран
-  // "Загрузка CSG (WASM)…" исчез. В yandex.ts есть fallback-таймер 15с
-  // на случай, если воркер так и не поднялся.
+  // ── LoadingAPI.ready() — ПОСЛЕ полной готовности UI (§A.1 чек-листа) ──
+  // U10/P1-8: Game Ready вызывается ТОЛЬКО когда CSG-воркер поднялся
+  // (workerOk === true) И SDK инициализирован (getInitDonePromise). Ранний
+  // fallback-таймер 15с убран из yandex.ts — ready() не может сработать
+  // при открытом экране "Загрузка CSG (WASM)…".
   useEffect(() => {
     if (!workerOk) return
-    getPlatform()?.loadingReady()
+    let disposed = false
+    void getInitDonePromise().then(() => {
+      if (disposed) return
+      getPlatform()?.loadingReady()
+    })
+    return () => { disposed = true }
   }, [workerOk]);
 
 
@@ -351,18 +360,23 @@ export default function App() {
 
   // ── Yandex Gameplay API — обязательное требование модерации ──
   // При открытии модальных окон — stopGameplay(), при закрытии — startGameplay()
-  // При монтировании (все модалки false) — автоматически вызывает startGameplay()
+  // При монтировании (все модалки false) — автоматически вызывает startGameplay().
+  // ⚠️ U10/P1-2: start/stop НЕ выполняются до завершения инициализации SDK
+  // (getInitDonePromise). После init эффект повторно оценит состояние модалок.
   useEffect(() => {
-    const platform = getPlatform()
-    if (!platform) return
-
-    const showAnyModal = showTextModal || showPM || showExportModal
-
-    if (showAnyModal) {
-      platform.stopGameplay()
-    } else {
-      platform.startGameplay()
-    }
+    let disposed = false
+    void getInitDonePromise().then(() => {
+      if (disposed) return
+      const platform = getPlatform()
+      if (!platform) return
+      const showAnyModal = showTextModal || showPM || showExportModal
+      if (showAnyModal) {
+        platform.stopGameplay()
+      } else {
+        platform.startGameplay()
+      }
+    })
+    return () => { disposed = true }
   }, [showTextModal, showPM, showExportModal])
 
   useEffect(() => {
@@ -463,8 +477,10 @@ export default function App() {
   const handleAddText = useCallback(async () => {
     // EC13: проверка доступа к 3D-тексту
     // P1-5: единый RO-хелпер (подписка ИЛИ аренда text3d по серверному времени)
+    // U3: нет левой вкладки «магазин» — «купить» ведёт в правую панель (экономика
+    // показывается при пустом выделении): снимаем выделение, чтобы раскрыть EconomyPanel.
     if (!useEconomyStore.getState().canUseText3dRO()) {
-      setActiveTab('shop')
+      clearSelection()
       notify(t('economy.adNotRentable'), 'warning')
       return
     }
@@ -589,6 +605,13 @@ export default function App() {
       {/* P0-6: только при реальном Yandex SDK (не clean-фолбэк) */}
       {isEconomyAvailable() && <EconomyOnboarding />}
 
+      {/* ── ЭКОНОМИКА: баннер-оффер скрытия (§6.3 ECONOMY.md) ── */}
+      {/* P0-1/U5: рендерится только когда экономика доступна (yandex-only),
+          bannerVisible=true, нет активной подписки и нет аренды disableBanner.
+          Все условия проверяются внутри EconomyBanner через геттеры store —
+          компонент сам возвращает null, если баннер не нужен. */}
+      {isEconomyAvailable() && <EconomyBanner />}
+
       {/* ── Ruler distance display ── */}
       {rulerDist !== null && (
         <div className="ruler-display">
@@ -702,8 +725,9 @@ export default function App() {
           onAddShape={addShape}
           onShowTextModal={() => {
             // P1-5: единый RO-хелпер доступа к 3D-тексту (подписка ИЛИ аренда text3d)
+            // U3: «купить» ведёт в правую панель (экономика при пустом выделении)
             if (!useEconomyStore.getState().canUseText3dRO()) {
-              setActiveTab('shop')
+              clearSelection()
               return
             }
             setShowTextModal(true)

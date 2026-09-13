@@ -17,7 +17,8 @@ export default function ImportModal({
 }) {
   const { t } = useTranslation()
   const tokens = useEconomyStore((s) => s.tokens)
-  const todayAdsWatched = useEconomyStore((s) => s.todayAdsWatched)
+  // U1/U9: импорт оплачивается серией вида `import` (свой счётчик/лимит)
+  const importAdCount = useEconomyStore((s) => s.adRewards.import?.countToday ?? 0)
   const watchAdsForImport = useEconomyStore((s) => s.watchAdsForImport)
   // P1-4: RO-селектор — без мутации state в render-фазе
   const hasActiveSub = useEconomyStore((s) => s.hasActiveSubscriptionRO())
@@ -117,16 +118,16 @@ export default function ImportModal({
             </div>
           )}
 
-          {/* Вариант 2: посмотреть рекламу 2 раза */}
+          {/* Вариант 2: посмотреть рекламу 2 раза (вид import — свой лимит U9) */}
           <button
             className="btn btn-compact flex-1"
-            disabled={todayAdsWatched + adCost > 3 || busy}
+            disabled={importAdCount + adCost > 3 || busy}
             onClick={handleWatchAd}
             style={{ justifyContent: 'center', padding: '16px 24px', fontSize: '20px' }}
           >
-            <AdFilmIcon size={32} /> {t('import.watchAd', { count: todayAdsWatched, max: 3, adsNeeded: adCost })}
+            <AdFilmIcon size={32} /> {t('import.watchAd', { count: importAdCount, max: 3, adsNeeded: adCost })}
           </button>
-          {todayAdsWatched + adCost > 3 && (
+          {importAdCount + adCost > 3 && (
             <div className="modal-hint" style={{ textAlign: 'center', fontSize: '12px', color: 'var(--text-muted)' }}>
               {t('economy.adLimit')}
             </div>

@@ -1063,9 +1063,19 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   },
 
   // ── Export STL ──
-  exportStl: () => {
+  // P1-1/U8: method указывает, чем оплачен экспорт:
+  //  - 'tokens' — кэшбэк УЖЕ учтён в цене модалки (netCost = 50 − кэшбэк),
+  //    поэтому в exportStl() кэшбэк НЕ начисляется повторно (защита от задвоения,
+  //    §2.1 ECONOMY.md «фактическая стоимость 31 💎»);
+  //  - 'ad' — бесплатный просмотр рекламы, кэшбэк начисляется (мотивация строить
+  //    сложные модели);
+  //  - undefined — прямой вызов (clean-режим/подписка): кэшбэк НЕ начисляем,
+  //    т.к. нет точки списания — поведение нейтрально для подписчиков.
+  exportStl: (method?: 'tokens' | 'ad') => {
     const { objects, fileName, operations } = get()
     const objectList = Object.values(objects)
+    const paidByTokens = method === 'tokens'
+    const paidByAd = method === 'ad'
     // P1-2: единый подсчёт объектов — та же функция, что в scanForCashback/evaluateQuests.
     // import_mesh и text3d тоже экспортируются в STL (downloadStl(objectList)), поэтому
     // считаются «объектами» для целей экспорта/квестов/кэшбэка (§2.1 ECONOMY.md).
@@ -1101,21 +1111,36 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     }
 
     // Y3.2/Y2.0: кэшбэк V2 за экспорт (только если модель изменилась).
-    // P0-1: hash передаётся ВНУТРЬ calculateAndClaimCashback — проверка анти-фарма
-    // (hash === lastExportHash || входит в todayExportHashes) выполняется ДО начисления.
-    // setExportHash() остаётся как доп. фиксация (атомарно добавляет в todayExportHashes).
+    // U8/P1-1: ЕДИНАЯ МОДЕЛЬ КЭШБЭКА — кэшбэк начисляется ТОЛЬКО при оплате
+    // рекламой ('ad'). При оплате токенами кэшбэк УЖЕ учтён в цене модалки
+    // (netCost = 50 − кэшбэк, §2.1 ECONOMY.md «фактическая стоимость»), поэтому
+    // повторное начисление здесь дало бы задвоение выгоды. Прямой вызов без
+    // method (подписка/clean) — начислений нет.
+    // P0-1: hash фиксируется ПРИ ЛЮБОМ успешном экспорте (анти-фарм — повторный
+    // экспорт той же модели без изменений не даёт кэшбэк ни токенами, ни рекламой).
+    // ВАЖНО: порядок — СНАЧАЛА calculateAndClaimCashback (проверяет анти-фарм по
+    // lastExportHash/todayExportHashes), ПОТОМ setExportHash (иначе хэш был бы уже
+    // зафиксирован и начисление никогда бы не сработало).
     if (hashChanged) {
-      const scan = scanForCashback(objects, operations)
-      const cashback = useEconomyStore.getState().calculateAndClaimCashback(scan, hash)
-      if (cashback > 0) {
-        // EC12: тост о кэшбэке
-        notify(`Кэшбэк +${cashback} 💎`, 'info')
-        // E6: через action (set) — попадает в persist и облако
-        useEconomyStore.getState().setExportHash(hash)
+      if (paidByAd) {
+        const scan = scanForCashback(objects, operations)
+        const cashback = useEconomyStore.getState().calculateAndClaimCashback(scan, hash)
+        if (cashback > 0) {
+          // EC12: тост о кэшбэке (рекламный путь — кэшбэк начислен после экспорта)
+          notify(i18n.t('export.cashbackEarned', { cashback }), 'info')
+        }
       }
+      // Анти-фарм: фиксируем хэш модели в любом случае (E6: через action set —
+      // попадает в persist и облако; атомарно добавляет в todayExportHashes).
+      useEconomyStore.getState().setExportHash(hash)
     }
 
     downloadStlBlob(blob, (fileName?.replace(/\.doodle$/, '') ?? i18n.t('app.name')) + '.stl')
+    // U8/P1-1: при оплате токенами кэшбэк уже заложен в цену модалки —
+    // информируем пользователя, что повторного начисления не будет.
+    if (paidByTokens) {
+      notify(i18n.t('export.cashbackIncluded'), 'info')
+    }
     // EC4: событийные квесты ДО коммита — прогресс должен обновиться до начисления токенов
     useEconomyStore.getState().completeEventQuest('export_stl', objectCount)
     if (objectCount >= 10) {
@@ -1362,6 +1387,10 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         set({ currentProjectId: meta.id })
       }
       set({ modified: false, currentProjectName: effectiveName })
+      // P0-2: квесты V2 — награды за задания начисляются при УСПЕШНОМ сохранении
+      // в проект (§4 ECONOMY.md «зачёт в saveProject()/exportStl()»).
+      // Только после успеха — иначе квесты не засчитываются.
+      await useEconomyStore.getState().commitQuests()
     } catch (e) {
       console.error('saveToProject:', e)
       notify(e instanceof Error ? e.message : i18n.t('errors.saveFailed'), 'error')

@@ -131,6 +131,8 @@
     "title": "Export STL",
     "description": "Choose how to export your model:",
     "cashbackInfo": "Cashback up to {{cashback}} tokens → final price: {{netCost}}",
+    "cashbackIncluded": "Cashback included in the price",
+    "cashbackEarned": "Cashback +{{cashback}} 💎",
     "payTokens": "Pay {{cost}} tokens",
     "watchAd": "Watch ad ({{count}}/{{max}} watched)",
     "cashbackBreakdown": {
@@ -162,7 +164,6 @@
     "objects": "Objects",
     "list": "List",
     "tree": "Tree",
-    "shop": "Shop",
     "sceneEmpty": "Scene is empty",
     "hidden": "hidden",
     "history": "History",
@@ -417,10 +418,10 @@
     },
     "tooltip": {
       "bonus": "Once per day, reset by server time",
-      "ad": "Up to 3 views per day, 5 min cooldown",
+      "ad": "Up to 3 views per day per reward, 5 min cooldown",
       "adLimit": "Daily limit",
       "quests": "Reward granted on save or export",
-      "bannerOff": "Hide banner for 24h for 50 tokens or 1 ad"
+      "bannerOff": "Hide banner for 24h for 50 tokens or 1 ad (own ad limit)"
     },
     "subscriptions": {
       "weekly": "Weekly",
@@ -431,7 +432,8 @@
     "status": {
       "active": "Active",
       "expired": "Expired",
-      "proActive": "Pro active · "
+      "proActive": "Pro active · ",
+      "bannerHidden": "Banner hidden · {{remaining}}"
     },
     "time": {
       "hoursMins": "{{h}}h {{m}}m",

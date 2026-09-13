@@ -35,6 +35,71 @@ export type RentalKey = 'text3d' | 'extendedPalette' | 'disableBanner'
 /** Тип подписки */
 export type SubscriptionKey = 'weekly' | 'monthly'
 
+/**
+ * U1/U9: вид rewarded-рекламы. Каждый вид имеет СОБСТВЕННЫЙ кулдаун 5 мин
+ * и СОБСТВЕННЫЙ дневной лимит ≤3 (§2 ECONOMY.md v2.1).
+ * - `tokens` — реклама за токены (+50, кнопка/HUD/экспорт);
+ * - `import` — серия из 2 роликов за импорт STL;
+ * - `banner` — 1 ролик за скрытие баннера (аренда disableBanner).
+ */
+export type AdRewardKind = 'tokens' | 'import' | 'banner'
+
+/** Состояние одного вида наградной рекламы */
+export interface AdRewardState {
+  /** Время последнего показа (серверное) — для кд 5 мин */
+  lastTimestamp: number | null
+  /** Просмотров сегодня (лимит ≤3/день на вид) */
+  countToday: number
+}
+
+/** Все виды наградной рекламы (порядок фиксирован) */
+export const AD_REWARD_KINDS: AdRewardKind[] = ['tokens', 'import', 'banner']
+
+/** Пустое состояние вида рекламы */
+export function emptyAdReward(): AdRewardState {
+  return { lastTimestamp: null, countToday: 0 }
+}
+
+/** Начальное per-reward состояние: все виды сброшены */
+export function emptyAdRewards(): Record<AdRewardKind, AdRewardState> {
+  return {
+    tokens: emptyAdReward(),
+    import: emptyAdReward(),
+    banner: emptyAdReward(),
+  }
+}
+
+/**
+ * Отметить успешный показ рекламы вида `kind`:
+ * счётчик +1 и кулдаун = serverTime (серверное время, §5).
+ */
+function markAdWatched(
+  rewards: Record<AdRewardKind, AdRewardState>,
+  kind: AdRewardKind,
+  serverTime: number
+): Record<AdRewardKind, AdRewardState> {
+  const cur = rewards[kind] ?? emptyAdReward()
+  return {
+    ...rewards,
+    [kind]: { lastTimestamp: serverTime, countToday: cur.countToday + 1 },
+  }
+}
+
+/**
+ * Сбросить ДНЕВНЫЕ счётчики всех видов рекламы (смена суток, §5).
+ * Кулдауны (lastTimestamp) НЕ сбрасываются — как было со старым
+ * lastAdTimestamp: перезапуск/новый день не даёт мгновенного показа.
+ */
+function resetAdRewardsCounters(
+  rewards: Record<AdRewardKind, AdRewardState>
+): Record<AdRewardKind, AdRewardState> {
+  return {
+    tokens: { ...(rewards.tokens ?? emptyAdReward()), countToday: 0 },
+    import: { ...(rewards.import ?? emptyAdReward()), countToday: 0 },
+    banner: { ...(rewards.banner ?? emptyAdReward()), countToday: 0 },
+  }
+}
+
 /** Сложность квеста */
 export type QuestDifficulty = 'easy' | 'medium' | 'hard'
 
@@ -88,8 +153,13 @@ interface EconomyState {
   rentals: Record<RentalKey, number | null> // timestamp когда истекает
 
   // ── Лимиты за день ──
-  todayAdsWatched: number
-  lastAdTimestamp: number | null
+  /**
+   * U1/U9: per-reward состояние rewarded-рекламы.
+   * Каждый вид (tokens/import/banner) — свой кулдаун 5 мин и свой дневной
+   * счётчик ≤3 (§2 ECONOMY.md v2.1). Заменяет единые todayAdsWatched/
+   * lastAdTimestamp (U1/U9 из docs/USER_FEEDBACK_ECONOMY.md).
+   */
+  adRewards: Record<AdRewardKind, AdRewardState>
   todayActions: number
   lastActionTimestamp: number | null
   todayCashbacks: number
@@ -142,6 +212,17 @@ interface EconomyState {
   /** EC2: N реклам подряд для импорта (без кулдауна между показами) */
   watchAdsForImport(count: number): Promise<boolean>
   watchAdForBanner(): Promise<{ ok: boolean }>
+
+  // ── U1/U9: per-reward геттеры для UI (кулдаун/лимит каждого вида) ──
+  /**
+   * Оставшееся время кулдауна (мс) для вида рекламы (0 — можно смотреть).
+   * Синхронно, на основе кэша серверного времени (P1-8).
+   */
+  getAdCooldownRemaining(kind: AdRewardKind): number
+  /** Осталось просмотров сегодня для вида (лимит ≤3/день на вид) */
+  getAdRewardsLeftToday(kind: AdRewardKind): number
+  /** Можно ли смотреть рекламу вида (не исчерпан лимит И нет кулдауна) */
+  canWatchAdKind(kind: AdRewardKind): boolean
   earnActionToken(): Promise<boolean>
   /** P0-1: кэшбэк начисляется только если hash не был использован сегодня (анти-фарм) */
   calculateAndClaimCashback(scanResult: CashbackScanResult, hash?: string | null): number
@@ -313,7 +394,7 @@ type PersistedEconomyFields = Pick<
   | 'rentals'
   | 'todayQuests'
   | 'todayQuestsCompleted'
-  | 'todayAdsWatched'
+  | 'adRewards'
   | 'todayActions'
   | 'todayCashbacks'
   | 'todayExportHashes'
@@ -376,6 +457,43 @@ function sanitizeQuest(v: unknown): QuestV2 | null {
 }
 
 /**
+ * U1/U9: санитизация per-reward состояний рекламы.
+ * - Каждый вид валидируется отдельно: countToday clamp к лимиту 3/день,
+ *   lastTimestamp — валидный timestamp или null.
+ * - МИГРАЦИЯ старых полей (v2.0 → v2.1): если в данных есть единые
+ *   lastAdTimestamp / todayAdsWatched и НЕТ новой структуры adRewards,
+ *   значения переносятся в вид `tokens` (см. комментарий в sanitizeEconomyData).
+ */
+function sanitizeAdRewards(
+  rawAdRewards: unknown,
+  rawRoot: Record<string, unknown>
+): Record<AdRewardKind, AdRewardState> {
+  const base = emptyAdRewards()
+
+  // Миграция старых полей → вид tokens (только если новой структуры ещё нет)
+  const hasNewStructure = isPlainObject(rawAdRewards)
+  if (!hasNewStructure) {
+    const legacyCount = toClampedNumber(rawRoot.todayAdsWatched, 0, 0, LIMITS.adsPerDay)
+    const legacyTs = toNullableTimestamp(rawRoot.lastAdTimestamp)
+    if (legacyCount > 0 || legacyTs !== null) {
+      base.tokens = { lastTimestamp: legacyTs, countToday: legacyCount }
+    }
+  }
+
+  if (!hasNewStructure) return base
+
+  for (const kind of AD_REWARD_KINDS) {
+    const entry = (rawAdRewards as Record<string, unknown>)[kind]
+    if (!isPlainObject(entry)) continue // отсутствующий вид → пустой
+    base[kind] = {
+      lastTimestamp: toNullableTimestamp(entry.lastTimestamp),
+      countToday: toClampedNumber(entry.countToday, 0, 0, LIMITS.adsPerDay),
+    }
+  }
+  return base
+}
+
+/**
  * P0-5: санитизация данных экономики.
  * Принимает произвольные данные (localStorage/cloud/hydrate) и возвращает
  * валидный Partial персистентных полей, либо null (данные не объект).
@@ -422,7 +540,13 @@ export function sanitizeEconomyData(raw: unknown): Partial<PersistedEconomyField
     : []
 
   // Дневные счётчики: clamp к дневным лимитам (нельзя записать 9999 реклам)
-  out.todayAdsWatched = toClampedNumber(raw.todayAdsWatched, 0, 0, LIMITS.adsPerDay)
+  // U1/U9: per-reward счётчики рекламы. Старые единые поля lastAdTimestamp /
+  // todayAdsWatched (до v2.1) мигрируются в вид `tokens`: это единственный
+  // вид, чьи старые показания можно однозначно интерпретировать (кнопка/HUD/
+  // экспорт — все были «реклама за токены»). Импорт и баннер получают пустые
+  // состояния — их счётчики начнутся с нуля (потеря ≤3 показов некритична,
+  // а риск неверно приписать просмотры импорта/баннера к токенам выше).
+  out.adRewards = sanitizeAdRewards(raw.adRewards, raw)
   out.todayActions = toClampedNumber(raw.todayActions, 0, 0, LIMITS.actionsPerDay)
   out.todayCashbacks = toClampedNumber(raw.todayCashbacks, 0, 0, LIMITS.cashbackPerDay)
 
@@ -460,7 +584,8 @@ function collectSyncData(state: EconomyState): Record<string, unknown> {
     rentals: state.rentals,
     todayQuests: state.todayQuests,
     todayQuestsCompleted: state.todayQuestsCompleted,
-    todayAdsWatched: state.todayAdsWatched,
+    // U1/U9: per-reward счётчики/кулдауны рекламы синхронизируются в облако
+    adRewards: state.adRewards,
     todayActions: state.todayActions,
     todayCashbacks: state.todayCashbacks,
     todayExportHashes: state.todayExportHashes, // P0-1: защита от очистки localStorage
@@ -492,8 +617,8 @@ export const useEconomyStore = create<EconomyState>()(
         extendedPalette: null,
         disableBanner: null,
       },
-      todayAdsWatched: 0,
-      lastAdTimestamp: null,
+      // U1/U9: per-reward реклама — свой кулдаун и счётчик у каждого вида
+      adRewards: emptyAdRewards(),
       todayActions: 0,
       lastActionTimestamp: null,
       todayCashbacks: 0,
@@ -563,18 +688,21 @@ export const useEconomyStore = create<EconomyState>()(
         return true
       },
 
-      // ── Реклама за токены: +50, ≤ 3/день, кулдаун 5 мин (§5 серверное время) ──
+      // ── Реклама за токены: +50, ≤ 3/день на вид, кулдаун 5 мин на вид (§5) ──
+      // U1/U9: свой кулдаун/счётчик у вида `tokens` — не блокирует импорт/баннер.
       watchAdForTokens: async () => {
         const state = get()
+        const kind: AdRewardKind = 'tokens'
+        const ad = state.adRewards[kind] ?? emptyAdReward()
 
-        if (isLimitReached(state.todayAdsWatched, LIMITS.adsPerDay)) {
-          console.warn('[Economy] Ad limit reached today')
+        if (isLimitReached(ad.countToday, LIMITS.adsPerDay)) {
+          console.warn('[Economy] Ad limit reached today (tokens)')
           return false
         }
 
-        const passed = await isCooldownPassed(state.lastAdTimestamp, AD_COOLDOWN_MS)
+        const passed = await isCooldownPassed(ad.lastTimestamp, AD_COOLDOWN_MS)
         if (!passed) {
-          console.warn('[Economy] Ad cooldown not passed')
+          console.warn('[Economy] Ad cooldown not passed (tokens)')
           return false
         }
 
@@ -591,33 +719,35 @@ export const useEconomyStore = create<EconomyState>()(
         const { getServerTime } = await import('../platform/server-time')
         const serverTime = await getServerTime()
 
-        set((state) => ({
-          tokens: state.tokens + EARNINGS_AD_REWARDED,
-          todayAdsWatched: state.todayAdsWatched + 1,
-          lastAdTimestamp: serverTime,
+        set((st) => ({
+          tokens: st.tokens + EARNINGS_AD_REWARDED,
+          adRewards: markAdWatched(st.adRewards, kind, serverTime),
         }))
         await get().syncToCloud()
-        console.log(`[Economy] Ad rewarded: +${EARNINGS_AD_REWARDED}`)
+        console.log(`[Economy] Ad rewarded (tokens): +${EARNINGS_AD_REWARDED}`)
         return true
       },
 
       // ── EC2: N рекламы подряд для импорта (§3.1: 2 просмотра) ──
-      // Без кулдауна между показами — кулдаун проверяется только один раз в начале
+      // U1/U9: серия использует СОБСТВЕННЫЙ вид `import` — кулдаун 5 мин
+      // проверяется один раз в начале серии, между показами паузы НЕТ (как раньше),
+      // но каждый показ увеличивает счётчик вида `import`.
       // P1-6: каждая УСПЕШНО просмотренная реклама начисляет +50 СРАЗУ, даже если
       // пользователь не досмотрел серию (отказ на 2-й) — показ платформой засчитан,
       // значит награда положена. Импорт дополнительно списывает стоимость токенами
       // в ImportModal (§3.1: 100 TC) — реклама и токены не смешиваются.
       watchAdsForImport: async (count: number): Promise<boolean> => {
         const state = get()
+        const kind: AdRewardKind = 'import'
+        const ad = state.adRewards[kind] ?? emptyAdReward()
 
-        // Проверяем только текущий лимит — серия показывается до тех пор,
-        // пока не исчерпан дневной лимит 3/день (§2)
-        if (isLimitReached(state.todayAdsWatched, LIMITS.adsPerDay)) {
+        // Проверяем лимит и кулдаун ТОЛЬКО вида import (U1/U9)
+        if (isLimitReached(ad.countToday, LIMITS.adsPerDay)) {
           console.warn('[Economy] Ad limit reached for import')
           return false
         }
 
-        const passed = await isCooldownPassed(state.lastAdTimestamp, AD_COOLDOWN_MS)
+        const passed = await isCooldownPassed(ad.lastTimestamp, AD_COOLDOWN_MS)
         if (!passed) {
           console.warn('[Economy] Ad cooldown not passed before import ads')
           return false
@@ -632,8 +762,9 @@ export const useEconomyStore = create<EconomyState>()(
         const { getServerTime } = await import('../platform/server-time')
         let watchedCount = 0
         for (let i = 0; i < count; i++) {
-          // Дневной лимит не даёт превысить 3/день даже в середине серии
-          if (isLimitReached(get().todayAdsWatched, LIMITS.adsPerDay)) break
+          // Дневной лимит вида import не даёт превысить 3/день даже в середине серии
+          const cur = get().adRewards[kind] ?? emptyAdReward()
+          if (isLimitReached(cur.countToday, LIMITS.adsPerDay)) break
           const rewarded = await platform.showRewardedVideo()
           if (!rewarded) break
           watchedCount++
@@ -641,8 +772,7 @@ export const useEconomyStore = create<EconomyState>()(
           const serverTime = await getServerTime()
           set((st) => ({
             tokens: st.tokens + EARNINGS_AD_REWARDED,
-            todayAdsWatched: st.todayAdsWatched + 1,
-            lastAdTimestamp: serverTime,
+            adRewards: markAdWatched(st.adRewards, kind, serverTime),
           }))
         }
 
@@ -657,23 +787,23 @@ export const useEconomyStore = create<EconomyState>()(
       },
 
       // ── Реклама для баннера: 1 просмотр → скрыть баннер на 24ч (§3.2, §6.3) ──
-      // P1-7: реклама баннера — rewarded-показ платформы, поэтому тратит ОБЩИЙ
-      // дневной лимит 3/день (§2 ECONOMY.md: «Реклама ≤3/день» без исключений для
-      // баннера) и увеличивает todayAdsWatched. Токены за показ НЕ начисляются —
-      // это оплата аренды disableBanner (§3.2: «Отключение баннера — 50 TC ИЛИ
-      // 1 просмотр»), а не заработок. Общий кулдаун 5 мин между rewarded-показами
-      // сохраняется (E4: требование Яндекса — пауза между рекламой).
+      // U1/U9: баннер использует СОБСТВЕННЫЙ вид `banner` — свой кулдаун 5 мин
+      // и свой лимит ≤3/день (в v2.0 был общий лимит/кулдаун со всей рекламой).
+      // Токены за показ НЕ начисляются — это оплата аренды disableBanner
+      // (§3.2: «Отключение баннера — 50 TC ИЛИ 1 просмотр»), а не заработок.
       watchAdForBanner: async () => {
         const state = get()
+        const kind: AdRewardKind = 'banner'
+        const ad = state.adRewards[kind] ?? emptyAdReward()
 
-        // P1-7: общий лимит rewarded-рекламы 3/день (§2)
-        if (isLimitReached(state.todayAdsWatched, LIMITS.adsPerDay)) {
+        // U1/U9: лимит вида banner (не общий для всех rewarded-показов)
+        if (isLimitReached(ad.countToday, LIMITS.adsPerDay)) {
           console.warn('[Economy] Banner ad limit reached today')
           return { ok: false }
         }
 
-        // E4: общий кулдаун rewarded-рекламы (токен-реклама и баннер делят паузу)
-        const cooldownPassed = await isCooldownPassed(state.lastAdTimestamp, AD_COOLDOWN_MS)
+        // U1/U9: кулдаун вида banner (не делится с токенами/импортом)
+        const cooldownPassed = await isCooldownPassed(ad.lastTimestamp, AD_COOLDOWN_MS)
         if (!cooldownPassed) {
           console.warn('[Economy] Banner ad cooldown not passed')
           return { ok: false }
@@ -691,10 +821,12 @@ export const useEconomyStore = create<EconomyState>()(
         const { getServerTime } = await import('../platform/server-time')
         const serverTime = await getServerTime()
 
-        set((state) => ({
-          rentals: { ...state.rentals, disableBanner: serverTime + ONE_DAY_MS },
-          lastAdTimestamp: serverTime, // E4: баннер-реклама тоже открывает кулдаун
-          todayAdsWatched: state.todayAdsWatched + 1, // P1-7: общий лимит 3/день
+        set((st) => ({
+          rentals: { ...st.rentals, disableBanner: serverTime + ONE_DAY_MS },
+          adRewards: markAdWatched(st.adRewards, kind, serverTime),
+          // P0-1/U5: баннер скрываем ЗДЕСЬ (единая точка) — компоненты не могут
+          // забыть вызвать setBannerVisible(false) после успешной оплаты.
+          bannerVisible: false,
         }))
         // ✅ Скрыть баннер после оплаты
         try {
@@ -706,6 +838,22 @@ export const useEconomyStore = create<EconomyState>()(
         await get().syncToCloud()
         console.log('[Economy] Banner ad watched — disableBanner rental activated')
         return { ok: true }
+      },
+
+      // ── U1/U9: per-reward геттеры для UI (кулдаун/лимит каждого вида) ──
+      getAdCooldownRemaining: (kind: AdRewardKind) => {
+        const ad = get().adRewards[kind] ?? emptyAdReward()
+        if (!ad.lastTimestamp) return 0
+        return Math.max(0, AD_COOLDOWN_MS - (serverTimeNow() - ad.lastTimestamp))
+      },
+      getAdRewardsLeftToday: (kind: AdRewardKind) => {
+        const ad = get().adRewards[kind] ?? emptyAdReward()
+        return Math.max(0, LIMITS.adsPerDay - ad.countToday)
+      },
+      canWatchAdKind: (kind: AdRewardKind) => {
+        const ad = get().adRewards[kind] ?? emptyAdReward()
+        return !isLimitReached(ad.countToday, LIMITS.adsPerDay)
+          && get().getAdCooldownRemaining(kind) === 0
       },
 
       // ── Бонус за действия: +1, ≤ 30/день, кулдаун 5 с (§5 серверное время) ──
@@ -873,6 +1021,10 @@ export const useEconomyStore = create<EconomyState>()(
         set((state) => ({
           tokens: state.tokens - config,
           rentals: { ...state.rentals, [key]: serverTime + ONE_DAY_MS },
+          // P0-1/U5: при покупке disableBanner баннер скрывается атомарно в store.
+          // Повторная покупка в другом компоненте (PropertiesPanel/EconomyBanner)
+          // невозможна — hasRentalRO('disableBanner') уже true.
+          bannerVisible: key === 'disableBanner' ? false : state.bannerVisible,
         }))
         await get().syncToCloud()
         console.log(`[Economy] Rental ${key} purchased: ${config} tokens, 24h`)
@@ -952,15 +1104,24 @@ export const useEconomyStore = create<EconomyState>()(
 
         const { getServerTime } = await import('../platform/server-time')
         const serverTime = await getServerTime()
+        // P0-1/U5: если аренда disableBanner истекла (24ч прошли) — снова показываем
+        // баннер-оффер (если нет подписки). Аналогично App.tsx bootstrap EC1.
+        const cur = get()
+        const showBannerAgain =
+          !cur.hasActiveSubscriptionRO() &&
+          !cur.hasRentalRO('disableBanner')
         set({
           todayQuests: generateDailyQuestsV2(),
           todayQuestsCompleted: [],
-          todayAdsWatched: 0,
+          // U1/U9: сбрасываем дневные счётчики ВСЕХ видов рекламы (кулдауны остаются)
+          adRewards: resetAdRewardsCounters(get().adRewards),
           todayActions: 0,
           todayCashbacks: 0,
           todayExportHashes: [], // P0-1: новый день — новый список хэшей кэшбэка
           questTriggers: {} as Record<QuestTrigger, number>,
           lastQuestResetDate: serverTime,
+          // P0-1/U5: истёкшая аренда → баннер снова доступен для покупки
+          bannerVisible: showBannerAgain,
         })
         console.log('[Economy] New day detected — quests and counters reset')
         void get().syncToCloud()
@@ -981,7 +1142,8 @@ export const useEconomyStore = create<EconomyState>()(
           set({
             todayQuests: generateDailyQuestsV2(),
             todayQuestsCompleted: [],
-            todayAdsWatched: 0,
+            // U1/U9: все виды рекламы сбрасываются на новый день
+            adRewards: resetAdRewardsCounters(get().adRewards),
             todayActions: 0,
             todayCashbacks: 0,
             todayExportHashes: [], // P0-1: новый день — новый список хэшей кэшбэка
@@ -1136,7 +1298,8 @@ export const useEconomyStore = create<EconomyState>()(
               rentals: sanitized.rentals ?? get().rentals,
               todayQuests: sanitized.todayQuests ?? get().todayQuests,
               todayQuestsCompleted: sanitized.todayQuestsCompleted ?? get().todayQuestsCompleted,
-              todayAdsWatched: sanitized.todayAdsWatched ?? get().todayAdsWatched,
+              // U1/U9: per-reward реклама из облака
+              adRewards: sanitized.adRewards ?? get().adRewards,
               todayActions: sanitized.todayActions ?? get().todayActions,
               todayCashbacks: sanitized.todayCashbacks ?? get().todayCashbacks,
               todayExportHashes: sanitized.todayExportHashes ?? get().todayExportHashes,
@@ -1210,7 +1373,9 @@ export const useEconomyStore = create<EconomyState>()(
     }),
     {
       name: 'tinkercraft-economy',
-      version: 2,
+      // U1/U9: v3 — per-reward реклама (adRewards вместо todayAdsWatched/lastAdTimestamp).
+      // Миграция старых полей выполняется в sanitizeEconomyData/sanitizeAdRewards.
+      version: 3,
       // P0-5: hydrate-merge с санитизацией — правка localStorage в DevTools
       // не даёт неограниченных токенов (clamp [0, MAX_TOKENS], валидация структуры).
       merge: (persisted, current) => {
@@ -1239,7 +1404,8 @@ export const useEconomyStore = create<EconomyState>()(
         todayQuests: state.todayQuests,
         todayQuestsCompleted: state.todayQuestsCompleted,
         // Daily-счётчики — кэшируем в localStorage
-        todayAdsWatched: state.todayAdsWatched,
+        // U1/U9: per-reward реклама персистится целиком (кулдауны + счётчики)
+        adRewards: state.adRewards,
         todayActions: state.todayActions,
         todayCashbacks: state.todayCashbacks,
         todayExportHashes: state.todayExportHashes, // P0-1: анти-фарм за день

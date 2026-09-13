@@ -46,7 +46,7 @@
 - SDK инициализация, Gameplay API, COEP-разделение
 - Сборка `dev:yandex`, `build:yandex`
 
-#### Y.2 Экономика V2 ✅ (28.08.2026, исправлено 22/22 проблем, 299 тестов)
+#### Y.2 Экономика V2 ✅ (28.08.2026, исправлено 22/22 проблем, 299 тестов; **после U1–U10 — 336/336 тестов**)
 
 - Конфиг экономики, store, квесты, триггеры
 - UI-панели (EconomyHUD, QuestPanel, EconomyShop, EconomyBanner)
@@ -180,7 +180,18 @@ web-app/
 | **P0-4** | `lastSavedData` не в `partialize` — облако может быть перезаписано старыми данными (`economy-store.ts:841`) | **CRITICAL** | ✅ ИСПРАВЛЕНО (2026-09-11) — `lastSavedData` в `partialize` + `loadFromCloud`; отчёт: `docs/ECONOMY_CODE_REVIEW.md` |
 | **P0-5** | Вся экономика client-side: правка localStorage = неограниченные токены/подписки (`economy-store.ts:244`) | **CRITICAL** | ✅ ИСПРАВЛЕНО (2026-09-11) — `sanitizeEconomyData()`; отчёт: `docs/ECONOMY_CODE_REVIEW.md` |
 | **P0-6** | Clean-фолбэк SDK: экономика остаётся активной при падении `yandex.init()`, заработок невозможен (`platform/index.ts:10`, `platform/yandex.ts:29`) | **CRITICAL** | ✅ ИСПРАВЛЕНО (2026-09-11) — `isEconomyAvailable()`; отчёт: `docs/ECONOMY_CODE_REVIEW.md` |
+| **U10** | SDK инициализируется ПОСЛЕ доступности игры — React-дерево рендерится до `initSdk()` (`main.tsx`) | **P0** | ✅ ИСПРАВЛЕНО (2026-09-12) — сплэш → `initSdk()` (таймаут 10с → clean) → рендер; `LoadingAPI.ready()` по факту готовности (workerOk + initDone), fallback 15с убран; `GameplayAPI.start()` через `getInitDonePromise()` |
+| **U2** | UI-таймеры кулдауна рекламы «стоят на месте» до обновления кэша 30с (`PropertiesPanel.tsx`, `EconomyMiniHUD.tsx`) | **P1** | ✅ ИСПРАВЛЕНО (2026-09-12) — `useAdCooldown()`/`getAdCooldownRemainingMs()` (`platform/ad-timers.ts`); посекундный тик с поправкой на серверное смещение; fallback `Date.now()` не кэшируется (P2-5) |
+| **U1/U9** | Единый кулдаун 5 мин и единый счётчик rewarded-рекламы на все награды; нужны раздельные по видам (`economy-store.ts`) | **P1** | ✅ ИСПРАВЛЕНО (2026-09-12) — `adRewards: Record<AdRewardKind, AdRewardState>` (кулдаун и лимит ≤3/день на каждый вид `tokens`/`import`/`banner`); миграция старых полей; persist v3 + облако; лимиты 705/350; ECONOMY.md v2.1 |
+| **U4** | Нет бейджа у 3D-текста на панели фигур (условие по неверному типу `text3d`) (`LeftPanel.tsx`) | **P2** | ✅ ИСПРАВЛЕНО (2026-09-12) — сравнение по реальному типу `type:'text'` + `canUseText3dRO()` |
+| **U5** | Баннер: повторное списание токенов/реклама после покупки скрытия (`EconomyBanner.tsx`, EconomyShop, PropertiesPanel) | **P0** | ✅ ИСПРАВЛЕНО (2026-09-12, P0-1) — EconomyBanner подключён в App.tsx; все 3 точки продажи защищены при активной аренде `disableBanner` |
+| **U6** | Нет простой палитры без аренды/подписки (`PropertiesPanel.tsx`) | **P1** | ✅ ИСПРАВЛЕНО (2026-09-12) — палитра Wad's Optimum 16 всегда; расширенный picker за аренду/подписку |
+| **U7** | Мелкие иконки бейджей (`Badge.tsx`, `IconBadge.tsx`) | **P2** | ✅ ИСПРАВЛЕНО (2026-09-12) — иконки ×2 (10→20px / 16→20px), шрифты 16/13px |
+| **U8** | Экспорт не выполняется после оплаты токенами/рекламы (`ExportModal.tsx`, `App.tsx`, `document-store.ts`) | **P0** | ✅ ИСПРАВЛЕНО (2026-09-12, P1-1) — единая модель кэшбэка `exportStl(method)`; цепочка оплата→скачивание восстановлена |
+| **U3** | Панель экономики дублируется слева (магазин) и справа (`LeftPanel.tsx`, `PropertiesPanel.tsx`) | **P1** | ✅ ИСПРАВЛЕНО (2026-09-13) — «магазин» = правая панель (`PropertiesPanel` → `EconomyPanel`); вкладка `shop` и `EconomyShop.tsx` удалены; переходы «купить» = `clearSelection()` (экономика при пустом выделении); ECONOMY.md v2.2 (§6.3 — два места) |
 
 > Ревью экономики (22 проблемы: 6 P0 / 9 P1 / 7 P2) **закрыто 2026-09-11** — все проблемы исправлены (typecheck 0 ошибок, 299/299 тестов). P1/P2 не вносились в эту таблицу отдельно — полный перечень и статусы: [`docs/ECONOMY_CODE_REVIEW.md`](docs/ECONOMY_CODE_REVIEW.md), [`CODE_REVIEW.md`](CODE_REVIEW.md).
+>
+> **Реестр отзыва пользователя U1–U10 закрыт 2026-09-13** — все 10 проблем исправлено (U3: «магазин» = правая панель, ECONOMY.md v2.2). Проверка: `pnpm verify` — typecheck 0 ошибок, **336/336 тестов (23 файла)**, build/build:yandex успешны. Детали: [`docs/USER_FEEDBACK_ECONOMY.md`](docs/USER_FEEDBACK_ECONOMY.md), [`CHANGELOG.md`](CHANGELOG.md).
 >
 > Все ранее исправленные проблемы см. в [`CHANGELOG.md`](CHANGELOG.md).

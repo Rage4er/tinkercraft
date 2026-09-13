@@ -25,21 +25,26 @@ export default function EconomyBanner() {
   if (hasRentalDisable) return null
 
   const handleBuyRental = async () => {
-    if (busy || tokens < 50) return
+    // P0-1/U5: защита от гонки — если аренда уже активна (купили в другом
+    // компоненте), НЕ списываем токены повторно.
+    if (busy || tokens < 50 || hasRentalDisable) return
     setBusy('tokens')
     const result = await buyRental('disableBanner')
     setBusy(null)
     if (result.ok) {
+      // Store сам скрывает баннер при покупке (P0-1); setBannerVisible(false)
+      // остаётся как страховка для совместимости.
       setBannerVisible(false)
     }
   }
 
   const handleWatchAd = async () => {
-    if (busy) return
+    // P0-1/U5: повторный показ рекламы бессмыслен, если аренда уже активна
+    if (busy || hasRentalDisable) return
     setBusy('ad')
     const result = await watchAdForBanner()
     if (result.ok) {
-      // После показа рекламы — скрываем баннер
+      // После показа рекламы — скрываем баннер (store также делает это атомарно)
       setBannerVisible(false)
     }
     setBusy(null)

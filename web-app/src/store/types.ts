@@ -49,7 +49,7 @@ export interface DocumentStore {
   clearScene: () => Promise<void>
   openDoodle: () => Promise<void>
   saveDoodle: () => Promise<void>
-  exportStl: () => void
+  exportStl: (method?: 'tokens' | 'ad') => void
   triggerAutosave: () => Promise<void>
   restoreAutosave: () => Promise<boolean>
   saveToProject: (name: string) => Promise<void>
