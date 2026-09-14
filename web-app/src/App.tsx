@@ -54,6 +54,7 @@ export default function App() {
     extrudeAxis, setExtrudeAxis,
     extrudeDepth, setExtrudeDepth,
     activeTab, setActiveTab,
+    setEconomyPanelOpen,
     cameraMode, setCameraMode,
     showTextModal, setShowTextModal,
     previewObject, setPreviewObject,
@@ -74,6 +75,7 @@ export default function App() {
       extrudeAxis: s.extrudeAxis, setExtrudeAxis: s.setExtrudeAxis,
       extrudeDepth: s.extrudeDepth, setExtrudeDepth: s.setExtrudeDepth,
       activeTab: s.activeTab, setActiveTab: s.setActiveTab,
+      setEconomyPanelOpen: s.setEconomyPanelOpen,
       cameraMode: s.cameraMode, setCameraMode: s.setCameraMode,
       showTextModal: s.showTextModal, setShowTextModal: s.setShowTextModal,
       previewObject: s.previewObject, setPreviewObject: s.setPreviewObject,
@@ -230,9 +232,14 @@ export default function App() {
           await useEconomyStore.getState().initDailyQuests()
           useEconomyStore.getState().checkSubscriptionExpiry()
           // EC1: показать баннер-оффер если нет подписки и аренда не активна
+          // B1: единый RO-геттер shouldShowBannerRO() — bannerVisible по умолчанию
+          // true (инициализация/merge в economy-store), здесь только страховка от
+          // устаревших персист-данных и пере-проверка подписки/аренды.
           const econ = useEconomyStore.getState()
-          if (!econ.hasActiveSubscription() && !econ.hasRental('disableBanner')) {
+          if (econ.shouldShowBannerRO()) {
             econ.setBannerVisible(true)
+          } else {
+            econ.setBannerVisible(false)
           }
         } catch (e) {
           console.error('[App] Economy init failed:', e)
@@ -298,9 +305,12 @@ export default function App() {
     setShowImportModal(true)
   }, [])
 
-  // Выполнить импорт после оплаты в модалке
-  const handleImportExecute = useCallback(() => {
-    importStl()
+  // Выполнить импорт после оплаты в модалке.
+  // U12: файл может быть выбран ДО показа рекламы (ImportModal открывает
+  // file chooser в момент клика — user activation). Если файла нет
+  // (подписка/clean-bypass) — importStl сам откроет диалог.
+  const handleImportExecute = useCallback((file?: File) => {
+    void importStl(file)
   }, [importStl])
 
   useEffect(() => {
@@ -477,10 +487,10 @@ export default function App() {
   const handleAddText = useCallback(async () => {
     // EC13: проверка доступа к 3D-тексту
     // P1-5: единый RO-хелпер (подписка ИЛИ аренда text3d по серверному времени)
-    // U3: нет левой вкладки «магазин» — «купить» ведёт в правую панель (экономика
-    // показывается при пустом выделении): снимаем выделение, чтобы раскрыть EconomyPanel.
+    // B2: «купить» открывает экономику ВНУТРИ правой панели (store-флаг
+    // economyPanelOpen) — НЕ снимая выделение (панель свойств не «закрывается»).
     if (!useEconomyStore.getState().canUseText3dRO()) {
-      clearSelection()
+      setEconomyPanelOpen(true)
       notify(t('economy.adNotRentable'), 'warning')
       return
     }
@@ -514,7 +524,7 @@ export default function App() {
     } catch (err) {
       console.error("Ошибка генерации текста:", err);
     }
-  }, [textInput, textSize, textDepth, addRawMesh]);
+  }, [textInput, textSize, textDepth, addRawMesh, setEconomyPanelOpen]);
 
   const objectList = useMemo(() => Object.values(objects), [objects]);
   const selSet = useMemo(() => new Set(selectedIds), [selectedIds]);
@@ -727,10 +737,16 @@ export default function App() {
             // P1-5: единый RO-хелпер доступа к 3D-тексту (подписка ИЛИ аренда text3d)
             // U3: «купить» ведёт в правую панель (экономика при пустом выделении)
             if (!useEconomyStore.getState().canUseText3dRO()) {
-              clearSelection()
+              setEconomyPanelOpen(true)
               return
             }
             setShowTextModal(true)
+          }}
+          openEconomy={() => {
+            // B2: клик по 3D-тексту без доступа — открыть правую панель экономики
+            // (аренда text3d 75 TC). Store-флаг economyPanelOpen НЕ снимает выделение,
+            // поэтому панель свойств не «закрывается».
+            setEconomyPanelOpen(true)
           }}
           objectList={objectList}
           selSet={selSet}

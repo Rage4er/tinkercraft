@@ -294,6 +294,25 @@
 
 ---
 
+## 🔍 Регрессии после теста на платформе Яндекс Игр (A/B/C, закрыт 2026-09-14)
+
+**Контекст:** реальный прогон сборки на платформе Яндекс Игр выявил регрессии в платных сценариях (A), UI-переходах (B) и бейджах/квесте (C). Все исправлены подзадачами; ниже — статусы.
+
+| # | Приоритет | Проблема | Статус |
+|---|-----------|----------|--------|
+| A1 | 🔴 P0 | **Экспорт за рекламу не работал:** `watchAdForTokens` начислял +50, но файл не скачивался; счётчик/кулдаун общие с HUD `tokens` | ✅ ИСПРАВЛЕНО — новый вид `export` + `watchAdForExport()` (НЕ начисляет токены), экспорт ПОСЛЕ onRewarded; свой кулдаун 5 мин/лимит ≤3/день (`economy-store.ts`, `ExportModal.tsx`, `App.tsx`) |
+| A2 | 🔴 P0 | **Импорт за рекламу:** +50/ролик начислялось; file chooser открывался после рекламы (потеря user activation) | ✅ ИСПРАВЛЕНО — `watchAdsForImport(2)` серия оплачивает импорт (без токенов), частичная серия → отказ; диалог выбора файла ДО рекламы, `importStl(preSelectedFile?)` (`economy-store.ts`, `ImportModal.tsx`, `document-store.ts`) |
+| B1 | 🟡 P1 | **Баннер-оффер не виден по умолчанию** (наш UI-баннер молчит, sticky платформы отдельно) | ✅ ИСПРАВЛЕНО — `bannerVisible` init `true` (initial state + persist-merge); RO-геттер `shouldShowBannerRO()` — единый источник для EconomyBanner и bootstrap EC1; после expiry аренды баннер возвращается (`economy-store.ts`, `EconomyBanner.tsx`, `App.tsx`) |
+| B2 | 🟡 P1 | **Кнопка «3D-текст» disabled без доступа** — нельзя открыть аренду слева | ✅ ИСПРАВЛЕНО — клик открывает правую панель с оффером text3d (75 TC) через `setEconomyPanelOpen(true)`; выделение и панель свойств сохраняются (`LeftPanel.tsx`, `App.tsx`, `ui-store.ts`) |
+| B3 | 🟡 P1 | **«Расширенный выбор» (палитра) закрывал панель свойств** вместо оффера аренды | ✅ ИСПРАВЛЕНО — флаг `economyPanelOpen` (ui-store): EconomyPanel рендерится ВНУТРИ панели поверх свойств (кнопка «← К свойствам»), сброс только при смене объекта (`PropertiesPanel.tsx`, `ui-store.ts`) |
+| C1 | 🟢 P2 | **Бейджи стали крупными** (шрифт 16px, контейнер ×2) — регрессия увеличения иконок U7 | ✅ ИСПРАВЛЕНО — компактные бейджи: шрифт 10px, padding 1px 3px; IconBadge 10px/2px 4px; иконки остаются 20×20 (`Badge.tsx`, `IconBadge.tsx`) |
+| C2 | 🟢 P2 | **Токен выглядел как монета**, нужен золотой куб | ✅ ИСПРАВЛЕНО — `TokenIcon` (золотой куб TC) заменил `MoneyIcon` в Badge/IconBadge (`icons/index.tsx`, `Badge.tsx`, `IconBadge.tsx`) |
+| C3 | 🟡 P1 | **Квест «Зазеркалье» не засчитывался** — проверка `scale < 0` не срабатывала (mirror пишет `Math.abs`) | ✅ ИСПРАВЛЕНО — счёт по mirror-операциям истории (`op.type === 'mirror'`, уникальные `mirrorCreatedIds`) + legacy `scale < 0`, пересечение со сценой, порог «≥ target» (`economy-store.ts`) |
+
+**Тесты A/B/C:** `economy-store.test.ts` (watchAdForExport не начисляет токены, лимит/кулдаун вида export, независимость счётчиков, watchAdsForImport без токенов, count_mirrored ×5), `Badge.test.tsx`/`IconBadge.test.tsx` (компактный шрифт/padding, TokenIcon 20×20), `LeftPanel.test.tsx` (клик 3D-текста), `PropertiesPanel.color.test.tsx` (расширенный выбор). Полный прогон: `pnpm verify` (2026-09-14) — typecheck 0 ошибок, **357/357 тестов (23 файла)**, build/build:yandex успешны.
+
+---
+
 ## 📌 Будущие направления
 
 Следующие направления для будущих итераций (не являются активными проблемами):

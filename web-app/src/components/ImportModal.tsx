@@ -1,11 +1,15 @@
 // src/components/ImportModal.tsx — Модалка выбора способа оплаты импорта STL
 // §3.1 ECONOMY.md v2.0: Импорт STL — 100 TC ИЛИ 2 просмотра рекламы
+// U12 (P2): реклама ОПЛАЧИВАЕТ импорт (НЕ начисляет токены). Диалог выбора
+// файла открывается ДО показа рекламы (в момент клика — user activation),
+// т.к. браузер блокирует file chooser после `await` рекламы.
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useEconomyStore } from '../store/economy-store'
 import { isEconomyAvailable } from '../platform'
 import { ECONOMY_COSTS } from '../store/economy-config'
 import { notify } from '../store/notifications'
+import { openStlFilePicker } from '../io/stl-import'
 import { ImportIcon, TokenIcon, AdFilmIcon } from './icons'
 
 export default function ImportModal({
@@ -13,7 +17,10 @@ export default function ImportModal({
   onImport,
 }: {
   onClose: () => void
-  onImport: () => void
+  // U12: onImport может получить заранее выбранный файл (путь с рекламой/токенами —
+  // файл выбирается в момент клика, user activation). Без файла (подписка/clean-bypass)
+  // импорт сам откроет диалог выбора (поведение как раньше).
+  onImport: (file?: File) => Promise<void> | void
 }) {
   const { t } = useTranslation()
   const tokens = useEconomyStore((s) => s.tokens)
@@ -56,10 +63,14 @@ export default function ImportModal({
     if (busy) return
     setBusy(true)
     try {
+      // U12: файл выбираем в момент клика (user activation) — после списания
+      // токенов диалог мог бы быть заблокирован так же, как после рекламы.
+      const file = await openStlFilePicker()
+      if (!file) return
       const ok = spendTokens(importCost)
       if (ok) {
         onClose()
-        await onImport()
+        await onImport(file)
       }
     } finally {
       setBusy(false)
@@ -70,14 +81,19 @@ export default function ImportModal({
     if (busy) return
     setBusy(true)
     try {
-      // EC2: одна функция — 2 рекламы подряд без кулдауна между ними
+      // U12 (P2): открываем диалог выбора файла ДО показа рекламы — в момент
+      // клика (user activation). После `await` рекламы браузер блокирует
+      // file chooser («can only be shown with a user activation»).
+      const file = await openStlFilePicker()
+      if (!file) return // отмена выбора — реклама НЕ показывается
+      // EC2/U12: серия из 2 роликов подряд ОПЛАЧИВАЕТ импорт (без начисления токенов)
       const rewarded = await watchAdsForImport(2)
       if (!rewarded) {
         notify(t('import.adFailed'), 'error')
         return
       }
       onClose()
-      await onImport()
+      await onImport(file)
     } finally {
       setBusy(false)
     }

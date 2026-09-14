@@ -12,17 +12,18 @@ export default function EconomyBanner() {
   const buyRental = useEconomyStore((s) => s.buyRental)
   const watchAdForBanner = useEconomyStore((s) => s.watchAdForBanner)
   const setBannerVisible = useEconomyStore((s) => s.setBannerVisible)
-  const bannerVisible = useEconomyStore((s) => s.bannerVisible)
+  // B1: единый RO-геттер — баннер виден, когда bannerVisible=true и нет
+  // активной подписки и нет аренды disableBanner (по серверному времени).
+  const shouldShow = useEconomyStore((s) => s.shouldShowBannerRO())
+  // Для кнопок покупки всё ещё нужны отдельные селекторы
   const hasActiveSub = useEconomyStore((s) => s.hasActiveSubscriptionRO())
   const hasRentalDisable = useEconomyStore((s) => s.hasRentalRO('disableBanner'))
   const bannerActive = hasActiveSub || hasRentalDisable
 
   const [busy, setBusy] = useState<string | null>(null)
 
-  // Если баннер уже скрыт — не показываем
-  if (!bannerVisible) return null
-  if (hasActiveSub) return null
-  if (hasRentalDisable) return null
+  // Если баннер скрыт (купили скрытие/подписка/выключен) — не показываем
+  if (!shouldShow) return null
 
   const handleBuyRental = async () => {
     // P0-1/U5: защита от гонки — если аренда уже активна (купили в другом

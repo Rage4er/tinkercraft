@@ -54,6 +54,20 @@ vi.mock('../platform/ad-timers', () => ({
     useAdCooldown: () => ({ remainingMs: 0, formatted: null, active: false }),
 }))
 
+// B3: ui-store — хранилище флага economyPanelOpen (правый сайдбар «режим экономики»)
+const uiH = vi.hoisted(() => {
+    let open = false
+    return {
+        isOpen: () => open,
+        setOpen: (v: boolean) => { open = v },
+        reset: () => { open = false },
+    }
+})
+vi.mock('../store/ui-store', () => ({
+    useUiStore: <T,>(selector: (s: { economyPanelOpen: boolean; setEconomyPanelOpen: (v: boolean) => void }) => T): T =>
+        selector({ economyPanelOpen: uiH.isOpen(), setEconomyPanelOpen: uiH.setOpen }),
+}))
+
 // ─── Импорты после моков ─────────────────────────────────────────────
 import { useEconomyStore } from '../store/economy-store'
 import { emptyAdRewards } from '../store/economy-store'
@@ -118,6 +132,7 @@ function renderPanel(obj: SceneObject) {
 
 describe('PropertiesPanel (U6: палитра доступна всегда)', () => {
     beforeEach(() => {
+        uiH.reset()
         localStorage.clear()
         useEconomyStore.setState({
             tokens: 100,
@@ -174,6 +189,32 @@ describe('PropertiesPanel (U6: палитра доступна всегда)', (
         })
         // Теперь native input виден
         expect(container.querySelector('input[type="color"]')).toBeTruthy()
+        act(() => { root.unmount() })
+    })
+
+    it('B3: клик по «Расширенный выбор» БЕЗ доступа открывает экономику ВНУТРИ панели (не снимая выделение)', () => {
+        const { container, root } = renderPanel(makeCube())
+        const advancedBtn = Array.from(container.querySelectorAll('button'))
+            .find((b) => b.textContent?.includes('Advanced picker'))
+        expect(advancedBtn).toBeTruthy()
+        act(() => {
+            advancedBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+        })
+        // economyPanelOpen стал true — панель осталась открытой, свойства объекта
+        // НЕ потеряны: firstSelected всё ещё obj-1
+        expect(uiH.isOpen()).toBe(true)
+        // native picker НЕ открылся (нет доступа)
+        expect(container.querySelector('input[type="color"]')).toBeNull()
+        act(() => { root.unmount() })
+    })
+
+    it('B3: при economyPanelOpen=true панель рендерит экономику + кнопку «назад», НЕ закрываясь', () => {
+        uiH.setOpen(true)
+        const { container, root } = renderPanel(makeCube())
+        // Кнопка возврата к свойствам
+        const backBtn = Array.from(container.querySelectorAll('button'))
+            .find((b) => b.textContent?.includes('Back to properties'))
+        expect(backBtn).toBeTruthy()
         act(() => { root.unmount() })
     })
 

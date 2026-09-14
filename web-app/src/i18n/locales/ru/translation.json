@@ -96,6 +96,7 @@
     "color": "Цвет",
     "palette": "Wad's Optimum 16",
     "advancedPicker": "Расширенный выбор",
+    "backToProps": "← К свойствам",
     "lockedExtended": "Расширенная палитра",
     "buyFor": "Купить за {{n}}",
     "visible": "Видим",

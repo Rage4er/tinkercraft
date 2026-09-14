@@ -320,9 +320,13 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   },
 
   // ── Импорт STL ──
-  importStl: async () => {
+  // U12 (P2): параметр `preSelectedFile` — файл, выбранный ДО показа рекламы
+  // (в ImportModal, в момент клика — user activation). Браузер блокирует
+  // file chooser после `await` рекламы, поэтому для рекламного пути файл
+  // выбирается заранее. Без файла (прямой вызов) — открываем диалог как раньше.
+  importStl: async (preSelectedFile?: File) => {
     if (get().busy) return
-    const file = await openStlFilePicker()
+    const file = preSelectedFile ?? (await openStlFilePicker())
     if (!file) return
     const result = await parseStlFile(file)
     if (!result.success) { notify(result.error, 'error'); return }

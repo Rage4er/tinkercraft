@@ -58,7 +58,7 @@ vi.mock('../platform/server-time', () => ({
 
 // Импорты — ПОСЛЕ vi.mock (vitest поднимает моки)
 import { useEconomyStore, sanitizeEconomyData, createExportHash, MAX_TOKENS, countSceneObjects, emptyAdRewards, type AdRewardKind } from './economy-store'
-import { EARNINGS_AD_REWARDED, LIMITS } from './economy-config'
+import { LIMITS } from './economy-config'
 import type { TinkerCraftOperation, SceneObject } from '../csg/types'
 
 const SCAN = { objectCount: 10, uniqueShapeTypes: 3, toolsCount: 2, toolCategories: 2 }
@@ -94,7 +94,8 @@ beforeEach(() => {
         lastSavedData: '',
         pendingSync: false,
         syncTailPending: false,
-        bannerVisible: false,
+        // B1: баннер-оффер виден по умолчанию (пока нет аренды disableBanner/подписки)
+        bannerVisible: true,
     })
 })
 
@@ -246,9 +247,51 @@ describe('loadFromCloud (P0-4, P0-5)', () => {
         // U1/U9: старые единые счётчики → вид tokens (clamp к лимиту 3/день)
         expect(s.adRewards.tokens.countToday).toBe(3)
         expect(s.adRewards.import.countToday).toBe(0)
+        expect(s.adRewards.export.countToday).toBe(0)
         expect(s.adRewards.banner.countToday).toBe(0)
         expect(s.todayExportHashes).toEqual(['h1'])
         expect(s.lastSavedData).not.toBe('')       // P0-4: восстановлен и пересчитан
+    })
+})
+
+// ─── B1: shouldShowBannerRO — баннер виден по умолчанию ─────────────
+
+describe('shouldShowBannerRO (B1: баннер по умолчанию)', () => {
+    it('баннер виден по умолчанию (bannerVisible=true, нет аренды/подписки)', () => {
+        const s = useEconomyStore.getState()
+        expect(s.bannerVisible).toBe(true)
+        expect(s.shouldShowBannerRO()).toBe(true)
+    })
+
+    it('скрывается при активной аренде disableBanner', () => {
+        const now = h.getCachedServerTime() ?? Date.now()
+        useEconomyStore.setState({
+            rentals: { text3d: null, extendedPalette: null, disableBanner: now + 60_000 },
+        })
+        expect(useEconomyStore.getState().shouldShowBannerRO()).toBe(false)
+    })
+
+    it('скрывается при активной подписке', () => {
+        const now = h.getCachedServerTime() ?? Date.now()
+        useEconomyStore.setState({
+            activeSubscription: 'weekly',
+            subscriptionExpiresAt: now + 60_000,
+        })
+        expect(useEconomyStore.getState().shouldShowBannerRO()).toBe(false)
+    })
+
+    it('скрывается при bannerVisible=false', () => {
+        useEconomyStore.setState({ bannerVisible: false })
+        expect(useEconomyStore.getState().shouldShowBannerRO()).toBe(false)
+    })
+
+    it('показывается снова после истечения аренды disableBanner', () => {
+        const now = h.getCachedServerTime() ?? Date.now()
+        useEconomyStore.setState({
+            bannerVisible: true,
+            rentals: { text3d: null, extendedPalette: null, disableBanner: now - 1000 },
+        })
+        expect(useEconomyStore.getState().shouldShowBannerRO()).toBe(true)
     })
 })
 
@@ -312,6 +355,7 @@ describe('sanitizeEconomyData (P0-5 валидация)', () => {
             adRewards: {
                 tokens: { lastTimestamp: 1_700_000_000_000, countToday: 999 },   // clamp 3
                 import: { lastTimestamp: 'bad', countToday: -5 },                 // null/0
+                export: { lastTimestamp: 1_700_000_000_000, countToday: 1 },      // новый вид v4
                 banner: { lastTimestamp: 1_700_000_000_000, countToday: 2 },
                 unknown: { lastTimestamp: 1, countToday: 1 },                     // игнор
             },
@@ -320,8 +364,27 @@ describe('sanitizeEconomyData (P0-5 валидация)', () => {
         expect(s?.adRewards?.tokens.lastTimestamp).toBe(1_700_000_000_000)
         expect(s?.adRewards?.import.lastTimestamp).toBeNull()
         expect(s?.adRewards?.import.countToday).toBe(0)
+        expect(s?.adRewards?.export.countToday).toBe(1)
+        expect(s?.adRewards?.export.lastTimestamp).toBe(1_700_000_000_000)
         expect(s?.adRewards?.banner.countToday).toBe(2)
         expect(s?.adRewards?.banner.lastTimestamp).toBe(1_700_000_000_000)
+    })
+
+    // U12: старые данные (v3) без вида export — export стартует с нуля,
+    // остальные виды сохраняются
+    it('миграция: старые виды сохраняются, export стартует с нуля', () => {
+        const s = sanitizeEconomyData({
+            adRewards: {
+                tokens: { lastTimestamp: 1_700_000_000_000, countToday: 2 },
+                import: { lastTimestamp: 1_700_000_000_000, countToday: 3 },
+                banner: { lastTimestamp: null, countToday: 1 },
+            },
+        })
+        expect(s?.adRewards?.tokens.countToday).toBe(2)
+        expect(s?.adRewards?.import.countToday).toBe(3)
+        expect(s?.adRewards?.banner.countToday).toBe(1)
+        expect(s?.adRewards?.export.countToday).toBe(0)
+        expect(s?.adRewards?.export.lastTimestamp).toBeNull()
     })
 })
 
@@ -506,6 +569,7 @@ describe('refreshDayRollover (P1-1)', () => {
             adRewards: {
                 tokens: { lastTimestamp: 1_700_000_000_000, countToday: 2 },
                 import: { lastTimestamp: 1_700_000_000_000, countToday: 3 },
+                export: { lastTimestamp: 1_700_000_000_000, countToday: 1 },
                 banner: { lastTimestamp: null, countToday: 1 },
             },
             todayActions: 5,
@@ -517,9 +581,10 @@ describe('refreshDayRollover (P1-1)', () => {
         await useEconomyStore.getState().refreshDayRollover()
 
         const s = useEconomyStore.getState()
-        // U1/U9: счётчики ВСЕХ видов обнулены
+        // U1/U9/U12: счётчики ВСЕХ видов обнулены
         expect(s.adRewards.tokens.countToday).toBe(0)
         expect(s.adRewards.import.countToday).toBe(0)
+        expect(s.adRewards.export.countToday).toBe(0)
         expect(s.adRewards.banner.countToday).toBe(0)
         expect(s.todayActions).toBe(0)
         expect(s.todayCashbacks).toBe(0)
@@ -537,6 +602,7 @@ describe('refreshDayRollover (P1-1)', () => {
             adRewards: {
                 tokens: { lastTimestamp: null, countToday: 2 },
                 import: { lastTimestamp: null, countToday: 1 },
+                export: { lastTimestamp: null, countToday: 2 },
                 banner: { lastTimestamp: null, countToday: 0 },
             },
             todayActions: 5,
@@ -549,6 +615,7 @@ describe('refreshDayRollover (P1-1)', () => {
         const s = useEconomyStore.getState()
         expect(s.adRewards.tokens.countToday).toBe(2)
         expect(s.adRewards.import.countToday).toBe(1)
+        expect(s.adRewards.export.countToday).toBe(2)
         expect(s.todayActions).toBe(5)
         expect(s.todayCashbacks).toBe(2)
         expect(s.todayExportHashes).toEqual(['h1'])
@@ -567,6 +634,7 @@ describe('per-reward реклама (U1/U9)', () => {
             adRewards: {
                 tokens: { lastTimestamp: 1_700_000_000_000, countToday: 1 },
                 import: { lastTimestamp: null, countToday: 0 },
+                export: { lastTimestamp: null, countToday: 0 },
                 banner: { lastTimestamp: null, countToday: 0 },
             },
             rentals: { text3d: null, extendedPalette: null, disableBanner: null },
@@ -597,6 +665,7 @@ describe('per-reward реклама (U1/U9)', () => {
             adRewards: {
                 tokens: { lastTimestamp: null, countToday: LIMITS.adsPerDay }, // лимит исчерпан
                 import: { lastTimestamp: null, countToday: 0 },
+                export: { lastTimestamp: null, countToday: 0 },
                 banner: { lastTimestamp: null, countToday: 0 },
             },
             rentals: { text3d: null, extendedPalette: null, disableBanner: null },
@@ -652,12 +721,80 @@ describe('per-reward реклама (U1/U9)', () => {
         expect(s.adRewards.import.lastTimestamp).toBe(1_700_000_000_000)
         expect(s.adRewards.tokens.countToday).toBe(0)
     })
+
+    // ─── U12: экспорт за рекламу — вид export, НЕ начисляет токены ──
+    it('watchAdForExport ОПЛАЧИВАЕТ экспорт: НЕ начисляет токены, свой счётчик', async () => {
+        h.setServerTime(1_700_000_000_000)
+        useEconomyStore.setState({ tokens: 100 })
+        h.platform.showRewardedVideo.mockReset()
+        h.platform.showRewardedVideo.mockResolvedValueOnce(true)
+
+        const ok = await useEconomyStore.getState().watchAdForExport()
+        expect(ok).toBe(true)
+        const s = useEconomyStore.getState()
+        // U12: токены НЕ начисляются (раньше ExportModal звал watchAdForTokens → +50)
+        expect(s.tokens).toBe(100)
+        expect(s.adRewards.export.countToday).toBe(1)
+        expect(s.adRewards.export.lastTimestamp).toBe(1_700_000_000_000)
+        // Другие виды не тронуты
+        expect(s.adRewards.tokens.countToday).toBe(0)
+        expect(s.adRewards.import.countToday).toBe(0)
+        expect(s.adRewards.banner.countToday).toBe(0)
+        // Кулдаун export активен, tokens/import — нет
+        expect(s.getAdCooldownRemaining('export')).toBeGreaterThan(0)
+        expect(s.getAdCooldownRemaining('tokens')).toBe(0)
+        expect(s.getAdCooldownRemaining('import')).toBe(0)
+    })
+
+    it('watchAdForExport уважает лимит 3/день вида export и не трогает другие виды', async () => {
+        h.setServerTime(1_700_000_000_000)
+        useEconomyStore.setState({
+            tokens: 100,
+            adRewards: {
+                tokens: { lastTimestamp: null, countToday: 1 },
+                import: { lastTimestamp: null, countToday: 2 },
+                export: { lastTimestamp: null, countToday: LIMITS.adsPerDay }, // лимит export исчерпан
+                banner: { lastTimestamp: null, countToday: 0 },
+            },
+        })
+        h.platform.showRewardedVideo.mockClear()
+        const ok = await useEconomyStore.getState().watchAdForExport()
+        expect(ok).toBe(false)
+        expect(h.platform.showRewardedVideo).not.toHaveBeenCalled()
+        const s = useEconomyStore.getState()
+        expect(s.adRewards.export.countToday).toBe(LIMITS.adsPerDay)
+        expect(s.adRewards.tokens.countToday).toBe(1) // не тронут
+        expect(s.adRewards.import.countToday).toBe(2) // не тронут
+    })
+
+    // ─── U12: счётчики видов полностью независимы (tokens/import/export/banner) ──
+    it('просмотр рекламы за токены НЕ влияет на export/import и наоборот', async () => {
+        h.setServerTime(1_700_000_000_000)
+        useEconomyStore.setState({ tokens: 100 })
+        h.platform.showRewardedVideo.mockReset()
+        h.platform.showRewardedVideo.mockResolvedValue(true)
+
+        // 3 показа: tokens (HUD) → export → import×2
+        await useEconomyStore.getState().watchAdForTokens()
+        await useEconomyStore.getState().watchAdForExport()
+        await useEconomyStore.getState().watchAdsForImport(2)
+
+        const s = useEconomyStore.getState()
+        expect(s.adRewards.tokens.countToday).toBe(1)
+        expect(s.adRewards.export.countToday).toBe(1)
+        expect(s.adRewards.import.countToday).toBe(2)
+        expect(s.adRewards.banner.countToday).toBe(0)
+        // Ни один вид не «протёк» в другой
+        expect(s.getAdCooldownRemaining('tokens')).toBeGreaterThan(0)
+        expect(s.getAdCooldownRemaining('export')).toBeGreaterThan(0)
+        expect(s.getAdCooldownRemaining('import')).toBeGreaterThan(0)
+    })
 })
 
-// ─── P1-6: частичный просмотр рекламы импорта ───────────────────────
+// ─── P1-6/U12: серия рекламы импорта — ОПЛАЧИВАЕТ импорт, НЕ начисляет токены ──
 
-describe('watchAdsForImport частичная серия (P1-6)', () => {
-    it('начисляет +50 за КАЖДЫЙ показанный ролик, даже если серия не завершена', async () => {
+describe('watchAdsForImport серия (P1-6/U12)', () => {
+    it('частичная серия (1 из 2): токены НЕ начисляются, импорт не оплачен', async () => {
         h.setServerTime(1_700_000_000_000)
         useEconomyStore.setState({ tokens: 100 })
         h.platform.showRewardedVideo.mockReset()
@@ -671,11 +808,12 @@ describe('watchAdsForImport частичная серия (P1-6)', () => {
         expect(ok).toBe(false) // серия не завершена — импорт не оплачен
 
         const s = useEconomyStore.getState()
-        expect(s.tokens).toBe(100 + EARNINGS_AD_REWARDED) // первая начислена
-        expect(s.adRewards.import.countToday).toBe(1) // учтён 1 показ вида import
+        // U12: реклама — оплата операции, а не заработок → токены не начисляются
+        expect(s.tokens).toBe(100)
+        expect(s.adRewards.import.countToday).toBe(1) // показ вида import учтён
     })
 
-    it('полная серия (2 показа) — начисляет 2×+50 и возвращает true', async () => {
+    it('полная серия (2 показа) — импорт оплачен, токены НЕ начислены', async () => {
         h.setServerTime(1_700_000_000_000)
         useEconomyStore.setState({ tokens: 100 })
         h.platform.showRewardedVideo.mockReset()
@@ -688,8 +826,10 @@ describe('watchAdsForImport частичная серия (P1-6)', () => {
         expect(ok).toBe(true)
 
         const s = useEconomyStore.getState()
-        expect(s.tokens).toBe(100 + EARNINGS_AD_REWARDED * 2)
+        // U12: токены НЕ начисляются (раньше было 100 + 2×50 — регрессия P2)
+        expect(s.tokens).toBe(100)
         expect(s.adRewards.import.countToday).toBe(2)
+        expect(s.adRewards.tokens.countToday).toBe(0)
     })
 
     it('уважает дневной лимит 3/день вида import', async () => {
@@ -698,6 +838,7 @@ describe('watchAdsForImport частичная серия (P1-6)', () => {
             adRewards: {
                 tokens: { lastTimestamp: null, countToday: 0 },
                 import: { lastTimestamp: null, countToday: LIMITS.adsPerDay },
+                export: { lastTimestamp: null, countToday: 0 },
                 banner: { lastTimestamp: null, countToday: 0 },
             },
         })
@@ -716,6 +857,7 @@ describe('watchAdForBanner лимит (U1/U9)', () => {
             adRewards: {
                 tokens: { lastTimestamp: null, countToday: 1 },
                 import: { lastTimestamp: null, countToday: 1 },
+                export: { lastTimestamp: null, countToday: 1 },
                 banner: { lastTimestamp: null, countToday: 1 },
             },
             rentals: { text3d: null, extendedPalette: null, disableBanner: null },
@@ -739,6 +881,7 @@ describe('watchAdForBanner лимит (U1/U9)', () => {
             adRewards: {
                 tokens: { lastTimestamp: null, countToday: 0 },
                 import: { lastTimestamp: null, countToday: 0 },
+                export: { lastTimestamp: null, countToday: 0 },
                 banner: { lastTimestamp: null, countToday: LIMITS.adsPerDay },
             },
         })
@@ -817,6 +960,138 @@ describe('evaluateQuests csg_complex (P1-9)', () => {
         useEconomyStore.getState().evaluateQuests(objects, [])
 
         const quest = useEconomyStore.getState().todayQuests[0]
+        expect(quest.completed).toBe(true)
+    })
+})
+
+// ─── C3: квест «зеркала» (count_mirrored) засчитывается корректно ────
+// Регрессия: зеркальные объекты имеют scale = abs() (mirror-store.ts),
+// поэтому проверка `scale < 0` никогда не срабатывала. Счётчик строится
+// по mirror-операциям истории (op.ids = id созданных зеркальных копий).
+// Порог: «≥ target» — count_mirrored с target 3 засчитывается при 3+.
+
+describe('evaluateQuests count_mirrored (C3)', () => {
+    const makeMirrorObj = (id: string, scaleX = 1): SceneObject => ({
+        id,
+        shapeType: 'cube',
+        params: {},
+        color: '#89b4fa',
+        transform: { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX, scaleY: 1, scaleZ: 1 },
+        visible: true,
+        locked: false,
+        vertices: new Float32Array(),
+        indices: new Uint32Array(),
+    })
+
+    const setMirrorQuest = (target: number) => {
+        useEconomyStore.setState({
+            todayQuests: [{
+                difficulty: 'hard',
+                trigger: 'count_mirrored',
+                category: 'transform',
+                target,
+                progress: 0,
+                reward: 50,
+                completed: false,
+            }],
+            todayQuestsCompleted: [],
+        })
+    }
+
+    it('засчитывается при N = target (≥3): 3 зеркала из mirror-операций', () => {
+        h.setServerTime(1_700_000_000_000)
+        const objects: Record<string, SceneObject> = {
+            'a': makeMirrorObj('a'),
+            'm1': makeMirrorObj('m1'),
+            'm2': makeMirrorObj('m2'),
+            'm3': makeMirrorObj('m3'),
+        }
+        // mirror-операции создали m1, m2, m3 (scale положительный — как в mirror-store.ts)
+        const operations = [
+            { type: 'mirror', originalIds: ['a'], ids: ['m1'], plane: 'YZ' },
+            { type: 'mirror', originalIds: ['a'], ids: ['m2'], plane: 'YZ' },
+            { type: 'mirror', originalIds: ['a'], ids: ['m3'], plane: 'YZ' },
+        ] as unknown as TinkerCraftOperation[]
+
+        setMirrorQuest(3)
+        useEconomyStore.getState().evaluateQuests(objects, operations)
+
+        const quest = useEconomyStore.getState().todayQuests[0]
+        expect(quest.progress).toBe(3)
+        expect(quest.completed).toBe(true)
+    })
+
+    it('НЕ засчитывается при N < target (2 < 3)', () => {
+        h.setServerTime(1_700_000_000_000)
+        const objects: Record<string, SceneObject> = {
+            'a': makeMirrorObj('a'),
+            'm1': makeMirrorObj('m1'),
+            'm2': makeMirrorObj('m2'),
+        }
+        const operations = [
+            { type: 'mirror', originalIds: ['a'], ids: ['m1'], plane: 'YZ' },
+            { type: 'mirror', originalIds: ['a'], ids: ['m2'], plane: 'YZ' },
+        ] as unknown as TinkerCraftOperation[]
+
+        setMirrorQuest(3)
+        useEconomyStore.getState().evaluateQuests(objects, operations)
+
+        const quest = useEconomyStore.getState().todayQuests[0]
+        expect(quest.progress).toBe(2)
+        expect(quest.completed).toBe(false)
+    })
+
+    it('считает и legacy-зеркала (scale < 0) без mirror-операций', () => {
+        h.setServerTime(1_700_000_000_000)
+        const objects: Record<string, SceneObject> = {
+            'a': makeMirrorObj('a'),
+            'legacy': makeMirrorObj('legacy', -1), // старый формат: отрицательный scale
+        }
+        setMirrorQuest(1)
+        useEconomyStore.getState().evaluateQuests(objects, [])
+
+        const quest = useEconomyStore.getState().todayQuests[0]
+        expect(quest.progress).toBe(1)
+        expect(quest.completed).toBe(true)
+    })
+
+    it('счётчик падает при удалении зеркала (объект исчез из сцены)', () => {
+        h.setServerTime(1_700_000_000_000)
+        const objects: Record<string, SceneObject> = {
+            'a': makeMirrorObj('a'),
+            'm1': makeMirrorObj('m1'), // m2 удалён из сцены
+        }
+        const operations = [
+            { type: 'mirror', originalIds: ['a'], ids: ['m1'], plane: 'YZ' },
+            { type: 'mirror', originalIds: ['a'], ids: ['m2'], plane: 'YZ' },
+        ] as unknown as TinkerCraftOperation[]
+
+        setMirrorQuest(2)
+        useEconomyStore.getState().evaluateQuests(objects, operations)
+
+        const quest = useEconomyStore.getState().todayQuests[0]
+        expect(quest.progress).toBe(1) // m2 не в сцене — не считается
+        expect(quest.completed).toBe(false)
+    })
+
+    it('не считает оригиналы повторно при многократных mirror-операциях (unique)', () => {
+        h.setServerTime(1_700_000_000_000)
+        const objects: Record<string, SceneObject> = {
+            'a': makeMirrorObj('a'),
+            'm1': makeMirrorObj('m1'),
+            'm2': makeMirrorObj('m2'),
+        }
+        // Зеркалим a → m1, затем m1 → m2: на сцене 2 зеркала (m1, m2)
+        const operations = [
+            { type: 'mirror', originalIds: ['a'], ids: ['m1'], plane: 'YZ' },
+            { type: 'mirror', originalIds: ['m1'], ids: ['m2'], plane: 'YZ' },
+        ] as unknown as TinkerCraftOperation[]
+
+        setMirrorQuest(2)
+        useEconomyStore.getState().evaluateQuests(objects, operations)
+
+        const quest = useEconomyStore.getState().todayQuests[0]
+        expect(quest.progress).toBe(2)
         expect(quest.completed).toBe(true)
     })
 })

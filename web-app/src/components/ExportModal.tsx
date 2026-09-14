@@ -20,10 +20,11 @@ export default function ExportModal({
 }) {
   const { t } = useTranslation()
   const tokens = useEconomyStore((s) => s.tokens)
-  // U1/U9: экспорт оплачивается рекламой вида `tokens` (свой счётчик/лимит)
-  const tokensAdCount = useEconomyStore((s) => s.adRewards.tokens?.countToday ?? 0)
+  // U12: экспорт оплачивается рекламой вида `export` (свой счётчик/лимит,
+  // НЕ пересекается с видом `tokens` за токены в HUD)
+  const exportAdCount = useEconomyStore((s) => s.adRewards.export?.countToday ?? 0)
   const todayCashbacks = useEconomyStore((s) => s.todayCashbacks)
-  const watchAdForTokens = useEconomyStore((s) => s.watchAdForTokens)
+  const watchAdForExport = useEconomyStore((s) => s.watchAdForExport)
   // P1-4: RO-селектор — без мутации state в render-фазе
   const hasActiveSub = useEconomyStore((s) => s.hasActiveSubscriptionRO())
   const [busy, setBusy] = useState(false)
@@ -86,13 +87,15 @@ export default function ExportModal({
   const handleWatchAd = useCallback(async () => {
     if (busy) return
     setBusy(true)
-    const rewarded = await watchAdForTokens()
+    // U12: реклама вида `export` — ОПЛАЧИВАЕТ экспорт (НЕ начисляет токены).
+    // Реальный экспорт (exportStl) выполняется ТОЛЬКО после успешного onRewarded.
+    const rewarded = await watchAdForExport()
     if (rewarded) {
       onClose()
       onExport('ad')
     }
     setBusy(false)
-  }, [busy, watchAdForTokens, onClose, onExport])
+  }, [busy, watchAdForExport, onClose, onExport])
 
   return (
     <div className="text-modal-backdrop" onClick={onClose}>
@@ -175,16 +178,16 @@ export default function ExportModal({
             </div>
           )}
 
-          {/* Вариант 2: посмотреть рекламу (вид tokens — свой лимит U9) */}
+          {/* Вариант 2: посмотреть рекламу (вид export — свой лимит U12) */}
           <button
             className="btn btn-compact flex-1"
-            disabled={tokensAdCount >= 3 || busy}
+            disabled={exportAdCount >= 3 || busy}
             onClick={handleWatchAd}
             style={{ justifyContent: 'center', padding: '16px 24px', fontSize: '20px' }}
           >
-            <AdFilmIcon size={32} /> {t('export.watchAd', { count: tokensAdCount, max: 3 })}
+            <AdFilmIcon size={32} /> {t('export.watchAd', { count: exportAdCount, max: 3 })}
           </button>
-          {tokensAdCount >= 3 && (
+          {exportAdCount >= 3 && (
             <div className="modal-hint" style={{ textAlign: 'center', fontSize: '12px', color: 'var(--text-muted)' }}>
               {t('economy.adLimit')}
             </div>

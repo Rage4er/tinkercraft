@@ -26,7 +26,8 @@ export interface DocumentStore {
   addShape: (shapeType: ShapeType, params?: ShapeParams) => Promise<void>
   addRawMesh: (name: string, vertices: number[], indices: number[]) => Promise<void>
   addTextMesh: (name: string, vertices: number[], indices: number[]) => Promise<void>
-  importStl: () => Promise<void>
+  /** U12: preSelectedFile — заранее выбранный файл (рекламный путь, user activation) */
+  importStl: (preSelectedFile?: File) => Promise<void>
   deleteSelected: () => Promise<void>
   selectObjects: (ids: string[], add: boolean) => void
   clearSelection: () => void

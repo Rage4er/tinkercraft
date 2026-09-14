@@ -8,7 +8,7 @@ import EconomyMiniHUD from "./EconomyMiniHUD";
 import type { ShapeParams, SceneObject } from "../csg/types";
 import { EyeIcon, EyeOffIcon, FilletIcon, FolderIcon, SaveIcon, TokenIcon, GiftIcon, AdFilmIcon, CrownIcon, ClockIcon, SparkIcon, StarIcon, TrophyIcon, TextIcon, ColorIcon } from "./icons";
 import { useEconomyStore, type QuestDifficulty, type RentalKey } from "../store/economy-store";
-import { useDocumentStore } from "../store/document-store";
+import { useUiStore } from "../store/ui-store";
 import { isEconomyAvailable } from "../platform";
 import { ECONOMY_UI, DIFFICULTY_ICON, ICON_REGISTRY } from "../store/economy-ui-config";
 import Badge from "./Badge";
@@ -481,9 +481,12 @@ export default function PropertiesPanel({
   const hasExtendedPaletteRental = useEconomyStore(s => s.hasRentalRO('extendedPalette'))
   const hasActiveSub = useEconomyStore(s => s.hasActiveSubscriptionRO())
   const canUseExtendedPicker = hasExtendedPaletteRental || hasActiveSub
-  // U3: нет левой вкладки «магазин» — «купить» снимает выделение: экономика
-  // (аренда text3d/extendedPalette и т.д.) показывается в правой панели при пустом выделении.
-  const clearSelection = useDocumentStore(s => s.clearSelection)
+  // B2/B3: переходы «купить» больше НЕ снимают выделение — используется
+  // store-флаг economyPanelOpen (ui-store): правая панель показывает экономику
+  // независимо от выделения, панель свойств остаётся открытой.
+  // Компонент сам читает флаг из store (единый источник) — проп не нужен.
+  const economyPanelOpen = useUiStore(s => s.economyPanelOpen)
+  const setEconomyPanelOpen = useUiStore(s => s.setEconomyPanelOpen)
 
   const commitDraftColor = () => {
     const targetId = draftTargetIdRef.current;
@@ -528,6 +531,23 @@ export default function PropertiesPanel({
 
   // P0-6: экономика рендерится только при реальном Yandex SDK (не clean-фолбэк)
   const isEconomyActive = isEconomyAvailable()
+
+  // B2/B3: режим экономики в правой панели — активен по store-флагу
+  // (переход «купить») либо при пустом выделении (U3).
+  const showEconomyMode = economyPanelOpen || !firstSelected
+
+  // B3: выходим из режима экономики только когда ИЗМЕНИЛСЯ выбранный объект
+  // (клик в списке объектов/вьюпорте). Клик «Расширенный выбор» (B3) не меняет
+  // selection → флаг остаётся, панель экономики показывается поверх свойств.
+  const prevSelectedIdRef = useRef<string | null>(null)
+  useEffect(() => {
+    const currentId = firstSelected?.id ?? null
+    const prevId = prevSelectedIdRef.current
+    prevSelectedIdRef.current = currentId
+    if (prevId !== currentId && currentId !== null && economyPanelOpen) {
+      setEconomyPanelOpen(false)
+    }
+  }, [firstSelected?.id, economyPanelOpen, setEconomyPanelOpen])
 
   if (!firstSelected) {
     // ── Нет выделения: показываем экономику (yandex-only) + проект ──
@@ -594,6 +614,21 @@ export default function PropertiesPanel({
       {/* EC6: мини-HUD баланса при выделенном объекте (P0-6: только при Yandex SDK) */}
       {isEconomyActive && <EconomyMiniHUD />}
 
+      {/* B2/B3: режим экономики — «купить» из LeftPanel/палитры (store-флаг).
+          Показывается ВНУТРИ правой панели, не снимая выделение. */}
+      {showEconomyMode && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          <button
+            className="btn btn-compact"
+            onClick={() => setEconomyPanelOpen(false)}
+            style={{ alignSelf: 'flex-start', fontSize: '12px' }}
+          >
+            {t('properties.backToProps')}
+          </button>
+          {isEconomyActive && <EconomyPanel />}
+        </div>
+      )}
+
       <div className="props-row">
         <span className="props-label">{t("properties.type")}</span>
         <span className="props-value">
@@ -636,9 +671,10 @@ export default function PropertiesPanel({
             className="btn btn-compact btn-full"
             onClick={() => {
               if (!canUseExtendedPicker) {
-                // 🔒 Нет доступа к расширенному — раскрыть правую панель экономики
-                // (снять выделение: EconomyPanel рендерится при пустом выделении)
-                clearSelection()
+                // 🔒 B3: нет доступа к расширенному — открыть экономику ВНУТРИ
+                // правой панели (аренда extendedPalette 75 TC). Store-флаг
+                // НЕ снимает выделение → панель свойств остаётся открытой.
+                setEconomyPanelOpen(true)
                 return
               }
               setShowNativePicker(!showNativePicker)

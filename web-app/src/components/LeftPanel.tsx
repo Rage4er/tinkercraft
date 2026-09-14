@@ -27,6 +27,7 @@ export default function LeftPanel({
   busy,
   onAddShape,
   onShowTextModal,
+  openEconomy,
   objectList,
   selSet,
   activeTab,
@@ -47,6 +48,7 @@ export default function LeftPanel({
   busy: boolean;
   onAddShape: (type: ShapeType) => void;
   onShowTextModal: () => void;
+  openEconomy: () => void;
   objectList: SceneObject[];
   selSet: Set<string>;
   activeTab: "objects" | "tree";
@@ -116,6 +118,12 @@ export default function LeftPanel({
                 disabled={!workerOk || busy}
                 onClick={() => {
                   if (isText3d) {
+                    // B2: без доступа к 3D-тексту — НЕ disabled, клик ведёт
+                    // к аренде text3d (75 токенов) в правой панели экономики.
+                    if (!textActive) {
+                      openEconomy()
+                      return
+                    }
                     onShowTextModal()
                     return
                   }

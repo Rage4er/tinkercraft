@@ -1,15 +1,16 @@
 # 🗣️ Отзыв пользователя: экономика и UI (2026-09-11)
 
 **Дата отзыва:** 2026-09-11
-**Источник:** пользовательский отзыв (ручной прогон приложения)
-**Статус:** 🟢 ЗАКРЫТО (2026-09-13) — все 10 проблем реестра исправлены (U3 — решение «магазин» = правая панель, ECONOMY.md v2.2)
-**Объект:** экономика ([`economy-store.ts`](../web-app/src/store/economy-store.ts), [`economy-config.ts`](../web-app/src/store/economy-config.ts)), UI экономики ([`PropertiesPanel.tsx`](../web-app/src/components/PropertiesPanel.tsx), [`EconomyShop.tsx`](../web-app/src/components/EconomyShop.tsx), [`EconomyBanner.tsx`](../web-app/src/components/EconomyBanner.tsx), [`LeftPanel.tsx`](../web-app/src/components/LeftPanel.tsx), [`Badge.tsx`](../web-app/src/components/Badge.tsx)), платформа ([`main.tsx`](../web-app/src/main.tsx), [`platform/*`](../web-app/src/platform/index.ts))
+**Источник:** пользовательский отзыв (ручной прогон приложения) + регрессии после теста на платформе Яндекс Игр (A/B/C, 2026-09-13/14)
+**Статус:** 🟢 ЗАКРЫТО (2026-09-14) — все проблемы реестра исправлены (U1–U10 + A1/A2 + B1/B2/B3 + C1/C2/C3)
+**Объект:** экономика ([`economy-store.ts`](../web-app/src/store/economy-store.ts), [`economy-config.ts`](../web-app/src/store/economy-config.ts)), UI экономики ([`PropertiesPanel.tsx`](../web-app/src/components/PropertiesPanel.tsx), [`EconomyBanner.tsx`](../web-app/src/components/EconomyBanner.tsx), [`LeftPanel.tsx`](../web-app/src/components/LeftPanel.tsx), [`Badge.tsx`](../web-app/src/components/Badge.tsx)), платформа ([`main.tsx`](../web-app/src/main.tsx), [`platform/*`](../web-app/src/platform/index.ts))
 
 > Документ создан по просьбе пользователя для фиксации отзыва. Это **реестр проблем**, а не код-ревью.
 > **Закрыт 2026-09-12:** все пункты U1–U10 обработаны в подзадачах (см. [`CHANGELOG.md`](../CHANGELOG.md) → `[Unreleased]`: U1/U9 v2.1, U10, U2, P2-5, U4, U6, U7, U5/P0-1, U8/P1-1, P0-2).
 > **U3 решён 2026-09-13:** «магазин» = правая панель (`PropertiesPanel` → `EconomyPanel`); левая вкладка убрана, переходы «купить» ведут в правую панель; ECONOMY.md обновлён до v2.2 (§6.3 — два места).
-> Проверка: `pnpm verify` — typecheck 0 ошибок, 336/336 тестов (23 файла), build/build:yandex успешны.
-> Связанные материалы: [`ECONOMY.md`](../ECONOMY.md) (v2.2), [`docs/ECONOMY_CODE_REVIEW.md`](ECONOMY_CODE_REVIEW.md), [`CHANGELOG.md`](../CHANGELOG.md), [`CODE_REVIEW.md`](CODE_REVIEW.md), [`DEVELOPMENT_PLAN.md`](DEVELOPMENT_PLAN.md).
+> **Регрессии A/B/C закрыты 2026-09-14:** A1/A2 (экспорт/импорт за рекламу), B1/B2/B3 (баннер, 3D-текст слева, палитра), C1/C2/C3 (бейджи, токен-куб, квест зеркал) — исправлены, полный `pnpm verify` зелёный (357/357).
+> Проверка: `pnpm verify` — typecheck 0 ошибок, **357/357 тестов (23 файла)**, build/build:yandex успешны.
+> Связанные материалы: [`ECONOMY.md`](../ECONOMY.md) (**v2.3**), [`docs/ECONOMY_CODE_REVIEW.md`](ECONOMY_CODE_REVIEW.md), [`CHANGELOG.md`](../CHANGELOG.md), [`CODE_REVIEW.md`](CODE_REVIEW.md), [`DEVELOPMENT_PLAN.md`](DEVELOPMENT_PLAN.md).
 
 ---
 
@@ -40,8 +41,16 @@ U5 | **Баннер:** после покупки скрытия за токен�
 U6 | В свойствах **отсутствует простая палитра** (доступна только расширенная за аренду/подписку) | UX / баг | 🟡 P1 | ✅ ИСПРАВЛЕНО — палитра Wad's Optimum 16 доступна всегда; расширенный native-picker — только при аренде `extendedPalette`/подписке ([`PropertiesPanel.tsx`](../web-app/src/components/PropertiesPanel.tsx), [`ColorPalette.tsx`](../web-app/src/components/ColorPalette.tsx)) |
 U7 | **Иконки на всех бейджах увеличить в 2 раза** | UX / косметика | 🟢 P2 | ✅ ИСПРАВЛЕНО — Badge: иконки 10→20px, шрифт 10→16px; IconBadge: 16→20px ([`Badge.tsx`](../web-app/src/components/Badge.tsx), [`IconBadge.tsx`](../web-app/src/components/IconBadge.tsx)) |
 U8 | **Экспорт не выполняется** после оплаты токенами и после просмотра рекламы | Баг, блокирует платный сценарий | 🔴 P0 | ✅ ИСПРАВЛЕНО — единая модель кэшбэка: `exportStl(method: 'tokens'\|'ad')`, кэшбэк учтён в цене при токенах/начисляется при рекламе, цепочка `handleExportExecute → exportStl` восстановлена ([`App.tsx`](../web-app/src/App.tsx), [`document-store.ts`](../web-app/src/store/document-store.ts), [`ExportModal.tsx`](../web-app/src/components/ExportModal.tsx)) |
-U9 | **Счётчик просмотров рекламы единый для всех наград**; должен быть **отдельный счётчик для каждой награды** | Логика | 🟡 P1 | ✅ ИСПРАВЛЕНО — отдельные дневные счётчики per-reward (`adRewards[*].countToday`), лимиты `maxPerDay=705`, `realisticPerDay=350` ([`economy-store.ts`](../web-app/src/store/economy-store.ts), [`economy-config.ts`](../web-app/src/store/economy-config.ts)) |
+U9 | **Счётчик просмотров рекламы единый для всех наград**; должен быть **отдельный счётчик для каждой награды** | Логика | 🟡 P1 | ✅ ИСПРАВЛЕНО — отдельные дневные счётчики per-reward (`adRewards[*].countToday`), лимиты `maxPerDay=705`, `realisticPerDay=350` (v2.1; **с v2.3 — 405/250**, т.к. доход даёт только вид `tokens`) ([`economy-store.ts`](../web-app/src/store/economy-store.ts), [`economy-config.ts`](../web-app/src/store/economy-config.ts)) |
 U10 | **SDK инициализируется уже после того, как игра стала доступна** — недопустимо | Платформа / модерация | 🔴 P0 | ✅ ИСПРАВЛЕНО — bootstrap «сплэш → initSdk → App» в main.tsx; ранний fallback LoadingAPI.ready (15с) убран; GameplayAPI стартует после `getInitDonePromise()` ([`main.tsx`](../web-app/src/main.tsx), [`platform/sdk.ts`](../web-app/src/platform/sdk.ts)) |
+B1 | **Баннер-оффер не виден по умолчанию** (sticky-баннер платформы скрыт/недоступен, наш UI-баннер тоже молчит) | UX / баг | 🟡 P1 | ✅ ИСПРАВЛЕНО — `bannerVisible` инициализируется `true` (initial state + persist-merge); единый RO-геттер `shouldShowBannerRO()` (bannerVisible && !подписка && !аренда disableBanner) для EconomyBanner и bootstrap EC1; платформенный sticky (`showBannerAdv`) не влияет на наш UI-баннер ([`economy-store.ts`](../web-app/src/store/economy-store.ts), [`EconomyBanner.tsx`](../web-app/src/components/EconomyBanner.tsx), [`App.tsx`](../web-app/src/App.tsx)) |
+B2 | **Кнопка «3D-текст» на левой панели неактивна**, нельзя арендовать (в правой панели аренда работает) | UX / баг | 🟡 P1 | ✅ ИСПРАВЛЕНО — клик по 3D-тексту без доступа открывает правую панель с оффером аренды text3d (75 TC, бейдж 💰75); store-флаг `economyPanelOpen` (ui-store) не снимает выделение ([`LeftPanel.tsx`](../web-app/src/components/LeftPanel.tsx), [`App.tsx`](../web-app/src/App.tsx), [`ui-store.ts`](../web-app/src/store/ui-store.ts)) |
+B3 | **«Расширенный выбор» (палитра) закрывает панель свойств** вместо открытия оффера аренды | UX / баг | 🟡 P1 | ✅ ИСПРАВЛЕНО — `setEconomyPanelOpen(true)` вместо `clearSelection()`: EconomyPanel рендерится ВНУТРИ правой панели поверх свойств (кнопка «← К свойствам»), флаг сбрасывается только при смене выбранного объекта ([`PropertiesPanel.tsx`](../web-app/src/components/PropertiesPanel.tsx), [`ui-store.ts`](../web-app/src/store/ui-store.ts)) |
+A1 | **Экспорт за рекламу:** rewarded-просмотр начислял +50 токенов, но файл не скачивался; счётчик/кулдаун общие с HUD | Баг, платный сценарий | 🔴 P0 | ✅ ИСПРАВЛЕНО — новый вид `export` в `adRewards` (`watchAdForExport()`): НЕ начисляет токены, экспорт выполняется ПОСЛЕ onRewarded; собственный кулдаун 5 мин и лимит ≤3/день, отдельный от HUD `tokens` ([`economy-store.ts`](../web-app/src/store/economy-store.ts), [`ExportModal.tsx`](../web-app/src/components/ExportModal.tsx), [`App.tsx`](../web-app/src/App.tsx)) |
+A2 | **Импорт за рекламу:** начислялось +50/ролик; file chooser требовал user activation после рекламы | Баг, платный сценарий | 🔴 P0 | ✅ ИСПРАВЛЕНО — `watchAdsForImport(2)` серия 2 роликов ОПЛАЧИВАЕТ импорт (без +50/ролик), частичная серия → импорт не выполняется; диалог выбора файла открывается ДО рекламы (user activation); счётчик вида `import` независим ([`economy-store.ts`](../web-app/src/store/economy-store.ts), [`ImportModal.tsx`](../web-app/src/components/ImportModal.tsx), [`document-store.ts`](../web-app/src/store/document-store.ts)) |
+C1 | **Бейджи стали слишком крупными** (шрифт 16px, контейнер ×2) после увеличения иконок (U7) | UX / косметика | 🟢 P2 | ✅ ИСПРАВЛЕНО — компактные бейджи: шрифт 10px, padding 1px 3px, gap 2px, minWidth 16/minHeight 14; IconBadge шрифт 10px/padding 2px 4px; иконки остаются 20×20 ([`Badge.tsx`](../web-app/src/components/Badge.tsx), [`IconBadge.tsx`](../web-app/src/components/IconBadge.tsx)) |
+C2 | **Токен выглядел как «монета»**, а должен быть золотым кубом-логотипом | UX / косметика | 🟢 P2 | ✅ ИСПРАВЛЕНО — иконка токена = золотой куб `TokenIcon` (из `components/icons`), заменён `MoneyIcon` в Badge/IconBadge; уже используется в HUD/баннере/онбординге/модалках ([`icons/index.tsx`](../web-app/src/components/icons/index.tsx), [`Badge.tsx`](../web-app/src/components/Badge.tsx), [`IconBadge.tsx`](../web-app/src/components/IconBadge.tsx)) |
+C3 | **Квест «Зазеркалье» (зеркала) не засчитывался** — счётчик молчал при выполнении условия | Баг (quest) | 🟡 P1 | ✅ ИСПРАВЛЕНО — счёт по mirror-операциям истории (`op.type === 'mirror'` → уникальные `mirrorCreatedIds`) + legacy `scale < 0`; пересечение с текущей сценой; порог «≥ target» ([`economy-store.ts`](../web-app/src/store/economy-store.ts)) |
 
 ---
 
@@ -85,7 +94,7 @@ U10 | **SDK инициализируется уже после того, как 
 ### U9. Единый счётчик рекламы вместо отдельного для каждой награды
 - **Статус:** ✅ ИСПРАВЛЕНО (2026-09-12).
 - **Решение принято:** раздельные дневные счётчики per-reward; ECONOMY.md v2.1.
-- **Где исправлено:** [`economy-store.ts`](../web-app/src/store/economy-store.ts) — `adRewards[*].countToday` на каждый вид; UI переведён на per-reward счётчики (EconomyMiniHUD/PropertiesPanel/ExportModal — вид `tokens`, ImportModal — вид `import`); i18n подсказка «≤3/день на каждую награду, пауза 5 минут»; `LIMITS.maxPerDay` 405→705, `realisticPerDay` 240→350 ([`economy-config.ts`](../web-app/src/store/economy-config.ts)). Persist v3 + облако (`collectSyncData`/`loadFromCloud`/`partialize`).
+- **Где исправлено:** [`economy-store.ts`](../web-app/src/store/economy-store.ts) — `adRewards[*].countToday` на каждый вид; UI переведён на per-reward счётчики (EconomyMiniHUD/PropertiesPanel/ExportModal — вид `tokens`, ImportModal — вид `import`); i18n подсказка «≤3/день на каждую награду, пауза 5 минут»; `LIMITS.maxPerDay` 405→705, `realisticPerDay` 240→350 (v2.1). **С v2.3 (A1/A2):** видов стало 4 (`tokens`/`import`/`export`/`banner`), доход только `tokens` → лимиты **705→405 / 350→250** ([`economy-config.ts`](../web-app/src/store/economy-config.ts)). Persist v3 + облако (`collectSyncData`/`loadFromCloud`/`partialize`).
 
 ### U10. SDK инициализируется после того, как игра становится доступной
 - **Статус:** ✅ ИСПРАВЛЕНО (2026-09-12).
@@ -93,15 +102,41 @@ U10 | **SDK инициализируется уже после того, как 
 
 ---
 
+## Регрессии после теста на платформе Яндекс Игр (A/B/C, закрыты 2026-09-14)
+
+> Проблемы выявлены при реальном прогоне сборки на платформе Яндекс Игр (в песочнице/на модерации). Исправлены подзадачами A1/A2 (платные сценарии), B1/B2/B3 (UI-переходы), C1/C2/C3 (бейджи/квест).
+
+### A1. Экспорт за рекламу — токены начислялись, файл не скачивался
+- **Статус:** ✅ ИСПРАВЛЕНО (2026-09-14).
+- **Где исправлено:** новый вид `export` в `adRewards` + `watchAdForExport()` в [`economy-store.ts`](../web-app/src/store/economy-store.ts) — НЕ начисляет токены (раньше `watchAdForTokens` начислял +50); `exportStl` выполняется ПОСЛЕ onRewarded в [`ExportModal.tsx`](../web-app/src/components/ExportModal.tsx) и [`App.tsx`](../web-app/src/App.tsx). Собственный кулдаун 5 мин и лимит ≤3/день, независимый от HUD `tokens`.
+
+### A2. Импорт за рекламу — +50/ролик и user activation
+- **Статус:** ✅ ИСПРАВЛЕНО (2026-09-14).
+- **Где исправлено:** `watchAdsForImport(2)` в [`economy-store.ts`](../web-app/src/store/economy-store.ts) — серия 2 роликов ОПЛАЧИВАЕТ импорт (токены НЕ начисляются ни за один), частичная серия → false; счётчик вида `import` считает показы. File chooser открывается ДО рекламы (в момент клика, user activation) — `importStl(preSelectedFile?)` в [`document-store.ts`](../web-app/src/store/document-store.ts); при отмене выбора реклама не показывается ([`ImportModal.tsx`](../web-app/src/components/ImportModal.tsx)).
+
+### C1. Бейджи стали крупными (регрессия U7)
+- **Статус:** ✅ ИСПРАВЛЕНО (2026-09-14).
+- **Где исправлено:** компактные бейджи в [`Badge.tsx`](../web-app/src/components/Badge.tsx) (шрифт 10px, padding 1px 3px, gap 2px, minWidth 16/minHeight 14) и [`IconBadge.tsx`](../web-app/src/components/IconBadge.tsx) (шрифт 10px, padding 2px 4px); иконки остаются 20×20, `pointer-events:none`, бейдж — ¼ кнопки.
+
+### C2. Токен-иконка — золотой куб вместо монеты
+- **Статус:** ✅ ИСПРАВЛЕНО (2026-09-14).
+- **Где исправлено:** `TokenIcon` (золотой изометрический куб TC из [`icons/index.tsx`](../web-app/src/components/icons/index.tsx)) заменил `MoneyIcon` в Badge/IconBadge; HUD/баннер/онбординг/модалки уже использовали `TokenIcon`.
+
+### C3. Квест «Зазеркалье» не засчитывал зеркала
+- **Статус:** ✅ ИСПРАВЛЕНО (2026-09-14).
+- **Где исправлено:** [`economy-store.ts`](../web-app/src/store/economy-store.ts) — счёт строится по mirror-операциям истории (`op.type === 'mirror'` → уникальные `mirrorCreatedIds`), пересечение с текущей сценой (удаление/undo уменьшает счёт), legacy `scale < 0` (причина бага: `mirrorObject` пишет `scale = Math.abs(...)`), порог «≥ target».
+
+---
+
 ## Приоритеты к исправлению
 
-> **Статус 2026-09-13:** все 10 пунктов закрыты (U3 — решение «магазин» = правая панель, ECONOMY.md v2.2).
+> **Статус 2026-09-14:** все 10 пунктов U1–U10 + регрессии A1/A2, B1/B2/B3, C1/C2/C3 закрыты.
 
-1. 🔴 **P0:** U5 ✅, U8 ✅, U10 ✅ — исправлены (см. реестр выше).
-2. 🟡 **P1:** U1 ✅, U2 ✅, **U3 ✅**, U6 ✅, U9 ✅ — исправлены (U1/U9 — раздельные откаты/счётчики per-reward, ECONOMY.md v2.1; U3 — «магазин» = правая панель, ECONOMY.md v2.2 §6.3).
-3. 🟢 **P2:** U4 ✅, U7 ✅ — исправлены.
+1. 🔴 **P0:** U5 ✅, U8 ✅, U10 ✅, **A1 ✅, A2 ✅** — исправлены (см. реестр выше).
+2. 🟡 **P1:** U1 ✅, U2 ✅, U3 ✅, U6 ✅, U9 ✅, **B1 ✅, B2 ✅, B3 ✅, C3 ✅** — исправлены (U1/U9 — раздельные откаты/счётчики per-reward, ECONOMY.md v2.1; U3 — «магазин» = правая панель, ECONOMY.md v2.2 §6.3; B1–B3 — баннер/3D-текст/палитра; C3 — квест зеркал).
+3. 🟢 **P2:** U4 ✅, U7 ✅, **C1 ✅, C2 ✅** — исправлены.
 
-**Что осталось открытым:** всё закрыто. Далее — ручная визуальная проверка UI на платформе Yandex и модерация (см. [`DEVELOPMENT_PLAN.md`](DEVELOPMENT_PLAN.md) → Этап 2, Y.3).
+**Что осталось открытым:** код-сторона закрыта. Остались ручные проверки на платформе Яндекс Игр: rewarded-реклама экспорта/импорта, отображение баннера, палитра «Расширенный выбор», квест зеркал, модерация (см. [`DEVELOPMENT_PLAN.md`](DEVELOPMENT_PLAN.md) → Этап 2, Y.3).
 
 ## Чек-лист закрытия
 
@@ -113,7 +148,15 @@ U10 | **SDK инициализируется уже после того, как 
 - [x] U6 — простая палитра доступна без аренды/подписки — ✅ ИСПРАВЛЕНО: `ColorPalette` рендерится всегда; расширенный picker — за аренду `extendedPalette`/подписку (`PropertiesPanel.tsx`)
 - [x] U7 — иконки бейджей ×2 — ✅ ИСПРАВЛЕНО: Badge 10→20px/шрифт 16px; IconBadge 16→20px (`Badge.tsx`, `IconBadge.tsx`)
 - [x] U8 — экспорт выполняется после оплаты токенами и после рекламы — ✅ ИСПРАВЛЕНО: единая модель кэшбэка (`exportStl(method)`), цепочка оплата → закрытие → скачивание восстановлена (P1-1)
-- [x] U9 — отдельные счётчики рекламы по видам наград — ✅ ИСПРАВЛЕНО: `adRewards[*].countToday` per-reward, лимиты 705/350, ECONOMY.md v2.1 (`economy-store.ts`, `economy-config.ts`)
+- [x] U9 — отдельные счётчики рекламы по видам наград — ✅ ИСПРАВЛЕНО: `adRewards[*].countToday` per-reward, лимиты 705/350 (v2.1) → **405/250 (v2.3)**, ECONOMY.md v2.1/v2.3 (`economy-store.ts`, `economy-config.ts`)
 - [x] U10 — SDK инициализирован до доступности игры — ✅ ИСПРАВЛЕНО: сплэш-экран → `initSdk()` (таймаут 10с → clean) → рендер App; `LoadingAPI.ready()` только при `workerOk && initDone` (fallback 15с убран); `GameplayAPI.start()` через `getInitDonePromise()` (не до init SDK)
-- [x] `pnpm verify` — 0 ошибок, все тесты проходят — ✅ 2026-09-12: typecheck 0 ошибок, 336/336 тестов (23 файла), build/build:yandex успешны
+- [x] A1 — экспорт за рекламу — ✅ ИСПРАВЛЕНО: вид `export` (`watchAdForExport()`, без начисления токенов), экспорт после onRewarded, свой счётчик/кулдаун (`economy-store.ts`, `ExportModal.tsx`)
+- [x] A2 — импорт за рекламу — ✅ ИСПРАВЛЕНО: серия 2 роликов оплачивает импорт (без +50/ролик), file chooser ДО рекламы (user activation), счётчик вида `import` независим (`economy-store.ts`, `ImportModal.tsx`, `document-store.ts`)
+- [x] B1 — баннер виден по умолчанию — ✅ ИСПРАВЛЕНО: `bannerVisible=true` (initial state + persist-merge), геттер `shouldShowBannerRO()` (`economy-store.ts`, `EconomyBanner.tsx`, `App.tsx`)
+- [x] B2 — клик по 3D-тексту без доступа → экономика, не disabled — ✅ ИСПРАВЛЕНО: `setEconomyPanelOpen(true)`, панель остаётся открытой (`LeftPanel.tsx`, `App.tsx`, `ui-store.ts`)
+- [x] B3 — «Расширенный выбор» не закрывает панель — ✅ ИСПРАВЛЕНО: `economyPanelOpen` в ui-store, EconomyPanel внутри панели, кнопка «← К свойствам» (`PropertiesPanel.tsx`, `ui-store.ts`)
+- [x] C1 — компактные бейджи (шрифт 10px, padding 1px 3px, иконки 20px) — ✅ ИСПРАВЛЕНО (`Badge.tsx`, `IconBadge.tsx`)
+- [x] C2 — токен = золотой куб `TokenIcon` — ✅ ИСПРАВЛЕНО (`icons/index.tsx`, `Badge.tsx`, `IconBadge.tsx`)
+- [x] C3 — квест зеркал считает mirror-операции истории, порог «≥ target» — ✅ ИСПРАВЛЕНО (`economy-store.ts`)
+- [x] `pnpm verify` — 0 ошибок, все тесты проходят — ✅ 2026-09-14: typecheck 0 ошибок, **357/357 тестов (23 файла)**, build/build:yandex успешны (полный прогон ПОСЛЕ всех A/B/C правок)
 - [x] Записи в `CHANGELOG.md`, статусы в `CODE_REVIEW.md` / `DEVELOPMENT_PLAN.md` — ✅ обновлены (см. ссылки в шапке)

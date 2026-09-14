@@ -70,6 +70,11 @@ export interface UiStore {
   // Panels
   activeTab: 'objects' | 'tree'
   setActiveTab: (v: 'objects' | 'tree') => void
+  // B2/B3: флаг «правая панель в режиме экономики» — переходы «купить»
+  // (3D-текст, расширенная палитра) открывают EconomyPanel НЕЗАВИСИМО от
+  // выделения. НЕ снимает выделение → панель свойств не «закрывается».
+  economyPanelOpen: boolean
+  setEconomyPanelOpen: (v: boolean) => void
   cameraMode: 'perspective' | 'orthographic'
   setCameraMode: (v: 'perspective' | 'orthographic' | ((prev: 'perspective' | 'orthographic') => 'perspective' | 'orthographic')) => void
 }
@@ -128,6 +133,8 @@ export const useUiStore = create<UiStore>((set) => ({
 
   activeTab: 'objects' as const,
   setActiveTab: (v) => set({ activeTab: v }),
+  economyPanelOpen: false,
+  setEconomyPanelOpen: (v) => set({ economyPanelOpen: v }),
   cameraMode: 'perspective',
   setCameraMode: (v) =>
     set((s) => ({ cameraMode: typeof v === 'function' ? v(s.cameraMode) : v })),

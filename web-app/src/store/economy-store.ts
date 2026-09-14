@@ -36,13 +36,18 @@ export type RentalKey = 'text3d' | 'extendedPalette' | 'disableBanner'
 export type SubscriptionKey = 'weekly' | 'monthly'
 
 /**
- * U1/U9: вид rewarded-рекламы. Каждый вид имеет СОБСТВЕННЫЙ кулдаун 5 мин
+ * U1/U9/U12: вид rewarded-рекламы. Каждый вид имеет СОБСТВЕННЫЙ кулдаун 5 мин
  * и СОБСТВЕННЫЙ дневной лимит ≤3 (§2 ECONOMY.md v2.1).
- * - `tokens` — реклама за токены (+50, кнопка/HUD/экспорт);
- * - `import` — серия из 2 роликов за импорт STL;
+ * - `tokens` — реклама за токены (+50, кнопка/HUD);
+ * - `import` — серия из 2 роликов ЗА ИМПОРТ STL (НЕ начисляет токены);
+ * - `export` — 1 ролик ЗА ЭКСПОРТ STL (НЕ начисляет токены);
  * - `banner` — 1 ролик за скрытие баннера (аренда disableBanner).
+ *
+ * U12 (регрессии P1/P2): экспорт и импорт имеют ОТДЕЛЬНЫЕ виды — просмотр
+ * рекламы за токены в HUD не влияет на счётчики/кулдауны оплаты экспорта/
+ * импорта и наоборот. Оплата экспорта/импорта рекламой НЕ начисляет токены.
  */
-export type AdRewardKind = 'tokens' | 'import' | 'banner'
+export type AdRewardKind = 'tokens' | 'import' | 'export' | 'banner'
 
 /** Состояние одного вида наградной рекламы */
 export interface AdRewardState {
@@ -53,7 +58,7 @@ export interface AdRewardState {
 }
 
 /** Все виды наградной рекламы (порядок фиксирован) */
-export const AD_REWARD_KINDS: AdRewardKind[] = ['tokens', 'import', 'banner']
+export const AD_REWARD_KINDS: AdRewardKind[] = ['tokens', 'import', 'export', 'banner']
 
 /** Пустое состояние вида рекламы */
 export function emptyAdReward(): AdRewardState {
@@ -65,6 +70,7 @@ export function emptyAdRewards(): Record<AdRewardKind, AdRewardState> {
   return {
     tokens: emptyAdReward(),
     import: emptyAdReward(),
+    export: emptyAdReward(),
     banner: emptyAdReward(),
   }
 }
@@ -96,6 +102,7 @@ function resetAdRewardsCounters(
   return {
     tokens: { ...(rewards.tokens ?? emptyAdReward()), countToday: 0 },
     import: { ...(rewards.import ?? emptyAdReward()), countToday: 0 },
+    export: { ...(rewards.export ?? emptyAdReward()), countToday: 0 },
     banner: { ...(rewards.banner ?? emptyAdReward()), countToday: 0 },
   }
 }
@@ -209,7 +216,12 @@ interface EconomyState {
   // ── Доход ──
   claimDailyBonus(): Promise<boolean>
   watchAdForTokens(): Promise<boolean>
-  /** EC2: N реклам подряд для импорта (без кулдауна между показами) */
+  /**
+   * U12: 1 rewarded-ролик ЗА ЭКСПОРТ STL (вид `export`).
+   * НЕ начисляет токены — оплачивает экспорт (после успеха вызывается onExport).
+   */
+  watchAdForExport(): Promise<boolean>
+  /** EC2/U12: N реклам подряд для импорта (без кулдауна между показами, НЕ начисляет токены) */
   watchAdsForImport(count: number): Promise<boolean>
   watchAdForBanner(): Promise<{ ok: boolean }>
 
@@ -238,6 +250,8 @@ interface EconomyState {
   hasRentalRO(key: RentalKey): boolean
   /** P1-5: единый read-only доступ к 3D-тексту (подписка ИЛИ аренда text3d по серверному времени) */
   canUseText3dRO(): boolean
+  /** B1: виден ли баннер-оффер (bannerVisible && нет подписки && нет аренды disableBanner) */
+  shouldShowBannerRO(): boolean
   buyRental(key: RentalKey): Promise<{ ok: boolean; code?: string }>
 
   // ── Квесты ──
@@ -632,7 +646,10 @@ export const useEconomyStore = create<EconomyState>()(
       lastSavedData: '' as string,
       pendingSync: false, // Y3.16: debounce для syncToCloud
       syncTailPending: false, // P0-3: «грязный» флаг для повторной синхронизации
-      bannerVisible: false,
+      // B1: баннер-оффер скрытия виден ПО УМОЛЧАНИЮ (§6.3 ECONOMY.md) —
+      // пока не куплена аренда disableBanner и нет подписки. При старте
+      // App.tsx (bootstrap EC1) дополнительно сверяет с подпиской/арендой.
+      bannerVisible: true,
 
       // ── Actions ──
       addTokens: (amount) => {
@@ -728,14 +745,59 @@ export const useEconomyStore = create<EconomyState>()(
         return true
       },
 
-      // ── EC2: N рекламы подряд для импорта (§3.1: 2 просмотра) ──
+      // ── U12: реклама ЗА ЭКСПОРТ STL (вид `export`) ──
+      // 1 ролик → экспорт оплачен. Токены НЕ начисляются (в отличие от
+      // watchAdForTokens — там +50 за просмотр). Свой кулдаун 5 мин и свой
+      // дневной лимит ≤3 (вид export). Не влияет на tokens/import/banner.
+      watchAdForExport: async (): Promise<boolean> => {
+        const state = get()
+        const kind: AdRewardKind = 'export'
+        const ad = state.adRewards[kind] ?? emptyAdReward()
+
+        if (isLimitReached(ad.countToday, LIMITS.adsPerDay)) {
+          console.warn('[Economy] Ad limit reached for export')
+          return false
+        }
+
+        const passed = await isCooldownPassed(ad.lastTimestamp, AD_COOLDOWN_MS)
+        if (!passed) {
+          console.warn('[Economy] Ad cooldown not passed for export')
+          return false
+        }
+
+        const platform = getPlatform()
+        if (!platform) {
+          console.warn('[Economy] No platform for export ad')
+          return false
+        }
+
+        const rewarded = await platform.showRewardedVideo()
+        if (!rewarded) return false
+
+        // Сохраняем серверное время
+        const { getServerTime } = await import('../platform/server-time')
+        const serverTime = await getServerTime()
+
+        // U12: НЕ начисляем токены — реклама ОПЛАЧИВАЕТ экспорт (оплата, не доход)
+        set((st) => ({
+          adRewards: markAdWatched(st.adRewards, kind, serverTime),
+        }))
+        await get().syncToCloud()
+        console.log('[Economy] Export ad watched — export paid by ad')
+        return true
+      },
+
+      // ── EC2/U12: N рекламы подряд для импорта (§3.1: 2 просмотра) ──
       // U1/U9: серия использует СОБСТВЕННЫЙ вид `import` — кулдаун 5 мин
-      // проверяется один раз в начале серии, между показами паузы НЕТ (как раньше),
-      // но каждый показ увеличивает счётчик вида `import`.
-      // P1-6: каждая УСПЕШНО просмотренная реклама начисляет +50 СРАЗУ, даже если
-      // пользователь не досмотрел серию (отказ на 2-й) — показ платформой засчитан,
-      // значит награда положена. Импорт дополнительно списывает стоимость токенами
-      // в ImportModal (§3.1: 100 TC) — реклама и токены не смешиваются.
+      // проверяется один раз в начале серии, между показами паузы НЕТ.
+      // U12 (P2): серия ОПЛАЧИВАЕТ импорт — токены НЕ начисляются ни за один
+      // ролик (раньше начислялись +50 за каждый — регрессия P2). Счётчик вида
+      // import увеличивается на каждый показанный ролик (серия 2 ролика = +2),
+      // лимит «≤3/день» ограничивает ПОКАЗЫ, а не серии (§2 ECONOMY.md v2.1).
+      // Полная серия (все N роликов) = «импорт оплачен». Частичный просмотр
+      // (отказ на 2-й) НЕ возвращает успех — импорт не выполняется, токены
+      // также НЕ начисляются (нечего частично «одаривать» — реклама была
+      // оплатой операции, а не заработком).
       watchAdsForImport: async (count: number): Promise<boolean> => {
         const state = get()
         const kind: AdRewardKind = 'import'
@@ -770,8 +832,8 @@ export const useEconomyStore = create<EconomyState>()(
           watchedCount++
           // Серверное время после каждого показа (P2-2: getServerTime напрямую)
           const serverTime = await getServerTime()
+          // U12: только отмечаем показ — токены НЕ начисляются
           set((st) => ({
-            tokens: st.tokens + EARNINGS_AD_REWARDED,
             adRewards: markAdWatched(st.adRewards, kind, serverTime),
           }))
         }
@@ -780,9 +842,8 @@ export const useEconomyStore = create<EconomyState>()(
         if (watchedCount === 0) return false
 
         void get().syncToCloud()
-        console.log(`[Economy] Import ads watched: ${watchedCount}x+${EARNINGS_AD_REWARDED} tokens (partial ok)`)
-        // P1-6: true только если серия завершена полностью (импорт оплачен рекламой).
-        // При частичном просмотре токены уже начислены, но импорт требует полной оплаты.
+        console.log(`[Economy] Import ads watched: ${watchedCount}/${count} — import paid by ads (no tokens)`)
+        // U12: true только если серия завершена полностью (импорт оплачен рекламой).
         return watchedCount >= count
       },
 
@@ -1006,6 +1067,23 @@ export const useEconomyStore = create<EconomyState>()(
         return false
       },
 
+      // ── B1: виден ли баннер-оффер (§6.3) ──
+      // bannerVisible && нет подписки && нет аренды disableBanner (по серверному
+      // времени). Без мутаций — безопасен для render-фазы и selector-ов.
+      // Единый источник истины для EconomyBanner и App.tsx bootstrap EC1.
+      shouldShowBannerRO: () => {
+        const state = get()
+        if (!state.bannerVisible) return false
+        if (state.activeSubscription) {
+          if (!state.subscriptionExpiresAt || serverTimeNow() <= state.subscriptionExpiresAt) {
+            return false
+          }
+        }
+        const disableExpires = state.rentals.disableBanner
+        if (disableExpires !== null && serverTimeNow() <= disableExpires) return false
+        return true
+      },
+
       buyRental: async (key: RentalKey) => {
         const config = ECONOMY_RENTALS[key]
         const state = get()
@@ -1171,6 +1249,22 @@ export const useEconomyStore = create<EconomyState>()(
         let csgCount = 0
         let csgWithChildren = 0
 
+        // C3: зеркала считаем по операциям history (type: 'mirror'), а НЕ по
+        // scale < 0. Причина: mirrorObject в mirror-store.ts записывает
+        // transform со scale = Math.abs(...) (строка «Scale всегда
+        // положительный (abs), геометрия отражена через позиции/повороты
+        // в дереве»), поэтому отрицательного scale у зеркальных объектов
+        // НЕТ — проверка scale < 0 никогда не срабатывала, и квест
+        // «count_mirrored» не засчитывался. Операция mirror хранит ids —
+        // id созданных зеркальных копий; считаем по ТЕКУЩЕЙ сцене, чтобы
+        // удаление зеркала/undo уменьшало счётчик.
+        const mirrorCreatedIds = new Set<string>()
+        for (const op of operations) {
+          if (op.type === 'mirror' && op.ids && op.ids.length > 0) {
+            for (const id of op.ids) mirrorCreatedIds.add(id)
+          }
+        }
+
         let coloredCount = 0
         for (const obj of Object.values(objects)) {
           shapeTypes.add(obj.shapeType)
@@ -1178,8 +1272,11 @@ export const useEconomyStore = create<EconomyState>()(
           if (obj.shapeType === 'csg') csgCount++
           // Y3.7: исправлено 'text' → 'text3d'
           if (obj.shapeType === 'text3d') text3dCount++
-          // Y3.6: зеркало — проверяем scale < 0
-          if (obj.transform.scaleX < 0 || obj.transform.scaleY < 0 || obj.transform.scaleZ < 0) {
+          // C3/Y3.6: зеркало — объект создан mirror-операцией ИЛИ legacy scale < 0
+          if (
+            mirrorCreatedIds.has(obj.id) ||
+            obj.transform.scaleX < 0 || obj.transform.scaleY < 0 || obj.transform.scaleZ < 0
+          ) {
             mirroredCount++
           }
         }
@@ -1374,8 +1471,11 @@ export const useEconomyStore = create<EconomyState>()(
     {
       name: 'tinkercraft-economy',
       // U1/U9: v3 — per-reward реклама (adRewards вместо todayAdsWatched/lastAdTimestamp).
-      // Миграция старых полей выполняется в sanitizeEconomyData/sanitizeAdRewards.
-      version: 3,
+      // U12: v4 — добавлен вид `export` (оплата экспорта рекламой). Старые виды
+      // tokens/import/banner сохраняются из v3 (санитизация не трогает их), вид
+      // export отсутствует в старых данных → стартует с нуля. Миграция старых
+      // единых полей (до v2.1) выполняется в sanitizeEconomyData/sanitizeAdRewards.
+      version: 4,
       // P0-5: hydrate-merge с санитизацией — правка localStorage в DevTools
       // не даёт неограниченных токенов (clamp [0, MAX_TOKENS], валидация структуры).
       merge: (persisted, current) => {
@@ -1389,7 +1489,10 @@ export const useEconomyStore = create<EconomyState>()(
           // Состояние синхронизации/UI не восстанавливаем из storage
           pendingSync: false,
           syncTailPending: false,
-          bannerVisible: false,
+          // B1: НЕ восстанавливаем bannerVisible из storage (UI-флаг, не данные).
+          // По умолчанию — true: оффер виден, пока нет аренды disableBanner/подписки.
+          // App.tsx bootstrap EC1 при необходимости скроет его.
+          bannerVisible: true,
         }
       },
       // P0-4: lastSavedData в partialize — после перезагрузки не перезаписываем
