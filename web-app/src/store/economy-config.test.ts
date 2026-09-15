@@ -160,4 +160,42 @@ describe('scanForCashback', () => {
     const scan = scanForCashback(objects as any, operations)
     expect(scan.toolCategories).toBeGreaterThanOrEqual(1)
   })
+
+  // ─── EC-R1: зеркала считаются по mirror-операциям (как C3 в квестах) ──
+
+  it('EC-R1: зеркало с ПОЛОЖИТЕЛЬНЫМ scale считается по mirror-операции', () => {
+    // mirror-store пишет scale = Math.abs(...) — положительный; раньше
+    // проверка scale < 0 никогда не срабатывала и зеркала не попадали в кэшбэк
+    const objects = {
+      '1': { shapeType: 'cube', color: '#808080', transform: { scaleX: 2, scaleY: 2, scaleZ: 2 } },
+      '2': { shapeType: 'cube', color: '#808080', transform: { scaleX: 1, scaleY: 1, scaleZ: 1 } },
+    }
+    const operations = [
+      { type: 'mirror', ids: ['2'] }, // id зеркальной копии — объект '2'
+    ]
+    const scan = scanForCashback(objects as any, operations)
+    expect(scan.toolsCount).toBe(1) // только зеркало (цвета нет, CSG нет)
+    expect(scan.toolCategories).toBe(1) // категория «зеркало»
+  })
+
+  it('EC-R1: удалённое зеркало не считается (пересечение с текущей сценой)', () => {
+    const objects = {
+      '1': { shapeType: 'cube', color: '#808080', transform: { scaleX: 1, scaleY: 1, scaleZ: 1 } },
+    }
+    const operations = [
+      { type: 'mirror', ids: ['2'] }, // зеркальная копия '2' удалена из сцены
+    ]
+    const scan = scanForCashback(objects as any, operations)
+    expect(scan.toolsCount).toBe(0)
+    expect(scan.toolCategories).toBe(0)
+  })
+
+  it('EC-R1: legacy scale < 0 по-прежнему считается (без mirror-операции)', () => {
+    const objects = {
+      '1': { shapeType: 'cube', color: '#808080', transform: { scaleX: -1, scaleY: 1, scaleZ: 1 } },
+    }
+    const operations: Array<{ type: string; ids?: string[] }> = []
+    const scan = scanForCashback(objects as any, operations)
+    expect(scan.toolsCount).toBe(1)
+  })
 })

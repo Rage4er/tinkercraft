@@ -313,6 +313,42 @@
 
 ---
 
+## 🔍 Ревью экономики (economy-store / economy-config / economy-ui-config, 2026-09-15)
+
+**Объект:** `economy-store.ts` (1523 строки), `economy-config.ts`, `economy-ui-config.ts`, точки потребления (`PropertiesPanel.tsx`, `ExportModal.tsx`, `document-store.ts`).
+
+### Что хорошо (подтверждено)
+
+- Атомарные updaters в критичных местах: `spendTokens`, `buyRental`/`buySubscription` (списание), `markAdWatched` — потерь обновлений нет.
+- Анти-фарм кэшбэка (P0-1): хэш модели + `todayExportHashes` в облаке — очистка localStorage не даёт повторного кэшбэка.
+- Санитизация P0-5 на всех входах (hydrate / syncToCloud / loadFromCloud), миграция legacy-полей v2.0→v2.1.
+- `syncToCloud` с «хвостом» (P0-3) — повторная синхронизация не теряет изменения; dedupe по `lastSavedData`.
+- Серверное время во всех кулдаунах/expiry (P0-2); per-reward реклама (U1/U9/U12) — 4 независимых вида.
+- Единый подсчёт объектов `countSceneObjects` (P1-2) для экспорта/кэшбэка/квестов.
+
+### Найденные проблемы
+
+| # | Приоритет | Проблема | Статус |
+|---|-----------|----------|--------|
+| EC-R1 | 🟡 P1 | **`scanForCashback` не считает зеркала** (`economy-config.ts:278`): подсчёт по `scale < 0`, но `mirror-store.ts:267-269` пишет ПОЛОЖИТЕЛЬНЫЙ scale (`Math.abs`) → зеркала никогда не попадают в `toolsCount`/`toolCategories` кэшбэка. Тот же корень, что C3 (квесты починили по mirror-операциям, кэшбэк — нет). Параметр `operations` уже передаётся — фикс по образцу C3 | ✅ ИСПРАВЛЕНО — зеркала считаются по mirror-операциям (`op.type === 'mirror'` → `ids` ∩ текущая сцена) + legacy `scale < 0`; удаление зеркала уменьшает счётчик (`economy-config.ts`, тесты в `economy-config.test.ts`) |
+| EC-R2 | 🟡 P1 | **Гонка `claimDailyBonus`** (`economy-store.ts:687`): TOCTOU — двойной клик по кнопке бонуса (onClick передан напрямую, `busy` для него НЕ ставится) → оба вызова проходят `isDayPassed` до первого `set` → +100 вместо +50. Аналогично `watchAdForTokens` (onClick напрямую) — возможен параллельный показ и превышение лимита вида | ✅ ИСПРАВЛЕНО — in-flight guard (`withInFlightGuard`: повторный вызов делит ОДНО выполнение) + атомарная повторная проверка «тот же день»/лимита ВНУТРИ `set()`; UX: busy-guard на кнопках бонуса/рекламы в PropertiesPanel (`economy-store.ts`, `PropertiesPanel.tsx`, тесты в `economy-store.test.ts`) |
+| EC-R3 | 🟢 P2 | **`buySubscription`/`buyRental`: списание без повторной проверки** — проверка `tokens < cost` до `await getServerTime()`, updater списывает без guard → при падении баланса за время await возможны отрицательные токены (окно микроскопическое, фикс дешёвый: guard внутри updater) | ✅ ИСПРАВЛЕНО — атомарная повторная проверка баланса ВНУТРИ updater (`applied`-флаг, отказ `not_enough` без списания). Тесты ×2 (`economy-store.ts`, `economy-store.test.ts`) |
+| EC-R4 | 🟢 P2 | **`loadFromCloud`: `lastSavedData` считается ДО применения облачных данных** (`economy-store.ts:1409`) — object literal вычисляется до merge zustand → hash состояния ДО загрузки → первый `syncToCloud` после старта всегда считает данные изменёнными → 1 избыточный `setData` за запуск | ✅ ИСПРАВЛЕНО — hash пересчитывается ОТДЕЛЬНЫМ set() ПОСЛЕ применения облачных полей; hash в `syncToCloud` теперь = hash фактически сохранённых данных (`canonicalDataHash(currentData)`). Тест ×1 |
+| EC-R5 | 🟢 P2 | **`loadFromCloud` перезаписывает локальные токены облачными без сверки**: если последний syncToCloud упал (сеть), а пользователь заработал токены и перезагрузился — несинхронизированный локальный прогресс теряется (cloud wins). `lastSavedData` защищает от записи старых данных, но не от потери несинхронизированных | ✅ ИСПРАВЛЕНО — keep-local стратегия: пустое облако (никогда не сохранялось) и облако ≡ наша последняя успешная копия (canonical hash совпадает) НЕ перезаписывают локальный прогресс; только облако с другого устройства (новее) — cloud wins. `lastSavedData` исключён из облачных данных (внутренний dedupe-флаг). Тесты ×3 |
+| EC-R6 | 🟢 P2 | **Мёртвое состояние**: `questTriggers` (объявлено, персистится, санитизируется, сбрасывается — нигде не читается/не инкрементируется) и `totalModelsCreated` (аналогично). ~40 строк накладных расходов в sanitize/collect/partialize/loadFromCloud | ✅ ИСПРАВЛЕНО — оба поля удалены из state/persist/sanitize/sync (старые данные в localStorage/облаке игнорируются санитизацией). Тесты обновлены |
+| EC-R7 | 🟢 P2 | **`CATEGORY_ICON` — латентный баг** (`economy-ui-config.ts:24-28`): ключи `variety`/`text` не совпадают с типом `QuestCategory` (`diversity`, `text` нет) → `CATEGORY_ICON['diversity']` === undefined. Сейчас не используется (мёртвый код) — упадёт при первом применении | ✅ ИСПРАВЛЕНО — ключи приведены к `QuestCategory` (`variety`→`diversity`, `text` удалён), `satisfies Record<QuestCategory, string>` даёт compile-time проверку полноты (`economy-ui-config.ts`) |
+| EC-R8 | 🟢 P3 | **Косметика**: дубликат `getTodayQuests()` в интерфейсе EconomyState (строки 180 и 258); опечатка «Mutingating» (989, 1041); `_justCompleted` попадает в persist/облако (санитизация при hydrate срезает — ок, но в облаке мусорное поле) | ✅ ИСПРАВЛЕНО — дубликат удалён; опечатки исправлены («Mutating»); `_justCompleted` удалён полностью (писался, но нигде не читался) |
+
+### Приоритет действий
+
+1. ~~**EC-R1** — зеркала в кэшбэке~~ ✅ (2026-09-16)
+2. ~~**EC-R2** — гонка бонуса~~ ✅ (2026-09-16)
+3. ~~EC-R3–EC-R8 — дешёвые фиксы~~ ✅ (2026-09-16)
+
+**Проверка после всех фиксов EC-R1…EC-R8:** `pnpm verify` (2026-09-16) — typecheck 0 ошибок, **373/373 тестов (24 файла)**, `build`/`build:yandex` успешны. Новые тесты: `economy-config.test.ts` ×3 (EC-R1 зеркала), `economy-store.test.ts` ×9 (EC-R2 гонки ×3, EC-R3 guard баланса ×2, EC-R4 dedupe ×1, EC-R5 keep-local/cloud-wins ×3). ⚠️ Одноразовая миграция: canonical-хэш `lastSavedData` (sorted keys) не совпадёт со старым форматом — первый `syncToCloud` после обновления перезапишет облако теми же данными (один избыточный `setData`, без потери данных).
+
+---
+
 ## 📌 Будущие направления
 
 Следующие направления для будущих итераций (не являются активными проблемами):

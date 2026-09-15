@@ -137,7 +137,6 @@ describe('PropertiesPanel (U6: палитра доступна всегда)', (
         useEconomyStore.setState({
             tokens: 100,
             lastDailyBonus: null,
-            totalModelsCreated: 0,
             activeSubscription: null,
             subscriptionExpiresAt: null,
             rentals: { text3d: null, extendedPalette: null, disableBanner: null },
@@ -148,7 +147,6 @@ describe('PropertiesPanel (U6: палитра доступна всегда)', (
             todayExportHashes: [],
             todayQuestsCompleted: [],
             todayQuests: [],
-            questTriggers: {} as never,
             lastExportHash: null,
             lastQuestResetDate: null,
             lastSavedData: '',

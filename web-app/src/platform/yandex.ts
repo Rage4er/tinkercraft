@@ -6,7 +6,7 @@
 
 import type { IPlatform } from './types'
 import type { SDK, Player } from 'ysdk'
-import { initSdk, getSdk } from './sdk'
+import { initSdk, getSdk, withTimeout } from './sdk'
 
 class YandexPlatform implements IPlatform {
   public ysdk: SDK | null = null
@@ -72,20 +72,34 @@ class YandexPlatform implements IPlatform {
               }
 
               // Пробуем получить игрока (с таймаутом — зависший getPlayer
-              // не должен блокировать init() и загрузку экономики)
+              // не должен блокировать init() и загрузку экономики).
+              // ⚠️ withTimeout очищает таймер при успехе — иначе после загрузки
+              // player setTimeout продолжает тикать и печатает ЛОЖНОЕ
+              // предупреждение «getPlayer() timeout» (см. диагностику в sdk.ts).
+              const playerPromise = ysdk.getPlayer()
               try {
-                this.player = await Promise.race([
-                  ysdk.getPlayer(),
-                  new Promise<null>((resolve) => setTimeout(() => {
-                    console.warn(`[Yandex] getPlayer() timeout (${YandexPlatform.GET_PLAYER_TIMEOUT_MS}ms) — guest mode`)
-                    resolve(null)
-                  }, YandexPlatform.GET_PLAYER_TIMEOUT_MS)),
-                ])
+                this.player = await withTimeout(
+                  playerPromise,
+                  YandexPlatform.GET_PLAYER_TIMEOUT_MS,
+                  () => console.warn(`[Yandex] getPlayer() timeout (${YandexPlatform.GET_PLAYER_TIMEOUT_MS}ms) — guest mode`),
+                )
                 console.log('[Yandex] Player loaded, authorized:', this.player?.isAuthorized?.())
               } catch {
                 console.warn('[Yandex] Player not authorized yet, guest mode')
                 this.player = null
               }
+              // ⚠️ Поздний приход player: если таймаут сработал раньше, а
+              // getPlayer() резолвился ПОЗЖЕ — всё равно заполняем this.player.
+              // Это починит облачные сохранения (syncToCloud → saveData),
+              // которые иначе молча пропускались бы в guest-режиме.
+              playerPromise
+                .then((late: Player) => {
+                  if (late && !this.player) {
+                    this.player = late
+                    console.log('[Yandex] Player loaded late (after timeout), authorized:', late.isAuthorized?.())
+                  }
+                })
+                .catch(() => { /* уже обработано выше */ })
 
               this.initialized = true
               resolve(true)

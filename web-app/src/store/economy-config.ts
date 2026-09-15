@@ -271,11 +271,27 @@ export function scanForCashback(
   let mirrorCount = 0
   let textCount = 0
 
-  for (const obj of Object.values(objects)) {
+  // EC-R1: зеркала считаем по mirror-операциям истории (как C3 в evaluateQuests).
+  // Причина: mirror-store пишет ПОЛОЖИТЕЛЬНЫЙ scale (Math.abs) — проверка
+  // scale < 0 никогда не срабатывала, и зеркала не попадали в toolsCount/
+  // toolCategories кэшбэка (§2.1). Считаем по ТЕКУЩЕЙ сцене (пересечение
+  // id из mirror-операций с объектами) — удаление зеркала/undo уменьшает счётчик.
+  const mirrorCreatedIds = new Set<string>()
+  for (const op of operations) {
+    if (op.type === 'mirror' && op.ids && op.ids.length > 0) {
+      for (const id of op.ids) mirrorCreatedIds.add(id)
+    }
+  }
+
+  for (const [id, obj] of Object.entries(objects)) {
     shapeTypes.add(obj.shapeType)
     if (obj.color && obj.color !== '#808080') coloredCount++
     if (obj.shapeType === 'csg') csgCount++
-    if (obj.transform.scaleX < 0 || obj.transform.scaleY < 0 || obj.transform.scaleZ < 0) mirrorCount++
+    // EC-R1: зеркало — создан mirror-операцией ИЛИ legacy scale < 0
+    if (
+      mirrorCreatedIds.has(id) ||
+      obj.transform.scaleX < 0 || obj.transform.scaleY < 0 || obj.transform.scaleZ < 0
+    ) mirrorCount++
     if (obj.shapeType === 'text3d') textCount++
   }
 

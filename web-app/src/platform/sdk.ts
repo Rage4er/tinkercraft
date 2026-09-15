@@ -15,6 +15,45 @@ let _waitForSdk: Promise<void> | null = null
 export const INIT_TIMEOUT_MS = 10_000
 
 /**
+ * Promise.race с гарантированной очисткой таймера.
+ *
+ * ⚠️ ВАЖНО: голый `Promise.race([promise, timeout])` НЕ отменяет таймер —
+ * после победы `promise` setTimeout продолжает тикать и через `ms` печатает
+ * ЛОЖНОЕ предупреждение о таймауте (resolve(null) — no-op, но console.warn
+ * срабатывает). В продакшн-логе это выглядело как «YaGames.init() timeout»
+ * и «getPlayer() timeout» ПОСЛЕ успешного завершения.
+ *
+ * Эта обёртка вызывает clearTimeout при любом исходе исходного промиса:
+ *   - resolve(value) — исходный промис выиграл раньше таймера;
+ *   - reject(error)  — исходный промис упал (ошибка пробрасывается наружу);
+ *   - resolve(null)  — таймер сработал первым (onTimeout логирует фолбэк).
+ */
+export function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  onTimeout: () => void,
+): Promise<T | null> {
+  let timer: ReturnType<typeof setTimeout> | null = null
+  return new Promise<T | null>((resolve, reject) => {
+    timer = setTimeout(() => {
+      timer = null
+      onTimeout()
+      resolve(null)
+    }, ms)
+    promise.then(
+      (value) => {
+        if (timer) clearTimeout(timer)
+        resolve(value)
+      },
+      (error) => {
+        if (timer) clearTimeout(timer)
+        reject(error)
+      },
+    )
+  })
+}
+
+/**
  * Промис инициализации SDK (для связывания GameplayAPI.start() с init).
  * Зарезолвится, когда initSdk() завершится (успех ИЛИ clean-фолбэк null),
  * чтобы старт геймплея не выполнялся ДО завершения инициализации SDK.
@@ -99,13 +138,13 @@ export function initSdk(): Promise<SDK | null> {
       // ⚠️ Защита от зависшего init(): если YaGames.init() не резолвится
       // (postMessage/timing проблемы в iframe Yandex), игра всё равно
       // запустится в clean-режиме через INIT_TIMEOUT_MS.
-      const ysdk = await Promise.race([
-        (window as any).YaGames.init(),
-        new Promise<null>((resolve) => setTimeout(() => {
-          console.warn(`[SDK] YaGames.init() timeout (${INIT_TIMEOUT_MS}ms) — continuing without SDK`)
-          resolve(null)
-        }, INIT_TIMEOUT_MS)),
-      ])
+      // withTimeout гарантирует clearTimeout при успехе — иначе через 10с
+      // сработает ЛОЖНОЕ предупреждение о таймауте (см. диагностику).
+      const ysdk = await withTimeout<SDK>(
+        (window as any).YaGames.init() as Promise<SDK>,
+        INIT_TIMEOUT_MS,
+        () => console.warn(`[SDK] YaGames.init() timeout (${INIT_TIMEOUT_MS}ms) — continuing without SDK`),
+      )
       if (!ysdk) return null
       _ysdk = ysdk
       console.log('[SDK] YaGames.init() OK')

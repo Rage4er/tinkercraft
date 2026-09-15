@@ -18,15 +18,22 @@ export const DIFFICULTY_ICON = {
   hard: 'trophy' as const,
 } as const
 
-/** Ключи иконок для категорий квестов */
+/**
+ * Ключи иконок для категорий квестов.
+ * EC-R7: ключи строго = QuestCategory ('composition' | 'diversity' | 'boolean'
+ * | 'transform' | 'output') — раньше были 'variety'/'text', не совпадающие
+ * с типом (CATEGORY_ICON['diversity'] === undefined). satisfies даёт
+ * compile-time проверку полноты.
+ */
+import type { QuestCategory } from './economy-store'
+
 export const CATEGORY_ICON = {
   composition: 'cube' as const,
-  variety: 'palette' as const,
+  diversity: 'palette' as const,
   boolean: 'union' as const,
   transform: 'mirror' as const,
   output: 'export' as const,
-  text: 'text3d' as const,
-} as const
+} satisfies Record<QuestCategory, string>
 
 /**
  * Единый реестр иконок для рендера в PropertiesPanel / EconomyMiniHUD

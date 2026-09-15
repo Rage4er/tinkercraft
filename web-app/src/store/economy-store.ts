@@ -142,7 +142,6 @@ interface QuestV2 {
   progress: number
   reward: number
   completed: boolean // флаг зачёта (не сбрасывается при прогрессе)
-  _justCompleted?: boolean // внутренний флаг: newly completed в этом вызове
 }
 
 /** Состояние экономики */
@@ -150,7 +149,6 @@ interface EconomyState {
   // ── Основные данные ──
   tokens: number
   lastDailyBonus: number | null
-  totalModelsCreated: number
 
   // ── Подписки ──
   activeSubscription: SubscriptionKey | null
@@ -176,8 +174,6 @@ interface EconomyState {
 
   // ── Квесты ──
   todayQuests: QuestV2[]
-  questTriggers: Record<QuestTrigger, number>
-  getTodayQuests(): QuestV2[]
   completeEventQuest(trigger: QuestTrigger, objectCount?: number): void
   initDailyQuests(): void
   /** P1-1: проверить смену суток по серверному времени и сбросить дневные лимиты при необходимости */
@@ -351,6 +347,36 @@ function serverTimeNow(): number {
   return getCachedServerTime() ?? Date.now()
 }
 
+/**
+ * EC-R2: синхронная проверка «тот же календарный день» (та же логика, что
+ * isDayPassed, но без await — для атомарной повторной проверки ВНУТРИ set()).
+ * Двойной клик по кнопке бонуса: оба вызова проходят await isDayPassed() до
+ * первого set → без этой проверки начислялось бы +100 вместо +50.
+ */
+function isSameServerDay(a: number, b: number): boolean {
+  const da = new Date(a)
+  const db = new Date(b)
+  return da.getFullYear() === db.getFullYear() &&
+    da.getMonth() === db.getMonth() &&
+    da.getDate() === db.getDate()
+}
+
+/**
+ * EC-R2: in-flight guard для асинхронных действий начисления.
+ * Повторный вызов во время выполнения первого НЕ запускает вторую копию —
+ * оба вызова получают результат ОДНОГО выполнения (двойной клик = один бонус,
+ * один показ рекламы). Guard модульный: живёт вне store (не персистится).
+ */
+function withInFlightGuard<T>(
+  ref: { current: Promise<T> | null },
+  run: () => Promise<T>
+): Promise<T> {
+  if (ref.current) return ref.current
+  const p = run().finally(() => { ref.current = null })
+  ref.current = p
+  return p
+}
+
 /** Простой хэш строки (DJB2) */
 function simpleHash(str: string): string {
   let hash = 5381
@@ -402,7 +428,6 @@ type PersistedEconomyFields = Pick<
   EconomyState,
   | 'tokens'
   | 'lastDailyBonus'
-  | 'totalModelsCreated'
   | 'activeSubscription'
   | 'subscriptionExpiresAt'
   | 'rentals'
@@ -412,7 +437,6 @@ type PersistedEconomyFields = Pick<
   | 'todayActions'
   | 'todayCashbacks'
   | 'todayExportHashes'
-  | 'questTriggers'
   | 'lastExportHash'
   | 'lastQuestResetDate'
   | 'lastSavedData'
@@ -522,7 +546,6 @@ export function sanitizeEconomyData(raw: unknown): Partial<PersistedEconomyField
   out.tokens = toClampedNumber(raw.tokens, 0, 0, MAX_TOKENS)
 
   out.lastDailyBonus = toNullableTimestamp(raw.lastDailyBonus)
-  out.totalModelsCreated = toClampedNumber(raw.totalModelsCreated, 0, 0, 1_000_000)
   out.lastQuestResetDate = toNullableTimestamp(raw.lastQuestResetDate)
   out.subscriptionExpiresAt = toNullableTimestamp(raw.subscriptionExpiresAt)
 
@@ -569,17 +592,6 @@ export function sanitizeEconomyData(raw: unknown): Partial<PersistedEconomyField
     ? raw.todayExportHashes.filter((h): h is string => typeof h === 'string')
     : []
 
-  // Триггеры квестов: число → clamp ≥ 0
-  if (isPlainObject(raw.questTriggers)) {
-    const qt = {} as Record<QuestTrigger, number>
-    for (const [k, v] of Object.entries(raw.questTriggers)) {
-      if (typeof v === 'number' && Number.isFinite(v) && v >= 0) qt[k as QuestTrigger] = Math.floor(v)
-    }
-    out.questTriggers = qt
-  } else {
-    out.questTriggers = {} as Record<QuestTrigger, number>
-  }
-
   out.lastExportHash = toNullableString(raw.lastExportHash)
   out.lastSavedData = typeof raw.lastSavedData === 'string' ? raw.lastSavedData : ''
   out.onboardingDone = raw.onboardingDone === true
@@ -592,7 +604,6 @@ function collectSyncData(state: EconomyState): Record<string, unknown> {
   return {
     tokens: state.tokens,
     lastDailyBonus: state.lastDailyBonus,
-    totalModelsCreated: state.totalModelsCreated,
     activeSubscription: state.activeSubscription,
     subscriptionExpiresAt: state.subscriptionExpiresAt,
     rentals: state.rentals,
@@ -603,17 +614,36 @@ function collectSyncData(state: EconomyState): Record<string, unknown> {
     todayActions: state.todayActions,
     todayCashbacks: state.todayCashbacks,
     todayExportHashes: state.todayExportHashes, // P0-1: защита от очистки localStorage
-    questTriggers: state.questTriggers,
     lastExportHash: state.lastExportHash,
     lastQuestResetDate: state.lastQuestResetDate,
     onboardingDone: state.onboardingDone, // P2-3: синхронизируем флаг онбординга
   }
 }
 
-/** Хэш текущего состояния для dedupe setData (P0-4) */
+/**
+ * Хэш текущего состояния для dedupe setData (P0-4).
+ * EC-R4/EC-R5: КАНОНИЧЕСКИЙ хэш — ключи объектов отсортированы на каждом
+ * уровне (sortDeep). Это делает хэш сравнимым между:
+ *  - локальным состоянием (computeSavedDataHash),
+ *  - облачными данными (canonicalDataHash санитизированного облака) —
+ *    порядок ключей в JSON из облака не совпадает с порядком collectSyncData.
+ * ⚠️ Одноразовая миграция: lastSavedData в старом (несортированном) формате
+ * не совпадёт с новым — первый syncToCloud после обновления перезапишет облако
+ * теми же данными (один избыточный setData, без потери данных).
+ */
 function computeSavedDataHash(state: EconomyState): string {
-  return JSON.stringify(collectSyncData(state))
+  return JSON.stringify(sortDeep(collectSyncData(state)))
 }
+
+/** EC-R5: канонический хэш произвольных (санитизированных) данных облака */
+function canonicalDataHash(data: Record<string, unknown>): string {
+  return JSON.stringify(sortDeep(data))
+}
+
+/** EC-R2: in-flight guard бонуса — двойной клик = одно начисление */
+const dailyBonusInFlight: { current: Promise<boolean> | null } = { current: null }
+/** EC-R2: in-flight guard рекламы за токены — двойной клик = один показ */
+const adTokensInFlight: { current: Promise<boolean> | null } = { current: null }
 
 // ─── Store ──────────────────────────────────────────────────────────
 
@@ -623,7 +653,6 @@ export const useEconomyStore = create<EconomyState>()(
       // ── Начальное состояние ──
       tokens: 0,
       lastDailyBonus: null,
-      totalModelsCreated: 0,
       activeSubscription: null,
       subscriptionExpiresAt: null,
       rentals: {
@@ -639,7 +668,6 @@ export const useEconomyStore = create<EconomyState>()(
       todayExportHashes: [] as string[], // P0-1: анти-фарм кэшбэка за день
       todayQuestsCompleted: [],
       todayQuests: [],
-      questTriggers: {} as Record<QuestTrigger, number>,
       lastExportHash: null,
       lastQuestResetDate: null, // E7: дата последнего сброса квестов
       onboardingDone: false, // P2-3: онбординг не показан по умолчанию
@@ -684,65 +712,98 @@ export const useEconomyStore = create<EconomyState>()(
       },
 
       // ── Ежедневный бонус: +50, 1 раз в день (§5 серверное время) ──
+      // EC-R2: двойной клик не даёт +100 — in-flight guard + атомарная
+      // повторная проверка «тот же день» ВНУТРИ set().
       claimDailyBonus: async () => {
-        const state = get()
-        const passed = await isDayPassed(state.lastDailyBonus)
-        if (!passed) {
-          console.warn('[Economy] Daily bonus already claimed today')
-          return false
-        }
+        return withInFlightGuard(dailyBonusInFlight, async () => {
+          const state = get()
+          const passed = await isDayPassed(state.lastDailyBonus)
+          if (!passed) {
+            console.warn('[Economy] Daily bonus already claimed today')
+            return false
+          }
 
-        // Сохраняем серверное время
-        const { getServerTime } = await import('../platform/server-time')
-        const serverTime = await getServerTime()
+          // Сохраняем серверное время
+          const { getServerTime } = await import('../platform/server-time')
+          const serverTime = await getServerTime()
 
-        set({
-          tokens: get().tokens + EARNINGS_DAILY_BONUS,
-          lastDailyBonus: serverTime,
+          // EC-R2: атомарная повторная проверка — если параллельный вызов
+          // уже начислил бонус (тот же серверный день), второй set — no-op
+          const tokensBefore = get().tokens
+          set((st) => {
+            if (st.lastDailyBonus !== null && isSameServerDay(st.lastDailyBonus, serverTime)) {
+              return {}
+            }
+            return {
+              tokens: st.tokens + EARNINGS_DAILY_BONUS,
+              lastDailyBonus: serverTime,
+            }
+          })
+          const applied = get().tokens === tokensBefore + EARNINGS_DAILY_BONUS
+          if (!applied) {
+            console.warn('[Economy] Daily bonus already claimed today (concurrent)')
+            return false
+          }
+          await get().syncToCloud()
+          console.log(`[Economy] Daily bonus claimed: +${EARNINGS_DAILY_BONUS}`)
+          return true
         })
-        await get().syncToCloud()
-        console.log(`[Economy] Daily bonus claimed: +${EARNINGS_DAILY_BONUS}`)
-        return true
       },
 
       // ── Реклама за токены: +50, ≤ 3/день на вид, кулдаун 5 мин на вид (§5) ──
       // U1/U9: свой кулдаун/счётчик у вида `tokens` — не блокирует импорт/баннер.
+      // EC-R2: двойной клик = один показ — in-flight guard + атомарная
+      // повторная проверка дневного лимита ВНУТРИ set().
       watchAdForTokens: async () => {
-        const state = get()
-        const kind: AdRewardKind = 'tokens'
-        const ad = state.adRewards[kind] ?? emptyAdReward()
+        return withInFlightGuard(adTokensInFlight, async () => {
+          const state = get()
+          const kind: AdRewardKind = 'tokens'
+          const ad = state.adRewards[kind] ?? emptyAdReward()
 
-        if (isLimitReached(ad.countToday, LIMITS.adsPerDay)) {
-          console.warn('[Economy] Ad limit reached today (tokens)')
-          return false
-        }
+          if (isLimitReached(ad.countToday, LIMITS.adsPerDay)) {
+            console.warn('[Economy] Ad limit reached today (tokens)')
+            return false
+          }
 
-        const passed = await isCooldownPassed(ad.lastTimestamp, AD_COOLDOWN_MS)
-        if (!passed) {
-          console.warn('[Economy] Ad cooldown not passed (tokens)')
-          return false
-        }
+          const passed = await isCooldownPassed(ad.lastTimestamp, AD_COOLDOWN_MS)
+          if (!passed) {
+            console.warn('[Economy] Ad cooldown not passed (tokens)')
+            return false
+          }
 
-        const platform = getPlatform()
-        if (!platform) {
-          console.warn('[Economy] No platform for ad')
-          return false
-        }
+          const platform = getPlatform()
+          if (!platform) {
+            console.warn('[Economy] No platform for ad')
+            return false
+          }
 
-        const rewarded = await platform.showRewardedVideo()
-        if (!rewarded) return false
+          const rewarded = await platform.showRewardedVideo()
+          if (!rewarded) return false
 
-        // Сохраняем серверное время
-        const { getServerTime } = await import('../platform/server-time')
-        const serverTime = await getServerTime()
+          // Сохраняем серверное время
+          const { getServerTime } = await import('../platform/server-time')
+          const serverTime = await getServerTime()
 
-        set((st) => ({
-          tokens: st.tokens + EARNINGS_AD_REWARDED,
-          adRewards: markAdWatched(st.adRewards, kind, serverTime),
-        }))
-        await get().syncToCloud()
-        console.log(`[Economy] Ad rewarded (tokens): +${EARNINGS_AD_REWARDED}`)
-        return true
+          // EC-R2: атомарная повторная проверка лимита — параллельный вызов
+          // не может превысить дневной лимит вида tokens
+          const tokensBefore = get().tokens
+          set((st) => {
+            const cur = st.adRewards[kind] ?? emptyAdReward()
+            if (isLimitReached(cur.countToday, LIMITS.adsPerDay)) return {}
+            return {
+              tokens: st.tokens + EARNINGS_AD_REWARDED,
+              adRewards: markAdWatched(st.adRewards, kind, serverTime),
+            }
+          })
+          const applied = get().tokens === tokensBefore + EARNINGS_AD_REWARDED
+          if (!applied) {
+            console.warn('[Economy] Ad limit reached today (tokens, concurrent)')
+            return false
+          }
+          await get().syncToCloud()
+          console.log(`[Economy] Ad rewarded (tokens): +${EARNINGS_AD_REWARDED}`)
+          return true
+        })
       },
 
       // ── U12: реклама ЗА ЭКСПОРТ STL (вид `export`) ──
@@ -986,7 +1047,7 @@ export const useEconomyStore = create<EconomyState>()(
         }
         return true
       },
-      /** Mutingating проверка подписки — очищает истёкшую (для render-фазы) */
+      /** Mutating проверка подписки — очищает истёкшую (для render-фазы) */
       // P0-2: expiry по серверному времени
       hasActiveSubscription: () => {
         const state = get()
@@ -1010,11 +1071,22 @@ export const useEconomyStore = create<EconomyState>()(
         const { getServerTime } = await import('../platform/server-time')
         const serverTime = await getServerTime()
 
-        set((state) => ({
-          tokens: state.tokens - config.tokens,
-          activeSubscription: type,
-          subscriptionExpiresAt: serverTime + config.days * ONE_DAY_MS,
-        }))
+        // EC-R3: атомарная повторная проверка баланса ВНУТРИ updater — между
+        // внешней проверкой и set() есть await, баланс мог упасть (отрицательные
+        // токены невозможны даже в гонке)
+        let applied = false
+        set((st) => {
+          if (st.tokens < config.tokens) return {}
+          applied = true
+          return {
+            tokens: st.tokens - config.tokens,
+            activeSubscription: type,
+            subscriptionExpiresAt: serverTime + config.days * ONE_DAY_MS,
+          }
+        })
+        if (!applied) {
+          return { ok: false, code: 'not_enough' }
+        }
         await get().syncToCloud()
         console.log(`[Economy] Subscription ${type} purchased: ${config.tokens} tokens, ${config.days} days`)
         return { ok: true, code: 'ok' }
@@ -1038,7 +1110,7 @@ export const useEconomyStore = create<EconomyState>()(
         if (serverTimeNow() > expires) return false
         return true
       },
-      /** Mutingating проверка аренды — очищает истёкшую (для render-фазы) */
+      /** Mutating проверка аренды — очищает истёкшую (для render-фазы) */
       // P0-2: expiry по серверному времени
       hasRental: (key: RentalKey) => {
         const state = get()
@@ -1096,14 +1168,23 @@ export const useEconomyStore = create<EconomyState>()(
         const { getServerTime } = await import('../platform/server-time')
         const serverTime = await getServerTime()
 
-        set((state) => ({
-          tokens: state.tokens - config,
-          rentals: { ...state.rentals, [key]: serverTime + ONE_DAY_MS },
-          // P0-1/U5: при покупке disableBanner баннер скрывается атомарно в store.
-          // Повторная покупка в другом компоненте (PropertiesPanel/EconomyBanner)
-          // невозможна — hasRentalRO('disableBanner') уже true.
-          bannerVisible: key === 'disableBanner' ? false : state.bannerVisible,
-        }))
+        // EC-R3: атомарная повторная проверка баланса ВНУТРИ updater (см. buySubscription)
+        let applied = false
+        set((st) => {
+          if (st.tokens < config) return {}
+          applied = true
+          return {
+            tokens: st.tokens - config,
+            rentals: { ...st.rentals, [key]: serverTime + ONE_DAY_MS },
+            // P0-1/U5: при покупке disableBanner баннер скрывается атомарно в store.
+            // Повторная покупка в другом компоненте (PropertiesPanel/EconomyBanner)
+            // невозможна — hasRentalRO('disableBanner') уже true.
+            bannerVisible: key === 'disableBanner' ? false : st.bannerVisible,
+          }
+        })
+        if (!applied) {
+          return { ok: false, code: 'not_enough' }
+        }
         await get().syncToCloud()
         console.log(`[Economy] Rental ${key} purchased: ${config} tokens, 24h`)
         return { ok: true, code: 'ok' }
@@ -1155,7 +1236,7 @@ export const useEconomyStore = create<EconomyState>()(
           if (trigger === 'export_stl' && objectCount !== undefined && objectCount < q.target) return q
           if (trigger === 'export_stl_large' && objectCount !== undefined && objectCount < q.target) return q
           // Событийный квест выполнен при наступлении события
-          return { ...q, completed: true, progress: q.target, _justCompleted: true }
+          return { ...q, completed: true, progress: q.target }
         })
         // Только обновляем прогресс — токены начисляются через commitQuests()
         set({ todayQuests: updated })
@@ -1196,7 +1277,6 @@ export const useEconomyStore = create<EconomyState>()(
           todayActions: 0,
           todayCashbacks: 0,
           todayExportHashes: [], // P0-1: новый день — новый список хэшей кэшбэка
-          questTriggers: {} as Record<QuestTrigger, number>,
           lastQuestResetDate: serverTime,
           // P0-1/U5: истёкшая аренда → баннер снова доступен для покупки
           bannerVisible: showBannerAgain,
@@ -1225,7 +1305,6 @@ export const useEconomyStore = create<EconomyState>()(
             todayActions: 0,
             todayCashbacks: 0,
             todayExportHashes: [], // P0-1: новый день — новый список хэшей кэшбэка
-            questTriggers: {} as Record<QuestTrigger, number>,
             lastQuestResetDate: serverTime,
           })
           return
@@ -1366,7 +1445,6 @@ export const useEconomyStore = create<EconomyState>()(
             ...quest,
             progress: Math.min(newProgress, quest.target),
             completed,
-            _justCompleted: completed,
           }
         })
 
@@ -1377,7 +1455,7 @@ export const useEconomyStore = create<EconomyState>()(
 
       // ── Синхронизация ──
       // P0-5: облачные данные проходят санитизацию (не доверяем cloud больше
-      // локального). lastSavedData восстанавливается и пересчитывается (P0-4).
+      // локального). lastSavedData пересчитывается ПОСЛЕ применения (P0-4/EC-R4).
       loadFromCloud: async () => {
         const platform = getPlatform()
         if (!platform) return
@@ -1386,10 +1464,29 @@ export const useEconomyStore = create<EconomyState>()(
           const raw = await platform.loadData()
           const sanitized = sanitizeEconomyData(raw)
           if (sanitized) {
+            // EC-R5: облако не новее нашей последней успешной синхронизации —
+            // НЕ перезаписываем локальный прогресс облачным.
+            //  - облако пустое (никогда не сохранялось, loadData() === {}) → keep local;
+            //  - канонический хэш облака === lastSavedData (облако содержит ровно то,
+            //    что мы последний раз успешно сохранили) → keep local: локальные
+            //    несинхронизированные изменения (последний syncToCloud упал) терять нельзя.
+            // Иначе (облако с другого устройства новее) — cloud wins, как раньше.
+            // lastSavedData исключается из сравнения: это внутренний dedupe-флаг,
+            // в облако он не отправляется (но может присутствовать в СТАРЫХ облаках).
+            const { lastSavedData: _cloudLsd, ...cloudData } = sanitized
+            const cloudHash = canonicalDataHash(cloudData)
+            const cloudNeverWritten = isPlainObject(raw) && Object.keys(raw).length === 0
+            const cloudIsOurLastSave = get().lastSavedData !== '' && cloudHash === get().lastSavedData
+            if (cloudNeverWritten || cloudIsOurLastSave) {
+              // EC-R4: lastSavedData пересчитывается от АКТУАЛЬНОГО состояния
+              // (раньше считался до merge → первый sync всегда видел «изменения»)
+              set({ lastSavedData: computeSavedDataHash(get()), pendingSync: false, syncTailPending: false })
+              return
+            }
+
             set({
               tokens: sanitized.tokens ?? get().tokens,
               lastDailyBonus: sanitized.lastDailyBonus !== undefined ? sanitized.lastDailyBonus : get().lastDailyBonus,
-              totalModelsCreated: sanitized.totalModelsCreated ?? get().totalModelsCreated,
               activeSubscription: sanitized.activeSubscription !== undefined ? sanitized.activeSubscription : get().activeSubscription,
               subscriptionExpiresAt: sanitized.subscriptionExpiresAt !== undefined ? sanitized.subscriptionExpiresAt : get().subscriptionExpiresAt,
               rentals: sanitized.rentals ?? get().rentals,
@@ -1400,16 +1497,17 @@ export const useEconomyStore = create<EconomyState>()(
               todayActions: sanitized.todayActions ?? get().todayActions,
               todayCashbacks: sanitized.todayCashbacks ?? get().todayCashbacks,
               todayExportHashes: sanitized.todayExportHashes ?? get().todayExportHashes,
-              questTriggers: sanitized.questTriggers ?? get().questTriggers,
               lastExportHash: sanitized.lastExportHash !== undefined ? sanitized.lastExportHash : get().lastExportHash,
               lastQuestResetDate: sanitized.lastQuestResetDate !== undefined ? sanitized.lastQuestResetDate : get().lastQuestResetDate,
               // P2-3: флаг онбординга из облака
               onboardingDone: sanitized.onboardingDone === true || get().onboardingDone,
-              // P0-4: восстанавливаем lastSavedData и пересчитываем hash
-              lastSavedData: computeSavedDataHash(get()),
               pendingSync: false,
               syncTailPending: false,
             })
+            // EC-R4: hash ПОСЛЕ применения облачных полей — object literal выше
+            // вычисляется до merge, поэтому computeSavedDataHash(get()) ВНУТРИ set()
+            // хэшировал ДО-облачное состояние → избыточный setData за запуск.
+            set({ lastSavedData: computeSavedDataHash(get()) })
           }
         } catch (error) {
           console.error('[Economy] Load from cloud failed:', error)
@@ -1437,7 +1535,12 @@ export const useEconomyStore = create<EconomyState>()(
         const runSync = async (): Promise<void> => {
           // P0-5: данные проходят санитизацию перед отправкой
           const currentData = sanitizeEconomyData(collectSyncData(get()))
-          const dataHash = currentData ? computeSavedDataHash(get()) : ''
+          // EC-R5: lastSavedData — ВНУТРЕННИЙ dedupe-флаг, в облако не отправляется
+          // (иначе canonical-хэш облака никогда не совпадает с lastSavedData)
+          if (currentData) delete currentData.lastSavedData
+          // EC-R5: hash = hash ФАКТИЧЕСКИ СОХРАНЁННЫХ данных (не состояния) —
+          // гарантирует совпадение с canonicalDataHash при следующей загрузке
+          const dataHash = currentData ? canonicalDataHash(currentData) : ''
 
           // Не сохраняем, если данные не изменились с последней синхронизации
           if (get().lastSavedData === dataHash) {
@@ -1500,7 +1603,6 @@ export const useEconomyStore = create<EconomyState>()(
       partialize: (state) => ({
         tokens: state.tokens,
         lastDailyBonus: state.lastDailyBonus,
-        totalModelsCreated: state.totalModelsCreated,
         activeSubscription: state.activeSubscription,
         subscriptionExpiresAt: state.subscriptionExpiresAt,
         rentals: state.rentals,
@@ -1512,7 +1614,6 @@ export const useEconomyStore = create<EconomyState>()(
         todayActions: state.todayActions,
         todayCashbacks: state.todayCashbacks,
         todayExportHashes: state.todayExportHashes, // P0-1: анти-фарм за день
-        questTriggers: state.questTriggers,
         lastExportHash: state.lastExportHash, // E6
         lastQuestResetDate: state.lastQuestResetDate, // E7
         lastSavedData: state.lastSavedData, // P0-4

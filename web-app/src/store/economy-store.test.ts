@@ -76,7 +76,6 @@ beforeEach(() => {
     useEconomyStore.setState({
         tokens: 100,
         lastDailyBonus: null,
-        totalModelsCreated: 0,
         activeSubscription: null,
         subscriptionExpiresAt: null,
         rentals: { text3d: null, extendedPalette: null, disableBanner: null },
@@ -88,7 +87,6 @@ beforeEach(() => {
         todayExportHashes: [],
         todayQuestsCompleted: [],
         todayQuests: [],
-        questTriggers: {} as never,
         lastExportHash: null,
         lastQuestResetDate: null,
         lastSavedData: '',
@@ -575,7 +573,6 @@ describe('refreshDayRollover (P1-1)', () => {
             todayActions: 5,
             todayCashbacks: 2,
             todayExportHashes: ['h1'],
-            questTriggers: { count_cubes: 5 } as never,
         })
 
         await useEconomyStore.getState().refreshDayRollover()
@@ -705,6 +702,57 @@ describe('per-reward реклама (U1/U9)', () => {
         expect(s.getAdCooldownRemaining('tokens')).toBeGreaterThan(0)
         expect(s.getAdCooldownRemaining('import')).toBe(0)
         expect(s.getAdCooldownRemaining('banner')).toBe(0)
+    })
+
+    // ─── EC-R2: гонки двойного клика (in-flight guard + атомарные проверки) ──
+
+    it('EC-R2: параллельный двойной вызов claimDailyBonus начисляет +50 ОДИН раз', async () => {
+        h.setServerTime(1_700_000_000_000)
+        useEconomyStore.setState({ tokens: 100, lastDailyBonus: null })
+
+        // Двойной клик: оба вызова стартуют до завершения первого
+        const [r1, r2] = await Promise.all([
+            useEconomyStore.getState().claimDailyBonus(),
+            useEconomyStore.getState().claimDailyBonus(),
+        ])
+        // Оба вызова делят ОДНО выполнение — результат одинаков
+        expect(r1).toBe(true)
+        expect(r2).toBe(true)
+        // +50 ОДИН раз (раньше гонка давала +100)
+        expect(useEconomyStore.getState().tokens).toBe(150)
+        expect(useEconomyStore.getState().lastDailyBonus).toBe(1_700_000_000_000)
+    })
+
+    it('EC-R2: повторный claimDailyBonus после завершения возвращает false (тот же день)', async () => {
+        h.setServerTime(1_700_000_000_000)
+        useEconomyStore.setState({ tokens: 100, lastDailyBonus: null })
+
+        expect(await useEconomyStore.getState().claimDailyBonus()).toBe(true)
+        expect(useEconomyStore.getState().tokens).toBe(150)
+
+        // Второй клик после завершения первого — бонус уже взят
+        expect(await useEconomyStore.getState().claimDailyBonus()).toBe(false)
+        expect(useEconomyStore.getState().tokens).toBe(150)
+    })
+
+    it('EC-R2: параллельный двойной вызов watchAdForTokens — ОДИН показ и +50', async () => {
+        h.setServerTime(1_700_000_000_000)
+        useEconomyStore.setState({ tokens: 100 })
+        h.platform.showRewardedVideo.mockReset()
+        h.platform.showRewardedVideo.mockResolvedValue(true)
+
+        // Двойной клик: оба вызова стартуют до завершения первого
+        const [r1, r2] = await Promise.all([
+            useEconomyStore.getState().watchAdForTokens(),
+            useEconomyStore.getState().watchAdForTokens(),
+        ])
+        expect(r1).toBe(true)
+        expect(r2).toBe(true)
+        // Реклама показана ОДИН раз (раньше гонка показывала дважды)
+        expect(h.platform.showRewardedVideo).toHaveBeenCalledTimes(1)
+        // +50 ОДИН раз, счётчик вида tokens = 1
+        expect(useEconomyStore.getState().tokens).toBe(150)
+        expect(useEconomyStore.getState().adRewards.tokens.countToday).toBe(1)
     })
 
     it('серия импорта (2 ролика) считается в одном виде import без паузы между показами', async () => {
@@ -1093,5 +1141,111 @@ describe('evaluateQuests count_mirrored (C3)', () => {
         const quest = useEconomyStore.getState().todayQuests[0]
         expect(quest.progress).toBe(2)
         expect(quest.completed).toBe(true)
+    })
+})
+
+// ─── EC-R3: guard баланса внутри updater покупок ─────────────────────
+
+describe('buySubscription/buyRental (EC-R3 атомарная проверка баланса)', () => {
+    it('buyRental не уходит в минус при падении баланса во время await', async () => {
+        h.setServerTime(1_700_000_000_000)
+        useEconomyStore.setState({ tokens: 100 })
+        // 100 ≥ 75 — внешняя проверка проходит; во время await getServerTime
+        // баланс падает до 50 (параллельная трата) — updater должен отказаться
+        const originalGetServerTime = h.getServerTime
+        h.getServerTime = async () => {
+            useEconomyStore.setState({ tokens: 50 })
+            return 1_700_000_000_000
+        }
+        try {
+            const res = await useEconomyStore.getState().buyRental('text3d')
+            expect(res.ok).toBe(false)
+            expect(res.code).toBe('not_enough')
+            // Токены НЕ ушли в минус
+            expect(useEconomyStore.getState().tokens).toBe(50)
+            expect(useEconomyStore.getState().rentals.text3d).toBeNull()
+        } finally {
+            h.getServerTime = originalGetServerTime
+        }
+    })
+
+    it('buySubscription не уходит в минус при падении баланса во время await', async () => {
+        h.setServerTime(1_700_000_000_000)
+        useEconomyStore.setState({ tokens: 700 })
+        const originalGetServerTime = h.getServerTime
+        h.getServerTime = async () => {
+            useEconomyStore.setState({ tokens: 100 })
+            return 1_700_000_000_000
+        }
+        try {
+            const res = await useEconomyStore.getState().buySubscription('weekly')
+            expect(res.ok).toBe(false)
+            expect(res.code).toBe('not_enough')
+            expect(useEconomyStore.getState().tokens).toBe(100)
+            expect(useEconomyStore.getState().activeSubscription).toBeNull()
+        } finally {
+            h.getServerTime = originalGetServerTime
+        }
+    })
+})
+
+// ─── EC-R4/EC-R5: loadFromCloud — hash после merge + keep-local ──────
+
+describe('loadFromCloud (EC-R4 hash после merge, EC-R5 keep-local)', () => {
+    it('EC-R5: пустое облако (никогда не сохранялось) НЕ затирает локальный прогресс', async () => {
+        useEconomyStore.setState({ tokens: 250, onboardingDone: true })
+        h.loadData.mockResolvedValueOnce({}) // облако пустое
+
+        await useEconomyStore.getState().loadFromCloud()
+
+        // Локальные токены/флаг сохранены (раньше cloud-wins обнулял их дефолтами)
+        expect(useEconomyStore.getState().tokens).toBe(250)
+        expect(useEconomyStore.getState().onboardingDone).toBe(true)
+    })
+
+    it('EC-R5: облако === наша последняя сохранённая копия — локальные несинхронизированные токены НЕ теряются', async () => {
+        h.setServerTime(1_700_000_000_000)
+        // Симулируем: раньше сохранили 100 токенов в облако (успешно)...
+        useEconomyStore.setState({ tokens: 100, lastSavedData: '' })
+        await useEconomyStore.getState().syncToCloud()
+        expect(h.saveData).toHaveBeenCalledTimes(1)
+        const savedCloud = (h.saveData.mock.calls as unknown as Array<[Record<string, unknown>]>)[0][0]
+        // ...потом заработали +50, но syncToCloud упал (сеть) — облако осталось со 100
+        useEconomyStore.setState({ tokens: 150 })
+        h.loadData.mockResolvedValueOnce(savedCloud)
+
+        await useEconomyStore.getState().loadFromCloud()
+
+        // Облако не новее нашей последней успешной синхронизации — keep local
+        expect(useEconomyStore.getState().tokens).toBe(150)
+    })
+
+    it('EC-R5: облако НОВЕЕ (другое устройство) — cloud wins, применяется', async () => {
+        h.setServerTime(1_700_000_000_000)
+        useEconomyStore.setState({ tokens: 100, lastSavedData: '' })
+        await useEconomyStore.getState().syncToCloud()
+        // Другое устройство сохранило 500 токенов + онбординг
+        h.loadData.mockResolvedValueOnce({ tokens: 500, onboardingDone: true })
+
+        await useEconomyStore.getState().loadFromCloud()
+
+        expect(useEconomyStore.getState().tokens).toBe(500)
+        expect(useEconomyStore.getState().onboardingDone).toBe(true)
+    })
+
+    it('EC-R4: после применения облака lastSavedData = hash НОВОГО состояния — повторный syncToCloud НЕ пишет', async () => {
+        h.setServerTime(1_700_000_000_000)
+        useEconomyStore.setState({ tokens: 100, lastSavedData: '' })
+        await useEconomyStore.getState().syncToCloud()
+        const savedCalls = h.saveData.mock.calls.length
+
+        h.loadData.mockResolvedValueOnce({ tokens: 500 })
+        await useEconomyStore.getState().loadFromCloud()
+        expect(useEconomyStore.getState().tokens).toBe(500)
+
+        // Данные не изменились с момента загрузки — dedupe отсекает лишний setData
+        // (раньше hash считался ДО merge → первый sync всегда считался «изменением»)
+        await useEconomyStore.getState().syncToCloud()
+        expect(h.saveData.mock.calls.length).toBe(savedCalls)
     })
 })

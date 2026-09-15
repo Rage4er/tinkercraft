@@ -119,6 +119,23 @@ function EconomyPanel() {
     if (result.ok) setBannerVisible(false)
   }
 
+  // EC-R2: busy-guard для бонуса и рекламы — двойной клик по кнопке не должен
+  // запускать вторую параллельную операцию (store дополнительно защищён
+  // in-flight guard'ом, здесь — UX-уровень: кнопка дизейблится сразу).
+  const handleClaimBonus = async () => {
+    if (busy) return
+    setBusy('dailyBonus')
+    await claimDailyBonus()
+    setBusy(null)
+  }
+
+  const handleWatchAdTokens = async () => {
+    if (busy) return
+    setBusy('adTokens')
+    await watchAdForTokens()
+    setBusy(null)
+  }
+
   // Утилиты для рендера иконок
   const renderIcon = (key: string, w = 14, h = 14) => {
     const Icon = ICON_REGISTRY[key]
@@ -144,7 +161,7 @@ function EconomyPanel() {
     <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
       {ECONOMY_UI.showDailyBonus && (
         canClaimBonus ? (
-          <button className="btn btn-compact btn-sm" onClick={claimDailyBonus} disabled={!!busy}
+          <button className="btn btn-compact btn-sm" onClick={handleClaimBonus} disabled={!!busy}
             title={t('economy.tooltip.bonus')}>
             {renderIcon('gift', 14, 14)} {t('economy.bonusLabel')}
           </button>
@@ -156,7 +173,7 @@ function EconomyPanel() {
       )}
       {ECONOMY_UI.showAdButton && (
         canWatchAd ? (
-          <button className="btn btn-compact btn-sm" onClick={watchAdForTokens} disabled={!!busy}
+          <button className="btn btn-compact btn-sm" onClick={handleWatchAdTokens} disabled={!!busy}
             title={t('economy.tooltip.ad')}>
             {renderIcon('ad', 14, 14)} {t('economy.adLabel')}
           </button>
