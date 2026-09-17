@@ -196,16 +196,15 @@ class YandexPlatform implements IPlatform {
               console.log('[Yandex] Rewarded video opened')
               this.stopGameplay()
             },
-            onRewarded: async () => {
+            onRewarded: () => {
               console.log('[Yandex] Rewarded! User earned reward')
               rewarded = true
-              // Скрываем баннер после просмотра rewarded-рекламы
-              try {
-                await this.ysdk?.adv.hideBannerAdv()
-                console.log('[Yandex] Banner hidden after rewarded')
-              } catch (e) {
-                console.log('[Yandex] Banner hide after rewarded failed:', e)
-              }
+              // FIX (UB-2): здесь НЕ скрываем sticky-баннер. Раньше hideBannerAdv()
+              // вызывался после ЛЮБОЙ досмотренной рекламы (токены, экспорт,
+              // импорт), поэтому платный reward «отключить баннер на 24ч»
+              // де-факто выдавался бесплатно. Скрытие баннера — ответственность
+              // экономики: economy-store.watchAdForBanner() вызывает
+              // platform.hideBannerAdv() только для вида рекламы `banner`.
             },
             onClose: () => {
               console.log('[Yandex] Rewarded video closed, rewarded:', rewarded)

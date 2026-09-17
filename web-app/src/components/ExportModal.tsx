@@ -4,8 +4,9 @@ import { useCallback, useState, useMemo, useRef, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useEconomyStore, scanForCashback } from '../store/economy-store'
 import { isEconomyAvailable } from '../platform'
+import { useAdCooldown } from '../platform/ad-timers'
 import { ECONOMY_COSTS, calculateCashbackBreakdown } from '../store/economy-config'
-import { ExportIcon, TokenIcon, AdFilmIcon } from './icons'
+import { ExportIcon, TokenIcon, AdFilmIcon, ClockIcon } from './icons'
 
 export default function ExportModal({
   objects,
@@ -28,6 +29,12 @@ export default function ExportModal({
   // P1-4: RO-селектор — без мутации state в render-фазе
   const hasActiveSub = useEconomyStore((s) => s.hasActiveSubscriptionRO())
   const [busy, setBusy] = useState(false)
+
+  // FIX (UB-3): таймер «отката» реварда. У рекламы вида `export` свой кулдаун
+  // (AD_COOLDOWN_MS) — без него кнопка выглядела залоченной без объяснений:
+  // счётчик просмотров (3/день) и кулдаун (пауза между просмотрами) — разные
+  // ограничения. Хук тикает посекундно.
+  const adCooldown = useAdCooldown('export')
 
   // P0-6: clean-режим (нет Yandex SDK) — экономика отключена, экспорт свободен
   const economyActive = isEconomyAvailable()
@@ -181,17 +188,24 @@ export default function ExportModal({
           {/* Вариант 2: посмотреть рекламу (вид export — свой лимит U12) */}
           <button
             className="btn btn-compact flex-1"
-            disabled={exportAdCount >= 3 || busy}
+            disabled={exportAdCount >= 3 || adCooldown.active || busy}
             onClick={handleWatchAd}
             style={{ justifyContent: 'center', padding: '16px 24px', fontSize: '20px' }}
           >
             <AdFilmIcon size={32} /> {t('export.watchAd', { count: exportAdCount, max: 3 })}
           </button>
-          {exportAdCount >= 3 && (
+          {exportAdCount >= 3 ? (
             <div className="modal-hint" style={{ textAlign: 'center', fontSize: '12px', color: 'var(--text-muted)' }}>
               {t('economy.adLimit')}
             </div>
-          )}
+          ) : adCooldown.active ? (
+            <div
+              className="modal-hint"
+              style={{ textAlign: 'center', fontSize: '12px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}
+            >
+              <ClockIcon width={14} height={14} /> {t('export.adCooldown', { time: adCooldown.formatted })}
+            </div>
+          ) : null}
 
           <button className="btn" onClick={onClose}>
             {t('textModal.cancel')}

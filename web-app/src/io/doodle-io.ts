@@ -7,8 +7,12 @@ import JSZip from 'jszip'
 import type { TinkerCraftFile, TinkerCraftOperation } from '../csg/types'
 
 const FORMAT_VERSION = '1.0.0'
-/** Максимальный размер model.json (5 МБ) для защиты от DoS */
-const MAX_MODEL_JSON_SIZE = 5 * 1024 * 1024
+/** Максимальный размер model.json (64 МБ) для защиты от DoS.
+ * FIX (UB-0): поднят с 5 МБ — операции import_mesh/text3d/group хранят
+ * вершины в JSON, и импортированная геометрия легко превышала 5 МБ
+ * (файл сохранялся, но не открывался с ошибкой лимита). Верхняя защита
+ * от ZIP-бомбы остаётся на MAX_DOODLE_SIZE (50 МБ архива). */
+const MAX_MODEL_JSON_SIZE = 64 * 1024 * 1024
 /** SEC-R8-1: Максимальный размер .doodle файла (50 МБ) для защиты от ZIP bomb */
 const MAX_DOODLE_SIZE = 50 * 1024 * 1024
 /** MAX_RECURSION_DEPTH: защита от stack overflow при рекурсивной валидации */
@@ -59,9 +63,12 @@ function sanitizeObjectKeys(obj: unknown): unknown {
   return result
 }
 
-/** WARN-R8-7: Валидные типы операций для проверки схемы .doodle */
+/** WARN-R8-7: Валидные типы операций для проверки схемы .doodle
+ * FIX (UB-0): добавлен 'text3d' — операции 3D-текста записываются в историю
+ * (Text3DOperation), но не были в списке валидных → .doodle с 3D-текстом
+ * вообще не открывался («операция с неизвестным типом»). */
 const VALID_OP_TYPES = new Set([
-  'add_shape', 'import_mesh', 'move', 'resize_dims', 'fillet',
+  'add_shape', 'import_mesh', 'text3d', 'move', 'resize_dims', 'fillet',
   'mirror', 'align', 'group', 'delete', 'visibility', 'color', 'rename',
 ])
 
@@ -110,8 +117,9 @@ export function restoreMeshArray(data: unknown): number[] | undefined {
 }
 
 /**
- * FIX (DOODLE-MESH): Restore mesh arrays on group/import_mesh operations
+ * FIX (DOODLE-MESH): Restore mesh arrays on group/import_mesh/text3d operations
  * after JSON.parse so downstream TypedArray constructors receive valid data.
+ * FIX (UB-0): text3d добавлен — раньше вершины 3D-текста не нормализовались.
  */
 function restoreOperationMeshArrays(operations: TinkerCraftOperation[]): void {
   for (const op of operations) {
@@ -120,7 +128,7 @@ function restoreOperationMeshArrays(operations: TinkerCraftOperation[]): void {
       if (g.resultVertices !== undefined) g.resultVertices = restoreMeshArray(g.resultVertices)
       if (g.resultIndices !== undefined) g.resultIndices = restoreMeshArray(g.resultIndices)
       if (g.resultNormals !== undefined) g.resultNormals = restoreMeshArray(g.resultNormals)
-    } else if (op.type === 'import_mesh') {
+    } else if (op.type === 'import_mesh' || op.type === 'text3d') {
       const im = op as import('../csg/types').ImportMeshOperation
       const v = restoreMeshArray(im.vertices)
       const i = restoreMeshArray(im.indices)
@@ -201,6 +209,19 @@ export async function parseDoodle(buffer: ArrayBuffer): Promise<TinkerCraftFile>
 
 // ---- Сериализовать в .doodle ----
 
+/**
+ * FIX (UB-0): TypedArray → обычный массив при JSON-сериализации.
+ * JSON.stringify(Float32Array) даёт объект {"0":1.5,"1":2.3,...} — в ~1.5–2×
+ * больше байт и без length. Массив компактнее и проходит JSON round-trip
+ * без restoreMeshArray-нормализации (restoreMeshArray принимает оба формата).
+ */
+function typedArrayReplacer(_key: string, value: unknown): unknown {
+  if (value instanceof Float32Array || value instanceof Uint32Array) {
+    return Array.from(value)
+  }
+  return value
+}
+
 export async function serializeDoodle(
   operations: TinkerCraftOperation[],
   thumbnailDataUrl?: string,
@@ -221,7 +242,7 @@ export async function serializeDoodle(
     version: FORMAT_VERSION,
     operations,
   }
-  zip.file('model.json', JSON.stringify(doc, null, 2))
+  zip.file('model.json', JSON.stringify(doc, typedArrayReplacer, 2))
 
   if (thumbnailDataUrl) {
     // Strip data:image/png;base64, prefix

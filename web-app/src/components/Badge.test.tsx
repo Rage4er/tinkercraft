@@ -59,12 +59,16 @@ describe('Badge (C1: компактный контейнер, иконки 20px)
         act(() => { root.unmount() })
     })
 
-    it('C1: шрифт текста компактный 10px (не 16px как в U7)', () => {
+    it('UB-5: контейнер уменьшён ×0.75 (шрифт 7.5px), иконки остались 20px', () => {
         const { container, root } = renderToContainer(<Badge type="tokens" value="75" />)
         const badge = container.querySelector('span[style]') as HTMLElement | null
-        expect(badge?.style.fontSize).toBe('10px')
-        // padding компактный (1px 3px)
-        expect(badge?.style.padding).toBe('1px 3px')
+        expect(badge?.style.fontSize).toBe('7.5px')
+        // padding компактный (1px 3px × 0.75)
+        expect(badge?.style.padding).toBe('0.75px 2.25px')
+        expect(badge?.style.minWidth).toBe('12px')
+        expect(badge?.style.minHeight).toBe('10.5px')
+        // Иконка НЕ масштабируется вместе с контейнером
+        expect(iconSizes(container)).toEqual([20, 20])
         act(() => { root.unmount() })
     })
 

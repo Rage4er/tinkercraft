@@ -1,7 +1,7 @@
 // src/components/Badge.tsx — Бейджи на кнопках экономики (§6.4 ECONOMY.md v2.0)
 // Токены слева-внизу / реклама справа-внизу — когда нет доступа
 // Корона/часы слева-вверху — когда доступ активен. Только SVG-иконки, без эмодзи.
-// C1: компактный контейнер (шрифт 10px, minWidth 16px), крупные иконки 20px.
+// UB-5: контейнер бейджа уменьшен ×0.75 относительно C1, иконки остались 20px.
 import type { ReactNode } from 'react'
 import { TokenIcon, AdFilmIcon, ClockIcon, CrownIcon } from './icons'
 
@@ -16,23 +16,26 @@ interface BadgeProps {
 export default function Badge({ type, value, isActive }: BadgeProps) {
   if (!type) return null
 
-  // C1: компактный контейнер как было ДО U7 — шрифт 10px, padding 1px 3px,
-  // minWidth 16px / minHeight 14px. Увеличены ТОЛЬКО иконки (10 → 20px).
+  // UB-5: все размеры КОНТЕЙНЕРА — C1 × 0.75 (шрифт 10 → 7.5px, minWidth 16 →
+  // 12px, minHeight 14 → 10.5px, padding 1px 3px → 0.75px 2.25px). Иконки
+  // намеренно НЕ уменьшены (20px): плашка только подложка под иконкой, поэтому
+  // overflow visible — иконка выступает за границы компактного контейнера.
   let style: React.CSSProperties = {
     position: 'absolute',
     pointerEvents: 'none' as const,
-    fontSize: '10px',
+    fontSize: '7.5px',
     fontWeight: 700,
-    borderRadius: '4px',
-    padding: '1px 3px',
+    borderRadius: '3px',
+    padding: '0.75px 2.25px',
     display: 'flex',
     alignItems: 'center',
-    gap: '2px',
-    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.3)',
-    minWidth: '16px',
-    minHeight: '14px',
+    gap: '1.5px',
+    boxShadow: '0 0.75px 2.25px rgba(0, 0, 0, 0.3)',
+    minWidth: '12px',
+    minHeight: '10.5px',
     justifyContent: 'center',
     lineHeight: 1,
+    overflow: 'visible',
   }
 
   let content: ReactNode = null

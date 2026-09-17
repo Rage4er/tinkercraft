@@ -54,18 +54,44 @@ vi.mock('../platform/ad-timers', () => ({
     useAdCooldown: () => ({ remainingMs: 0, formatted: null, active: false }),
 }))
 
-// B3: ui-store — хранилище флага economyPanelOpen (правый сайдбар «режим экономики»)
+// B3/UB-1: ui-store — мокаем флаги правой панели (economyPanelOpen) и
+// модалки аренды (rentalModalKey / palettePickerRequested)
 const uiH = vi.hoisted(() => {
-    let open = false
+    const state = {
+        open: false,
+        rentalKey: null as string | null,
+        paletteRequested: false,
+    }
     return {
-        isOpen: () => open,
-        setOpen: (v: boolean) => { open = v },
-        reset: () => { open = false },
+        state,
+        isOpen: () => state.open,
+        setOpen: (v: boolean) => { state.open = v },
+        setRentalKey: (v: string | null) => { state.rentalKey = v },
+        setPaletteRequested: (v: boolean) => { state.paletteRequested = v },
+        reset: () => {
+            state.open = false
+            state.rentalKey = null
+            state.paletteRequested = false
+        },
     }
 })
 vi.mock('../store/ui-store', () => ({
-    useUiStore: <T,>(selector: (s: { economyPanelOpen: boolean; setEconomyPanelOpen: (v: boolean) => void }) => T): T =>
-        selector({ economyPanelOpen: uiH.isOpen(), setEconomyPanelOpen: uiH.setOpen }),
+    useUiStore: <T,>(selector: (s: {
+        economyPanelOpen: boolean
+        setEconomyPanelOpen: (v: boolean) => void
+        rentalModalKey: string | null
+        setRentalModalKey: (v: string | null) => void
+        palettePickerRequested: boolean
+        setPalettePickerRequested: (v: boolean) => void
+    }) => T): T =>
+        selector({
+            economyPanelOpen: uiH.state.open,
+            setEconomyPanelOpen: uiH.setOpen,
+            rentalModalKey: uiH.state.rentalKey,
+            setRentalModalKey: uiH.setRentalKey,
+            palettePickerRequested: uiH.state.paletteRequested,
+            setPalettePickerRequested: uiH.setPaletteRequested,
+        }),
 }))
 
 // ─── Импорты после моков ─────────────────────────────────────────────
@@ -190,7 +216,7 @@ describe('PropertiesPanel (U6: палитра доступна всегда)', (
         act(() => { root.unmount() })
     })
 
-    it('B3: клик по «Расширенный выбор» БЕЗ доступа открывает экономику ВНУТРИ панели (не снимая выделение)', () => {
+    it('UB-1: клик по «Расширенный выбор» БЕЗ доступа открывает модалку аренды', () => {
         const { container, root } = renderPanel(makeCube())
         const advancedBtn = Array.from(container.querySelectorAll('button'))
             .find((b) => b.textContent?.includes('Advanced picker'))
@@ -198,11 +224,23 @@ describe('PropertiesPanel (U6: палитра доступна всегда)', (
         act(() => {
             advancedBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
         })
-        // economyPanelOpen стал true — панель осталась открытой, свойства объекта
-        // НЕ потеряны: firstSelected всё ещё obj-1
-        expect(uiH.isOpen()).toBe(true)
+        // FIX (UB-1): открывается МОДАЛКА аренды extendedPalette, а не режим
+        // экономики в правой панели. Выделение НЕ снимается.
+        expect(uiH.state.rentalKey).toBe('extendedPalette')
+        expect(uiH.isOpen()).toBe(false)
         // native picker НЕ открылся (нет доступа)
         expect(container.querySelector('input[type="color"]')).toBeNull()
+        act(() => { root.unmount() })
+    })
+
+    it('UB-1: после аренды (palettePickerRequested) native picker открывается сам', () => {
+        useEconomyStore.setState({
+            rentals: { text3d: null, extendedPalette: h.serverTime + 60_000, disableBanner: null },
+        })
+        uiH.state.paletteRequested = true
+        const { container, root } = renderPanel(makeCube())
+        expect(container.querySelector('input[type="color"]')).toBeTruthy()
+        expect(uiH.state.paletteRequested).toBe(false)
         act(() => { root.unmount() })
     })
 

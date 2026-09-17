@@ -244,10 +244,14 @@ function EconomyPanel() {
   })() : null
 
   // ── Аренда и подписки ──
+  // FIX (UB-4): `adReward` — для отключения баннера аренда оплачивается и
+  // токенами, и 1 просмотром рекламы. Кнопки живут ТОЛЬКО здесь (в разделе
+  // «Аренда»): раньше была дублирующая секция «Скрытие баннера» ниже по
+  // панели плюс баннер-виджет над тулбаром.
   const rentalsConfig = [
-    { key: 'text3d' as const, cost: 75, icon: <TextIcon width={14} height={14} />, label: t('economy.rentals.text3d.label'), desc: t('economy.rentals.text3d.desc') },
-    { key: 'extendedPalette' as const, cost: 75, icon: <ColorIcon width={14} height={14} />, label: t('economy.rentals.extendedPalette.label'), desc: t('economy.rentals.extendedPalette.desc') },
-    { key: 'disableBanner' as const, cost: 50, icon: <AdFilmIcon width={14} height={14} />, label: t('economy.rentals.disableBanner.label'), desc: t('economy.rentals.disableBanner.desc') },
+    { key: 'text3d' as const, cost: 75, icon: <TextIcon width={14} height={14} />, label: t('economy.rentals.text3d.label'), desc: t('economy.rentals.text3d.desc'), adReward: false },
+    { key: 'extendedPalette' as const, cost: 75, icon: <ColorIcon width={14} height={14} />, label: t('economy.rentals.extendedPalette.label'), desc: t('economy.rentals.extendedPalette.desc'), adReward: false },
+    { key: 'disableBanner' as const, cost: 50, icon: <AdFilmIcon width={14} height={14} />, label: t('economy.rentals.disableBanner.label'), desc: t('economy.rentals.disableBanner.desc'), adReward: true },
   ]
 
   const subsConfig = [
@@ -284,22 +288,46 @@ function EconomyPanel() {
                 </div>
               </div>
               {isActive ? (
-                <span style={{ fontSize: '10px', color: 'var(--success)' }}>{t('economy.status.active')}</span>
+                <span style={{ fontSize: '10px', color: 'var(--success)' }}>
+                  {r.key === 'disableBanner' && remaining
+                    ? t('economy.status.bannerHidden', { remaining })
+                    : t('economy.status.active')}
+                </span>
               ) : (
-                <button
-                  className="btn btn-compact btn-sm"
-                  disabled={tokens < r.cost || busy === r.key}
-                  onClick={() => handleBuyRental(r.key)}
-                  style={{
-                    fontSize: '10px', padding: '2px 6px',
-                    position: 'relative',
-                    display: 'flex', alignItems: 'center', gap: '2px',
-                  }}
-                >
-                  <TokenIcon width={10} height={10} /> {r.cost}
-                  {/* Бейдж 💰 → SVG-иконка (§6.4, без эмодзи) */}
-                  <Badge type="tokens" value={String(r.cost)} />
-                </button>
+                <div style={{ display: 'flex', gap: '4px' }}>
+                  <button
+                    className="btn btn-compact btn-sm"
+                    disabled={tokens < r.cost || busy === r.key}
+                    onClick={() => handleBuyRental(r.key)}
+                    style={{
+                      fontSize: '10px', padding: '2px 6px',
+                      position: 'relative',
+                      display: 'flex', alignItems: 'center', gap: '2px',
+                    }}
+                  >
+                    <TokenIcon width={10} height={10} /> {r.cost}
+                    {/* Бейдж 💰 → SVG-иконка (§6.4, без эмодзи) */}
+                    <Badge type="tokens" value={String(r.cost)} />
+                  </button>
+                  {/* FIX (UB-4): единственный способ «рекламой» для скрытия баннера */}
+                  {r.adReward && (
+                    <button
+                      className="btn btn-compact btn-sm"
+                      disabled={!!busy}
+                      onClick={handleWatchAdForBanner}
+                      title={t('economy.tooltip.bannerOff')}
+                      style={{
+                        fontSize: '10px', padding: '2px 6px',
+                        position: 'relative',
+                        display: 'flex', alignItems: 'center', gap: '2px',
+                      }}
+                    >
+                      <AdFilmIcon width={10} height={10} /> 1
+                      {/* Бейдж 📺1 → SVG-иконка (§6.4, без эмодзи) */}
+                      <Badge type="ad" value="1" />
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           )
@@ -343,60 +371,9 @@ function EconomyPanel() {
     </div>
   )
 
-  // ── Скрытие баннера (2 место §6.3) ──
-  // U5/P0-1: если аренда disableBanner уже активна — показываем состояние
-  // «активно (баннер скрыт · N ч)» и НЕ даём повторно купить/посмотреть рекламу.
-  const bannerRentalActive = hasRental('disableBanner')
-  const bannerRentalExpires = rentals.disableBanner
-  const bannerRentalRemaining = bannerRentalExpires !== null ? formatRentalRemaining(bannerRentalExpires, t) : null
-  const bannerOffSection = (
-    <div style={{
-      padding: '6px 8px', borderRadius: '4px',
-      background: 'var(--bg-tertiary)', border: '1px solid var(--border)',
-      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-    }}>
-      <div>
-        <div style={{ fontSize: '11px', fontWeight: 'bold' }}>{t('economy.triggers.bannerOff', { defaultValue: 'Нет баннера на 24 ч' })}</div>
-        <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
-          {bannerRentalActive && bannerRentalRemaining
-            ? t('economy.status.bannerHidden', { remaining: bannerRentalRemaining })
-            : t('economy.tooltip.bannerOff')}
-        </div>
-      </div>
-      {bannerRentalActive ? (
-        <span style={{ fontSize: '10px', color: 'var(--success)' }}>{t('economy.status.active')}</span>
-      ) : (
-        <div style={{ display: 'flex', gap: '4px' }}>
-          <button
-            className="btn btn-compact btn-sm"
-            disabled={tokens < 50 || busy === 'disableBanner'}
-            onClick={() => handleBuyRental('disableBanner')}
-            style={{
-              fontSize: '10px', padding: '2px 6px',
-              position: 'relative', display: 'flex', alignItems: 'center', gap: '2px',
-            }}
-          >
-            <TokenIcon width={10} height={10} /> 50
-            {/* Бейдж 💰50 → SVG-иконка (§6.4, без эмодзи) */}
-            <Badge type="tokens" value="50" />
-          </button>
-          <button
-            className="btn btn-compact btn-sm"
-            disabled={busy === 'bannerAd'}
-            onClick={handleWatchAdForBanner}
-            style={{
-              fontSize: '10px', padding: '2px 6px',
-              position: 'relative', display: 'flex', alignItems: 'center', gap: '2px',
-            }}
-          >
-            <AdFilmIcon width={10} height={10} /> 1
-            {/* Бейдж 📺1 → SVG-иконка (§6.4, без эмодзи) */}
-            <Badge type="ad" value="1" />
-          </button>
-        </div>
-      )}
-    </div>
-  )
+  // FIX (UB-4): отдельная секция «Скрытие баннера» (2 место §6.3) УДАЛЕНА —
+  // её кнопки дублировали строку «Отключение баннера» в разделе «Аренда»
+  // выше. Ревард-кнопка (1 просмотр) переехала в ту строку.
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -410,11 +387,8 @@ function EconomyPanel() {
       {/* Квесты */}
       {questsSection && <div className="csg-group">{questsSection}</div>}
 
-      {/* Аренда + подписки */}
+      {/* Аренда + подписки (включая «Отключение баннера»: токены + 1 просмотр) */}
       <div className="csg-group">{rentalsSection}</div>
-
-      {/* Баннер off */}
-      <div className="csg-group">{bannerOffSection}</div>
     </div>
   )
 }
@@ -493,6 +467,19 @@ export default function PropertiesPanel({
 
   // Toggle: показывать ли нативный color picker вместо палитры
   const [showNativePicker, setShowNativePicker] = useState(false);
+
+  // FIX (UB-1): клик по «Расширенный выбор» БЕЗ аренды открывает МОДАЛКУ аренды
+  // (раньше — молча переключал правую панель в режим экономики, и пользователь
+  // не понимал, что делать). После успешной аренды RentalModal выставляет
+  // palettePickerRequested — picker открывается сам, вторной клик не нужен.
+  const setRentalModalKey = useUiStore(s => s.setRentalModalKey)
+  const palettePickerRequested = useUiStore(s => s.palettePickerRequested)
+  const setPalettePickerRequested = useUiStore(s => s.setPalettePickerRequested)
+  useEffect(() => {
+    if (!palettePickerRequested) return
+    setPalettePickerRequested(false)
+    setShowNativePicker(true)
+  }, [palettePickerRequested, setPalettePickerRequested])
 
   // ✅ Проверка доступа к расширенной палитре — через RO-хелпер
   const hasExtendedPaletteRental = useEconomyStore(s => s.hasRentalRO('extendedPalette'))
@@ -688,10 +675,10 @@ export default function PropertiesPanel({
             className="btn btn-compact btn-full"
             onClick={() => {
               if (!canUseExtendedPicker) {
-                // 🔒 B3: нет доступа к расширенному — открыть экономику ВНУТРИ
-                // правой панели (аренда extendedPalette 75 TC). Store-флаг
-                // НЕ снимает выделение → панель свойств остаётся открытой.
-                setEconomyPanelOpen(true)
+                // 🔒 FIX (UB-1): нет доступа — открываем модалку аренды
+                // extendedPalette (75 TC). Store-флаг rentalModalKey НЕ снимает
+                // выделение → панель свойств остаётся открытой.
+                setRentalModalKey('extendedPalette')
                 return
               }
               setShowNativePicker(!showNativePicker)

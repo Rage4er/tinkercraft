@@ -149,7 +149,8 @@
     "adNotRentable": "Not available with ads",
     "bonusCooldown": "Until {{time}}",
     "bonusClaimed": "Already claimed",
-    "adLimitReached": "Ad limit reached"
+    "adLimitReached": "Ad limit reached",
+    "adCooldown": "Ad available in {{time}}"
   },
   "import": {
     "title": "Import STL",
@@ -486,5 +487,13 @@
     "unavailable": "WebGL unavailable",
     "msg": "This environment does not support WebGL (headless or software rendering). Open the app in a browser with hardware acceleration for full 3D visualization.",
     "hint": "CSG engine and remaining UI work correctly."
+  },
+  "rentalModal": {
+    "title": "24-hour rental",
+    "desc": "The feature is available for {{hours}} hours after rental.",
+    "balance": "Your balance",
+    "buy": "Rent for {{cost}}",
+    "earn": "Earn tokens",
+    "rented": "{{label}}: rental active for 24 h"
   }
 }

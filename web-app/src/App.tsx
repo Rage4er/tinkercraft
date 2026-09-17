@@ -12,7 +12,9 @@ import TextModal from "./components/TextModal";
 import ExportModal from "./components/ExportModal";
 import ImportModal from "./components/ImportModal";
 import EconomyOnboarding from "./components/EconomyOnboarding";
-import EconomyBanner from "./components/EconomyBanner";
+// FIX (UB-4): EconomyBanner удалён — кнопки скрытия баннера дублировали
+// строку «Отключение баннера» в разделе «Аренда» правой панели.
+import RentalModal from "./components/RentalModal";
 import StatusBar from "./components/StatusBar";
 import LeftPanel from "./components/LeftPanel";
 import PropertiesPanel from "./components/PropertiesPanel";
@@ -490,8 +492,10 @@ export default function App() {
     // B2: «купить» открывает экономику ВНУТРИ правой панели (store-флаг
     // economyPanelOpen) — НЕ снимая выделение (панель свойств не «закрывается»).
     if (!useEconomyStore.getState().canUseText3dRO()) {
-      setEconomyPanelOpen(true)
-      notify(t('economy.adNotRentable'), 'warning')
+      // FIX (UB-1): доступ мог истечь, пока модалка текста открыта, —
+      // закрываем её и открываем модалку аренды text3d.
+      setShowTextModal(false)
+      useUiStore.getState().setRentalModalKey('text3d')
       return
     }
     try {
@@ -615,12 +619,9 @@ export default function App() {
       {/* P0-6: только при реальном Yandex SDK (не clean-фолбэк) */}
       {isEconomyAvailable() && <EconomyOnboarding />}
 
-      {/* ── ЭКОНОМИКА: баннер-оффер скрытия (§6.3 ECONOMY.md) ── */}
-      {/* P0-1/U5: рендерится только когда экономика доступна (yandex-only),
-          bannerVisible=true, нет активной подписки и нет аренды disableBanner.
-          Все условия проверяются внутри EconomyBanner через геттеры store —
-          компонент сам возвращает null, если баннер не нужен. */}
-      {isEconomyAvailable() && <EconomyBanner />}
+      {/* FIX (UB-4): баннер-оффер скрытия (§6.3 ECONOMY.md) над панелью
+          инструментов УДАЛЁН — его кнопки дублировали строку
+          «Отключение баннера» в разделе «Аренда» правой панели. */}
 
       {/* ── Ruler distance display ── */}
       {rulerDist !== null && (
@@ -629,20 +630,24 @@ export default function App() {
         </div>
       )}
 
+      {/* ── FIX (UB-1): модалка аренды 24ч (3D-текст / расширенная палитра) ── */}
+      {/* Рендерится всегда: сама возвращает null, если ключ не выставлен либо
+          экономика недоступна (clean-версия). */}
+      <RentalModal />
+
       {/* ── Text Modal ── */}
-      {showTextModal && (
-        <TextModal
-          textInput={textInput}
-          textSize={textSize}
-          textDepth={textDepth}
-          busy={busy}
-          workerOk={workerOk}
-          onTextChange={setTextInput}
-          onSizeChange={setTextSize}
-          onDepthChange={setTextDepth}
-          onAdd={handleAddText}
-          onClose={() => setShowTextModal(false)}
-        />
+      {showTextModal && (<TextModal
+        textInput={textInput}
+        textSize={textSize}
+        textDepth={textDepth}
+        busy={busy}
+        workerOk={workerOk}
+        onTextChange={setTextInput}
+        onSizeChange={setTextSize}
+        onDepthChange={setTextDepth}
+        onAdd={handleAddText}
+        onClose={() => setShowTextModal(false)}
+      />
       )}
 
       {/* ── Export Modal ── */}
@@ -735,18 +740,19 @@ export default function App() {
           onAddShape={addShape}
           onShowTextModal={() => {
             // P1-5: единый RO-хелпер доступа к 3D-тексту (подписка ИЛИ аренда text3d)
-            // U3: «купить» ведёт в правую панель (экономика при пустом выделении)
+            // FIX (UB-1): без доступа — МОДАЛКА аренды text3d (было: молчаливое
+            // переключение правой панели в режим экономики).
             if (!useEconomyStore.getState().canUseText3dRO()) {
-              setEconomyPanelOpen(true)
+              useUiStore.getState().setRentalModalKey('text3d')
               return
             }
             setShowTextModal(true)
           }}
           openEconomy={() => {
-            // B2: клик по 3D-тексту без доступа — открыть правую панель экономики
-            // (аренда text3d 75 TC). Store-флаг economyPanelOpen НЕ снимает выделение,
-            // поэтому панель свойств не «закрывается».
-            setEconomyPanelOpen(true)
+            // FIX (UB-1): клик по 3D-тексту без доступа — открываем модалку
+            // аренды text3d (75 TC, 24 ч). Из неё можно уйти в панель экономики
+            // за токенами (бонус/реклама/квесты).
+            useUiStore.getState().setRentalModalKey('text3d')
           }}
           objectList={objectList}
           selSet={selSet}

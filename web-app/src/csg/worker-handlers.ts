@@ -851,13 +851,43 @@ export async function handleRebuildScene(msg: RebuildSceneMessage): Promise<void
         setCached(op.id as string, m)
         shapeInfos.set(op.id as string, { shapeType: st, params: par, filletRadius: 0 })
         currentTransforms.set(op.id as string, { ...t })
-      } else if (op.type === 'import_mesh') {
+      } else if (op.type === 'import_mesh' || op.type === 'text3d') {
         const raw = op.transform as { x: number; y: number; z: number; rotX: number; rotY: number; rotZ: number; scaleX?: number; scaleY?: number; scaleZ?: number } | undefined
         const t: RebuildTransform = raw
           ? { x: raw.x, y: raw.y, z: raw.z, rotX: raw.rotX, rotY: raw.rotY, rotZ: raw.rotZ, scaleX: raw.scaleX ?? 1, scaleY: raw.scaleY ?? 1, scaleZ: raw.scaleZ ?? 1 }
           : { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
         currentTransforms.set(op.id as string, t)
-        shapeInfos.set(op.id as string, { shapeType: 'import_mesh', params: {}, filletRadius: 0 })
+        // FIX (UB-0): восстанавливаем baked-геометрию (импорт STL / 3D-текст)
+        // из op.vertices/op.indices. Раньше здесь запоминался только transform —
+        // вершины не попадали в cache, объект отсутствовал в results, и после
+        // загрузки проекта/.doodle импортированная геометрия ИСЧЕЗАЛА.
+        // Конвенция как у примитивов: в cache запекается ТОЛЬКО translation
+        // (rotation/scale применяются на рендере через pivot и в CSG через
+        // applySRAroundCenter). shapeInfos НЕ заполняем: ветки move/mirror/fillet
+        // должны обрабатывать baked-геометрию через cache-transform, а не через
+        // buildPrimitive (иначе rebuild строил бы куб-заглушку 20×20×20).
+        const verts = op.vertices as Float32Array | number[] | undefined
+        const idxs = op.indices as Uint32Array | number[] | undefined
+        const vertCount = verts ? (verts as ArrayLike<number>).length : 0
+        const idxCount = idxs ? (idxs as ArrayLike<number>).length : 0
+        if (vertCount >= 9 && vertCount <= 10_000_000 && idxCount >= 3 && idxCount <= 30_000_000) {
+          try {
+            const wasm = getWasm()
+            const m = new wasm.Manifold({
+              numProp: 3,
+              vertProperties: new Float32Array(verts as ArrayLike<number>),
+              triVerts: new Uint32Array(idxs as ArrayLike<number>),
+            })
+            const tm = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, t.x, t.y, t.z, 1]
+            setCached(op.id as string, m.transform(tm))
+          } catch (me) {
+            // Non-manifold — cache null; fallback в rebuild.ts вернёт сырой меш
+            console.warn(`[rebuild] Baked mesh (import/text3d) non-manifold for ${op.id}:`, me)
+            setCached(op.id as string, null)
+          }
+        } else if (vertCount > 0 || idxCount > 0) {
+          console.warn(`[rebuild] Baked mesh skipped for ${op.id}: verts=${vertCount}, idxs=${idxCount}`)
+        }
       } else if (op.type === 'fillet') {
         const id = op.id as string
         const info = shapeInfos.get(id)
@@ -888,6 +918,14 @@ export async function handleRebuildScene(msg: RebuildSceneMessage): Promise<void
               const fresh = buildPrimitiveWithFillet(info.shapeType, info.params, info.filletRadius)
               const tm = applyTransform(fresh, { x: nt.x, y: nt.y, z: nt.z })
               setCached(id, tm)
+            } else {
+              // FIX (UB-0): baked-геометрия (import_mesh/text3d/CSG-результат) не
+              // может быть перестроена из shapeType/params — сдвигаем кэшированный
+              // меш на дельту (translation запечён, RS применяется позже).
+              // Раньше здесь был no-op → move терялся при загрузке проекта, а для
+              // import_mesh строился куб-заглушка (shapeInfos имел 'import_mesh').
+              const cm = cache.get(id)
+              if (cm) setCached(id, cm.transform([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, d.x, d.y, d.z, 1]))
             }
           } else {
             const cm = cache.get(id)

@@ -75,6 +75,15 @@ export interface UiStore {
   // выделения. НЕ снимает выделение → панель свойств не «закрывается».
   economyPanelOpen: boolean
   setEconomyPanelOpen: (v: boolean) => void
+  // FIX (UB-1): модалка аренды 24ч. Клик по НЕарендованной фиче (3D-текст,
+  // расширенная палитра) обязан открывать модалку, где фичу можно арендовать,
+  // а не молча переключать правую панель. Тип локальный — ui-store не
+  // импортирует economy-store (нет циклической зависимости).
+  rentalModalKey: 'text3d' | 'extendedPalette' | null
+  setRentalModalKey: (v: 'text3d' | 'extendedPalette' | null) => void
+  // «После успешной аренды расширенной палитры — открыть нативный picker»
+  palettePickerRequested: boolean
+  setPalettePickerRequested: (v: boolean) => void
   cameraMode: 'perspective' | 'orthographic'
   setCameraMode: (v: 'perspective' | 'orthographic' | ((prev: 'perspective' | 'orthographic') => 'perspective' | 'orthographic')) => void
 }
@@ -135,6 +144,10 @@ export const useUiStore = create<UiStore>((set) => ({
   setActiveTab: (v) => set({ activeTab: v }),
   economyPanelOpen: false,
   setEconomyPanelOpen: (v) => set({ economyPanelOpen: v }),
+  rentalModalKey: null,
+  setRentalModalKey: (v) => set({ rentalModalKey: v }),
+  palettePickerRequested: false,
+  setPalettePickerRequested: (v) => set({ palettePickerRequested: v }),
   cameraMode: 'perspective',
   setCameraMode: (v) =>
     set((s) => ({ cameraMode: typeof v === 'function' ? v(s.cameraMode) : v })),
