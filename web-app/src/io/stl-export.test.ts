@@ -3,7 +3,8 @@
 // ============================================================
 
 import { describe, it, expect } from 'vitest'
-import { exportToStl } from './stl-export'
+import { exportToStl, StlTooLargeError } from './stl-export'
+import i18n from '../i18n'
 import type { SceneObject, ShapeParams, TransformNR } from '../csg/types'
 
 const T: TransformNR = { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
@@ -196,5 +197,37 @@ describe('exportToStl', () => {
     expect(bx).toBeCloseTo(1, 5)
     expect(by).toBeCloseTo(1.5, 5)
     expect(bz).toBeCloseTo(2, 5)
+  })
+
+  // FIX (E1): лимит треугольников обязан отклонять сцену ЯВНО. Раньше он
+  // урезал только размер буфера и заголовок, а цикл записи лимита не знал →
+  // выход за границу DataView (RangeError) либо файл с недостоверным count.
+  it('throws StlTooLargeError instead of writing a broken file (E1)', () => {
+    const obj = makeObj({ indices: new Uint32Array([0, 1, 2, 0, 1, 2]) }) // 2 треугольника
+    let caught: unknown = null
+    try {
+      exportToStl([obj], 1)
+    } catch (e) {
+      caught = e
+    }
+    expect(caught).toBeInstanceOf(StlTooLargeError)
+    // Локализованное сообщение из errors.stlTooManyTris (ключ был мёртвым)
+    expect((caught as StlTooLargeError).count).toBe(2)
+    expect((caught as StlTooLargeError).max).toBe(1)
+    expect((caught as Error).message).toContain('2')
+    // Ровно лимит — не ошибка
+    expect(() => exportToStl([obj], 2)).not.toThrow()
+  })
+
+  // FIX (E2): заголовок пишется UTF-8, а не побайтно через charCodeAt —
+  // кириллица в ru-локали раньше превращалась в мусорные байты.
+  it('writes the header as UTF-8 within 80 bytes (E2)', async () => {
+    const blob = exportToStl([makeObj()])
+    const buf = new ArrayBuffer(blob.size)
+    new Uint8Array(buf).set(new Uint8Array(await blob.arrayBuffer()))
+    const header = new TextDecoder().decode(new Uint8Array(buf, 0, 80)).replace(/\0.*$/s, '')
+    // Заголовок —Decodable-строка без «обрезков» charCodeAt (байты <128 либо валидный UTF-8)
+    expect(header.length).toBeGreaterThan(0)
+    expect(header).toBe(i18n.t('app.stlHeader'))
   })
 })

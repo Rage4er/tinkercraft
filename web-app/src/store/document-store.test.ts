@@ -10,10 +10,16 @@ const h = vi.hoisted(() => ({
   exportToStl: vi.fn(),
   downloadStlBlob: vi.fn(),
 }))
-vi.mock('../io/stl-export', () => ({
-  exportToStl: h.exportToStl,
-  downloadStlBlob: h.downloadStlBlob,
-}))
+vi.mock('../io/stl-export', async (importOriginal) => {
+  // StlTooLargeError — настоящий класс: exportStl проверяет instanceof, чтобы
+  // показать локализованное сообщение о лимите треугольников (E1)
+  const actual = await importOriginal<typeof import('../io/stl-export')>()
+  return {
+    exportToStl: h.exportToStl,
+    downloadStlBlob: h.downloadStlBlob,
+    StlTooLargeError: actual.StlTooLargeError,
+  }
+})
 
 // Экономика «доступна» — кэшбэк начисляется (проверка анти-фарма внутри
 // calculateAndClaimCashback остаётся настоящей, нам нужен только факт доступности).

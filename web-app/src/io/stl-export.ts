@@ -115,20 +115,47 @@ function applyTransformToNormals(
 }
 
 /**
- * Объединить несколько mesh-объектов и записать в binary STL.
+ * Ошибка «сцена слишком большая для STL»: бросается ДО выделения буфера,
+ * чтобы экспорт падал предсказуемой ошибкой (её показывает UI), а не
+ * RangeError'ом внутри DataView на половине записанных треугольников.
+ * FIX (E1).
  */
-export function exportToStl(objects: SceneObject[]): Blob {
+export class StlTooLargeError extends Error {
+  readonly count: number
+  readonly max: number
+
+  constructor(count: number, max: number) {
+    super(i18n.t('errors.stlTooManyTris', { count, max }))
+    this.name = 'StlTooLargeError'
+    this.count = count
+    this.max = max
+  }
+}
+
+/** FIX (HIGH-18-19): Protection against memory overflow — cap at 10M triangles (~500MB buffer) */
+export const MAX_TRIANGLES = 10_000_000
+
+/**
+ * Объединить несколько mesh-объектов и записать в binary STL.
+ * @param objects объекты сцены, скрытые игнорируются
+ * @param maxTriangles верхний лимит треугольников, по умолчанию MAX_TRIANGLES;
+ * параметр нужен прежде всего для тестов лимита (E1)
+ * @throws StlTooLargeError если суммарно треугольников больше лимита
+ */
+export function exportToStl(objects: SceneObject[], maxTriangles: number = MAX_TRIANGLES): Blob {
   const visible = objects.filter(o => o.visible)
 
   // Count total triangles
   let totalTris = 0
   for (const obj of visible) totalTris += obj.indices.length / 3
 
-  // FIX (HIGH-18-19): Protection against memory overflow — cap at 10M triangles (~500MB buffer)
-  const MAX_TRIANGLES = 10_000_000
-  if (totalTris > MAX_TRIANGLES) {
-    console.warn(`[STL export] Too many triangles: ${totalTris}, capping at ${MAX_TRIANGLES}`)
-    totalTris = MAX_TRIANGLES
+  // FIX (E1): раньше лимит только урезал размер буфера и заголовок, а цикл
+  // записи лимита не проверял → выход за границы DataView (RangeError) либо
+  // файл с недостоверным числом треугольников. Теперь сцена сверх лимита
+  // отклоняется ЯВНО — пользователь получает сообщение вместо битого файла.
+  if (totalTris > maxTriangles) {
+    console.warn(`[STL export] Too many triangles: ${totalTris}, limit is ${maxTriangles}`)
+    throw new StlTooLargeError(totalTris, maxTriangles)
   }
 
   // Allocate buffer: 80 (header) + 4 (count) + 50 * tris
@@ -136,11 +163,14 @@ export function exportToStl(objects: SceneObject[]): Blob {
   const dv = new DataView(buf)
   const header = new Uint8Array(buf, 0, 80)
 
-  // Header — ASCII текст
-  const title = i18n.t('app.stlHeader')
-  for (let i = 0; i < title.length && i < 80; i++) {
-    header[i] = title.charCodeAt(i)
-  }
+  // Header — фиксированные 80 байт.
+  // FIX (E2): раньше писалось побайтно через charCodeAt — кириллица и «—»
+  // (ru-локаль «Творческая студия — экспорт STL») давали значения > 255,
+  // которые Uint8Array обрезал по младшему байту → в заголовке мусор.
+  // UTF-8 через TextEncoder корректно умещается в 80 байт (обрезка по
+  // границе массива байт, а не по символу).
+  const titleBytes = new TextEncoder().encode(i18n.t('app.stlHeader'))
+  header.set(titleBytes.subarray(0, 80))
 
   // Triangle count (uint32 LE)
   dv.setUint32(80, totalTris, true)
