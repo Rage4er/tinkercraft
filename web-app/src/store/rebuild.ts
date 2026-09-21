@@ -174,6 +174,31 @@ export async function rebuildFromHistory(
   // use those instead of the worker's rebuilt geometry — this preserves the
   // exact CSG result from the original operation.
   const meshByObjId = new Map(result.results.map(m => [m.objId, m]))
+
+  // FIX (UB-0): фолбэк для import_mesh, которых НЕТ в ответе воркера
+  // (non-manifold STL → cache=null; слишком большие меши — skip). Без фолбэка
+  // импортированная геометрия исчезала при загрузке проекта/.doodle.
+  // Восстанавливаем «живую» конвенцию: сырые вершины из операции + transform
+  // из meta (применяется на рендере через pivot).
+  const returnedIds = new Set(result.results.map(m => m.objId))
+  for (const op of ops) {
+    if (op.type !== 'import_mesh') continue
+    if (returnedIds.has(op.id) || !meta[op.id]) continue
+    const verts = op.vertices
+    const idxs = op.indices
+    const vertCount = verts ? verts.length : 0
+    const idxCount = idxs ? idxs.length : 0
+    if (vertCount < 9 || vertCount > 10_000_000 || idxCount < 3 || idxCount > 30_000_000) continue
+    result.results.push({
+      objId: op.id,
+      vertices: new Float32Array(verts),
+      indices: new Uint32Array(idxs),
+      normals: null,
+      tris: idxCount / 3,
+      ms: 0,
+    })
+  }
+
   for (const id of csgResultIds) {
     const m = meshByObjId.get(id)
     if (m && meta[id]) {

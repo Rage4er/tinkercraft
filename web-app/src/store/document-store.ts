@@ -27,7 +27,7 @@ import type { MeshResult } from '../csg/worker-handlers'
 import { parseDoodle, serializeDoodle, openDoodleFilePicker, downloadBlob } from '../io/doodle-io'
 import { notify } from './notifications'
 import { saveProject as pmSave, updateProject as pmUpdate, loadProject as pmLoad, listProjects as pmList } from '../io/project-manager'
-import { downloadStl } from '../io/stl-export'
+import { exportToStl, downloadStlBlob, StlTooLargeError } from '../io/stl-export'
 import { openStlFilePicker, parseStlFile } from '../io/stl-import'
 import { autosaveSession, restoreSession } from '../io/autosave'
 import i18n from '../i18n'
@@ -975,7 +975,20 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   // ── Export STL ──
   exportStl: () => {
     const { objects, fileName } = get()
-    downloadStl(Object.values(objects), (fileName?.replace(/\.doodle$/, '') ?? i18n.t('app.name')) + '.stl')
+    // FIX (E1b): раньше downloadStl() вызывался без try/catch прямо из
+    // обработчика клика — любое исключение сериализации (невалидная геометрия,
+    // сцена сверх лимита треугольников) уходило наружу: файл не создан,
+    // пользователю тишина. Сериализацию отделяем от скачивания и показываем
+    // причину через notify (сообщение StlTooLargeError уже локализовано).
+    let blob: Blob
+    try {
+      blob = exportToStl(Object.values(objects))
+    } catch (e) {
+      console.error('[Document] STL export failed:', e)
+      notify(e instanceof StlTooLargeError ? e.message : i18n.t('errors.stlExportFailed'), 'error')
+      return
+    }
+    downloadStlBlob(blob, (fileName?.replace(/\.doodle$/, '') ?? i18n.t('app.name')) + '.stl')
   },
 
   // ── Resize dims ──

@@ -14,13 +14,36 @@ import i18n from '../i18n'
  * совместимости с Three.js Euler 'XYZ' (Rx · Ry · Rz). Раньше была
  * дублированная матрица Rz × Ry × Rx, которая расходилась с рендером
  * при многоосевом повороте.
+ * FIX (UB-0): bbox-центр вершин вычитается ДО применения RS+position.
+ * Вьюпорт (viewport-hooks.ts → centerGeometry) центрирует геометрию КАЖДОГО
+ * объекта и применяет transform к pivot'у: world = R·S·(v − center) + t.
+ * Примитивы хранят позицию спавна, запечённую воркером В вершины
+ * (handleBuildShape → m.transform([T])), и ДУБЛИРУЮТ её в obj.transform —
+ * без вычитания центра позиция применялась дважды, и при экспорте
+ * нескольких фигур они «разлетались» относительно друг друга.
  */
 function applyTransformToVertices(
   vertices: Float32Array,
   transform: { x: number; y: number; z: number; rotX: number; rotY: number; rotZ: number; scaleX: number; scaleY: number; scaleZ: number },
 ): Float32Array {
-  // If transform is identity — return as-is (optimization)
+  const count = vertices.length / 3;
+  if (count === 0) return vertices;
+
+  // FIX (UB-0): bbox-центр «сырых» вершин (один проход O(n))
+  let minX = Infinity, maxX = -Infinity
+  let minY = Infinity, maxY = -Infinity
+  let minZ = Infinity, maxZ = -Infinity
+  for (let i = 0; i < vertices.length; i += 3) {
+    if (vertices[i] < minX) minX = vertices[i]; if (vertices[i] > maxX) maxX = vertices[i]
+    if (vertices[i + 1] < minY) minY = vertices[i + 1]; if (vertices[i + 1] > maxY) maxY = vertices[i + 1]
+    if (vertices[i + 2] < minZ) minZ = vertices[i + 2]; if (vertices[i + 2] > maxZ) maxZ = vertices[i + 2]
+  }
+  const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2, cz = (minZ + maxZ) / 2
+
+  // Identity-трансформ и уже отцентрированная геометрия (CSG-результаты) —
+  // возвращаем как есть (optimization)
   if (
+    cx === 0 && cy === 0 && cz === 0 &&
     transform.x === 0 && transform.y === 0 && transform.z === 0 &&
     transform.rotX === 0 && transform.rotY === 0 && transform.rotZ === 0 &&
     transform.scaleX === 1 && transform.scaleY === 1 && transform.scaleZ === 1
@@ -34,14 +57,14 @@ function applyTransformToVertices(
     { scaleX: transform.scaleX, scaleY: transform.scaleY, scaleZ: transform.scaleZ },
   )
 
-  // Apply rotation + scale then translation
-  const count = vertices.length / 3;
+  // Apply rotation + scale around the geometry center, then translation —
+  // точно как pivot во вьюпорте: R·S·(v − center) + pos
   const transformed = new Float32Array(count * 3);
 
   for (let i = 0; i < count; i++) {
-    const vx = vertices[i * 3];
-    const vy = vertices[i * 3 + 1];
-    const vz = vertices[i * 3 + 2];
+    const vx = vertices[i * 3] - cx;
+    const vy = vertices[i * 3 + 1] - cy;
+    const vz = vertices[i * 3 + 2] - cz;
 
     // RS × v + pos (column-major matrix multiplication)
     transformed[i * 3] = r00 * vx + r01 * vy + r02 * vz + transform.x;
@@ -92,20 +115,47 @@ function applyTransformToNormals(
 }
 
 /**
- * Объединить несколько mesh-объектов и записать в binary STL.
+ * Ошибка «сцена слишком большая для STL»: бросается ДО выделения буфера,
+ * чтобы экспорт падал предсказуемой ошибкой (её показывает UI), а не
+ * RangeError'ом внутри DataView на половине записанных треугольников.
+ * FIX (E1).
  */
-export function exportToStl(objects: SceneObject[]): Blob {
+export class StlTooLargeError extends Error {
+  readonly count: number
+  readonly max: number
+
+  constructor(count: number, max: number) {
+    super(i18n.t('errors.stlTooManyTris', { count, max }))
+    this.name = 'StlTooLargeError'
+    this.count = count
+    this.max = max
+  }
+}
+
+/** FIX (HIGH-18-19): Protection against memory overflow — cap at 10M triangles (~500MB buffer) */
+export const MAX_TRIANGLES = 10_000_000
+
+/**
+ * Объединить несколько mesh-объектов и записать в binary STL.
+ * @param objects объекты сцены, скрытые игнорируются
+ * @param maxTriangles верхний лимит треугольников, по умолчанию MAX_TRIANGLES;
+ * параметр нужен прежде всего для тестов лимита (E1)
+ * @throws StlTooLargeError если суммарно треугольников больше лимита
+ */
+export function exportToStl(objects: SceneObject[], maxTriangles: number = MAX_TRIANGLES): Blob {
   const visible = objects.filter(o => o.visible)
 
   // Count total triangles
   let totalTris = 0
   for (const obj of visible) totalTris += obj.indices.length / 3
 
-  // FIX (HIGH-18-19): Protection against memory overflow — cap at 10M triangles (~500MB buffer)
-  const MAX_TRIANGLES = 10_000_000
-  if (totalTris > MAX_TRIANGLES) {
-    console.warn(`[STL export] Too many triangles: ${totalTris}, capping at ${MAX_TRIANGLES}`)
-    totalTris = MAX_TRIANGLES
+  // FIX (E1): раньше лимит только урезал размер буфера и заголовок, а цикл
+  // записи лимита не проверял → выход за границы DataView (RangeError) либо
+  // файл с недостоверным числом треугольников. Теперь сцена сверх лимита
+  // отклоняется ЯВНО — пользователь получает сообщение вместо битого файла.
+  if (totalTris > maxTriangles) {
+    console.warn(`[STL export] Too many triangles: ${totalTris}, limit is ${maxTriangles}`)
+    throw new StlTooLargeError(totalTris, maxTriangles)
   }
 
   // Allocate buffer: 80 (header) + 4 (count) + 50 * tris
@@ -113,11 +163,14 @@ export function exportToStl(objects: SceneObject[]): Blob {
   const dv = new DataView(buf)
   const header = new Uint8Array(buf, 0, 80)
 
-  // Header — ASCII текст
-  const title = i18n.t('app.stlHeader')
-  for (let i = 0; i < title.length && i < 80; i++) {
-    header[i] = title.charCodeAt(i)
-  }
+  // Header — фиксированные 80 байт.
+  // FIX (E2): раньше писалось побайтно через charCodeAt — кириллица и «—»
+  // (ru-локаль «Творческая студия — экспорт STL») давали значения > 255,
+  // которые Uint8Array обрезал по младшему байту → в заголовке мусор.
+  // UTF-8 через TextEncoder корректно умещается в 80 байт (обрезка по
+  // границе массива байт, а не по символу).
+  const titleBytes = new TextEncoder().encode(i18n.t('app.stlHeader'))
+  header.set(titleBytes.subarray(0, 80))
 
   // Triangle count (uint32 LE)
   dv.setUint32(80, totalTris, true)
@@ -199,7 +252,15 @@ export function exportToStl(objects: SceneObject[]): Blob {
 }
 
 export function downloadStl(objects: SceneObject[], fileName = i18n.t('app.stlDefaultName')): void {
-  const blob = exportToStl(objects)
+  downloadStlBlob(exportToStl(objects), fileName)
+}
+
+/**
+ * FIX (E1b): скачать УЖЕ созданный Blob STL. Отделено от downloadStl(), чтобы
+ * вызывающий код мог обернуть СЕРИАЛИЗАЦИЮ в try/catch и показать ошибку,
+ * не путая её с ошибкой скачивания.
+ */
+export function downloadStlBlob(blob: Blob, fileName = i18n.t('app.stlDefaultName')): void {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url

@@ -158,3 +158,67 @@ describe('.doodle color round-trip', () => {
     expect(meta['obj_1'].transform.x).toBe(10)
   })
 })
+
+// FIX (UB-0): импортированная геометрия должна переживать сохранение/загрузку.
+// Два независимых дефекта: (1) JSON.stringify(Float32Array) давал объект
+// {"0":…} вместо массива, (2) лимит model.json 5 МБ отрезал файлы с импортами —
+// файл сохранялся, но НЕ открывался.
+describe('.doodle import_mesh round-trip (UB-0)', () => {
+  const DEFAULT_TRANSFORM = { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
+
+  /** Импортированный меш: trianglesCount треугольников, вершины «заумные»
+   * (полная float-точность → реалистичный размер JSON). */
+  function makeImport(id: string, trianglesCount: number): ImportMeshOperation {
+    const vertCount = trianglesCount * 3
+    const vertices = new Float32Array(vertCount * 3)
+    for (let i = 0; i < vertices.length; i++) vertices[i] = Math.sin(i) * 12.5
+    const indices = new Uint32Array(vertCount)
+    for (let i = 0; i < indices.length; i++) indices[i] = i
+    return {
+      type: 'import_mesh', id, name: 'импорт.stl', color: '#f9e2af',
+      transform: { ...DEFAULT_TRANSFORM, x: 25 },
+      vertices, indices,
+    }
+  }
+
+  it('сохраняет вершины и индексы импорта после serialize → parse', async () => {
+    const ops: TinkerCraftOperation[] = [makeImport('imp_1', 4)]
+
+    const doc = await parseDoodle(await (await serializeDoodle(ops)).arrayBuffer())
+
+    const im = doc.operations[0] as ImportMeshOperation
+    expect(im.type).toBe('import_mesh')
+    expect(im.vertices).toHaveLength(4 * 3 * 3)
+    expect(im.indices).toHaveLength(4 * 3)
+    // restoreMeshArray обязан вернуть ЧИСЛА (после JSON это number[]), иначе
+    // new Float32Array(объект) дал бы пустой массив и геометрия исчезла
+    expect(typeof (im.vertices as number[])[0]).toBe('number')
+    expect((im.vertices as number[])[0]).toBeCloseTo(0, 5)
+    expect((im.vertices as number[])[1]).toBeCloseTo(Math.sin(1) * 12.5, 4)
+  })
+
+  it('пишет вершины массивом, а не объектом {"0":…} (компактнее и с length)', async () => {
+    const ops: TinkerCraftOperation[] = [makeImport('imp_1', 2)]
+    const json = JSON.stringify({ version: '1.0.0', operations: ops }, (k, v) =>
+      v instanceof Float32Array || v instanceof Uint32Array ? Array.from(v) : v)
+    expect(json).toContain('"vertices":[0,')
+    expect(json).not.toContain('"vertices":{"0"')
+  })
+
+  it('открывает model.json больше прежнего лимита 5 МБ', async () => {
+    // ~100k треугольников: model.json заведомо > 5 МБ (старый лимит) и < 64 МБ
+    const ops: TinkerCraftOperation[] = [makeImport('imp_big', 100_000)]
+    // Прокрутовка фикстуры в ТОМ же формате, что пишет serializeDoodle
+    // (TypedArray → массив, отступ 2): если фикстура «усохнет» — тест станет
+    // ложно-зелёным и перестанет прикрывать старый лимит.
+    const asSaved = JSON.stringify({ version: '1.0.0', operations: ops }, (_k, v) =>
+      v instanceof Float32Array || v instanceof Uint32Array ? Array.from(v) : v, 2)
+    expect(asSaved.length).toBeGreaterThan(5 * 1024 * 1024)
+
+    const doc = await parseDoodle(await (await serializeDoodle(ops)).arrayBuffer())
+
+    const im = doc.operations[0] as ImportMeshOperation
+    expect(im.vertices).toHaveLength(100_000 * 3 * 3)
+    expect(im.indices).toHaveLength(100_000 * 3)
+  })
+})
