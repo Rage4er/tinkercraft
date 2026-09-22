@@ -1,4 +1,4 @@
-// src/components/Badge.test.tsx — C1: компактный контейнер (шрифт 10px), иконки 20px
+// src/components/Badge.test.tsx — UB2-3b: иконка 14px ВНУТРИ контейнера (без overflow)
 import { describe, it, expect } from 'vitest'
 import React from 'react'
 import { createRoot, type Root } from 'react-dom/client'
@@ -21,35 +21,36 @@ function iconSizes(container: HTMLElement): number[] {
         .flat()
 }
 
-describe('Badge (C1: компактный контейнер, иконки 20px)', () => {
-    it('рендерит корону 20×20 при активном доступе', () => {
+describe('Badge (UB2-3b: иконка 14px внутри контейнера)', () => {
+    it('рендерит корону 14×14 при активном доступе', () => {
         const { container, root } = renderToContainer(<Badge type="tokens" value="75" isActive />)
-        expect(iconSizes(container)).toEqual([20, 20])
+        expect(iconSizes(container)).toEqual([14, 14])
         act(() => { root.unmount() })
     })
 
-    it('рендерит TokenIcon 20×20 и число при отсутствии доступа', () => {
+    it('рендерит TokenIcon 14×14 и число при отсутствии доступа', () => {
         const { container, root } = renderToContainer(<Badge type="tokens" value="75" />)
-        expect(iconSizes(container)).toEqual([20, 20])
+        expect(iconSizes(container)).toEqual([14, 14])
         expect(container.textContent).toContain('75')
         act(() => { root.unmount() })
     })
 
-    it('рендерит AdFilmIcon 20×20 без доступа к рекламе', () => {
+    it('рендерит AdFilmIcon 14×14 и число без доступа к рекламе', () => {
         const { container, root } = renderToContainer(<Badge type="ad" value="1" />)
-        expect(iconSizes(container)).toEqual([20, 20])
+        expect(iconSizes(container)).toEqual([14, 14])
+        expect(container.textContent).toContain('1')
         act(() => { root.unmount() })
     })
 
-    it('рендерит ClockIcon 20×20 при кулдауне', () => {
+    it('рендерит ClockIcon 14×14 при кулдауне', () => {
         const { container, root } = renderToContainer(<Badge type="cooldown" value="0:30" />)
-        expect(iconSizes(container)).toEqual([20, 20])
+        expect(iconSizes(container)).toEqual([14, 14])
         act(() => { root.unmount() })
     })
 
-    it('рендерит CrownIcon 20×20 для pro-бейджа', () => {
+    it('рендерит CrownIcon 14×14 для pro-бейджа', () => {
         const { container, root } = renderToContainer(<Badge type="pro" />)
-        expect(iconSizes(container)).toEqual([20, 20])
+        expect(iconSizes(container)).toEqual([14, 14])
         act(() => { root.unmount() })
     })
 
@@ -59,16 +60,16 @@ describe('Badge (C1: компактный контейнер, иконки 20px)
         act(() => { root.unmount() })
     })
 
-    it('UB-5: контейнер уменьшён ×0.75 (шрифт 7.5px), иконки остались 20px', () => {
+    it('UB2-3b: контейнер вмещает иконку (шрифт 8px, padding 1px 3px, без overflow)', () => {
         const { container, root } = renderToContainer(<Badge type="tokens" value="75" />)
         const badge = container.querySelector('span[style]') as HTMLElement | null
-        expect(badge?.style.fontSize).toBe('7.5px')
-        // padding компактный (1px 3px × 0.75)
-        expect(badge?.style.padding).toBe('0.75px 2.25px')
-        expect(badge?.style.minWidth).toBe('12px')
-        expect(badge?.style.minHeight).toBe('10.5px')
-        // Иконка НЕ масштабируется вместе с контейнером
-        expect(iconSizes(container)).toEqual([20, 20])
+        expect(badge?.style.fontSize).toBe('8px')
+        expect(badge?.style.padding).toBe('1px 3px')
+        expect(badge?.style.minWidth).toBe('14px')
+        expect(badge?.style.minHeight).toBe('12px')
+        // UB2-3b: иконка больше НЕ выходит за границы контейнера
+        expect(badge?.style.overflow).not.toBe('visible')
+        expect(iconSizes(container)).toEqual([14, 14])
         act(() => { root.unmount() })
     })
 

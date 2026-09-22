@@ -260,6 +260,12 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       invalidateMirrorCache()
       // Y3.1: начисление токена за действие (лимит 30/день, кулдаун 5с, серверное время)
       void useEconomyStore.getState().earnActionToken()
+      // UB2-1: квесты по состоянию проекта. addShape был ЕДИНСТВЕННОЙ мутацией
+      // без evaluateQuestsAfterMutation — прогресс квестов (count_unique_shapes,
+      // count_objects, count_cubes и др.) не обновлялся при создании примитивов,
+      // поэтому квесты не засчитывались при save/export (commitQuests коммитит
+      // только уже completed квесты).
+      evaluateQuestsAfterMutation(newObjects, newOps)
     } catch (e) { set({ busy: false }); console.error('addShape:', e); notify(i18n.t('errors.createShapeFailed'), 'error') }
   },
 

@@ -1,5 +1,6 @@
 // src/components/IconBadge.tsx — Бейджи на кнопках инструментов (§6.4 ECONOMY.md v2.0)
-// C1: компактный контейнер (шрифт 10px, padding 2px 4px), крупная иконка 20px.
+// UB2-3b: иконка 16px, компактный контейнер вмещает её (раньше 20px иконка
+// в контейнере minWidth 20/minHeight 16 перекрывала четверть кнопки).
 import { TokenIcon, AdFilmIcon, ClockIcon, CrownIcon } from './icons'
 
 /** Типы бейджей */
@@ -22,8 +23,8 @@ const badgeStyles: Record<BadgeType, { bg: string; color: string }> = {
 
 /** Бейдж ¼ кнопки, pointer-events:none */
 export default function IconBadge({ type, label }: BadgeProps) {
-  // C1: иконка остаётся крупной (20px), контейнер компактный
-  const size = 20
+  // UB2-3b: иконка 16px, контейнер под неё
+  const size = 16
   const style = badgeStyles[type]
 
   // Иконка в зависимости от типа
@@ -53,19 +54,19 @@ export default function IconBadge({ type, label }: BadgeProps) {
         pointerEvents: 'none',
         background: style.bg,
         color: style.color,
-        fontSize: '10px',
+        fontSize: '9px',
         fontWeight: 700,
         borderRadius: 4,
-        padding: '2px 4px',
-        minWidth: 20,
-        minHeight: 16,
-        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.3)',
+        padding: '1px 3px',
+        minWidth: 16,
+        minHeight: 12,
+        boxShadow: '0 1px 2px rgba(0, 0, 0, 0.3)',
         lineHeight: 1,
       }}
     >
       {icon}
       {label && (
-        <span style={{ fontSize: '10px', marginLeft: '2px', lineHeight: 1 }}>{label}</span>
+        <span style={{ fontSize: '9px', marginLeft: '2px', lineHeight: 1 }}>{label}</span>
       )}
     </div>
   )

@@ -217,8 +217,12 @@ interface EconomyState {
    * НЕ начисляет токены — оплачивает экспорт (после успеха вызывается onExport).
    */
   watchAdForExport(): Promise<boolean>
-  /** EC2/U12: N реклам подряд для импорта (без кулдауна между показами, НЕ начисляет токены) */
-  watchAdsForImport(count: number): Promise<boolean>
+  /**
+   * EC2/U12: N реклам подряд для импорта (без кулдауна между показами, НЕ начисляет токены).
+   * UB2-2: onProgress — прогресс серии (после каждого успешного показа),
+   * чтобы модалка импорта показывала живой «1/2» вместо стоящего «0/2».
+   */
+  watchAdsForImport(count: number, onProgress?: (watched: number, total: number) => void): Promise<boolean>
   watchAdForBanner(): Promise<{ ok: boolean }>
 
   // ── U1/U9: per-reward геттеры для UI (кулдаун/лимит каждого вида) ──
@@ -859,7 +863,7 @@ export const useEconomyStore = create<EconomyState>()(
       // (отказ на 2-й) НЕ возвращает успех — импорт не выполняется, токены
       // также НЕ начисляются (нечего частично «одаривать» — реклама была
       // оплатой операции, а не заработком).
-      watchAdsForImport: async (count: number): Promise<boolean> => {
+      watchAdsForImport: async (count: number, onProgress?: (watched: number, total: number) => void): Promise<boolean> => {
         const state = get()
         const kind: AdRewardKind = 'import'
         const ad = state.adRewards[kind] ?? emptyAdReward()
@@ -891,6 +895,8 @@ export const useEconomyStore = create<EconomyState>()(
           const rewarded = await platform.showRewardedVideo()
           if (!rewarded) break
           watchedCount++
+          // UB2-2: уведомляем UI о прогрессе серии (1/2, 2/2)
+          onProgress?.(watchedCount, count)
           // Серверное время после каждого показа (P2-2: getServerTime напрямую)
           const serverTime = await getServerTime()
           // U12: только отмечаем показ — токены НЕ начисляются

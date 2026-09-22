@@ -1,0 +1,178 @@
+# 🗣️ Отзыв пользователя: UB2 — квесты, экономика UI, вьюпорт (2026-09-22)
+
+**Дата отзыва:** 2026-09-22
+**Источник:** пользовательский отзыв (ручной прогон сборки на Яндекс Играх, draft, `debug-mode=16`) + консольный лог сессии (game 572445, `yandex-games` @ `c05ed94`)
+**Статус:** 🟢 ЗАКРЫТО (2026-09-23) — все 6 пунктов исправлены (UB2-1…UB2-5, включая два пункта под номером ub2-3: UB2-3a/UB2-3b). Проверка: `pnpm verify` — typecheck 0 ошибок, **393/393 тестов (26 файлов)**, `build` + `build:yandex` успешны. Записи в [`CHANGELOG.md`](../CHANGELOG.md) → `[Unreleased]` (Fixed/Changed).
+**Объект:** квесты ([`economy-store.ts`](../web-app/src/store/economy-store.ts), [`document-store.ts`](../web-app/src/store/document-store.ts)), экономический UI ([`ImportModal.tsx`](../web-app/src/components/ImportModal.tsx), [`PropertiesPanel.tsx`](../web-app/src/components/PropertiesPanel.tsx), [`Badge.tsx`](../web-app/src/components/Badge.tsx), [`IconBadge.tsx`](../web-app/src/components/IconBadge.tsx), [`EconomyMiniHUD.tsx`](../web-app/src/components/EconomyMiniHUD.tsx)), рендеринг ([`viewport-hooks.ts`](../web-app/src/components/viewport-hooks.ts)), i18n ([`i18n/locales/{ru,en}/translation.json`](../web-app/src/i18n/locales/ru/translation.json))
+
+> Это **реестр проблем**, а не код-ревью. Все ссылки на строки проверены по рабочему дереву ветки `yandex-games` (коммит `c05ed94`).
+
+---
+
+## Текст отзыва (дословно)
+
+> - ub2-1. — Создал несколько > 4 примитивов, сохранил, задача на > 4 примитивов не выполнена, даже прогресс не считает.
+> - ub2-2. — На кнопке реварда импорта stl нужно написать не "Посмотреть рекламу (0/3, нужно 2)", а "Посмотреть две рекламы 0/2 (0/3)"
+> - ub2-3. — Палитра обычная 16 цветов опять в свойствах при переключении с расширенной по английски название, нужно на русском "Обычная палитра"
+> - ub2-3. — иконки экономики плохо читаются, слишком мелкие, бейджи перекрывают кнопки сильно
+> - ub2-4. — добавить ребра у фигур на пару тонов чтоб отличались для лучшей читаемости
+> - ub2-5. — добавить всплывающие подсказки к панели экономики, с расширенными подсказками, локализация
+
+> ⚠️ В тексте отзыва нумерация «ub2-3» присвоена **двум** разным пунктам. В реестре они разнесены как **UB2-3a** (подпись палитры) и **UB2-3b** (иконки/бейджи); нумерация пользователя сохранена дословно в цитате.
+
+---
+
+## Реестр проблем
+
+| # | Проблема (из отзыва) | Тип | Приоритет | Проверка по коду | Статус |
+|---|----------------------|-----|-----------|------------------|--------|
+| UB2-1 | Квест «Разнообразие (≥ 4 разных примитива)» не прогрессирует: созданы примитивы, сцена сохранена — прогресс не считает, квест не засчитан | Баг квестов, потеря награды | 🔴 P0 | ✅ подтверждено: `addShape` не вызывает `evaluateQuestsAfterMutation` | ✅ ИСПРАВЛЕНО (2026-09-23) |
+| UB2-2 | Текст кнопки реварда импорта STL: «Посмотреть рекламу (0/3, нужно 2)» → нужно «Посмотреть две рекламы 0/2 (0/3)» — серия, прогресс серии, дневной лимит | UX / текст | 🟢 P2 | ✅ подтверждено: ключ `import.watchAd` (`ImportModal.tsx:144`) | ✅ ИСПРАВЛЕНО (2026-09-23) |
+| UB2-3a | Подпись переключателя палитры в свойствах — «Wad's Optimum 16» (латиница/бренд); нужна русская «Обычная палитра» при переключении с расширенной | UX / i18n | 🟢 P2 | ✅ подтверждено: `PropertiesPanel.tsx:691` → `properties.palette`; ключ `palette.regular` существовал, но не использовался | ✅ ИСПРАВЛЕНО (2026-09-23) |
+| UB2-3b | Иконки экономики плохо читаются (слишком мелкие); бейджи сильно перекрывают кнопки | UX / косметика (регрессия U7×UB-5) | 🟡 P1 | ✅ подтверждено: иконки 10–14px в панелях; `Badge.tsx` — иконки 20px на контейнере ×0.75 (`overflow: visible`, offsets −2px) | ✅ ИСПРАВЛЕНО (2026-09-23) |
+| UB2-4 | Рёбра у фигур «на пару тонов» темнее — для читаемости формы | Фича вьюпорта | 🟢 P2 | ✅ подтверждено: сетки вьюпорта рендерились без рёбер (`EdgesGeometry` только у ViewCube) | ✅ ИСПРАВЛЕНО (2026-09-23) |
+| UB2-5 | Всплывающие подсказки к панели экономики — расширенные, с локализацией | UX / фича | 🟡 P1 | ✅ подтверждено: только 3 нативных `title` + статические подписи; двухуровневый `Tooltip` к экономике не подключён | ✅ ИСПРАВЛЕНО (2026-09-23) |
+
+---
+
+## Что сделано (2026-09-23)
+
+### UB2-1 — 🔴 P0 → ✅
+[`store/document-store.ts`](../web-app/src/store/document-store.ts): в `addShape` добавлен вызов `evaluateQuestsAfterMutation(newObjects, newOps)` (после `earnActionToken()`, как в остальных мутациях). Формулировка квеста уточнена: ru `economy.triggers.count_unique_shapes` = «Разнообразие (≥ {{n}} разных типов фигур)» — считаются уникальные ТИПЫ (`shapeTypes.size`), а не количество примитивов. Тесты в `document-store.test.ts` (мок `worker-client`): 1 примитив → 1/4; 4 разных типа → completed; 4 одинаковых → 1/4.
+
+### UB2-2 — 🟢 P2 → ✅
+`watchAdsForImport(count, onProgress?)` в [`economy-store.ts`](../web-app/src/store/economy-store.ts) сообщает прогресс серии после каждого показа (обратная совместимость — опциональный параметр). [`ImportModal.tsx`](../web-app/src/components/ImportModal.tsx): локальный `seriesWatched` (сброс при новом запуске серии), подпись через плюрализованные ключи `import.watchAd_one/_few/_many` (ru; 2 → few → «Посмотреть 2 рекламы 0/2 (0/3)»), `watchAd_one/_other` (en) + fallback `watchAd`. Формат: цена серии / прогресс серии / дневной лимит вида.
+
+### UB2-3a — 🟢 P2 → ✅
+[`PropertiesPanel.tsx`](../web-app/src/components/PropertiesPanel.tsx): подпись возврата к обычной палитре — `t('palette.regular')` («Обычная палитра» ru / «Standard Palette» en). Мёртвый ключ `properties.palette` удалён из ru/en.
+
+### UB2-3b — 🟡 P1 → ✅
+- [`Badge.tsx`](../web-app/src/components/Badge.tsx): иконка 14px **внутри** контейнера (шрифт 8px, padding 1px 3px, minWidth 14/minHeight 12), оффсеты −2→−3px (бейдж сильнее выходит ЗА кнопку, меньше перекрывает её), `overflow:visible` убран; у типов `ad`/`cooldown` число теперь показывается.
+- [`IconBadge.tsx`](../web-app/src/components/IconBadge.tsx): иконка 16px, контейнер под неё (9px шрифт, padding 1px 3px, minWidth 16/minHeight 12).
+- [`PropertiesPanel.tsx`](../web-app/src/components/PropertiesPanel.tsx): с мелких кнопок аренды/подписок убраны дублирующие бейджи (цена видна инлайн), иконки 10→14px; иконки секций: бонус/реклама 14→18, часы 12→14, квесты 12→14, аренда/подписка 14→16.
+- [`EconomyMiniHUD.tsx`](../web-app/src/components/EconomyMiniHUD.tsx): 14→16px, часы 10→12px.
+- История размеров зафиксирована в комментариях кода (U7 ×2 → UB-5 ×0.75 → UB2-3b). Тесты обновлены (`Badge.test.tsx`, `IconBadge.test.tsx`).
+
+### UB2-4 — 🟢 P2 → ✅
+[`viewport-hooks.ts`](../web-app/src/components/viewport-hooks.ts): `attachShapeEdges`/`detachShapeEdges` + `edgeColorFor` (×0.7 в sRGB). `LineSegments` по `EdgesGeometry(geometry, 30°)` — ребёнок меша: наследует visibility/трансформы, пересобирается при изменении геометрии (`vertsChanged`) и цвета, освобождается при удалении объекта. `raycast` отключён (выделение/snap не затронуты). Защита производительности: > 100 000 треугольников — без рёбер. Тесты: [`viewport-hooks.test.ts`](../web-app/src/components/viewport-hooks.test.ts) (5 тестов на `edgeColorFor`).
+
+### UB2-5 — 🟡 P1 → ✅
+Двухуровневый `Tooltip` подключён к: балансу, кнопкам бонуса/рекламы, заголовкам квестов/аренды/подписки ([`PropertiesPanel.tsx`](../web-app/src/components/PropertiesPanel.tsx)) и всем трём показателям [`EconomyMiniHUD.tsx`](../web-app/src/components/EconomyMiniHUD.tsx). Кнопки покупки аренды/подписок — нативные `title`. Новые ключи `economy.tooltip.{tokensDesc,bonusTitle,bonusDesc,adTitle,adDesc,questsDesc,rentalsDesc,subsDesc}` ru/en; декоративный «(i)» убран; `tooltip.bonus`/`tooltip.ad` заменены.
+
+---
+
+## Контекст лога сессии (Яндекс Игры, draft)
+
+Экономические события сессии — подтверждают картину отзыва (лёгкий квест «Разнообразие» НЕ был засчитан, средний — да):
+
+```
+[Economy] Daily bonus claimed: +50          — ежедневный бонус
+[Yandex] Rewarded! User earned reward
+[Economy] Ad rewarded (tokens): +50         — ревард «токены»
+[Yandex] Rewarded! User earned reward
+[Economy] Export ad watched — export paid by ad
+[Economy] Cashback V2 claimed: +5
+[Economy] Quest committed (medium): +30 tokens   ← только средний квест
+[Economy] Quest rewards committed to cloud
+```
+
+Лёгкий квест (`easy`, +20) не закоммитился — совпадает с UB2-1 (см. ниже: прогресс не обновляется при создании примитивов).
+
+Платформенные ошибки в логе (вне списка отзыва, waterfall Яндекс-рекламы, не наш код): interstitial «No adv to show now» (onspot), rewarded «No rewarded video to show now» → фолбэк на сервис `promo` (ролик показан, reward получен), sticky-баннер `[adv.safeGuard] ... 20000 ms` → `onAdLoadFailed`. SDK инициализирован до готовности игры, `LoadingAPI.ready()` отправлен штатно.
+
+---
+
+## Детали по пунктам
+
+### UB2-1. Квест «Разнообразие (≥ 4 разных примитива)» — прогресс не считает 🔴 P0
+
+**Корневая причина подтверждена кодом.** [`store/document-store.ts:231-263`](../web-app/src/store/document-store.ts) — `addShape` (палитра фигур → App `onAddShape` → `addShape`) после мутации вызывает только `earnActionToken()` и **не вызывает `evaluateQuestsAfterMutation`**. Все остальные мутации его вызывают:
+
+| Действие | Файл | Строка вызова |
+|---|---|---|
+| `addRawMesh` | `document-store.ts` | :290 |
+| `addTextMesh` | `document-store.ts` | :318 |
+| `importStl` | `document-store.ts` | :358 |
+| `applyFillet` | `document-store.ts` | :394 |
+| CSG-операции | `document-store.ts` | :483, :520, :639 |
+| `move` | `document-store.ts` | :877 |
+| resize / mirror | `document-store.ts` | :1219, :1274 |
+| **`addShape`** | `document-store.ts` | **нет вызова** |
+
+Цепочка у пользователя: создано >4 примитивов (через `addShape`) → прогресс квестов не пересчитан (`todayQuests[*].progress` остался прежним) → сохранение → `saveDoodle` → `commitQuests()` ([`economy-store.ts:1198-1219`](../web-app/src/store/economy-store.ts)) — а он коммитит **только уже `completed`** квесты и сам прогресс не пересчитывает. Итог: награда не начислена, прогресс в панели стоит на месте. В логе сессии закоммитился только `medium` (+30) — лёгкий квест не был даже завершён.
+
+**Второй аспект — формулировка квеста.** Даже после починки прогресса квест `count_unique_shapes` считает **уникальные ТИПЫ** фигур (`shapeTypes.size` — `economy-store.ts:1349, 1417-1418`), а не количество примитивов. Target 4 = «4 разных типа фигур» (пул easy: [`economy-store.ts:276`](../web-app/src/store/economy-store.ts)). Если пользователь поставил, например, 5 кубов — прогресс был бы 1/4. Формулировка ru-ключа `economy.triggers.count_unique_shapes` = «Разнообразие (≥ {{n}} разных примитива)» ([`ru/translation.json:411`](../web-app/src/i18n/locales/ru/translation.json)) пользователь прочитал как «> 4 примитивов». Стоит: (1) починить `addShape`; (2) уточнить формулировку (например, «≥ 4 разных типов фигур») — вопрос к обсуждению.
+
+**Воспроизведение:** создать ≥4 примитива любых типов → квест-панель (правая панель, раздел «Задания дня») — прогресс 0/4; сохранить — без изменений.
+
+### UB2-2. Текст кнопки реварда импорта STL 🟢 P2
+
+Сейчас ([`ImportModal.tsx:138-145`](../web-app/src/components/ImportModal.tsx)): `t('import.watchAd', { count: importAdCount, max: 3, adsNeeded: adCost })` → ru-ключ ([`ru/translation.json:159`](../web-app/src/i18n/locales/ru/translation.json)) «Посмотреть рекламу ({{count}}/{{max}}, нужно {{adsNeeded}})» → **«Посмотреть рекламу (0/3, нужно 2)»**. en: "Watch ads ({{count}}/{{max}} watched, need {{adsNeeded}})".
+
+Пользователь хочет: **«Посмотреть две рекламы 0/2 (0/3)»** — расшифровка: цена = серия из 2 роликов; 0/2 — прогресс текущей серии; 0/3 — дневной счётчик вида `import`.
+
+Факты кода:
+- `adCost = 2` захардкожен ([`ImportModal.tsx:39`](../web-app/src/components/ImportModal.tsx)); дневной счётчик `importAdCount = adRewards.import.countToday` (:28); кнопка дизейблится при `importAdCount + adCost > 3` (:140).
+- **Прогресс серии в store не трекается:** `watchAdsForImport(2)` ([`economy-store.ts:862`](../web-app/src/store/economy-store.ts)) смотрит всю серию одним вызовом. «0/2» требует либо локального счётчика серии в модалке (показ роликов итеративно с обновлением), либо итеративной серии в store.
+- Для «двух реклам» при локализации — учесть плюрализацию i18next (2/3/… ролика) либо формат «рекламу ×{{adsNeeded}}».
+
+### UB2-3a. Подпись переключателя палитры — русская «Обычная палитра» 🟢 P2
+
+[`PropertiesPanel.tsx:674-693`](../web-app/src/components/PropertiesPanel.tsx) — кнопка-переключатель палитры: подпись `showNativePicker ? t("properties.palette") : t("properties.advancedPicker")`. Когда открыт расширенный native-picker, кнопка возвращает к обычной палитре с подписью `properties.palette`, а в ru-локали ([`ru/translation.json:97`](../web-app/src/i18n/locales/ru/translation.json)) это **«Wad's Optimum 16»** (латиница) — отсюда «по-английски название».
+
+Готовый ключ **уже есть и не используется**: `palette.regular` = «Обычная палитра» (ru:129) / "Standard Palette" (en:129) — grep по коду даёт только translation.json. Вероятно, ключ и создавался под этот переключатель. Решение в лоб: подпись возврата к обычной палитре = `t('palette.regular')`. Вопрос к обсуждению: оставлять ли бренд «Wad's Optimum 16» где-то ещё (AGENTS.md описывает палитру им) или полностью убрать латиницу из UI.
+
+### UB2-3b. Иконки экономики мелкие, бейджи перекрывают кнопки 🟡 P1
+
+Две составляющие:
+
+1. **Бейджи поверх кнопок** ([`Badge.tsx`](../web-app/src/components/Badge.tsx)). После U7 (иконки ×2 → 20px) и UB-5 (контейнер ×0.75: шрифт 7.5px, minWidth 12px, minHeight 10.5px) иконка 20px намеренно «выступает» за контейнер (`overflow: visible`, комментарий :19-22) с позиционированием `top/left/right/bottom: −2px` (:47, :52, :60, :64, :71, :76). Итог: бейдж абсолютный (`position: absolute`, `pointer-events: none`), иконка перекрывает края кнопки-родителя на заметную площадь — «перекрывают кнопки сильно».
+2. **Мелкие иконки экономики в панелях** («плохо читаются, слишком мелкие»): PropertiesPanel — токен 20×20 (:152), кнопки бонус/реклама 14×14 (:166, :178), часы 12×12, квесты 12×12 (:221), аренда 14×14 (:252-254); EconomyMiniHUD — токен/подарок/реклама 14×14 (:52, :59, :71), часы 10×10 (:76).
+
+Направление (к обсуждению): увеличить иконки эконом-элементов (≥16px в кнопках, ≥18px в HUD), бейджи — вернуть соразмерный контейнер (или уменьшить иконку бейджа до ~14px с выравниванием внутри), снизить «нависание» (offsets 0..−1px вместо −2px). Учесть историю U7 (иконки ×2) → UB-5 (контейнер ×0.75) → текущая жалоба — маятник размеров качается уже второй раз; желательно зафиксировать целевые размеры в ECONOMY.md §6.4.
+
+### UB2-4. Рёбра фигур «на пару тонов темнее» 🟢 P2 (фича)
+
+Вьюпорт рендерит меши только материалом — рёбер нет: [`viewport-hooks.ts`](../web-app/src/components/viewport-hooks.ts) `MeshStandardMaterial` в :631-637 (raw mesh), :915-928, :995-1004. `EdgesGeometry`/`LineSegments` в сценах не используется вовсе — единственное место `EdgesGeometry` — ViewCube ([`ViewCube.tsx:130`](../web-app/src/components/ViewCube.tsx)).
+
+Предложение пользователя: добавить линии рёбер (`LineSegments` по `EdgesGeometry` с `thresholdAngle`) с цветом «на пару тонов темнее» базового цвета объекта — улучшает читаемость формы, особенно при плоском освещении. Технические соображения:
+- цвет ребра = darken(`obj.color`, ~15–25%) — вычислять из hex;
+- рёбра — ребёнок меша → наследуют visibility/hide, обновлять при смене геометрии (CSG/resize/fillet) и **dispose** старого `EdgesGeometry`;
+- производительность: по одному `LineSegments` на объект, для импортов с большим числом треугольников — ограничить `thresholdAngle` (например, 30–40°), иначе линии утонут в шуме;
+- решение по CSG-результатам и импортам (рёбра по silhouette или полный wireframe) — обсудить отдельно.
+
+### UB2-5. Расширенные тултипы панели экономики 🟡 P1
+
+Сейчас в панели экономики есть только:
+- нативные `title` на трёх кнопках — бонус ([`PropertiesPanel.tsx:165`](../web-app/src/components/PropertiesPanel.tsx)), реклама (:177), отключение баннера (:318);
+- статическая подпись под квестами `economy.tooltip.quests` (:240) и декоративный «(i)» без интерактива (:156).
+
+При этом в проекте есть **двухуровневый Tooltip** с расширенным описанием ([`Tooltip.tsx`](../web-app/src/components/Tooltip.tsx): первый уровень по hover, расширенный по задержке/второму хову, `descriptionKey`) — он подключён через `IconButton`+`TOOLTIP_DATA` ([`constants.ts`](../web-app/src/constants.ts)) к тулбару/CSG/align/mirror, но **не к экономике**. Экономические кнопки — plain `<button>`, не `IconButton` — потребуется либо перевод на `IconButton`, либо обёртка `Tooltip` вокруг произвольного контента.
+
+Охват по просьбе пользователя (все с локализацией ru/en):
+- баланс (что такое токены, что даёт подписка);
+- ежедневный бонус (сброс по серверному времени);
+- реклама (per-reward лимит ≤3/день, кулдаун 5 мин, виды наград);
+- квесты (как засчитываются, когда начисляются токены — при save/export);
+- аренда 24ч (отсчёт от момента покупки, автопродление);
+- подписки (700/нед, 2000/мес, что открывают);
+- кэшбэк (5–25, анти-фарм по хэшу модели).
+Существующие ключи `economy.tooltip.*` ([`ru/translation.json:422-428`](../web-app/src/i18n/locales/ru/translation.json)) покрывают часть текстов; нужны `descriptionKey`-уровень и подключение к элементам.
+
+---
+
+## Предлагаемые приоритеты (черновик, к обсуждению)
+
+1. 🔴 **P0 — UB2-1:** квесты не прогрессируют при создании примитивов (потеря награды; правка точечная — 1 вызов + тест).
+2. 🟡 **P1 — UB2-3b:** читаемость иконок/бейджей экономики.
+3. 🟡 **P1 — UB2-5:** расширенные тултипы (пользователь явно просит + локализация).
+4. 🟢 **P2 — UB2-2, UB2-3a:** тексты/i18n (для UB2-3a ключ уже готов).
+5. 🟢 **P2 — UB2-4:** фича рёбер (нужна оценка производительности и решение по импортам/CSG).
+
+> **Статус 2026-09-23:** все пункты закрыты в порядке приоритета. Для UB2-4 производительность закрыта лимитом 100 000 треугольников (тяжёлые импорты остаются без рёбер).
+
+**Что осталось открытым:** код-сторона закрыта. Ручные проверки на платформе Яндекс Игр: прогресс серии реварда импорта (0/2 → 1/2), рёбра на CSG-результатах/импортах, тултипы экономики на тач-устройствах (hover-only — на тач не показываются, как и прежние нативные `title`).
+
+---
+
+**Связанные материалы:** [`docs/USER_FEEDBACK_ECONOMY.md`](USER_FEEDBACK_ECONOMY.md) (реестры U1–U10, A/B/C, UB-0…UB-5), [`docs/USER_FEEDBACK_EXPORT.md`](USER_FEEDBACK_EXPORT.md), [`ECONOMY.md`](../ECONOMY.md), [`CHANGELOG.md`](../CHANGELOG.md) → `[Unreleased]`, [`docs/PRE_COMMIT_CHECKLIST.md`](PRE_COMMIT_CHECKLIST.md).

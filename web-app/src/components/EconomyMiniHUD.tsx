@@ -1,4 +1,6 @@
 // src/components/EconomyMiniHUD.tsx — Мини-HUD баланса при выделенном объекте (§6.1)
+// UB2-3b: иконки 14→16px (часы 10→12px) — читаемость.
+// UB2-5: расширенные двухуровневые тултипы (баланс/бонус/реклама) с локализацией.
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useEconomyStore } from '../store/economy-store'
@@ -6,6 +8,7 @@ import { ECONOMY_UI } from '../store/economy-ui-config'
 import { TokenIcon, GiftIcon, AdFilmIcon, ClockIcon } from './icons'
 import { LIMITS, isDayPassed } from '../store/economy-config'
 import { useAdCooldown } from '../platform/ad-timers'
+import Tooltip from './Tooltip'
 
 export default function EconomyMiniHUD() {
   const { t } = useTranslation()
@@ -47,38 +50,62 @@ export default function EconomyMiniHUD() {
       fontSize: '12px',
       flexWrap: 'wrap',
     }}>
-      {/* Баланс */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-        <TokenIcon width={14} height={14} />
-        <strong>{tokens}</strong>
-      </div>
-
-      {/* Бонус — всегда показываем состояние */}
-      {ECONOMY_UI.showDailyBonus && (
+      {/* Баланс — UB2-5: расширенный тултип */}
+      <Tooltip
+        tooltip={{
+          labelKey: 'economy.tokensLabel',
+          descriptionKey: 'economy.tooltip.tokensDesc',
+        }}
+        position="bottom"
+      >
         <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-          <GiftIcon width={14} height={14} />
-          {bonusAvailable ? (
-            <span style={{ color: 'var(--success)' }}>+50</span>
-          ) : (
-            <span style={{ color: 'var(--text-muted)' }}>—</span>
-          )}
+          <TokenIcon width={16} height={16} />
+          <strong>{tokens}</strong>
         </div>
+      </Tooltip>
+
+      {/* Бонус — всегда показываем состояние. UB2-5: расширенный тултип */}
+      {ECONOMY_UI.showDailyBonus && (
+        <Tooltip
+          tooltip={{
+            labelKey: 'economy.tooltip.bonusTitle',
+            descriptionKey: 'economy.tooltip.bonusDesc',
+          }}
+          position="bottom"
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <GiftIcon width={16} height={16} />
+            {bonusAvailable ? (
+              <span style={{ color: 'var(--success)' }}>+50</span>
+            ) : (
+              <span style={{ color: 'var(--text-muted)' }}>—</span>
+            )}
+          </div>
+        </Tooltip>
       )}
 
-      {/* Реклама — всегда показываем состояние */}
+      {/* Реклама — всегда показываем состояние. UB2-5: расширенный тултип */}
       {ECONOMY_UI.showAdButton && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-          <AdFilmIcon width={14} height={14} />
-          {canWatchAd ? (
-            <span>{tokensAd.countToday}/3</span>
-          ) : cooldownMs > 0 ? (
-            <span style={{ display: 'flex', alignItems: 'center', gap: '2px', color: 'var(--text-muted)' }}>
-              <ClockIcon width={10} height={10} /> {cooldownLabel}
-            </span>
-          ) : (
-            <span style={{ color: 'var(--text-muted)' }}>—</span>
-          )}
-        </div>
+        <Tooltip
+          tooltip={{
+            labelKey: 'economy.tooltip.adTitle',
+            descriptionKey: 'economy.tooltip.adDesc',
+          }}
+          position="bottom"
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <AdFilmIcon width={16} height={16} />
+            {canWatchAd ? (
+              <span>{tokensAd.countToday}/3</span>
+            ) : cooldownMs > 0 ? (
+              <span style={{ display: 'flex', alignItems: 'center', gap: '2px', color: 'var(--text-muted)' }}>
+                <ClockIcon width={12} height={12} /> {cooldownLabel}
+              </span>
+            ) : (
+              <span style={{ color: 'var(--text-muted)' }}>—</span>
+            )}
+          </div>
+        </Tooltip>
       )}
     </div>
   )

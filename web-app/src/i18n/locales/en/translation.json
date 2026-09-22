@@ -94,7 +94,6 @@
     "header": "Properties",
     "type": "Type",
     "color": "Color",
-    "palette": "Wad's Optimum 16",
     "advancedPicker": "Advanced picker",
     "backToProps": "← Back to properties",
     "lockedExtended": "Extended palette",
@@ -156,7 +155,9 @@
     "title": "Import STL",
     "description": "Choose how to import your model:",
     "payTokens": "Pay {{cost}} tokens",
-    "watchAd": "Watch ads ({{count}}/{{max}} watched, need {{adsNeeded}})",
+    "watchAd": "Watch ads ×{{adsNeeded}} {{series}}/{{adsNeeded}} ({{done}}/{{max}})",
+    "watchAd_one": "Watch {{adsNeeded}} ad {{series}}/{{adsNeeded}} ({{done}}/{{max}})",
+    "watchAd_other": "Watch {{adsNeeded}} ads {{series}}/{{adsNeeded}} ({{done}}/{{max}})",
     "adFailed": "Couldn't show ads. Try paying with tokens."
   },
   "leftPanel": {
@@ -419,11 +420,17 @@
       "bannerOff": "No banner for 24h"
     },
     "tooltip": {
-      "bonus": "Once per day, reset by server time",
-      "ad": "Up to 3 views per day per reward, 5 min cooldown",
+      "bonusTitle": "Daily bonus",
+      "bonusDesc": "+50 tokens once a day. Resets by Yandex server time.",
+      "adTitle": "Ads for tokens",
+      "adDesc": "Rewarded video: +50 tokens. Up to 3 views per day for each reward kind (tokens, import, export, banner), 5-minute pause between views. Each kind has its own counter and cooldown.",
+      "tokensDesc": "In-game currency. Earn: daily bonus, ads, quests, export cashback. Spend: STL export/import, 24h rentals, Pro subscription.",
       "adLimit": "Daily limit",
       "quests": "Reward granted on save or export",
-      "bannerOff": "Hide banner for 24h for 50 tokens or 1 ad (own ad limit)"
+      "questsDesc": "3 quests a day: easy +20, medium +30, hard +50. Progress is tracked from the current scene automatically. Resets at midnight by server time.",
+      "bannerOff": "Hide banner for 24h for 50 tokens or 1 ad (own ad limit)",
+      "rentalsDesc": "24-hour access from the moment of purchase (not until midnight). 3D text and extended palette — 75 tokens; banner off — 50 tokens or 1 ad view.",
+      "subsDesc": "Unlocks 3D text, extended palette and hides the banner for the whole period. Weekly — 700, monthly — 2000 tokens. One-time purchase, no auto-renewal."
     },
     "subscriptions": {
       "weekly": "Weekly",

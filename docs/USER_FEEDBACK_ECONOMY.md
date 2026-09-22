@@ -10,7 +10,7 @@
 > **U3 решён 2026-09-13:** «магазин» = правая панель (`PropertiesPanel` → `EconomyPanel`); левая вкладка убрана, переходы «купить» ведут в правую панель; ECONOMY.md обновлён до v2.2 (§6.3 — два места).
 > **Регрессии A/B/C закрыты 2026-09-14:** A1/A2 (экспорт/импорт за рекламу), B1/B2/B3 (баннер, 3D-текст слева, палитра), C1/C2/C3 (бейджи, токен-куб, квест зеркал) — исправлены, полный `pnpm verify` зелёный (357/357).
 > Проверка: `pnpm verify` — typecheck 0 ошибок, **357/357 тестов (23 файла)**, build/build:yandex успешны.
-> Связанные материалы: [`ECONOMY.md`](../ECONOMY.md) (**v2.3**), [`docs/ECONOMY_CODE_REVIEW.md`](ECONOMY_CODE_REVIEW.md), [`CHANGELOG.md`](../CHANGELOG.md), [`CODE_REVIEW.md`](CODE_REVIEW.md), [`DEVELOPMENT_PLAN.md`](DEVELOPMENT_PLAN.md).
+> Связанные материалы: [`ECONOMY.md`](../ECONOMY.md) (**v2.3**), [`docs/ECONOMY_CODE_REVIEW.md`](ECONOMY_CODE_REVIEW.md), [`CHANGELOG.md`](../CHANGELOG.md), [`CODE_REVIEW.md`](CODE_REVIEW.md), [`DEVELOPMENT_PLAN.md`](DEVELOPMENT_PLAN.md), [`docs/USER_FEEDBACK_UB2.md`](USER_FEEDBACK_UB2.md) (продолжение: UB2-1…UB2-5, 2026-09-22 — квесты/иконки/тултипы, 🔲 ОТКРЫТО).
 
 ---
 

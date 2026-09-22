@@ -77,9 +77,14 @@ export default function ImportModal({
     }
   }, [importCost, busy, onClose, onImport, spendTokens])
 
+  // UB2-2: живой прогресс серии рекламы (0 → 1 → 2). Сбрасывается при новом
+  // запуске серии; после завершения (успех/провал) — снова 0.
+  const [seriesWatched, setSeriesWatched] = useState(0)
+
   const handleWatchAd = useCallback(async () => {
     if (busy) return
     setBusy(true)
+    setSeriesWatched(0)
     try {
       // U12 (P2): открываем диалог выбора файла ДО показа рекламы — в момент
       // клика (user activation). После `await` рекламы браузер блокирует
@@ -87,7 +92,7 @@ export default function ImportModal({
       const file = await openStlFilePicker()
       if (!file) return // отмена выбора — реклама НЕ показывается
       // EC2/U12: серия из 2 роликов подряд ОПЛАЧИВАЕТ импорт (без начисления токенов)
-      const rewarded = await watchAdsForImport(2)
+      const rewarded = await watchAdsForImport(2, (watched) => setSeriesWatched(watched))
       if (!rewarded) {
         notify(t('import.adFailed'), 'error')
         return
@@ -95,6 +100,7 @@ export default function ImportModal({
       onClose()
       await onImport(file)
     } finally {
+      setSeriesWatched(0)
       setBusy(false)
     }
   }, [busy, watchAdsForImport, onClose, onImport, t])
@@ -135,13 +141,22 @@ export default function ImportModal({
           )}
 
           {/* Вариант 2: посмотреть рекламу 2 раза (вид import — свой лимит U9) */}
+          {/* UB2-2: подпись «Посмотреть 2 рекламы 0/2 (0/3)» — цена серии,
+              прогресс текущей серии и дневной лимит вида import */}
           <button
             className="btn btn-compact flex-1"
             disabled={importAdCount + adCost > 3 || busy}
             onClick={handleWatchAd}
             style={{ justifyContent: 'center', padding: '16px 24px', fontSize: '20px' }}
           >
-            <AdFilmIcon size={32} /> {t('import.watchAd', { count: importAdCount, max: 3, adsNeeded: adCost })}
+            <AdFilmIcon size={32} />{' '}
+            {t('import.watchAd', {
+              count: adCost,
+              adsNeeded: adCost,
+              series: seriesWatched,
+              done: importAdCount,
+              max: 3,
+            })}
           </button>
           {importAdCount + adCost > 3 && (
             <div className="modal-hint" style={{ textAlign: 'center', fontSize: '12px', color: 'var(--text-muted)' }}>

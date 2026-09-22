@@ -12,6 +12,7 @@ import { useUiStore } from "../store/ui-store";
 import { isEconomyAvailable } from "../platform";
 import { ECONOMY_UI, DIFFICULTY_ICON, ICON_REGISTRY } from "../store/economy-ui-config";
 import Badge from "./Badge";
+import Tooltip from "./Tooltip";
 import { getCachedServerTime } from "../platform/server-time";
 import { useAdCooldown } from "../platform/ad-timers";
 
@@ -146,14 +147,19 @@ function EconomyPanel() {
     t(`economy.triggers.${trigger}`, { n: target })
 
   // ── Токены и бонусы ──
+  // UB2-5: расширенные тултипы (label мгновенно, описание через 1.5с)
   const tokensSection = (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-        {renderIcon('token', 20, 20)}
-        <span style={{ fontWeight: 'bold', fontSize: '16px' }}>{tokens}</span>
-        <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{t('economy.tokensLabel')}</span>
-      </div>
-      <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>(i)</span>
+      <Tooltip
+        tooltip={{ labelKey: 'economy.tokensLabel', descriptionKey: 'economy.tooltip.tokensDesc' }}
+        position="bottom"
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {renderIcon('token', 20, 20)}
+          <span style={{ fontWeight: 'bold', fontSize: '16px' }}>{tokens}</span>
+          <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{t('economy.tokensLabel')}</span>
+        </div>
+      </Tooltip>
     </div>
   )
 
@@ -161,25 +167,33 @@ function EconomyPanel() {
     <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
       {ECONOMY_UI.showDailyBonus && (
         canClaimBonus ? (
-          <button className="btn btn-compact btn-sm" onClick={handleClaimBonus} disabled={!!busy}
-            title={t('economy.tooltip.bonus')}>
-            {renderIcon('gift', 14, 14)} {t('economy.bonusLabel')}
-          </button>
+          <Tooltip
+            tooltip={{ labelKey: 'economy.tooltip.bonusTitle', descriptionKey: 'economy.tooltip.bonusDesc' }}
+            position="bottom"
+          >
+            <button className="btn btn-compact btn-sm" onClick={handleClaimBonus} disabled={!!busy}>
+              {renderIcon('gift', 18, 18)} {t('economy.bonusLabel')}
+            </button>
+          </Tooltip>
         ) : (
           <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <ClockIcon width={12} height={12} /> {t('economy.bonusClaimed')}
+            <ClockIcon width={14} height={14} /> {t('economy.bonusClaimed')}
           </span>
         )
       )}
       {ECONOMY_UI.showAdButton && (
         canWatchAd ? (
-          <button className="btn btn-compact btn-sm" onClick={handleWatchAdTokens} disabled={!!busy}
-            title={t('economy.tooltip.ad')}>
-            {renderIcon('ad', 14, 14)} {t('economy.adLabel')}
-          </button>
+          <Tooltip
+            tooltip={{ labelKey: 'economy.tooltip.adTitle', descriptionKey: 'economy.tooltip.adDesc' }}
+            position="bottom"
+          >
+            <button className="btn btn-compact btn-sm" onClick={handleWatchAdTokens} disabled={!!busy}>
+              {renderIcon('ad', 18, 18)} {t('economy.adLabel')}
+            </button>
+          </Tooltip>
         ) : cooldownMs > 0 ? (
           <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <ClockIcon width={12} height={12} /> {cooldownLabel}
+            <ClockIcon width={14} height={14} /> {cooldownLabel}
           </span>
         ) : (
           <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{t('economy.adLimitReached')}</span>
@@ -193,9 +207,15 @@ function EconomyPanel() {
     const completedCount = todayQuestsCompleted.length
     return (
       <div>
-        <div style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '6px', color: 'var(--text-muted)' }}>
-          {t('economy.quests')} · {completedCount}/{todayQuests.length}
-        </div>
+        {/* UB2-5: расширенный тултип на заголовке квестов */}
+        <Tooltip
+          tooltip={{ labelKey: 'economy.quests', descriptionKey: 'economy.tooltip.questsDesc' }}
+          position="bottom"
+        >
+          <div style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '6px', color: 'var(--text-muted)' }}>
+            {t('economy.quests')} · {completedCount}/{todayQuests.length}
+          </div>
+        </Tooltip>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
           {todayQuests.map((quest, idx) => {
             const isCompleted = todayQuestsCompleted.includes(quest.difficulty)
@@ -218,7 +238,7 @@ function EconomyPanel() {
               }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
                   <span style={{ fontSize: '11px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    {IconComp && <IconComp width={12} height={12} />}
+                    {IconComp && <IconComp width={14} height={14} />}
                     {quest.difficulty === 'easy' ? t('economy.difficulty.easy') :
                       quest.difficulty === 'medium' ? t('economy.difficulty.medium') :
                         t('economy.difficulty.hard')}
@@ -249,9 +269,9 @@ function EconomyPanel() {
   // «Аренда»): раньше была дублирующая секция «Скрытие баннера» ниже по
   // панели плюс баннер-виджет над тулбаром.
   const rentalsConfig = [
-    { key: 'text3d' as const, cost: 75, icon: <TextIcon width={14} height={14} />, label: t('economy.rentals.text3d.label'), desc: t('economy.rentals.text3d.desc'), adReward: false },
-    { key: 'extendedPalette' as const, cost: 75, icon: <ColorIcon width={14} height={14} />, label: t('economy.rentals.extendedPalette.label'), desc: t('economy.rentals.extendedPalette.desc'), adReward: false },
-    { key: 'disableBanner' as const, cost: 50, icon: <AdFilmIcon width={14} height={14} />, label: t('economy.rentals.disableBanner.label'), desc: t('economy.rentals.disableBanner.desc'), adReward: true },
+    { key: 'text3d' as const, cost: 75, icon: <TextIcon width={16} height={16} />, label: t('economy.rentals.text3d.label'), desc: t('economy.rentals.text3d.desc'), adReward: false },
+    { key: 'extendedPalette' as const, cost: 75, icon: <ColorIcon width={16} height={16} />, label: t('economy.rentals.extendedPalette.label'), desc: t('economy.rentals.extendedPalette.desc'), adReward: false },
+    { key: 'disableBanner' as const, cost: 50, icon: <AdFilmIcon width={16} height={16} />, label: t('economy.rentals.disableBanner.label'), desc: t('economy.rentals.disableBanner.desc'), adReward: true },
   ]
 
   const subsConfig = [
@@ -261,10 +281,16 @@ function EconomyPanel() {
 
   const rentalsSection = (
     <div>
-      <div style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '6px', color: 'var(--text-muted)' }}>
-        <ClockIcon width={14} height={14} style={{ display: 'inline-block', verticalAlign: 'middle', marginRight: '4px' }} />
-        {t('economy.rentals.title')}
-      </div>
+      {/* UB2-5: расширенный тултип на заголовке аренды */}
+      <Tooltip
+        tooltip={{ labelKey: 'economy.rentals.title', descriptionKey: 'economy.tooltip.rentalsDesc' }}
+        position="bottom"
+      >
+        <div style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '6px', color: 'var(--text-muted)' }}>
+          <ClockIcon width={16} height={16} style={{ display: 'inline-block', verticalAlign: 'middle', marginRight: '4px' }} />
+          {t('economy.rentals.title')}
+        </div>
+      </Tooltip>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
         {rentalsConfig.map((r) => {
           const isActive = hasRental(r.key)
@@ -299,15 +325,15 @@ function EconomyPanel() {
                     className="btn btn-compact btn-sm"
                     disabled={tokens < r.cost || busy === r.key}
                     onClick={() => handleBuyRental(r.key)}
+                    title={t('economy.rentals.title')}
                     style={{
                       fontSize: '10px', padding: '2px 6px',
-                      position: 'relative',
-                      display: 'flex', alignItems: 'center', gap: '2px',
+                      display: 'flex', alignItems: 'center', gap: '3px',
                     }}
                   >
-                    <TokenIcon width={10} height={10} /> {r.cost}
-                    {/* Бейдж 💰 → SVG-иконка (§6.4, без эмодзи) */}
-                    <Badge type="tokens" value={String(r.cost)} />
+                    {/* UB2-3b: бейдж убран — он перекрывал маленькую кнопку,
+                        а цена и так видна рядом (иконка + число). Иконка 10→14px. */}
+                    <TokenIcon width={14} height={14} /> {r.cost}
                   </button>
                   {/* FIX (UB-4): единственный способ «рекламой» для скрытия баннера */}
                   {r.adReward && (
@@ -318,13 +344,11 @@ function EconomyPanel() {
                       title={t('economy.tooltip.bannerOff')}
                       style={{
                         fontSize: '10px', padding: '2px 6px',
-                        position: 'relative',
-                        display: 'flex', alignItems: 'center', gap: '2px',
+                        display: 'flex', alignItems: 'center', gap: '3px',
                       }}
                     >
-                      <AdFilmIcon width={10} height={10} /> 1
-                      {/* Бейдж 📺1 → SVG-иконка (§6.4, без эмодзи) */}
-                      <Badge type="ad" value="1" />
+                      {/* UB2-3b: то же — без бейджа, цена видна инлайн */}
+                      <AdFilmIcon width={14} height={14} /> 1
                     </button>
                   )}
                 </div>
@@ -336,10 +360,16 @@ function EconomyPanel() {
 
       {/* Подписки */}
       <div style={{ marginTop: '8px' }}>
-        <div style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '6px', color: 'var(--text-muted)' }}>
-          <CrownIcon width={14} height={14} style={{ display: 'inline-block', verticalAlign: 'middle', marginRight: '4px' }} />
-          {t('economy.subscription')}
-        </div>
+        {/* UB2-5: расширенный тултип на заголовке подписки */}
+        <Tooltip
+          tooltip={{ labelKey: 'economy.subscription', descriptionKey: 'economy.tooltip.subsDesc' }}
+          position="bottom"
+        >
+          <div style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '6px', color: 'var(--text-muted)' }}>
+            <CrownIcon width={16} height={16} style={{ display: 'inline-block', verticalAlign: 'middle', marginRight: '4px' }} />
+            {t('economy.subscription')}
+          </div>
+        </Tooltip>
         {hasActiveSub && subscriptionExpiresAt ? (
           <div style={{
             padding: '4px 8px', borderRadius: '4px', background: 'var(--bg-secondary)',
@@ -355,14 +385,14 @@ function EconomyPanel() {
                 className="btn btn-compact btn-sm"
                 disabled={tokens < s.cost || busy === s.key}
                 onClick={() => handleBuySub(s.key)}
+                title={t('economy.tooltip.subsDesc')}
                 style={{
                   fontSize: '10px', padding: '2px 6px',
-                  position: 'relative', display: 'flex', alignItems: 'center', gap: '2px',
+                  display: 'flex', alignItems: 'center', gap: '3px',
                 }}
               >
-                <TokenIcon width={10} height={10} /> {s.cost}
-                {/* Бейдж 💰 → SVG-иконка (§6.4, без эмодзи) */}
-                <Badge type="tokens" value={String(s.cost)} />
+                {/* UB2-3b: бейдж убран (дублировал инлайн-цену и перекрывал кнопку) */}
+                <TokenIcon width={14} height={14} /> {s.cost}
               </button>
             ))}
           </div>
@@ -688,7 +718,10 @@ export default function PropertiesPanel({
             }}
             style={{ position: 'relative' }}
           >
-            {showNativePicker ? t("properties.palette") : t("properties.advancedPicker")}
+            {/* UB2-3a: при открытом расширенном picker кнопка ВОЗВРАЩАЕТ к обычной
+                палитре — подпись на русском («Обычная палитра», ключ palette.regular),
+                а не бренд «Wad's Optimum 16» латиницей (properties.palette). */}
+            {showNativePicker ? t("palette.regular") : t("properties.advancedPicker")}
             <Badge type="tokens" value="75" isActive={canUseExtendedPicker} />
           </button>
         </div>

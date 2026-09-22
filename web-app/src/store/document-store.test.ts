@@ -44,6 +44,25 @@ vi.mock('../io/project-manager', () => ({
   listProjects: pm.pmList,
 }))
 
+// UB2-1: мокаем CSG-воркер — addShape вызывает workerBuildShape (WASM не нужен)
+const wc = vi.hoisted(() => ({
+  workerBuildShape: vi.fn(),
+  workerSyncObjects: vi.fn(async () => []),
+  workerSyncMesh: vi.fn(async () => ({})),
+  workerCsgBoolean: vi.fn(),
+  workerCsgBooleanWithSync: vi.fn(),
+  workerBuildImportedMesh: vi.fn(),
+  workerApplyFillet: vi.fn(),
+  workerMirrorObject: vi.fn(),
+  workerRebuildScene: vi.fn(),
+  workerRebuildNode: vi.fn(),
+  workerDeleteObjects: vi.fn(async () => undefined),
+  workerClearAll: vi.fn(async () => undefined),
+  isWorkerReady: () => true,
+  disposeWorker: () => undefined,
+}))
+vi.mock('../csg/worker-client', () => wc)
+
 import { computeAABB, extractAndCenterInPlace, useDocumentStore } from './document-store'
 import { useEconomyStore } from './economy-store'
 import { calculateCashbackV2, scanForCashback } from './economy-config'
@@ -382,5 +401,88 @@ describe('saveToProject commitQuests (P0-2)', () => {
     // Сохранение не состоялось — квесты НЕ засчитаны, токены не изменились
     expect(useEconomyStore.getState().tokens).toBe(100)
     expect(useEconomyStore.getState().todayQuestsCompleted).not.toContain('easy')
+  })
+})
+
+// ─── UB2-1: addShape обновляет прогресс квестов (evaluateQuests) ───
+
+describe('addShape quest progress (UB2-1)', () => {
+  const uniqueShapesQuest = {
+    difficulty: 'easy' as const,
+    trigger: 'count_unique_shapes' as const,
+    category: 'diversity' as const,
+    target: 4,
+    progress: 0,
+    reward: 20,
+    completed: false,
+  }
+
+  /** Минимальный «меш» из мокнутого воркера (один вырожденный треугольник) */
+  const stubMesh = () => ({
+    objId: 'obj',
+    vertices: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]),
+    indices: new Uint32Array([0, 1, 2]),
+    normals: null,
+    tris: 1,
+    ms: 1,
+  })
+
+  beforeEach(() => {
+    wc.workerBuildShape.mockReset()
+    wc.workerBuildShape.mockImplementation(async (id: string) => ({ ...stubMesh(), objId: id }))
+    useDocumentStore.setState({
+      objects: {},
+      operations: [],
+      historyIndex: 0,
+      fileName: null,
+      currentProjectId: null,
+      currentProjectName: null,
+      modified: false,
+      selectedIds: [],
+      busy: false,
+    })
+    useEconomyStore.setState({
+      tokens: 100,
+      todayQuests: [uniqueShapesQuest],
+      todayQuestsCompleted: [],
+      todayActions: 0,
+      lastActionTimestamp: null,
+      lastExportHash: null,
+      todayExportHashes: [],
+      todayCashbacks: 0,
+    })
+  })
+
+  it('создание примитива обновляет прогресс квеста (раньше addShape не звал evaluateQuests)', async () => {
+    await useDocumentStore.getState().addShape('cube')
+
+    const quest = useEconomyStore.getState().todayQuests[0]
+    // Один куб = один уникальный тип фигуры → прогресс 1/4
+    expect(quest.progress).toBe(1)
+    expect(quest.completed).toBe(false)
+  })
+
+  it('4 РАЗНЫХ типа фигур завершают квест (уникальные типы, не количество примитивов)', async () => {
+    const store = useDocumentStore.getState()
+    await store.addShape('cube')
+    await store.addShape('sphere')
+    await store.addShape('cylinder')
+    await store.addShape('cone')
+
+    const quest = useEconomyStore.getState().todayQuests[0]
+    expect(quest.progress).toBe(4)
+    expect(quest.completed).toBe(true)
+  })
+
+  it('4 ОДИНАКОВЫХ примитива НЕ завершают квест (прогресс 1/4 — считаются типы)', async () => {
+    const store = useDocumentStore.getState()
+    await store.addShape('cube')
+    await store.addShape('cube')
+    await store.addShape('cube')
+    await store.addShape('cube')
+
+    const quest = useEconomyStore.getState().todayQuests[0]
+    expect(quest.progress).toBe(1)
+    expect(quest.completed).toBe(false)
   })
 })
