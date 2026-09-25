@@ -155,9 +155,9 @@
     "title": "Import STL",
     "description": "Choose how to import your model:",
     "payTokens": "Pay {{cost}} tokens",
-    "watchAd": "Watch ads ×{{adsNeeded}} {{series}}/{{adsNeeded}} ({{done}}/{{max}})",
-    "watchAd_one": "Watch {{adsNeeded}} ad {{series}}/{{adsNeeded}} ({{done}}/{{max}})",
-    "watchAd_other": "Watch {{adsNeeded}} ads {{series}}/{{adsNeeded}} ({{done}}/{{max}})",
+    "watchAd": "Watch ads ×{{adsNeeded}} {{series}}/{{adsNeeded}} (imports {{done}}/{{max}})",
+    "watchAd_one": "Watch {{adsNeeded}} ad {{series}}/{{adsNeeded}} (imports {{done}}/{{max}})",
+    "watchAd_other": "Watch {{adsNeeded}} ads {{series}}/{{adsNeeded}} (imports {{done}}/{{max}})",
     "adFailed": "Couldn't show ads. Try paying with tokens."
   },
   "leftPanel": {

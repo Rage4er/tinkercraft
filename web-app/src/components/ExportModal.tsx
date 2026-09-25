@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { useEconomyStore, scanForCashback } from '../store/economy-store'
 import { isEconomyAvailable } from '../platform'
 import { useAdCooldown } from '../platform/ad-timers'
-import { ECONOMY_COSTS, calculateCashbackBreakdown } from '../store/economy-config'
+import { ECONOMY_COSTS, calculateCashbackBreakdown, adShowsLimit } from '../store/economy-config'
 import { ExportIcon, TokenIcon, AdFilmIcon, ClockIcon } from './icons'
 
 export default function ExportModal({
@@ -186,15 +186,16 @@ export default function ExportModal({
           )}
 
           {/* Вариант 2: посмотреть рекламу (вид export — свой лимит U12) */}
+          {/* UB-7: лимит берём из конфига (adShowsLimit), а не хардкод 3 */}
           <button
             className="btn btn-compact flex-1"
-            disabled={exportAdCount >= 3 || adCooldown.active || busy}
+            disabled={exportAdCount >= adShowsLimit('export') || adCooldown.active || busy}
             onClick={handleWatchAd}
             style={{ justifyContent: 'center', padding: '16px 24px', fontSize: '20px' }}
           >
-            <AdFilmIcon size={32} /> {t('export.watchAd', { count: exportAdCount, max: 3 })}
+            <AdFilmIcon size={32} /> {t('export.watchAd', { count: exportAdCount, max: adShowsLimit('export') })}
           </button>
-          {exportAdCount >= 3 ? (
+          {exportAdCount >= adShowsLimit('export') ? (
             <div className="modal-hint" style={{ textAlign: 'center', fontSize: '12px', color: 'var(--text-muted)' }}>
               {t('economy.adLimit')}
             </div>

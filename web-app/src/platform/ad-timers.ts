@@ -84,3 +84,70 @@ export function useAdCooldown(kind: AdRewardKind): {
         active: remainingMs > 0,
     }
 }
+
+// ─── UB3-5: таймер до сброса ежедневного бонуса ──────────────────────
+
+/**
+ * Чистый геттер: сколько мс осталось до сброса ежедневного бонуса.
+ *
+ * День бонуса определяется календарной датой СЕРВЕРНОГО времени
+ * (isDayPassed сравнивает getFullYear/getMonth/getDate в локальной TZ
+ * браузера) → «момент сброса» = ближайшая полуночь локальной TZ после
+ * момента получения (lastDailyBonus), скорректированная серверным смещением.
+ * 0 — бонус уже доступен (не получен или день сменился).
+ */
+export function getDailyResetRemainingMs(lastDailyBonus: number | null, nowMs: number): number {
+    if (lastDailyBonus === null) return 0
+    const d = new Date(lastDailyBonus)
+    const nextMidnight = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1).getTime()
+    return Math.max(0, nextMidnight - nowMs)
+}
+
+/** Формат UB3-5: ms → "ч:мм:сс" (часы без ведущего нуля) */
+export function formatCountdownHms(ms: number): string {
+    const totalSec = Math.ceil(ms / 1000)
+    const h = Math.floor(totalSec / 3600)
+    const min = Math.floor((totalSec % 3600) / 60)
+    const sec = totalSec % 60
+    return `${h}:${min.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`
+}
+
+/**
+ * Хук «живого» отсчёта до сброса ежедневного бонуса (UB3-5).
+ * Тот же паттерн, что у useAdCooldown: тик 1с по локальным часам
+ * с поправкой на серверное смещение; подписка на lastDailyBonus — чтобы
+ * после получения бонуса отсчёт стартовал без перезагрузки.
+ */
+export function useDailyReset(): {
+    remainingMs: number
+    formatted: string | null
+    /** true, если бонус уже доступен (не получен или сутки прошли) */
+    due: boolean
+} {
+    const lastDailyBonus = useEconomyStore((s) => s.lastDailyBonus)
+    const [nowMs, setNowMs] = useState<number>(() => Date.now() + (getServerTimeOffset() ?? 0))
+
+    useEffect(() => {
+        void getServerTime().then(() => {
+            setNowMs(Date.now() + (getServerTimeOffset() ?? 0))
+        })
+        const iv = setInterval(() => {
+            setNowMs(Date.now() + (getServerTimeOffset() ?? 0))
+        }, 1000)
+        const refresh = setInterval(() => {
+            void getServerTime()
+        }, SERVER_TIME_REFRESH_MS)
+        return () => {
+            clearInterval(iv)
+            clearInterval(refresh)
+        }
+    }, [])
+
+    const remainingMs = getDailyResetRemainingMs(lastDailyBonus, nowMs)
+
+    return {
+        remainingMs,
+        formatted: remainingMs > 0 ? formatCountdownHms(remainingMs) : null,
+        due: lastDailyBonus === null || remainingMs === 0,
+    }
+}

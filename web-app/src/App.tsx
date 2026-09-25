@@ -31,6 +31,7 @@ import { notify } from "./store/notifications";
 import { SNAP_VALUES, AUTOSAVE_DELAY_MS } from "./constants";
 import { getPlatform, initPlatform, isEconomyAvailable } from "./platform";
 import { getInitDonePromise } from "./platform/sdk";
+import { applyDebugTokensGrant, installEconomyDebugHelper } from "./platform/debug-mode";
 import type {
   TransformNR,
   ShapeParams,
@@ -233,6 +234,11 @@ export default function App() {
           await useEconomyStore.getState().loadFromCloud()
           await useEconomyStore.getState().initDailyQuests()
           useEconomyStore.getState().checkSubscriptionExpiry()
+          // UB3-3: debug-хук — выдача 3000 токенов при `?debug-mode`/`?debug-tokens=N`
+          // (и referrer/payload-каналах). Строго ПОСЛЕ loadFromCloud: иначе облако
+          // перезатрёт счёт. Без параметров URL — полный no-op («ничего лишнего»).
+          await applyDebugTokensGrant()
+          void installEconomyDebugHelper()
           // EC1: показать баннер-оффер если нет подписки и аренда не активна
           // B1: единый RO-геттер shouldShowBannerRO() — bannerVisible по умолчанию
           // true (инициализация/merge в economy-store), здесь только страховка от

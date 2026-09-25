@@ -1,7 +1,11 @@
-// src/components/IconBadge.tsx — Бейджи на кнопках инструментов (§6.4 ECONOMY.md v2.0)
+// src/components/IconBadge.tsx — Бейджи на кнопках инструментов (§6.4 ECONOMY.md v2.5)
 // UB2-3b: иконка 16px, компактный контейнер вмещает её (раньше 20px иконка
 // в контейнере minWidth 20/minHeight 16 перекрывала четверть кнопки).
+// UB3-4: заливка убрана (background/boxShadow) — цветовой акцент в иконке
+// (color → currentColor; TokenIcon остаётся intrinsic-золотым), цифра читается
+// за счёт двойной текстовой обводки.
 import { TokenIcon, AdFilmIcon, ClockIcon, CrownIcon } from './icons'
+import { BADGE_TEXT_HALO } from './Badge'
 
 /** Типы бейджей */
 export type BadgeType = 'tokens' | 'ad' | 'timer' | 'crown'
@@ -13,15 +17,15 @@ export interface BadgeProps {
   label?: string
 }
 
-/** Цветовая схема для каждого типа бейджа */
-const badgeStyles: Record<BadgeType, { bg: string; color: string }> = {
-  tokens: { bg: '#fbbf24', color: '#78350f' },    // жёлтый + тёмно-коричневый
-  ad: { bg: '#8b5cf6', color: '#ffffff' },    // фиолетовый + белый
-  timer: { bg: '#10b981', color: '#ffffff' },    // зелёный + белый
-  crown: { bg: '#f59e0b', color: '#ffffff' },    // золотой + белый
+/** UB3-4: акцентный цвет иконки/цифры для каждого типа (без подложки) */
+const badgeStyles: Record<BadgeType, { accent: string }> = {
+  tokens: { accent: '#78350f' }, // тёмно-коричневый (куб TokenIcon — золотой сам по себе)
+  ad: { accent: '#8b5cf6' },     // фиолетовый
+  timer: { accent: '#10b981' },  // зелёный
+  crown: { accent: '#f59e0b' },  // золотой
 }
 
-/** Бейдж ¼ кнопки, pointer-events:none */
+/** Бейдж ¼ кнопки, pointer-events:none, без заливки (UB3-4) */
 export default function IconBadge({ type, label }: BadgeProps) {
   // UB2-3b: иконка 16px, контейнер под неё
   const size = 16
@@ -33,11 +37,11 @@ export default function IconBadge({ type, label }: BadgeProps) {
       case 'tokens':
         return <TokenIcon width={size} height={size} />
       case 'ad':
-        return <AdFilmIcon width={size} height={size} style={{ fill: style.color }} />
+        return <AdFilmIcon width={size} height={size} style={{ color: style.accent }} />
       case 'timer':
-        return <ClockIcon width={size} height={size} style={{ fill: style.color }} />
+        return <ClockIcon width={size} height={size} style={{ color: style.accent }} />
       case 'crown':
-        return <CrownIcon width={size} height={size} style={{ fill: style.color }} />
+        return <CrownIcon width={size} height={size} style={{ color: style.accent }} />
     }
   })()
 
@@ -52,16 +56,15 @@ export default function IconBadge({ type, label }: BadgeProps) {
         alignItems: 'center',
         justifyContent: 'center',
         pointerEvents: 'none',
-        background: style.bg,
-        color: style.color,
+        color: style.accent,
         fontSize: '9px',
         fontWeight: 700,
         borderRadius: 4,
         padding: '1px 3px',
         minWidth: 16,
         minHeight: 12,
-        boxShadow: '0 1px 2px rgba(0, 0, 0, 0.3)',
         lineHeight: 1,
+        textShadow: BADGE_TEXT_HALO,
       }}
     >
       {icon}

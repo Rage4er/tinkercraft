@@ -14,6 +14,11 @@ import {
   LIMITS,
   AD_COOLDOWN_MS,
   ACTION_COOLDOWN_MS,
+  // UB3-1 (ECONOMY.md v2.5): бюджет ПОКАЗОВ, лимит ОПЕРАЦИЙ и число оплаченных
+  // операций для каждого вида rewarded-рекламы (import = серия из 2 роликов).
+  adShowsLimit,
+  adOperationsLimit,
+  adPaidOperations,
   calculateCashbackV2,
   scanForCashback,
   countSceneObjects, // P1-2: единый подсчёт объектов для экспорта/кэшбэка/квестов
@@ -204,6 +209,8 @@ interface EconomyState {
   // ── Actions ──
   addTokens(amount: number): void
   spendTokens(amount: number): boolean
+  /** UB3-3: debug-хук — довести баланс до target (не уменьшает). Только из debug-mode. */
+  grantDebugTokens(target: number): boolean
   /** P2-3: отметить онбординг завершённым (persist + облако) */
   completeOnboarding(): void
   /** E6: зафиксировать хэш экспортированной модели (через set, с persist) */
@@ -529,7 +536,8 @@ function sanitizeAdRewards(
     if (!isPlainObject(entry)) continue // отсутствующий вид → пустой
     base[kind] = {
       lastTimestamp: toNullableTimestamp(entry.lastTimestamp),
-      countToday: toClampedNumber(entry.countToday, 0, 0, LIMITS.adsPerDay),
+      // UB3-1: clamp к бюджету ПОКАЗОВ вида (import допускает 6)
+      countToday: toClampedNumber(entry.countToday, 0, 0, adShowsLimit(kind)),
     }
   }
   return base
@@ -696,6 +704,20 @@ export const useEconomyStore = create<EconomyState>()(
         return true
       },
 
+      // UB3-3: debug-выдача — «доплатить до target», никогда не уменьшает и
+      // не превышает MAX_TOKENS. Вызывается ТОЛЬКО из platform/debug-mode.ts
+      // (детекция debug-mode/debug-tokens в URL), в релизе без параметров
+      // недостижима. В облако уходит как обычный баланс (syncToCloud) — для
+      // draft-прогодов это осознанно: тесты покупок должны переживать reload.
+      grantDebugTokens: (target) => {
+        const cur = get().tokens
+        const next = Math.min(Math.max(cur, Math.floor(target)), MAX_TOKENS)
+        if (next <= cur) return false
+        set({ tokens: next })
+        console.log(`[Economy][DEBUG] grantDebugTokens: ${cur} → ${next}`)
+        return true
+      },
+
       // P2-3: отметить онбординг завершённым. Флаг попадает в persist
       // (localStorage) и в облако через syncToCloud() — единая точка
       // персиста/синхронизации вместо прямого platform.saveData().
@@ -764,7 +786,9 @@ export const useEconomyStore = create<EconomyState>()(
           const kind: AdRewardKind = 'tokens'
           const ad = state.adRewards[kind] ?? emptyAdReward()
 
-          if (isLimitReached(ad.countToday, LIMITS.adsPerDay)) {
+          // UB3-1: бюджет показов вида (единый источник AD_SHOWS_PER_DAY; для
+          // tokens = 3 — поведение не меняется)
+          if (isLimitReached(ad.countToday, adShowsLimit(kind))) {
             console.warn('[Economy] Ad limit reached today (tokens)')
             return false
           }
@@ -793,7 +817,7 @@ export const useEconomyStore = create<EconomyState>()(
           const tokensBefore = get().tokens
           set((st) => {
             const cur = st.adRewards[kind] ?? emptyAdReward()
-            if (isLimitReached(cur.countToday, LIMITS.adsPerDay)) return {}
+            if (isLimitReached(cur.countToday, adShowsLimit(kind))) return {}
             return {
               tokens: st.tokens + EARNINGS_AD_REWARDED,
               adRewards: markAdWatched(st.adRewards, kind, serverTime),
@@ -819,7 +843,7 @@ export const useEconomyStore = create<EconomyState>()(
         const kind: AdRewardKind = 'export'
         const ad = state.adRewards[kind] ?? emptyAdReward()
 
-        if (isLimitReached(ad.countToday, LIMITS.adsPerDay)) {
+        if (isLimitReached(ad.countToday, adShowsLimit(kind))) {
           console.warn('[Economy] Ad limit reached for export')
           return false
         }
@@ -857,20 +881,26 @@ export const useEconomyStore = create<EconomyState>()(
       // проверяется один раз в начале серии, между показами паузы НЕТ.
       // U12 (P2): серия ОПЛАЧИВАЕТ импорт — токены НЕ начисляются ни за один
       // ролик (раньше начислялись +50 за каждый — регрессия P2). Счётчик вида
-      // import увеличивается на каждый показанный ролик (серия 2 ролика = +2),
-      // лимит «≤3/день» ограничивает ПОКАЗЫ, а не серии (§2 ECONOMY.md v2.1).
-      // Полная серия (все N роликов) = «импорт оплачен». Частичный просмотр
-      // (отказ на 2-й) НЕ возвращает успех — импорт не выполняется, токены
-      // также НЕ начисляются (нечего частично «одаривать» — реклама была
-      // оплатой операции, а не заработком).
+      // import считает ПОКАЗЫ (серия 2 ролика = +2).
+      // UB3-1 (ECONOMY.md v2.5): дневной контракт импорта — «3 импорта/сутки,
+      // до 6 показов». Серия может начаться, только если (а) оплаченных
+      // операций (floor(shows/2)) ещё меньше 3 и (б) остатка показов хватает на
+      // ВСЮ серию (countToday + count <= 6) — иначе ролик «сгорел бы» на
+      // середине. Частичный просмотр (отказ на 2-й) НЕ засчитывает операцию:
+      // импорт не выполняется, токены не начисляются.
       watchAdsForImport: async (count: number, onProgress?: (watched: number, total: number) => void): Promise<boolean> => {
         const state = get()
         const kind: AdRewardKind = 'import'
         const ad = state.adRewards[kind] ?? emptyAdReward()
+        const showsBudget = adShowsLimit(kind) // 6
 
-        // Проверяем лимит и кулдаун ТОЛЬКО вида import (U1/U9)
-        if (isLimitReached(ad.countToday, LIMITS.adsPerDay)) {
-          console.warn('[Economy] Ad limit reached for import')
+        // UB3-1: лимит ОПЕРАЦИЙ (3 импорта/день) + бюджет показов на всю серию
+        if (isLimitReached(adPaidOperations(ad.countToday, kind), adOperationsLimit(kind))) {
+          console.warn('[Economy] Import operations limit reached today')
+          return false
+        }
+        if (ad.countToday + count > showsBudget) {
+          console.warn('[Economy] Import ad shows budget exhausted')
           return false
         }
 
@@ -889,9 +919,9 @@ export const useEconomyStore = create<EconomyState>()(
         const { getServerTime } = await import('../platform/server-time')
         let watchedCount = 0
         for (let i = 0; i < count; i++) {
-          // Дневной лимит вида import не даёт превысить 3/день даже в середине серии
+          // UB3-1: бюджет показов вида import (6/день) не даём превысить и в середине серии
           const cur = get().adRewards[kind] ?? emptyAdReward()
-          if (isLimitReached(cur.countToday, LIMITS.adsPerDay)) break
+          if (isLimitReached(cur.countToday, showsBudget)) break
           const rewarded = await platform.showRewardedVideo()
           if (!rewarded) break
           watchedCount++
@@ -925,7 +955,7 @@ export const useEconomyStore = create<EconomyState>()(
         const ad = state.adRewards[kind] ?? emptyAdReward()
 
         // U1/U9: лимит вида banner (не общий для всех rewarded-показов)
-        if (isLimitReached(ad.countToday, LIMITS.adsPerDay)) {
+        if (isLimitReached(ad.countToday, adShowsLimit(kind))) {
           console.warn('[Economy] Banner ad limit reached today')
           return { ok: false }
         }
@@ -976,11 +1006,14 @@ export const useEconomyStore = create<EconomyState>()(
       },
       getAdRewardsLeftToday: (kind: AdRewardKind) => {
         const ad = get().adRewards[kind] ?? emptyAdReward()
-        return Math.max(0, LIMITS.adsPerDay - ad.countToday)
+        // UB3-1: остаток ПОКАЗОВ вида (import — бюджет 6, остальные 3)
+        return Math.max(0, adShowsLimit(kind) - ad.countToday)
       },
       canWatchAdKind: (kind: AdRewardKind) => {
         const ad = get().adRewards[kind] ?? emptyAdReward()
-        return !isLimitReached(ad.countToday, LIMITS.adsPerDay)
+        // UB3-1: для импорта нужна ещё и проверка «хватает ли показов на серию»
+        // (см. watchAdsForImport) — здесь только базовый бюджет вида.
+        return !isLimitReached(ad.countToday, adShowsLimit(kind))
           && get().getAdCooldownRemaining(kind) === 0
       },
 

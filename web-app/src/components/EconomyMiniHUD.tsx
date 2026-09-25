@@ -1,42 +1,32 @@
 // src/components/EconomyMiniHUD.tsx — Мини-HUD баланса при выделенном объекте (§6.1)
 // UB2-3b: иконки 14→16px (часы 10→12px) — читаемость.
 // UB2-5: расширенные двухуровневые тултипы (баланс/бонус/реклама) с локализацией.
-import { useEffect, useState } from 'react'
-import { useTranslation } from 'react-i18next'
+// UB3-5: после получения бонуса — подарок + тикающий «ч:мм:сс» до сброса
+// (вместо «—»); источник — useDailyReset (тот же паттерн, что у кулдауна).
 import { useEconomyStore } from '../store/economy-store'
 import { ECONOMY_UI } from '../store/economy-ui-config'
 import { TokenIcon, GiftIcon, AdFilmIcon, ClockIcon } from './icons'
-import { LIMITS, isDayPassed } from '../store/economy-config'
-import { useAdCooldown } from '../platform/ad-timers'
+import { adShowsLimit } from '../store/economy-config'
+import { useAdCooldown, useDailyReset } from '../platform/ad-timers'
 import Tooltip from './Tooltip'
 
 export default function EconomyMiniHUD() {
-  const { t } = useTranslation()
   const tokens = useEconomyStore((s) => s.tokens)
   // U1/U9: HUD показывает состояние вида `tokens` (реклама за токены)
   const adRewardsTokens = useEconomyStore((s) => s.adRewards.tokens)
-  const lastDailyBonus = useEconomyStore((s) => s.lastDailyBonus)
 
   // ── U2: живой посекундный отсчёт кулдауна рекламы (вид `tokens`).
   // Тикает по локальным часам с поправкой на серверное смещение —
   // «м:сс» убывает плавно, а не стоит на месте до обновления кэша 30с.
   const { remainingMs: cooldownMs, formatted: cooldownLabel } = useAdCooldown('tokens')
+  // UB3-5: отсчёт до полуночного сброса бонуса (due = бонус доступен)
+  const dailyReset = useDailyReset()
 
-  // U1/U9: кулдаун/лимит вида `tokens` (свой у каждого вида награды)
+  // U1/U9: кулдаун/лимит вида `tokens` (свой у каждого вида награды).
+  // UB3-1: дневной бюджет показов — per-kind (adShowsLimit), хардкод `/3` убран.
+  const tokensAdLimit = adShowsLimit('tokens')
   const tokensAd = adRewardsTokens ?? { lastTimestamp: null, countToday: 0 }
-  const canWatchAd = tokensAd.countToday < LIMITS.adsPerDay && cooldownMs === 0
-
-  // Бонус доступен (день сменился по серверной дате)
-  const [bonusAvailable, setBonusAvailable] = useState(true)
-  useEffect(() => {
-    let mounted = true
-    const check = async () => {
-      const ok = await isDayPassed(lastDailyBonus)
-      if (mounted) setBonusAvailable(ok)
-    }
-    void check()
-    return () => { mounted = false }
-  }, [lastDailyBonus])
+  const canWatchAd = tokensAd.countToday < tokensAdLimit && cooldownMs === 0
 
   // EC17: показываем состояние вместо скрытия
   return (
@@ -75,10 +65,11 @@ export default function EconomyMiniHUD() {
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
             <GiftIcon width={16} height={16} />
-            {bonusAvailable ? (
+            {dailyReset.due ? (
               <span style={{ color: 'var(--success)' }}>+50</span>
             ) : (
-              <span style={{ color: 'var(--text-muted)' }}>—</span>
+              // UB3-5: вместо «—» — тикающий остаток до полуночного сброса
+              <span style={{ color: 'var(--text-muted)' }}>{dailyReset.formatted}</span>
             )}
           </div>
         </Tooltip>
@@ -96,7 +87,8 @@ export default function EconomyMiniHUD() {
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
             <AdFilmIcon width={16} height={16} />
             {canWatchAd ? (
-              <span>{tokensAd.countToday}/3</span>
+              /* UB3-1: бюджет показов вида из конфига (без хардкода) */
+              <span>{tokensAd.countToday}/{tokensAdLimit}</span>
             ) : cooldownMs > 0 ? (
               <span style={{ display: 'flex', alignItems: 'center', gap: '2px', color: 'var(--text-muted)' }}>
                 <ClockIcon width={12} height={12} /> {cooldownLabel}
@@ -106,7 +98,8 @@ export default function EconomyMiniHUD() {
             )}
           </div>
         </Tooltip>
-      )}
-    </div>
+      )
+      }
+    </div >
   )
 }

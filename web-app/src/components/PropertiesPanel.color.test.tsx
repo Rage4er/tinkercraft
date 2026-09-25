@@ -49,9 +49,10 @@ vi.mock('../platform/server-time', () => ({
     getServerTimeOffset: () => 0,
 }))
 
-// Кулдауны рекламы — заглушка (никаких таймеров в тесте)
+// Кулдауны рекламы и ежедневный сброс — заглушки (никаких таймеров в тесте)
 vi.mock('../platform/ad-timers', () => ({
     useAdCooldown: () => ({ remainingMs: 0, formatted: null, active: false }),
+    useDailyReset: () => ({ remainingMs: 0, formatted: null }),
 }))
 
 // B3/UB-1: ui-store — мокаем флаги правой панели (economyPanelOpen) и

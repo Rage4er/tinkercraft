@@ -880,12 +880,14 @@ describe('watchAdsForImport серия (P1-6/U12)', () => {
         expect(s.adRewards.tokens.countToday).toBe(0)
     })
 
-    it('уважает дневной лимит 3/день вида import', async () => {
+    // UB3-1 (ECONOMY.md v2.5): дневной контракт импорта — 3 импорта/сутки,
+    // каждый = серия из 2 роликов → бюджет показов вида import = 6.
+    it('отклоняет серию при 3 оплаченных импортах (6 показов = бюджет исчерпан)', async () => {
         useEconomyStore.setState({
             tokens: 100,
             adRewards: {
                 tokens: { lastTimestamp: null, countToday: 0 },
-                import: { lastTimestamp: null, countToday: LIMITS.adsPerDay },
+                import: { lastTimestamp: null, countToday: 6 }, // 3 импорта = floor(6/2)
                 export: { lastTimestamp: null, countToday: 0 },
                 banner: { lastTimestamp: null, countToday: 0 },
             },
@@ -893,6 +895,43 @@ describe('watchAdsForImport серия (P1-6/U12)', () => {
         const ok = await useEconomyStore.getState().watchAdsForImport(2)
         expect(ok).toBe(false)
         expect(useEconomyStore.getState().tokens).toBe(100)
+    })
+
+    it('UB3-1: после 1 импорта (2 показа) вторая серия доступна — 3 импорта/сутки', async () => {
+        h.setServerTime(1_700_000_000_000)
+        useEconomyStore.setState({ tokens: 100 })
+        h.platform.showRewardedVideo.mockReset()
+        h.platform.showRewardedVideo.mockResolvedValue(true)
+
+        // 1-й импорт
+        expect(await useEconomyStore.getState().watchAdsForImport(2)).toBe(true)
+        expect(useEconomyStore.getState().adRewards.import.countToday).toBe(2)
+        // кулдаун вида между сериями — проматываем серверное время
+        h.setServerTime(1_700_000_000_000 + 6 * 60 * 1000)
+        // 2-й импорт (после UB3-1 разрешён: было 2+2<=6)
+        expect(await useEconomyStore.getState().watchAdsForImport(2)).toBe(true)
+        h.setServerTime(1_700_000_000_000 + 12 * 60 * 1000)
+        // 3-й импорт (4+2<=6)
+        expect(await useEconomyStore.getState().watchAdsForImport(2)).toBe(true)
+        expect(useEconomyStore.getState().adRewards.import.countToday).toBe(6)
+        // 4-й — лимит операций
+        h.setServerTime(1_700_000_000_000 + 18 * 60 * 1000)
+        expect(await useEconomyStore.getState().watchAdsForImport(2)).toBe(false)
+    })
+
+    it('UB3-1: остаток показов меньше серии → отказ (без «сгоревшего» ролика)', async () => {
+        useEconomyStore.setState({
+            tokens: 100,
+            adRewards: {
+                tokens: { lastTimestamp: null, countToday: 0 },
+                import: { lastTimestamp: null, countToday: 5 }, // 2 импорта + 1 потерянный
+                export: { lastTimestamp: null, countToday: 0 },
+                banner: { lastTimestamp: null, countToday: 0 },
+            },
+        })
+        // 5 + 2 > 6 → не хватает бюджета показов на серию
+        expect(await useEconomyStore.getState().watchAdsForImport(2)).toBe(false)
+        expect(h.platform.showRewardedVideo).not.toHaveBeenCalled()
     })
 })
 

@@ -14,7 +14,8 @@ import { ECONOMY_UI, DIFFICULTY_ICON, ICON_REGISTRY } from "../store/economy-ui-
 import Badge from "./Badge";
 import Tooltip from "./Tooltip";
 import { getCachedServerTime } from "../platform/server-time";
-import { useAdCooldown } from "../platform/ad-timers";
+import { useAdCooldown, useDailyReset } from "../platform/ad-timers";
+import { adShowsLimit } from "../store/economy-config";
 
 // P1-8: единый источник «сейчас» — серверное время (§5 ECONOMY.md).
 // Форматтеры оставшегося времени аренды/подписки используют кэш серверного
@@ -79,6 +80,8 @@ function EconomyPanel() {
   // Значение пересчитывается раз в секунду по локальным часам с поправкой
   // на серверное смещение — «м:сс» тикает, а не стоит на месте 30с.
   const { remainingMs: cooldownMs, formatted: cooldownLabel } = useAdCooldown('tokens')
+  // UB3-5: живой отсчёт до сброса ежедневного бонуса (ч:мм:сс до полуночи)
+  const dailyReset = useDailyReset()
 
   // Бонус доступен (день сменился по серверной дате)
   useEffect(() => {
@@ -93,8 +96,9 @@ function EconomyPanel() {
     return () => clearInterval(iv)
   }, [lastDailyBonus])
 
-  // U1/U9: лимит/кулдаун вида `tokens` (свой у каждого вида награды)
-  const canWatchAd = tokensAdCount < 3 && cooldownMs === 0
+  // U1/U9: лимит/кулдаун вида `tokens` (свой у каждого вида награды).
+  // UB3-1: лимит берём из конфига показов вида, а не хардкод 3.
+  const canWatchAd = tokensAdCount < adShowsLimit('tokens') && cooldownMs === 0
 
   const handleBuyRental = async (key: RentalKey) => {
     if (busy) return
@@ -148,6 +152,9 @@ function EconomyPanel() {
 
   // ── Токены и бонусы ──
   // UB2-5: расширенные тултипы (label мгновенно, описание через 1.5с)
+  // UB3-2: иконки экономических секций увеличены ×2 (см. ECONOMY.md §6.4 —
+  // зафиксированная таблица размеров: баланс 40, кнопки бонуса/рекламы 36,
+  // статусы/квесты 28, заголовки и строки аренды 32, иконки в кнопках 20).
   const tokensSection = (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
       <Tooltip
@@ -155,7 +162,7 @@ function EconomyPanel() {
         position="bottom"
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          {renderIcon('token', 20, 20)}
+          {renderIcon('token', 40, 40)}
           <span style={{ fontWeight: 'bold', fontSize: '16px' }}>{tokens}</span>
           <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{t('economy.tokensLabel')}</span>
         </div>
@@ -172,13 +179,20 @@ function EconomyPanel() {
             position="bottom"
           >
             <button className="btn btn-compact btn-sm" onClick={handleClaimBonus} disabled={!!busy}>
-              {renderIcon('gift', 18, 18)} {t('economy.bonusLabel')}
+              {renderIcon('gift', 36, 36)} {t('economy.bonusLabel')}
             </button>
           </Tooltip>
         ) : (
-          <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <ClockIcon width={14} height={14} /> {t('economy.bonusClaimed')}
-          </span>
+          // UB3-5: вместо «уже получено» — подарок + тикающий остаток до
+          // полуночи (сброс бонуса), как откат у рекламы. Тултип тот же.
+          <Tooltip
+            tooltip={{ labelKey: 'economy.tooltip.bonusTitle', descriptionKey: 'economy.tooltip.bonusDesc' }}
+            position="bottom"
+          >
+            <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <GiftIcon width={28} height={28} /> {dailyReset.formatted ?? t('economy.bonusClaimed')}
+            </span>
+          </Tooltip>
         )
       )}
       {ECONOMY_UI.showAdButton && (
@@ -188,12 +202,12 @@ function EconomyPanel() {
             position="bottom"
           >
             <button className="btn btn-compact btn-sm" onClick={handleWatchAdTokens} disabled={!!busy}>
-              {renderIcon('ad', 18, 18)} {t('economy.adLabel')}
+              {renderIcon('ad', 36, 36)} {t('economy.adLabel')}
             </button>
           </Tooltip>
         ) : cooldownMs > 0 ? (
           <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <ClockIcon width={14} height={14} /> {cooldownLabel}
+            <ClockIcon width={28} height={28} /> {cooldownLabel}
           </span>
         ) : (
           <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{t('economy.adLimitReached')}</span>
@@ -238,7 +252,7 @@ function EconomyPanel() {
               }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
                   <span style={{ fontSize: '11px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    {IconComp && <IconComp width={14} height={14} />}
+                    {IconComp && <IconComp width={28} height={28} />}
                     {quest.difficulty === 'easy' ? t('economy.difficulty.easy') :
                       quest.difficulty === 'medium' ? t('economy.difficulty.medium') :
                         t('economy.difficulty.hard')}
@@ -269,9 +283,9 @@ function EconomyPanel() {
   // «Аренда»): раньше была дублирующая секция «Скрытие баннера» ниже по
   // панели плюс баннер-виджет над тулбаром.
   const rentalsConfig = [
-    { key: 'text3d' as const, cost: 75, icon: <TextIcon width={16} height={16} />, label: t('economy.rentals.text3d.label'), desc: t('economy.rentals.text3d.desc'), adReward: false },
-    { key: 'extendedPalette' as const, cost: 75, icon: <ColorIcon width={16} height={16} />, label: t('economy.rentals.extendedPalette.label'), desc: t('economy.rentals.extendedPalette.desc'), adReward: false },
-    { key: 'disableBanner' as const, cost: 50, icon: <AdFilmIcon width={16} height={16} />, label: t('economy.rentals.disableBanner.label'), desc: t('economy.rentals.disableBanner.desc'), adReward: true },
+    { key: 'text3d' as const, cost: 75, icon: <TextIcon width={32} height={32} />, label: t('economy.rentals.text3d.label'), desc: t('economy.rentals.text3d.desc'), adReward: false },
+    { key: 'extendedPalette' as const, cost: 75, icon: <ColorIcon width={32} height={32} />, label: t('economy.rentals.extendedPalette.label'), desc: t('economy.rentals.extendedPalette.desc'), adReward: false },
+    { key: 'disableBanner' as const, cost: 50, icon: <AdFilmIcon width={32} height={32} />, label: t('economy.rentals.disableBanner.label'), desc: t('economy.rentals.disableBanner.desc'), adReward: true },
   ]
 
   const subsConfig = [
@@ -287,7 +301,7 @@ function EconomyPanel() {
         position="bottom"
       >
         <div style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '6px', color: 'var(--text-muted)' }}>
-          <ClockIcon width={16} height={16} style={{ display: 'inline-block', verticalAlign: 'middle', marginRight: '4px' }} />
+          <ClockIcon width={32} height={32} style={{ display: 'inline-block', verticalAlign: 'middle', marginRight: '4px' }} />
           {t('economy.rentals.title')}
         </div>
       </Tooltip>
@@ -320,7 +334,10 @@ function EconomyPanel() {
                     : t('economy.status.active')}
                 </span>
               ) : (
-                <div style={{ display: 'flex', gap: '4px' }}>
+                // UB3-2: кнопки «токены» и «ревард» — друг над другом
+                // (flexDirection: column): в панели 200px две кнопки в строку
+                // не влезали и обрезались.
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'stretch' }}>
                   <button
                     className="btn btn-compact btn-sm"
                     disabled={tokens < r.cost || busy === r.key}
@@ -328,12 +345,12 @@ function EconomyPanel() {
                     title={t('economy.rentals.title')}
                     style={{
                       fontSize: '10px', padding: '2px 6px',
-                      display: 'flex', alignItems: 'center', gap: '3px',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '3px',
                     }}
                   >
                     {/* UB2-3b: бейдж убран — он перекрывал маленькую кнопку,
-                        а цена и так видна рядом (иконка + число). Иконка 10→14px. */}
-                    <TokenIcon width={14} height={14} /> {r.cost}
+                        а цена и так видна рядом (иконка + число). */}
+                    <TokenIcon width={20} height={20} /> {r.cost}
                   </button>
                   {/* FIX (UB-4): единственный способ «рекламой» для скрытия баннера */}
                   {r.adReward && (
@@ -344,11 +361,11 @@ function EconomyPanel() {
                       title={t('economy.tooltip.bannerOff')}
                       style={{
                         fontSize: '10px', padding: '2px 6px',
-                        display: 'flex', alignItems: 'center', gap: '3px',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '3px',
                       }}
                     >
                       {/* UB2-3b: то же — без бейджа, цена видна инлайн */}
-                      <AdFilmIcon width={14} height={14} /> 1
+                      <AdFilmIcon width={20} height={20} /> 1
                     </button>
                   )}
                 </div>
@@ -366,7 +383,7 @@ function EconomyPanel() {
           position="bottom"
         >
           <div style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '6px', color: 'var(--text-muted)' }}>
-            <CrownIcon width={16} height={16} style={{ display: 'inline-block', verticalAlign: 'middle', marginRight: '4px' }} />
+            <CrownIcon width={32} height={32} style={{ display: 'inline-block', verticalAlign: 'middle', marginRight: '4px' }} />
             {t('economy.subscription')}
           </div>
         </Tooltip>
@@ -392,7 +409,7 @@ function EconomyPanel() {
                 }}
               >
                 {/* UB2-3b: бейдж убран (дублировал инлайн-цену и перекрывал кнопку) */}
-                <TokenIcon width={14} height={14} /> {s.cost}
+                <TokenIcon width={20} height={20} /> {s.cost}
               </button>
             ))}
           </div>

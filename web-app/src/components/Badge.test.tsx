@@ -84,4 +84,28 @@ describe('Badge (UB2-3b: иконка 14px внутри контейнера)', 
         expect(goldPath).toBe(true)
         act(() => { root.unmount() })
     })
+
+    // UB3-4: заливка убрана у ВСЕХ бейджей (перекрывали кнопки тулбара),
+    // токен остаётся золотым за счёт intrinsic-заливки самого TokenIcon.
+    it('UB3-4: ни один тип бейджа не имеет фона и тени', () => {
+        const cases: Array<Parameters<typeof Badge>[0]> = [
+            { type: 'tokens', value: '75' },
+            { type: 'tokens', value: '75', isActive: true },
+            { type: 'ad', value: '1' },
+            { type: 'ad', value: '1', isActive: true },
+            { type: 'cooldown', value: '0:30' },
+            { type: 'pro' },
+        ]
+        for (const props of cases) {
+            const { container, root } = renderToContainer(<Badge {...props} />)
+            const badge = container.querySelector('span[style]') as HTMLElement | null
+            expect(badge).not.toBeNull()
+            expect(badge!.style.background).toBe('')
+            expect(badge!.style.backgroundColor).toBe('')
+            expect(badge!.style.boxShadow).toBe('')
+            // читаемость цифры — двойная обводка (тёмная + светлая)
+            expect(badge!.style.textShadow).not.toBe('')
+            act(() => { root.unmount() })
+        }
+    })
 })

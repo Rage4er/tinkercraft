@@ -41,6 +41,17 @@ export const EARNINGS_DAILY_BONUS = 50
 /** Просмотр рекламы */
 export const EARNINGS_AD_REWARDED = 50
 
+/**
+ * UB3-1 (v2.5): сколько рекламных РОЛИКОВ стоит одна операция вида награды.
+ * `import` = 2 (серия из двух роликов, §3.1 ECONOMY.md), остальные виды = 1.
+ */
+export const AD_OPERATION_COST = {
+  tokens: 1,
+  import: 2,
+  export: 1,
+  banner: 1,
+} as const
+
 /** Ежедневные задания */
 export const EARNINGS_QUESTS = {
   easy: 20,
@@ -79,9 +90,16 @@ export const LIMITS = {
 
   /**
    * U1/U9: просмотры рекламы в день — НА КАЖДЫЙ ВИД награды
-   * (tokens / import / export / banner), §2 ECONOMY.md v2.3
+   * (tokens / import / export / banner), §2 ECONOMY.md v2.3.
+   * ⚠️ UB3-1 (v2.5): для вида `import` это лимит **операций** (импортов),
+   * бюджет ПОКАЗОВ для него — `AD_SHOWS_PER_DAY.import` (= 6).
    */
   adsPerDay: 3,
+  /**
+   * UB3-1 (v2.5): оплачиваемых рекламой ИМПОРТОВ в день. Один импорт стоит
+   * серию из 2 роликов → дневной бюджет показов вида `import` = 6.
+   */
+  importsPerDay: 3,
   /** Кулдаун между рекламой (мс) — на каждый вид награды (U1) */
   adCooldownMs: 5 * 60 * 1000,
 
@@ -96,6 +114,43 @@ export const LIMITS = {
   /** Ежедневный бонус — 1 раз в день */
   dailyBonusPerDay: 1,
 } as const
+
+/**
+ * UB3-1 (v2.5): бюджет рекламных ПОКАЗОВ в день на каждый вид награды.
+ *
+ * Контракт UB3-1: «3 импорта в сутки, каждый оплачивается серией из 2 роликов»
+ * → для вида `import` бюджет показов = 3 × 2 = 6. Для видов с ценой 1 ролик
+ * бюджет совпадает с `LIMITS.adsPerDay` (3 показа = 3 операции), то есть
+ * поведение tokens / export / banner НЕ меняется.
+ */
+export const AD_SHOWS_PER_DAY = {
+  tokens: LIMITS.adsPerDay * AD_OPERATION_COST.tokens,
+  import: LIMITS.importsPerDay * AD_OPERATION_COST.import, // 3 × 2 = 6
+  export: LIMITS.adsPerDay * AD_OPERATION_COST.export,
+  banner: LIMITS.adsPerDay * AD_OPERATION_COST.banner,
+} as const
+
+/** Вид rewarded-рекламы (совпадает с AdRewardKind в economy-store) */
+export type AdRewardKindName = keyof typeof AD_OPERATION_COST
+
+/** UB3-1: дневной бюджет ПОКАЗОВ для вида (import = 6, остальные = 3) */
+export function adShowsLimit(kind: AdRewardKindName): number {
+  return AD_SHOWS_PER_DAY[kind]
+}
+
+/** UB3-1: лимит ОПЕРАЦИЙ вида в день (import = 3 импорта, остальные = 3) */
+export function adOperationsLimit(kind: AdRewardKindName): number {
+  return Math.floor(AD_SHOWS_PER_DAY[kind] / AD_OPERATION_COST[kind])
+}
+
+/**
+ * UB3-1: сколько ОПЕРАЦИЙ вида оплачено сегодня по числу показов.
+ * Частичная серия (показ был, операция не оплачена) операцию не засчитывает:
+ * 3 показа импорта = 1 оплаченный импорт + 1 «сгоревший» ролик.
+ */
+export function adPaidOperations(countToday: number, kind: AdRewardKindName): number {
+  return Math.floor(Math.max(0, countToday) / AD_OPERATION_COST[kind])
+}
 
 // ─── Кулдауны ───────────────────────────────────────────────────────
 

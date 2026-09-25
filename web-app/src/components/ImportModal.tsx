@@ -7,7 +7,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useEconomyStore } from '../store/economy-store'
 import { isEconomyAvailable } from '../platform'
-import { ECONOMY_COSTS } from '../store/economy-config'
+import { ECONOMY_COSTS, AD_OPERATION_COST, adPaidOperations, adOperationsLimit, adShowsLimit } from '../store/economy-config'
 import { notify } from '../store/notifications'
 import { openStlFilePicker } from '../io/stl-import'
 import { ImportIcon, TokenIcon, AdFilmIcon } from './icons'
@@ -36,7 +36,13 @@ export default function ImportModal({
   const economyActive = isEconomyAvailable()
 
   const importCost = ECONOMY_COSTS.importSTL
-  const adCost = 2
+  const adCost = AD_OPERATION_COST.import
+  // UB3-1 (ECONOMY.md v2.5): счётчик в скобках — ОПЛАЧЕННЫЕ ИМПОРТЫ (floor(shows/2)),
+  // а не показы; дневной бюджет показов вида import = 6 (= 3 импорта × 2 ролика).
+  const importsDone = adPaidOperations(importAdCount, 'import')
+  const importsMax = adOperationsLimit('import')
+  const seriesFitsBudget = importAdCount + adCost <= adShowsLimit('import')
+  const adExhausted = importsDone >= importsMax || !seriesFitsBudget
 
   // E3: bypass подписки — через useEffect, НЕ в render-фазе
   // (side-effect в теле компонента вызывался дважды в StrictMode)
@@ -141,11 +147,11 @@ export default function ImportModal({
           )}
 
           {/* Вариант 2: посмотреть рекламу 2 раза (вид import — свой лимит U9) */}
-          {/* UB2-2: подпись «Посмотреть 2 рекламы 0/2 (0/3)» — цена серии,
-              прогресс текущей серии и дневной лимит вида import */}
+          {/* UB3-1 (ECONOMY.md v2.5): «Импортов: 0/3» — ОПЛАЧЕННЫЕ ИМПОРТЫ
+              (floor(показов/2)), а не показы; бюджет 6 показов = 3 импорта */}
           <button
             className="btn btn-compact flex-1"
-            disabled={importAdCount + adCost > 3 || busy}
+            disabled={adExhausted || busy}
             onClick={handleWatchAd}
             style={{ justifyContent: 'center', padding: '16px 24px', fontSize: '20px' }}
           >
@@ -154,11 +160,11 @@ export default function ImportModal({
               count: adCost,
               adsNeeded: adCost,
               series: seriesWatched,
-              done: importAdCount,
-              max: 3,
+              done: importsDone,
+              max: importsMax,
             })}
           </button>
-          {importAdCount + adCost > 3 && (
+          {adExhausted && (
             <div className="modal-hint" style={{ textAlign: 'center', fontSize: '12px', color: 'var(--text-muted)' }}>
               {t('economy.adLimit')}
             </div>
