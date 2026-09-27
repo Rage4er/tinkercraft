@@ -23,7 +23,7 @@
 cd web-app
 pnpm dev          # dev-сервер (порт 5000)
 pnpm build        # production-сборка
-pnpm test         # запуск тестов (205 тестов)
+pnpm test         # запуск тестов (414 тестов в 27 файлах)
 pnpm typecheck    # tsc --noEmit
 pnpm verify       # полная проверка: typecheck + test + build + build:yandex
 ```
@@ -102,7 +102,7 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 
 ### Тесты
 - Type-level тесты: `src/csg/types.test.ts`
-- Unit-тесты: `src/csg/*.test.ts`, `src/io/*.test.ts`, `src/store/*.test.ts`, `src/components/*.test.ts`
+- Unit-тесты: `src/csg/*.test.ts`, `src/io/*.test.ts`, `src/store/*.test.ts`, `src/platform/*.test.ts`, `src/components/*.test.ts(x)` — всего 27 файлов, 414 тестов
 - Мок IndexedDB: `src/__mocks__/indexeddb.ts` (in-memory IDB для jsdom)
 - Среда: jsdom (через vite.config.ts)
 - Имена: `describe('FunctionName')` → `it('описание')`
@@ -180,7 +180,7 @@ Worker НЕ центрирует геометрию. Центрирование 
 - Квесты: 3/день (1 лёгкое + 1 среднее + 1 сложное), сброс в полночь, прогресс по триггерам
 - Аренда 24ч: отсчёт от момента покупки (не до полуночи)
 - Clean-версия: вся экономика отключена, всё бесплатно
-- Тесты: `economy-config.test.ts` (21 тест на `calculateCashbackV2`, `calculateCashbackBreakdown`, `scanForCashback`)
+- Тесты: `economy-config.test.ts` (26 тестов: `calculateCashbackV2`, `calculateCashbackBreakdown`, `countSceneObjects`, `scanForCashback`), `economy-store.test.ts` (76 тестов)
 
 ## Известные ограничения (не баги)
 
