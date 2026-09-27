@@ -1288,3 +1288,74 @@ describe('loadFromCloud (EC-R4 hash после merge, EC-R5 keep-local)', () => 
         expect(h.saveData.mock.calls.length).toBe(savedCalls)
     })
 })
+
+// ─── UB4-1: платформенный sticky-баннер скрывается при оплате снятия рекламы ──
+// Покупка «отключить баннер» (аренда disableBanner) и подписка обязаны убирать
+// не только наш UI-оффер (bannerVisible), но и рекламу платформы через SDK.
+
+describe('Платформенный sticky-баннер (UB4-1)', () => {
+    beforeEach(() => {
+        h.platform.showBannerAdv.mockClear()
+        h.platform.hideBannerAdv.mockClear()
+    })
+
+    it('покупка аренды disableBanner за токены скрывает баннер платформы', async () => {
+        const res = await useEconomyStore.getState().buyRental('disableBanner')
+
+        expect(res.ok).toBe(true)
+        expect(h.platform.hideBannerAdv).toHaveBeenCalledTimes(1)
+        expect(h.platform.showBannerAdv).not.toHaveBeenCalled()
+    })
+
+    it('покупка другой аренды баннер платформы не трогает', async () => {
+        const res = await useEconomyStore.getState().buyRental('text3d')
+
+        expect(res.ok).toBe(true)
+        expect(h.platform.hideBannerAdv).not.toHaveBeenCalled()
+        expect(h.platform.showBannerAdv).not.toHaveBeenCalled()
+    })
+
+    it('покупка подписки скрывает баннер платформы', async () => {
+        useEconomyStore.setState({ tokens: 700 })
+        const res = await useEconomyStore.getState().buySubscription('weekly')
+
+        expect(res.ok).toBe(true)
+        expect(h.platform.hideBannerAdv).toHaveBeenCalledTimes(1)
+    })
+
+    it('просмотр рекламы за баннер скрывает и его (как и раньше)', async () => {
+        h.platform.showRewardedVideo.mockResolvedValue(true)
+        const res = await useEconomyStore.getState().watchAdForBanner()
+
+        expect(res.ok).toBe(true)
+        expect(h.platform.hideBannerAdv).toHaveBeenCalledTimes(1)
+        expect(useEconomyStore.getState().bannerVisible).toBe(false)
+    })
+
+    it('syncPlatformBanner: активная аренда → hideBannerAdv', () => {
+        useEconomyStore.setState({
+            rentals: { text3d: null, extendedPalette: null, disableBanner: h.getCachedServerTime()! + ONE_DAY_MS },
+        })
+        useEconomyStore.getState().syncPlatformBanner()
+
+        expect(h.platform.hideBannerAdv).toHaveBeenCalledTimes(1)
+        expect(h.platform.showBannerAdv).not.toHaveBeenCalled()
+    })
+
+    it('syncPlatformBanner: аренда не оплачена → showBannerAdv', () => {
+        useEconomyStore.getState().syncPlatformBanner()
+
+        expect(h.platform.showBannerAdv).toHaveBeenCalledTimes(1)
+        expect(h.platform.hideBannerAdv).not.toHaveBeenCalled()
+    })
+
+    it('syncPlatformBanner: истёкшая аренда возвращает баннер', () => {
+        useEconomyStore.setState({
+            rentals: { text3d: null, extendedPalette: null, disableBanner: h.getCachedServerTime()! - 1000 },
+        })
+        useEconomyStore.getState().syncPlatformBanner()
+
+        expect(h.platform.showBannerAdv).toHaveBeenCalledTimes(1)
+        expect(h.platform.hideBannerAdv).not.toHaveBeenCalled()
+    })
+})

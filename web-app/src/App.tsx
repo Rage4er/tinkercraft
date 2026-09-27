@@ -244,11 +244,12 @@ export default function App() {
           // true (инициализация/merge в economy-store), здесь только страховка от
           // устаревших персист-данных и пере-проверка подписки/аренды.
           const econ = useEconomyStore.getState()
-          if (econ.shouldShowBannerRO()) {
-            econ.setBannerVisible(true)
-          } else {
-            econ.setBannerVisible(false)
-          }
+          econ.setBannerVisible(econ.shouldShowBannerRO())
+          // UB4-1: platform.init() показывает sticky-баннер безусловно, а оплата
+          // «отключить баннер» обязана убирать и его. syncPlatformBanner() сверяет
+          // SDK с экономикой в обе стороны: оплачено → hide, нет/истекло → show
+          // (аккаунт с истёкшей арендой, загруженный из облака).
+          void econ.syncPlatformBanner()
         } catch (e) {
           console.error('[App] Economy init failed:', e)
         }

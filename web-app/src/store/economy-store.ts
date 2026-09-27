@@ -270,6 +270,17 @@ interface EconomyState {
 
   // ── Статус панели ──
   setBannerVisible(visible: boolean): void
+  /**
+   * UB4: синхронизировать ПЛАТФОРМЕННЫЙ sticky-баннер (Yandex SDK) с решением
+   * экономики. `bannerVisible` прячет лишь наш UI-оффер — чтобы скрыть саму
+   * рекламу платформы, обязан быть вызван hideBannerAdv().
+   */
+  setPlatformBannerVisible(visible: boolean): Promise<void>
+  /**
+   * UB4-1: привести платформенный баннер в соответствие с решением экономики —
+   * куплено снятие рекламы (подписка/аренда) → hideBannerAdv(), иначе → показать.
+   */
+  syncPlatformBanner(): Promise<void>
   bannerVisible: boolean
 }
 
@@ -986,13 +997,8 @@ export const useEconomyStore = create<EconomyState>()(
           // забыть вызвать setBannerVisible(false) после успешной оплаты.
           bannerVisible: false,
         }))
-        // ✅ Скрыть баннер после оплаты
-        try {
-          await platform.hideBannerAdv()
-          console.log('[Economy] Banner hidden after rental purchase')
-        } catch (e) {
-          console.log('[Economy] Banner hide failed (may be dashboard-controlled):', e)
-        }
+        // UB4-1: скрываем и платформенный sticky-баннер (единая точка — store)
+        await get().setPlatformBannerVisible(false)
         await get().syncToCloud()
         console.log('[Economy] Banner ad watched — disableBanner rental activated')
         return { ok: true }
@@ -1126,6 +1132,9 @@ export const useEconomyStore = create<EconomyState>()(
         if (!applied) {
           return { ok: false, code: 'not_enough' }
         }
+        // UB4-1: подписка тоже отключает баннер (shouldShowBannerRO === false) —
+        // скрываем и платформенный sticky-баннер, не только наш UI-оффер.
+        await get().setPlatformBannerVisible(false)
         await get().syncToCloud()
         console.log(`[Economy] Subscription ${type} purchased: ${config.tokens} tokens, ${config.days} days`)
         return { ok: true, code: 'ok' }
@@ -1195,6 +1204,36 @@ export const useEconomyStore = create<EconomyState>()(
         return true
       },
 
+      // ── UB4-1: платформенный sticky-баннер (Yandex SDK) ──
+      // Покупка «отключить баннер» скрывала лишь наш UI-оффер (bannerVisible),
+      // а sticky-баннер платформы оставался на экране — эффект за 50 токенов
+      // был не виден. Здесь единая точка синхронизации с SDK.
+      setPlatformBannerVisible: async (visible: boolean) => {
+        const platform = getPlatform()
+        if (!platform) return
+        try {
+          if (visible) {
+            await platform.showBannerAdv()
+            console.log('[Economy] Platform sticky banner shown')
+          } else {
+            await platform.hideBannerAdv()
+            console.log('[Economy] Platform sticky banner hidden (offer paid off)')
+          }
+        } catch (e) {
+          // Баннер может быть недоступен (настройки консоли / нет рекламной сети)
+          console.log('[Economy] Platform sticky banner sync failed:', e)
+        }
+      },
+
+      // UB4-1: единая точка «привести SDK-баннер к решению экономики».
+      // Плата за снятие рекламы учитывается по обоим источникам — активной
+      // подписке и аренде disableBanner (RO-геттеры, без мутаций).
+      syncPlatformBanner: async () => {
+        const st = get()
+        const paidOff = st.hasActiveSubscriptionRO() || st.hasRentalRO('disableBanner')
+        await st.setPlatformBannerVisible(!paidOff)
+      },
+
       buyRental: async (key: RentalKey) => {
         const config = ECONOMY_RENTALS[key]
         const state = get()
@@ -1224,6 +1263,10 @@ export const useEconomyStore = create<EconomyState>()(
         if (!applied) {
           return { ok: false, code: 'not_enough' }
         }
+        // UB4-1: аренда disableBanner, купленная ЗА ТОКЕНЫ, обязана скрывать и
+        // платформенный sticky-баннер — раньше это делал только рекламный путь
+        // (watchAdForBanner), из-за чего покупка за 50 TC не давала видимого эффекта.
+        if (key === 'disableBanner') await get().setPlatformBannerVisible(false)
         await get().syncToCloud()
         console.log(`[Economy] Rental ${key} purchased: ${config} tokens, 24h`)
         return { ok: true, code: 'ok' }
@@ -1320,6 +1363,8 @@ export const useEconomyStore = create<EconomyState>()(
           // P0-1/U5: истёкшая аренда → баннер снова доступен для покупки
           bannerVisible: showBannerAgain,
         })
+        // UB4-1: оффер вернулся — платформенный sticky-баннер снова показываем
+        if (showBannerAgain) void get().setPlatformBannerVisible(true)
         console.log('[Economy] New day detected — quests and counters reset')
         void get().syncToCloud()
       },
