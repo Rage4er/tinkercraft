@@ -333,6 +333,13 @@ function EconomyPanel() {
                     ? t('economy.status.bannerHidden', { remaining })
                     : t('economy.status.active')}
                 </span>
+              ) : hasActiveSub ? (
+                // UB5-1: функция уже входит в Pro-подписку (ECONOMY.md §3.3) —
+                // кнопки покупки скрыты; buyRental на всякий случай отсекает
+                // списание на уровне store (code 'included_in_subscription').
+                <span style={{ fontSize: '10px', color: 'var(--success)', whiteSpace: 'nowrap' }}>
+                  {t('economy.status.includedInPro')}
+                </span>
               ) : (
                 // UB3-2: кнопки «токены» и «ревард» — друг над другом
                 // (flexDirection: column): в панели 200px две кнопки в строку

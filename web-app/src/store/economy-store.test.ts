@@ -1359,3 +1359,61 @@ describe('Платформенный sticky-баннер (UB4-1)', () => {
         expect(h.platform.hideBannerAdv).not.toHaveBeenCalled()
     })
 })
+
+// ─── UB5-1: покупка аренды при активной Pro-подписке ─────────────────
+// Подписка уже включает «текст, палитру, баннер off» (ECONOMY.md §3.3) —
+// buyRental обязан отказывать и НЕ списывать токены за уже выданное.
+
+describe('buyRental при активной подписке (UB5-1)', () => {
+    const setProActive = () => useEconomyStore.setState({
+        tokens: 3000,
+        activeSubscription: 'monthly',
+        subscriptionExpiresAt: h.getCachedServerTime()! + 7 * ONE_DAY_MS,
+    })
+
+    it('extendedPalette: отказ, токены и rentals не изменены', async () => {
+        setProActive()
+        const res = await useEconomyStore.getState().buyRental('extendedPalette')
+
+        expect(res.ok).toBe(false)
+        expect(res.code).toBe('included_in_subscription')
+        expect(useEconomyStore.getState().tokens).toBe(3000)
+        expect(useEconomyStore.getState().rentals.extendedPalette).toBeNull()
+    })
+
+    it('text3d и disableBanner: отказ, баннер и hideBannerAdv не тронуты', async () => {
+        setProActive()
+        const rText = await useEconomyStore.getState().buyRental('text3d')
+        const rBanner = await useEconomyStore.getState().buyRental('disableBanner')
+
+        expect(rText.code).toBe('included_in_subscription')
+        expect(rBanner.ok).toBe(false)
+        expect(useEconomyStore.getState().tokens).toBe(3000)
+        expect(useEconomyStore.getState().rentals.text3d).toBeNull()
+        expect(useEconomyStore.getState().rentals.disableBanner).toBeNull()
+        expect(useEconomyStore.getState().bannerVisible).toBe(true)
+        expect(h.platform.hideBannerAdv).not.toHaveBeenCalled()
+    })
+
+    it('истёкшая подписка не блокирует покупку (expiry по серверному времени)', async () => {
+        useEconomyStore.setState({
+            tokens: 3000,
+            activeSubscription: 'monthly',
+            subscriptionExpiresAt: h.getCachedServerTime()! - 1000,
+        })
+        const res = await useEconomyStore.getState().buyRental('extendedPalette')
+
+        expect(res.ok).toBe(true)
+        expect(useEconomyStore.getState().tokens).toBe(3000 - 75)
+        expect(useEconomyStore.getState().rentals.extendedPalette).not.toBeNull()
+    })
+
+    it('без подписки покупка проходит как раньше (регрессия UB4-1)', async () => {
+        useEconomyStore.setState({ tokens: 3000 })
+        const res = await useEconomyStore.getState().buyRental('disableBanner')
+
+        expect(res.ok).toBe(true)
+        expect(useEconomyStore.getState().tokens).toBe(3000 - 50)
+        expect(h.platform.hideBannerAdv).toHaveBeenCalledTimes(1)
+    })
+})

@@ -259,6 +259,7 @@ interface EconomyState {
   canUseText3dRO(): boolean
   /** B1: виден ли баннер-оффер (bannerVisible && нет подписки && нет аренды disableBanner) */
   shouldShowBannerRO(): boolean
+  /** UB5-1: покупка аренды 24ч; при активной Pro-подписке — отказ `included_in_subscription` (фичи уже входят в подписку) */
   buyRental(key: RentalKey): Promise<{ ok: boolean; code?: string }>
 
   // ── Квесты ──
@@ -1237,6 +1238,14 @@ export const useEconomyStore = create<EconomyState>()(
       buyRental: async (key: RentalKey) => {
         const config = ECONOMY_RENTALS[key]
         const state = get()
+
+        // UB5-1: Pro-подписка уже включает все три арендуемые функции
+        // (ECONOMY.md §3.3: «текст, палитра, баннер off») — покупка аренды
+        // была бы повторным списанием токенов за уже выданный доступ.
+        // RO-геттер (без мутаций, expiry по серверному времени, P0-2).
+        if (state.hasActiveSubscriptionRO()) {
+          return { ok: false, code: 'included_in_subscription' }
+        }
 
         if (state.tokens < config) {
           return { ok: false, code: 'not_enough' }

@@ -23,7 +23,7 @@
 cd web-app
 pnpm dev          # dev-сервер (порт 5000)
 pnpm build        # production-сборка
-pnpm test         # запуск тестов (414 тестов в 27 файлах)
+pnpm test         # запуск тестов (420 тестов в 27 файлах)
 pnpm typecheck    # tsc --noEmit
 pnpm verify       # полная проверка: typecheck + test + build + build:yandex
 ```
@@ -102,7 +102,7 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 
 ### Тесты
 - Type-level тесты: `src/csg/types.test.ts`
-- Unit-тесты: `src/csg/*.test.ts`, `src/io/*.test.ts`, `src/store/*.test.ts`, `src/platform/*.test.ts`, `src/components/*.test.ts(x)` — всего 27 файлов, 414 тестов
+- Unit-тесты: `src/csg/*.test.ts`, `src/io/*.test.ts`, `src/store/*.test.ts`, `src/platform/*.test.ts`, `src/components/*.test.ts(x)` — всего 27 файлов, 420 тестов
 - Мок IndexedDB: `src/__mocks__/indexeddb.ts` (in-memory IDB для jsdom)
 - Среда: jsdom (через vite.config.ts)
 - Имена: `describe('FunctionName')` → `it('описание')`
@@ -204,6 +204,7 @@ Worker НЕ центрирует геометрию. Центрирование 
 - `docs/USER_FEEDBACK_UB2.md` — продолжение отзыва (UB2-1…UB2-5, закрыто 2026-09-23)
 - `docs/USER_FEEDBACK_UB3.md` — следующая партия отзыва (UB3-1…UB3-5, 2026-09-23 — счётчик реварда импорта, иконки панели, дебаг-токены, бейджи тулбара, таймер бонуса; 🔴 ОТКРЫТО)
 - `docs/USER_FEEDBACK_UB4.md` — следующая партия отзыва (UB4-1…UB4-2, 2026-09-27 — «отключение баннера за 50 TC» не скрывало платформенный sticky-баннер: `hideBannerAdv()` вызывался только из рекламного пути, `platform.init()` показывал баннер безусловно; исправлено единой точкой `setPlatformBannerVisible()`/`syncPlatformBanner()`, 🟢 ЗАКРЫТО, UB4-2 — сторож по `getBannerAdvStatus()` под наблюдением)
+- ✅ **ЗАКРЫТ UB5** (`docs/USER_FEEDBACK_UB5.md`) — прогон на **Яндекс Играх**, 3 пункта (2026-09-28 → исправлено 2026-09-29): **покупка аренды (палитра/текст/баннер) была доступна и списывала токены при активной Pro-подписке, которая эти фичи уже даёт** (UB5-1, P1 → гейт в начале `buyRental` (`economy-store.ts`): `hasActiveSubscription()` → `{ ok: false, code: 'included_in_subscription' }`, в разделе «Аренда» вместо кнопок покупки статус «Входит в Pro» (`economy.status.includedInPro`, ru+en)); правая панель расширена ×1,2: `.panel-right { width: 240px }` (200 → 240, `App.css:772-782`; UB5-2); `.object-list { max-height: 240px; overflow-y: auto }` — внутренний скролл как у `.ct-list` (UB5-3); тесты: `economy-store.test.ts` +4 (store-гейт), `PropertiesPanel.color.test.tsx` +2 (UI)
 - `docs/USER_FEEDBACK_EXPORT.md` — отзыв пользователя по экспорту/сохранению (реестр: UB-0a/0b/0d, статус по веткам `main` и `yandex-games`)
 - `DEVELOPMENT_PLAN.md` — план разработки (Фазы 0–7)
 - `ARCHITECTURE.md` — описание архитектуры

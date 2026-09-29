@@ -444,7 +444,8 @@
       "active": "Активно",
       "expired": "Истекла",
       "proActive": "Pro активна · ",
-      "bannerHidden": "Баннер скрыт · {{remaining}}"
+      "bannerHidden": "Баннер скрыт · {{remaining}}",
+      "includedInPro": "Входит в Pro"
     },
     "time": {
       "hoursMins": "{{h}}ч {{m}}м",

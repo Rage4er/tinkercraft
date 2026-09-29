@@ -255,6 +255,33 @@ describe('PropertiesPanel (U6: палитра доступна всегда)', (
         act(() => { root.unmount() })
     })
 
+    it('UB5-1: при активной подписке в «Аренде» нет кнопок покупки — статус «Included in Pro»', () => {
+        // Pro активна: все три аренды (текст/палитра/баннер) уже входят в неё
+        useEconomyStore.setState({
+            activeSubscription: 'weekly',
+            subscriptionExpiresAt: h.serverTime + 60_000,
+        })
+        uiH.setOpen(true)
+        const { container, root } = renderPanel(makeCube())
+        // Статус вместо кнопок списания
+        expect(container.textContent).toContain('Included in Pro')
+        // Ни одной кнопки с ценой аренды (75/50 TC) быть не должно
+        const priceBtns = Array.from(container.querySelectorAll('button'))
+            .filter((b) => /^\s*(75|50)\s*$/.test(b.textContent ?? ''))
+        expect(priceBtns.length).toBe(0)
+        act(() => { root.unmount() })
+    })
+
+    it('UB5-1: БЕЗ подписки кнопки покупки аренды на месте (регрессия)', () => {
+        uiH.setOpen(true)
+        const { container, root } = renderPanel(makeCube())
+        const priceBtns = Array.from(container.querySelectorAll('button'))
+            .filter((b) => /^\s*(75|50)\s*$/.test(b.textContent ?? ''))
+        expect(priceBtns.length).toBe(3)
+        expect(container.textContent).not.toContain('Included in Pro')
+        act(() => { root.unmount() })
+    })
+
     it('ColorPalette — отдельный компонент с 16 цветами', () => {
         const { container, root } = renderToContainerPalette()
         expect(container.querySelectorAll('.color-palette-swatch').length).toBe(16)

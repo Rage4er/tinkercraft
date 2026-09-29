@@ -453,12 +453,19 @@ body {
 }
 
 /* ---- Object list ---- */
+/* UB5-3: у списка объектов не было внутреннего скролла (в отличие от .ct-list) —
+ * длинный список растягивал секцию «Объекты», и скроллилась вся .panel-left.
+ * Математика как у .ct-list: max-height + overflow-y + тонкий скроллбар. */
 .object-list {
   display: flex;
   flex-direction: column;
   gap: 1px;
   padding: 2px 4px;
   min-height: 20px;
+  max-height: 240px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
 }
 
 .object-list-empty {
@@ -760,8 +767,10 @@ body {
 }
 
 /* ---- Right panel ---- */
+/* UB5-2: по отзыву пользователя панель слишком узкая (иконки и кнопки
+ * экономики не влезают — см. также UB3-2), расширение ×1,2: 200px → 240px. */
 .panel-right {
-  width: 200px;
+  width: 240px;
   background: var(--bg-panel);
   border-left: 1px solid var(--border);
   display: flex;

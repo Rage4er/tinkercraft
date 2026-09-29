@@ -75,11 +75,16 @@ export default function RentalModal() {
         grant(key)
       } else if (res.code === 'not_enough') {
         notify(t('economy.notEnoughTokens', { n: ECONOMY_RENTALS[key] - tokens }), 'error')
+      } else if (res.code === 'included_in_subscription') {
+        // UB5-1: подписка стала активна, пока модалка была открыта (гейт в
+        // buyRental). Доступ уже выдан, списания не было — закрываем модалку
+        // и продолжаем исходное действие, как при обычном bypass.
+        bypassDone(key)
       }
     } finally {
       setBusy(false)
     }
-  }, [rentalKey, busy, buyRental, setRentalModalKey, grant, t, tokens])
+  }, [rentalKey, busy, buyRental, setRentalModalKey, grant, bypassDone, t, tokens])
 
   if (!rentalKey || !economyActive) return null
 

@@ -442,7 +442,8 @@
       "active": "Active",
       "expired": "Expired",
       "proActive": "Pro active · ",
-      "bannerHidden": "Banner hidden · {{remaining}}"
+      "bannerHidden": "Banner hidden · {{remaining}}",
+      "includedInPro": "Included in Pro"
     },
     "time": {
       "hoursMins": "{{h}}h {{m}}m",
