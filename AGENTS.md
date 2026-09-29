@@ -23,6 +23,7 @@
 cd web-app
 pnpm dev          # dev-сервер (порт 5000)
 pnpm build        # production-сборка
+pnpm build:itch   # чистая версия для itch.io: base './' + dist-itch + удаление sdk.js (см. NODEJS_SETUP.md)
 pnpm test         # запуск тестов (420 тестов в 27 файлах)
 pnpm typecheck    # tsc --noEmit
 pnpm verify       # полная проверка: typecheck + test + build + build:yandex

@@ -42,4 +42,6 @@ bowler
 /target
 web-app/dist-yandex/
 dist-yandex/
+web-app/dist-itch/
+dist-itch/
 tinkercraft-yandex-v1.0.0.zip

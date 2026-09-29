@@ -7,6 +7,7 @@
     "dev": "vite",
     "dev:yandex": "cross-env VITE_PLATFORM=yandex vite",
     "build": "tsc && vite build",
+    "build:itch": "tsc && vite build --base=./ --outDir dist-itch && node -e \"require('fs').rmSync('dist-itch/sdk.js',{force:true})\"",
     "build:yandex": "cross-env VITE_PLATFORM=yandex tsc && cross-env VITE_PLATFORM=yandex vite build --mode yandex",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",

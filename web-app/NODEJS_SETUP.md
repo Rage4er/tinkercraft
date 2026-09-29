@@ -162,6 +162,7 @@ pnpm dev          # порт 5000
 | 2026-09-07 | Node.js v24.19.0 установлен на Windows (winget); `dev:yandex`/`build:yandex` переведены на cross-env; полный verify прошёл на Windows |
 | 2026-09-28 | Обновлены счётчики тестов: `pnpm test` — 414/414 (27 файлов), проверено прогоном; синхронизированы с `AGENTS.md` |
 | 2026-09-29 | UB5-1…UB5-3 исправлены: +6 тестов (4 store `buyRental` при подписке + 2 UI «Входит в Pro») → 420/420; тесту `doodle-io.test.ts` «открывает model.json > 5 МБ» выставлен явный `timeout` 30 000 мс — фикстура на 100k треугольников регулярно выходила за дефолтные 5000 мс |
+| 2026-09-30 | Добавлена секция «Сборка для itch.io» — скрипт `pnpm build:itch` (clean-версия, `base './'`, `dist-itch/`, удаление `sdk.js` из сборки), архив `tinkercraft-itch-v1.3.4.zip` |
 
 ---
 
@@ -291,3 +292,52 @@ assets/worker-Oe8JwiBX.js
 | `index-DHvC04F5.css` | 23 KB | 5 KB |
 | `helvetiker_regular.typeface.js` | 63 KB | 22 KB |
 | **Итого ZIP** | **3.2 MB** | **1.1 MB** |
+
+---
+
+## 🕹️ Сборка для itch.io
+
+itch.io принимает HTML-игру ZIP-архивом (Kind of project = **HTML**, `index.html` — в **корне ZIP**).
+Отличия от Яндекс-сборки: **clean-версия без экономики** (токены/реклама/подписки/аренда
+отключены, всё бесплатно) и **относительный `base: './'`** — itch раздаёт файлы из iframe
+вида `https://html.itch.zone/html/NNNNN/`, абсолютные пути (`/tinkercraft/...` из обычной
+`pnpm build` для GitHub Pages) там не работают.
+
+### Шаг 1: Сборка
+
+```bash
+cd /home/small-room/GitHub/tinkercraft/web-app
+pnpm build:itch     # tsc + vite build --base=./ --outDir dist-itch + rm dist-itch/sdk.js
+```
+
+Скрипт (`web-app/package.json`) делает три вещи:
+1. `vite build --base=./ --outDir dist-itch` — clean-платформа (VITE_PLATFORM≠yandex):
+   Yandex-чанк tree-shaken, `isEconomyAvailable() === false`, SDK-init видит отсутствие
+   `window.YaGames` и возвращается в null;
+2. `base: './'` — все пути в `index.html` и ассетах относительные (WASM грузится через
+   `new URL(..., import.meta.url)` — работает в любом iframe);
+3. удаляет `dist-itch/sdk.js` — он копируется из `public/` для Яндекс-режима, на itch не нужен.
+
+### Шаг 2: Проверка
+
+```bash
+find dist-itch -type f            # index.html есть, sdk.js — НЕТ
+grep -c "sdk.js" dist-itch/index.html   # 0
+grep -rl "tinkercraft/" dist-itch/      # пусто (нет абсолютных путей GitHub Pages)
+```
+
+### Шаг 3: ZIP и загрузка
+
+```bash
+cd dist-itch && zip -r ../../tinkercraft-itch-vX.Y.Z.zip . && cd ../..
+```
+
+1. [itch.io](https://itch.io) → проект → **Kind of project: HTML**
+2. **Uploads** → ZIP (файлы верхним уровнем, без папки)
+3. Embed: **Embed in page ✅**, размер 1280×720, Fullscreen ✅, Auto-start ❌, Scrollbars ❌
+4. **SharedArrayBuffer**: manifold-3d в текущей сборке однопоточный — галочка не нужна;
+   если CSG упадёт с ошибкой про SAB — включить в настройках embed
+5. Сначала Draft → проверить CSG/экспорт/импорт → Public
+
+**Актуальный архив:** `tinkercraft-itch-v1.3.4.zip` (~569 KB, 12 файлов; проверка: все
+ассеты отдают 200 через `python3 -m http.server`). `*.zip` и `dist-itch/` — в `.gitignore`.
