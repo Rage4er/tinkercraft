@@ -1,6 +1,6 @@
 {
   "name": "tinkercraft",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "TinkerCraft — браузерный 3D CAD-редактор. Параметрический 3D-редактор для образования и хобби, вдохновлённый CaDoodle.",
   "main": "index.js",
   "scripts": {
