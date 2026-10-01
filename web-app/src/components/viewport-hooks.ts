@@ -419,6 +419,68 @@ function centerGeometry(mesh: THREE.Mesh, objectId: string): THREE.Object3D {
     return container;
 }
 
+// ============================================================
+// UB2-4: рёбра фигур — линии по выраженным граням, «на пару тонов»
+// темнее базового цвета объекта (читаемость формы)
+// ============================================================
+
+/** Порог угла между гранями (°): рёбра только на выраженных стыках
+ *  (куб 90° → да, сфера/тор ~11° → нет) */
+const EDGE_THRESHOLD_ANGLE = 30;
+
+/** Максимум треугольников для построения рёбер (защита производительности:
+ *  EdgesGeometry — O(треугольников); тяжёлые импорты остаются без рёбер) */
+const EDGE_MAX_TRIANGLES = 100_000;
+
+/** Флаг в userData линий рёбер (отличаем от прочих детей меша) */
+const EDGE_FLAG = 'isShapeEdges';
+
+/**
+ * UB2-4: цвет рёбер — базовый цвет объекта ×0.7 («на пару тонов темнее»).
+ * Вычисляется в том же sRGB-пространстве, в котором задан obj.color
+ * (материал меша получает цвет той же строкой).
+ */
+export function edgeColorFor(hex: string): string {
+    const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+    if (!m) return hex;
+    const n = parseInt(m[1], 16);
+    const r = Math.round(((n >> 16) & 0xff) * 0.7);
+    const g = Math.round(((n >> 8) & 0xff) * 0.7);
+    const b = Math.round((n & 0xff) * 0.7);
+    return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')}`;
+}
+
+/**
+ * UB2-4: прикрепить линии рёбер к мешу (ребёнок меша — наследует
+ * visibility/трансформы родителя). Возвращает null, если геометрия
+ * слишком тяжёлая для EdgesGeometry.
+ */
+function attachShapeEdges(mesh: THREE.Mesh, colorHex: string): THREE.LineSegments | null {
+    const geo = mesh.geometry as THREE.BufferGeometry;
+    const tris = (geo.index?.count ?? geo.attributes.position.count) / 3;
+    if (!Number.isFinite(tris) || tris <= 0 || tris > EDGE_MAX_TRIANGLES) return null;
+    const edgesGeo = new THREE.EdgesGeometry(geo, EDGE_THRESHOLD_ANGLE);
+    const mat = new THREE.LineBasicMaterial({ color: edgeColorFor(colorHex) });
+    const lines = new THREE.LineSegments(edgesGeo, mat);
+    lines.userData[EDGE_FLAG] = true;
+    // Рёбра не участвуют в raycast — выделение и snap работают по мешу
+    lines.raycast = () => { };
+    mesh.add(lines);
+    return lines;
+}
+
+/** UB2-4: снять линии рёбер меша и освободить их геометрию/материал */
+function detachShapeEdges(mesh: THREE.Mesh): void {
+    for (const child of [...mesh.children]) {
+        const lines = child as THREE.LineSegments;
+        if (lines.userData?.[EDGE_FLAG] === true) {
+            mesh.remove(lines);
+            lines.geometry.dispose();
+            (lines.material as THREE.Material).dispose();
+        }
+    }
+}
+
 export function useMeshSync(
     objects: SceneObject[],
     sceneReady: boolean,
@@ -453,6 +515,8 @@ export function useMeshSync(
                     scene.remove(entry.helper);
                     entry.helper.dispose?.();
                 }
+                // UB2-4: освобождаем геометрию/материал линий рёбер
+                detachShapeEdges(entry.mesh);
                 entry.mesh.geometry.dispose();
                 (entry.mesh.material as THREE.Material).dispose();
                 map.delete(id);
@@ -500,6 +564,10 @@ export function useMeshSync(
                     existing.mesh.geometry.translate(-center.x, -center.y, -center.z);
                     existing.mesh.geometry.computeBoundingBox();
                     existing.mesh.geometry.computeBoundingSphere();
+
+                    // UB2-4: геометрия изменилась — пересобираем рёбра
+                    detachShapeEdges(existing.mesh);
+                    attachShapeEdges(existing.mesh, obj.color);
                 }
 
                 // Sync transform from store to pivot
@@ -540,6 +608,13 @@ export function useMeshSync(
                 const mat = existing.mesh.material as THREE.MeshStandardMaterial;
                 if (mat.color.getHexString() !== obj.color.replace("#", "")) {
                     mat.color.set(obj.color);
+                    // UB2-4: рёбра темнеют вместе с объектом
+                    for (const child of existing.mesh.children) {
+                        const lines = child as THREE.LineSegments;
+                        if (lines.userData?.[EDGE_FLAG] === true) {
+                            (lines.material as THREE.LineBasicMaterial).color.set(edgeColorFor(obj.color));
+                        }
+                    }
                 }
             } else {
                 // Create new mesh
@@ -639,6 +714,9 @@ export function useMeshSync(
                 rawMesh.receiveShadow = true;
                 rawMesh.userData.objectId = obj.id;
                 const pivot = centerGeometry(rawMesh, obj.id);
+                // UB2-4: рёбра по выраженным граням, «на пару тонов» темнее
+                // (ребёнок меша — наследует visibility/трансформы родителя)
+                attachShapeEdges(rawMesh, obj.color);
                 pivot.position.set(obj.transform.x, obj.transform.y, obj.transform.z);
                 pivot.rotation.set(
                     THREE.MathUtils.degToRad(obj.transform.rotX),

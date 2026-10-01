@@ -448,12 +448,19 @@ body {
 }
 
 /* ---- Object list ---- */
+/* UB5-3: у списка объектов не было внутреннего скролла (в отличие от .ct-list) —
+ * длинный список растягивал секцию «Объекты», и скроллилась вся .panel-left.
+ * Математика как у .ct-list: max-height + overflow-y + тонкий скроллбар. */
 .object-list {
   display: flex;
   flex-direction: column;
   gap: 1px;
   padding: 2px 4px;
   min-height: 20px;
+  max-height: 240px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
 }
 
 .object-list-empty {
