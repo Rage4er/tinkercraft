@@ -32,8 +32,8 @@ import { openStlFilePicker, parseStlFile } from '../io/stl-import'
 import { autosaveSession, restoreSession } from '../io/autosave'
 import i18n from '../i18n'
 
-export { computeAABB, extractAndCenterInPlace, extractAndCenterGetAABB, computeWorldAABB } from './helpers'
-import { computeAABB, extractAndCenterInPlace, extractAndCenterGetAABB, computeWorldAABB, makeObject, nextId, colorForIndex } from './helpers'
+export { computeAABB, extractAndCenterInPlace, extractAndCenterGetAABB, computeWorldAABB, extractCenteredAt } from './helpers'
+import { computeAABB, extractAndCenterInPlace, extractAndCenterGetAABB, computeWorldAABB, extractCenteredAt, makeObject, nextId, colorForIndex } from './helpers'
 import type { ClipEntry } from './helpers'
 import type { DocumentStore } from './types'
 import { rebuildFromHistory, rebuildBuildTree } from './rebuild'
@@ -56,7 +56,8 @@ import {
 } from '../csg/history-tree'
 import { getAllNodes } from '../csg/history-tree'
 import { previewMirror as mirrorPreviewFn, mirrorSelected as mirrorConfirmFn, invalidateMirrorCache } from './mirror-store'
-import { devLog, devWarn } from '../utils/debug'
+import { devLog, devWarn, devLogCsg, devLogStore } from '../utils/debug'
+import { fmtPoint, fmtTransform } from '../utils/debug-format'
 
 // ── Shared undo/redo/jumpToHistory helper — FIX (MED-18-1): eliminates ~90 lines of duplication ──
 
@@ -477,6 +478,13 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         const t = objects[id].transform
         return { x: t.x, y: t.y, z: t.z, rotX: t.rotX, rotY: t.rotY, rotZ: t.rotZ, scaleX: t.scaleX, scaleY: t.scaleY, scaleZ: t.scaleZ }
       }
+
+      // DIAG: log operands before CSG
+      const aObj = objects[idA]
+      const bObj = objects[idB]
+      devLogCsg('operandA', { id: idA, shapeType: aObj.shapeType, transform: fmtTransform(aObj.transform), bbox: aObj.aabb ? { min: aObj.aabb.min, max: aObj.aabb.max } : null })
+      devLogCsg('operandB', { id: idB, shapeType: bObj.shapeType, transform: fmtTransform(bObj.transform), bbox: bObj.aabb ? { min: bObj.aabb.min, max: bObj.aabb.max } : null })
+      devLogCsg('send', { idA, idB, op, resultId, transformA: fmtTransform(srOf(idA)), transformB: fmtTransform(srOf(idB)) })
       // Only send shapeType/params for regular primitives (not 'csg', not 'import_mesh').
       // CSG results and imports are already synced via syncObjectsForOperation → workerSyncMesh.
       // import_mesh already excluded by early return above.
@@ -499,27 +507,42 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         )
       }
       const ms = performance.now() - t0
-      // Single-pass: center geometry at origin + compute AABB (PERF-R6-1)
-      const { cx, cy, cz, aabb } = extractAndCenterGetAABB(mesh.vertices)
-      // Store original bbox size for CSG results — used to compute scale relative to original dimensions
-      const originalBboxSize = { x: aabb.max.x - aabb.min.x, y: aabb.max.y - aabb.min.y, z: aabb.max.z - aabb.min.z }
+      // Get transformA BEFORE centering — vertices will be centered relative to it.
+      // FIX (CSG-TRANSFORM-IS-CENTROID): Vertices must be centered relative to
+      // transformA (first operand position), NOT the CSG bbox center. For asymmetric
+      // CSG results (cube+prism), bbox center differs from transformA, causing shift.
+      // extractCenteredAt shifts vertices by -transformA so pivot at transformA
+      // renders them at correct world positions: pivot(transformA) + vertex(-relative) = world.
+      const transformA = srOf(idA)
+      const { aabb } = extractCenteredAt(mesh.vertices, transformA)
 
-      // Use the CSG result centroid (cx, cy, cz) as the position.
-      // Rotation and scale are 0/1 because the worker already applied
-      // the full TRS of both operands to the geometry — the boolean result mesh
-      // is in world coordinates with all transforms baked in. After centering,
-      // only translation is needed to place it back at the correct position.
+      // Pivot is at transformA — vertices are centered relative to it.
+      // World position: pivot(transformA) + vertex(centered_at_transformA) = original world vertex.
       const resultTransform: TransformNR = {
-        x: cx, y: cy, z: cz,
+        x: transformA.x, y: transformA.y, z: transformA.z,
         rotX: 0, rotY: 0, rotZ: 0,
         scaleX: 1, scaleY: 1, scaleZ: 1,
       }
+
+      // DIAG: compute original bbox center (before centering) for comparison
+      // Note: mesh.vertices are already centered by extractCenteredAt, so we can't
+      // recover original bbox. This log is for debugging only.
+      devLogCsg('center', {
+        assignedLocal: fmtPoint(resultTransform),
+        transformA: fmtTransform(transformA),
+        transformB: fmtTransform(srOf(idB)),
+        centeredAabb: { min: fmtPoint(aabb.min), max: fmtPoint(aabb.max) },
+      })
+      // Store original bbox size for CSG results — used to compute scale relative to original dimensions
+      const originalBboxSize = { x: aabb.max.x - aabb.min.x, y: aabb.max.y - aabb.min.y, z: aabb.max.z - aabb.min.z }
 
       const newObj: SceneObject = { id: resultId, shapeType: 'csg', params: {}, operation: op, children: [idA, idB], color: objects[idA].color, transform: resultTransform, visible: true, locked: false, vertices: mesh.vertices, indices: mesh.indices, normals: mesh.normals, aabb, originalBboxSize }
       const newObjects = { ...objects }; delete newObjects[idA]; delete newObjects[idB]; newObjects[resultId] = newObj
       // Store result vertices/indices AND center position in GroupOperation
       // so rebuildFromHistory can reconstruct the CSG result geometry at the correct position.
-      const histOp: GroupOperation = { type: 'group', ids: [idA, idB], resultId, resultVertices: mesh.vertices, resultIndices: mesh.indices, resultNormals: mesh.normals ?? undefined, resultCenter: { x: cx, y: cy, z: cz }, originalBboxSize: originalBboxSize, treeOperation: op as 'union' | 'subtract' | 'intersect', shapeType: 'csg', color: objects[idA].color }
+      // FIX (CSG-TRANSFORM-IS-CENTROID): Use transformA as resultCenter so rebuild
+      // positions the CSG result at the first operand's location (not centroid).
+      const histOp: GroupOperation = { type: 'group', ids: [idA, idB], resultId, resultVertices: mesh.vertices, resultIndices: mesh.indices, resultNormals: mesh.normals ?? undefined, resultCenter: { x: transformA.x, y: transformA.y, z: transformA.z }, originalBboxSize: originalBboxSize, treeOperation: op as 'union' | 'subtract' | 'intersect', shapeType: 'csg', color: objects[idA].color }
       const newOps = [...operations.slice(0, historyIndex), histOp]
       // Ensure children are registered in build tree.
       // CSG results (shapeType='csg') and import_mesh are registered as BAKED nodes
@@ -1150,12 +1173,15 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const resultMesh = await workerCsgBoolean(id, slabId, 'union', resultId)
       // FIX (R17-11): Clean up temporary slab from worker cache to prevent memory leak
       workerDeleteObjects([slabId]).catch(() => { })
-      const ms = performance.now() - t0
-      // Single-pass: center geometry at origin + compute AABB (PERF-R6-1)
-      const { cx: ex, cy: ey, cz: ez, aabb } = extractAndCenterGetAABB(resultMesh.vertices)
-      const newObj: SceneObject = { id: resultId, shapeType: 'csg', params: {}, color: obj.color, transform: { x: ex, y: ey, z: ez, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }, visible: true, locked: false, vertices: resultMesh.vertices, indices: resultMesh.indices, normals: resultMesh.normals, aabb }
-      const addOp: AddShapeOperation = { type: 'add_shape', id: slabId, shapeType: 'cube', params: slabP, color: obj.color, transform: slabT }
-      const grpOp: GroupOperation = { type: 'group', ids: [id, slabId], resultId, resultVertices: resultMesh.vertices, resultIndices: resultMesh.indices, resultNormals: resultMesh.normals ?? undefined, resultCenter: { x: ex, y: ey, z: ez } }
+       const ms = performance.now() - t0
+       // FIX (CSG-TRANSFORM-IS-CENTROID): Center vertices relative to original object's transform.
+       // The extruded result centroid shifts away from the original object — centering by bbox
+       // would cause position shift. Centering by obj.transform ensures correct world position.
+       const resultT = obj.transform
+       const { aabb } = extractCenteredAt(resultMesh.vertices, resultT)
+       const newObj: SceneObject = { id: resultId, shapeType: 'csg', params: {}, color: obj.color, transform: { x: resultT.x, y: resultT.y, z: resultT.z, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }, visible: true, locked: false, vertices: resultMesh.vertices, indices: resultMesh.indices, normals: resultMesh.normals, aabb }
+       const addOp: AddShapeOperation = { type: 'add_shape', id: slabId, shapeType: 'cube', params: slabP, color: obj.color, transform: slabT }
+       const grpOp: GroupOperation = { type: 'group', ids: [id, slabId], resultId, resultVertices: resultMesh.vertices, resultIndices: resultMesh.indices, resultNormals: resultMesh.normals ?? undefined, resultCenter: { x: resultT.x, y: resultT.y, z: resultT.z } }
       const newObjects = { ...objects }; delete newObjects[id]; newObjects[resultId] = newObj
       const newOps = [...operations.slice(0, historyIndex), addOp, grpOp]
       set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, selectedIds: [resultId], modified: true, busy: false, lastCsgMs: ms })

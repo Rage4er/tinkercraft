@@ -23,6 +23,8 @@ import {
     removeSnapIndicators,
     type SnapType,
 } from "./snap-utils";
+import { devLogStore, devLogSnap, devLogEvent, devLogTransform, devLogPointer } from "../utils/debug";
+import { fmtPoint, fmtTransform } from "../utils/debug-format";
 
 // ============================================================
 // Константы (перенесены из Viewport3D.tsx)
@@ -507,9 +509,13 @@ export function useMeshSync(
         const currentIds = new Set(objects.map((o) => o.id));
         const map = meshMapRef.current;
 
+        // DIAG: mesh sync overview
+        devLogStore('meshSync', { objectCount: objects.length, meshMapSize: map.size, objectIds: objects.map(o => o.id) });
+
         // Remove meshes that no longer exist
         for (const [id, entry] of map) {
             if (!currentIds.has(id)) {
+                devLogStore('meshRemove', { id });
                 scene.remove(entry.pivot);
                 if (entry.helper) {
                     scene.remove(entry.helper);
@@ -580,6 +586,7 @@ export function useMeshSync(
                     Math.abs(pivotPos.z - t.z) > eps
                 ) {
                     existing.pivot.position.set(t.x, t.y, t.z);
+                    devLogTransform('meshSync', obj.id, t);
                 }
                 const pivotRot = existing.pivot.rotation;
                 if (
@@ -592,6 +599,7 @@ export function useMeshSync(
                         THREE.MathUtils.degToRad(t.rotY),
                         THREE.MathUtils.degToRad(t.rotZ),
                     );
+                    devLogTransform('meshSync', obj.id, t);
                 }
                 const pivotScl = existing.pivot.scale;
                 if (
@@ -600,6 +608,7 @@ export function useMeshSync(
                     Math.abs(pivotScl.z - t.scaleZ) > SCALE_EPS
                 ) {
                     existing.pivot.scale.set(t.scaleX, t.scaleY, t.scaleZ);
+                    devLogTransform('meshSync', obj.id, t);
                 }
 
                 // Update visibility
@@ -618,6 +627,13 @@ export function useMeshSync(
                 }
             } else {
                 // Create new mesh
+                devLogStore('meshCreate', {
+                    id: obj.id,
+                    shapeType: obj.shapeType,
+                    vertexCount: obj.vertices.length / 3,
+                    indexCount: obj.indices.length,
+                    transform: fmtTransform(obj.transform),
+                });
                 const geometry = new THREE.BufferGeometry();
                 geometry.setAttribute(
                     "position",
@@ -862,6 +878,7 @@ export function useRulerMode(
             const snapResult = findNearestSnap(raycaster, meshMapRef, camera, screenPos, shapeTypeMapRef.current);
             let point: THREE.Vector3;
             if (snapResult) {
+                devLogSnap('ruler', { type: snapResult.type ?? 'none', point: { x: snapResult.point.x, y: snapResult.point.y, z: snapResult.point.z }, distance: snapResult.snapDistance });
                 point = snapResult.point;
             } else {
                 // Fallback: project onto work plane (Z=0)
@@ -876,13 +893,16 @@ export function useRulerMode(
 
             if (rulerPointsRef.current.length === 0) {
                 // First click: save start point
+                devLogEvent('ruler', 'click', { pointIndex: 0, point: fmtPoint(point) });
                 rulerPointsRef.current = [point];
                 updateRulerVisuals(rulerPointsRef.current);
             } else {
                 // Second click: complete measurement
                 rulerPointsRef.current.push(point);
                 updateRulerVisuals(rulerPointsRef.current);
-                onRulerMeasure?.(rulerPointsRef.current[0].distanceTo(point));
+                const dist = rulerPointsRef.current[0].distanceTo(point);
+                devLogEvent('ruler', 'measure', { distance: dist.toFixed(2), from: fmtPoint(rulerPointsRef.current[0]), to: fmtPoint(point) });
+                onRulerMeasure?.(dist);
                 // Reset for next measurement
                 rulerPointsRef.current = [];
             }
@@ -907,12 +927,15 @@ export function useRulerMode(
             if (!Number.isFinite(distance) || distance < 0) return;
 
             const worldPoint = camera.position.clone().add(dir.clone().multiplyScalar(distance));
+            devLogPointer('rulerMove', { worldX: worldPoint.x, worldY: worldPoint.y, worldZ: worldPoint.z });
+
             const screenPos = new THREE.Vector2(x, y);
             const raycaster = new THREE.Raycaster();
             raycaster.setFromCamera(screenPos, camera);
 
             const result = findNearestSnap(raycaster, meshMapRef, camera, screenPos, shapeTypeMapRef.current);
             if (result) {
+                devLogSnap('preview', { type: result.type ?? 'none', point: { x: result.point.x, y: result.point.y, z: result.point.z }, distance: result.snapDistance });
                 setSnapPreviewPoint(result.point);
                 setSnapPreviewType(result.type);
             } else {

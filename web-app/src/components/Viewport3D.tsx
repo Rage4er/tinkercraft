@@ -15,6 +15,8 @@ import {
   type GizmoMode,
   setGridColor,
 } from "./viewport-hooks";
+import { devLogEvent, devLogPointer, devLogTransform } from "../utils/debug";
+import { fmtPoint, fmtPoint2 } from "../utils/debug-format";
 
 export type { GizmoMode } from "./viewport-hooks";
 
@@ -190,6 +192,8 @@ export default function Viewport3D({
       const rx = THREE.MathUtils.radToDeg(rot.x);
       const ry = THREE.MathUtils.radToDeg(rot.y);
       const rz = THREE.MathUtils.radToDeg(rot.z);
+      devLogTransform('gizmoMouseUp', id, { x: sx, y: sy, z: sz, rotX: rx, rotY: ry, rotZ: rz, scaleX: scl.x, scaleY: scl.y, scaleZ: scl.z });
+      devLogEvent('transform', 'gizmoMouseUp', { id, raw: fmtPoint({ x: pos.x, y: pos.y, z: pos.z }), snapped: fmtPoint({ x: sx, y: sy, z: sz }) });
       onTransformEndRef.current(id, {
         x: sx, y: sy, z: sz,
         rotX: rx, rotY: ry, rotZ: rz,
@@ -298,6 +302,8 @@ export default function Viewport3D({
         e.stopPropagation();
         return;
       }
+      devLogPointer('down', { screenX: e.clientX, screenY: e.clientY });
+      devLogEvent('pointer', 'down', { screen: fmtPoint2({ x: e.clientX, y: e.clientY }) });
       pointerDownPos.current = { x: e.clientX, y: e.clientY };
       isDraggingRef.current = false;
     },
@@ -328,6 +334,9 @@ export default function Viewport3D({
         return;
       }
 
+      devLogPointer('up', { screenX: e.clientX, screenY: e.clientY });
+      devLogEvent('pointer', 'up', { screen: fmtPoint2({ x: e.clientX, y: e.clientY }) });
+
       const start = pointerDownPos.current;
       pointerDownPos.current = null;
 
@@ -341,6 +350,8 @@ export default function Viewport3D({
           const rect = container.getBoundingClientRect();
           const x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
           const y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+          devLogPointer('raycast', { ndcX: x, ndcY: y });
+          devLogEvent('raycast', 'start', { ndc: fmtPoint2({ x, y }) });
           const raycaster = new THREE.Raycaster();
           raycaster.setFromCamera(new THREE.Vector2(x, y), camera);
           const meshes: THREE.Mesh[] = [];
@@ -348,10 +359,14 @@ export default function Viewport3D({
             if (entry.mesh.visible) meshes.push(entry.mesh);
           }
           const hits = raycaster.intersectObjects(meshes, false);
+          devLogEvent('raycast', 'hits', { count: hits.length, meshes: meshes.length });
           if (hits.length > 0) {
             const id = hits[0].object.userData.objectId as string;
+            const point = hits[0].point;
+            devLogEvent('select', 'object', { id, shiftKey: e.shiftKey, point: fmtPoint(point) });
             onSelect(id, e.shiftKey);
           } else {
+            devLogEvent('select', 'deselect', {});
             onSelect(null, false);
           }
         }
@@ -360,6 +375,7 @@ export default function Viewport3D({
 
       // If it was a drag (box selection)
       if (isDraggingRef.current) {
+        devLogEvent('select', 'drag', { start: fmtPoint2(start), end: fmtPoint2({ x: e.clientX, y: e.clientY }) });
         const rect: DragRect = {
           startX: start.x,
           startY: start.y,

@@ -85,6 +85,7 @@ export function createPrimitiveNode(
     localTransform: { ...transform },
   }
   treeStore.setNode(id, node)
+  devLog('TREE', { action: 'createPrimitive', id, shapeType, params, transform })
   return node
 }
 
@@ -127,6 +128,7 @@ export function createBooleanNode(
   if (childANode) childANode.parentId = id
   if (childBNode) childBNode.parentId = id
 
+  devLog('TREE', { action: 'createBoolean', id, operation, children: [childA, childB], transform })
   return node
 }
 
@@ -147,6 +149,7 @@ export function createBakedNode(
     localTransform: { ...transform },
   }
   treeStore.setNode(id, node)
+  devLog('TREE', { action: 'createBaked', id, vertexCount: vertices.length / 3, indexCount: indices.length, transform })
   return node
 }
 

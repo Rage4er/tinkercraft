@@ -9,7 +9,7 @@ import { FILLET_EPSILON, FILLET_MIN_RADIUS } from '../constants.ts'
 import type { RebuildTransform } from './rebuildOps'
 import { applyMoveDelta, applyMirrorToTransform, applyAlignToTransform } from './rebuildOps'
 import type { MirrorOperation } from './types'
-import { devLog } from '../utils/debug'
+import { devLog, devLogCsg } from '../utils/debug'
 
 // --- Type definitions (moved from worker.ts to avoid circular deps) ---
 
@@ -577,14 +577,14 @@ export async function handleBuildImportedMesh(msg: BuildImportedMeshMessage): Pr
   const t0 = performance.now()
   const verts = new Float32Array(msg.vertices)
   const tris = new Uint32Array(msg.indices)
-  if (import.meta.env.DEV) console.log(`[DIAG:handleBuildImportedMesh] objId=${msg.objId} verts=${verts.length} tris=${tris.length}`)
+  devLogCsg('BUILD_IMPORTED_MESH', { objId: msg.objId, verts: verts.length / 3, tris: tris.length / 3 })
   try {
     const m = new wasm.Manifold({
       numProp: 3,
       vertProperties: verts,
       triVerts: tris,
     })
-    if (import.meta.env.DEV) console.log(`[DIAG:handleBuildImportedMesh] Manifold created successfully for ${msg.objId}`)
+    devLogCsg('BUILD_IMPORTED_MESH', { objId: msg.objId, status: 'Manifold created' })
     setCached(msg.objId, m)
     const mesh = extractMesh(m)
     safePostMessage(
@@ -1143,6 +1143,31 @@ export async function handleCsgBoolean(msg: CsgBooleanMessage): Promise<void> {
   // to ensure worker cache has geometry with correct position/rotation/scale.
   // The transformA/transformB parameters are legacy and kept for backward compat.
 
+  // DIAG: operand BBox before CSG
+  const aMesh = a.getMesh()
+  const aVerts = aMesh.vertProperties
+  const aNumVerts = aVerts.length / aMesh.numProp
+  let aMin = { x: Infinity, y: Infinity, z: Infinity }, aMax = { x: -Infinity, y: -Infinity, z: -Infinity }
+  for (let i = 0; i < aNumVerts; i++) {
+    const vx = aVerts[i * aMesh.numProp], vy = aVerts[i * aMesh.numProp + 1], vz = aVerts[i * aMesh.numProp + 2]
+    if (vx < aMin.x) aMin.x = vx; if (vx > aMax.x) aMax.x = vx
+    if (vy < aMin.y) aMin.y = vy; if (vy > aMax.y) aMax.y = vy
+    if (vz < aMin.z) aMin.z = vz; if (vz > aMax.z) aMax.z = vz
+  }
+  devLogCsg('operandA', { id: msg.idA, bbox: { min: aMin, max: aMax } })
+
+  const bMesh = b.getMesh()
+  const bVerts = bMesh.vertProperties
+  const bNumVerts = bVerts.length / bMesh.numProp
+  let bMin = { x: Infinity, y: Infinity, z: Infinity }, bMax = { x: -Infinity, y: -Infinity, z: -Infinity }
+  for (let i = 0; i < bNumVerts; i++) {
+    const vx = bVerts[i * bMesh.numProp], vy = bVerts[i * bMesh.numProp + 1], vz = bVerts[i * bMesh.numProp + 2]
+    if (vx < bMin.x) bMin.x = vx; if (vx > bMax.x) bMax.x = vx
+    if (vy < bMin.y) bMin.y = vy; if (vy > bMax.y) bMax.y = vy
+    if (vz < bMin.z) bMin.z = vz; if (vz > bMax.z) bMax.z = vz
+  }
+  devLogCsg('operandB', { id: msg.idB, bbox: { min: bMin, max: bMax } })
+
   let result: ManifoldObject
   switch (msg.op) {
     case 'union':
@@ -1160,6 +1185,23 @@ export async function handleCsgBoolean(msg: CsgBooleanMessage): Promise<void> {
   setCached(msg.resultId, result)
 
   const mesh = extractMesh(result)
+
+  // DIAG: result BBox
+  const rMin = { x: Infinity, y: Infinity, z: Infinity }, rMax = { x: -Infinity, y: -Infinity, z: -Infinity }
+  for (let i = 0; i < mesh.vertices.length; i += 3) {
+    const vx = mesh.vertices[i], vy = mesh.vertices[i + 1], vz = mesh.vertices[i + 2]
+    if (vx < rMin.x) rMin.x = vx; if (vx > rMax.x) rMax.x = vx
+    if (vy < rMin.y) rMin.y = vy; if (vy > rMax.y) rMax.y = vy
+    if (vz < rMin.z) rMin.z = vz; if (vz > rMax.z) rMax.z = vz
+  }
+  const rCx = (rMin.x + rMax.x) / 2, rCy = (rMin.y + rMax.y) / 2, rCz = (rMin.z + rMax.z) / 2
+  devLogCsg('result:bbox', {
+    id: msg.resultId, op: msg.op,
+    bbox: { min: rMin, max: rMax, center: { x: rCx, y: rCy, z: rCz }, size: { x: rMax.x - rMin.x, y: rMax.y - rMin.y, z: rMax.z - rMin.z } },
+    verts: mesh.vertices.length / 3, tris: mesh.tris, ms: performance.now() - t0,
+  })
+  devLogCsg('verts', { id: msg.resultId, firstVertex: { x: mesh.vertices[0], y: mesh.vertices[1], z: mesh.vertices[2] }, transformA: msg.transformA })
+
   safePostMessage(
     {
       reqId: msg.reqId,
@@ -1208,6 +1250,7 @@ export async function handleSyncObjects(msg: SyncObjectsMessage): Promise<void> 
       )
       const tm = m.transform(fullMatrix)
       setCached(e.objId, tm)
+      devLogCsg('SYNC_MESH', { objId: e.objId, shapeType: e.shapeType, transform: e.transform, hasRotationOrScale: e.transform.rotX !== 0 || e.transform.rotY !== 0 || e.transform.rotZ !== 0 || e.transform.scaleX !== 1 || e.transform.scaleY !== 1 || e.transform.scaleZ !== 1 })
       success = true
     } finally {
       // FIX (LOW-18-15): Dispose on error to prevent WASM memory leak

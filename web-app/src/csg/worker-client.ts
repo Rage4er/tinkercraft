@@ -3,6 +3,7 @@
 // ============================================================
 
 import type { CsgBooleanOp, ShapeType, ShapeParams, TransformNR } from './types'
+import { devLogWorker } from '../utils/debug'
 
 export interface MeshResult {
   objId: string
@@ -136,6 +137,8 @@ function send<T>(type: string, data: Record<string, unknown>, timeoutMs = 10000)
   // FIX (MED-18-12): Reduced default timeout from 30s to 10s — sync operations
   // (buildShape, syncObjects, rebuildScene) typically complete in <2s.
   // CSG booleans may still need longer — they pass explicit timeout.
+  devLogWorker('send', type, data)
+  const t0 = performance.now()
   return new Promise((resolve, reject) => {
     const reqId = nextReqId()
 
@@ -152,10 +155,14 @@ function send<T>(type: string, data: Record<string, unknown>, timeoutMs = 10000)
           reject(new Error(`Invalid worker response for ${type}: missing or mismatched fields`))
           return
         }
+        const ms = performance.now() - t0
+        devLogWorker('receive', type, v, ms)
         resolve(v as T)
       },
       (r: unknown) => {
         clearTimeout(timer)
+        const ms = performance.now() - t0
+        devLogWorker('error', type, r, ms)
         reject(r)
       }
     ])
@@ -176,21 +183,27 @@ export async function workerBuildShape(
   objId: string, shapeType: ShapeType, params: ShapeParams, transform: TransformNR,
 ): Promise<MeshResult> {
   await waitReady()
-  return send<MeshResult>('buildShape', { objId, shapeType, params, transform })
+  const result = await send<MeshResult>('buildShape', { objId, shapeType, params, transform })
+  devLogWorker('receive', 'buildShape', { objId, shapeType, tris: result.tris, vertices: result.vertices.length / 3 }, result.ms)
+  return result
 }
 
 export async function workerApplyFillet(
   objId: string, shapeType: ShapeType, params: ShapeParams, radius: number, transform: TransformNR,
 ): Promise<MeshResult> {
   await waitReady()
-  return send<MeshResult>('applyFillet', { objId, shapeType, params, radius, transform })
+  const result = await send<MeshResult>('applyFillet', { objId, shapeType, params, radius, transform })
+  devLogWorker('receive', 'applyFillet', { objId, shapeType, radius, tris: result.tris }, result.ms)
+  return result
 }
 
 export async function workerBuildImportedMesh(
   objId: string, vertices: Float32Array | number[], indices: Uint32Array | number[],
 ): Promise<MeshResult> {
   await waitReady()
-  return send<MeshResult>('buildImportedMesh', { objId, vertices, indices })
+  const result = await send<MeshResult>('buildImportedMesh', { objId, vertexCount: vertices.length, indexCount: indices.length })
+  devLogWorker('receive', 'buildImportedMesh', { objId, tris: result.tris, vertices: result.vertices.length / 3 }, result.ms)
+  return result
 }
 
 /**
@@ -208,7 +221,10 @@ export async function workerSyncObjects(
   }>,
 ): Promise<void> {
   await waitReady()
+  devLogWorker('send', 'syncObjects', { count: entries.length, ids: entries.map(e => e.objId) })
+  const t0 = performance.now()
   await send<unknown>('syncObjects', { entries })
+  devLogWorker('receive', 'syncObjects', { count: entries.length }, performance.now() - t0)
 }
 
 export async function workerSyncMesh(
@@ -218,7 +234,10 @@ export async function workerSyncMesh(
   transform?: TransformNR,
 ): Promise<void> {
   await waitReady()
+  devLogWorker('send', 'syncMesh', { objId, vertexCount: vertices.length, indexCount: indices.length })
+  const t0 = performance.now()
   await send<unknown>('syncMesh', { objId, vertices, indices, transform: transform ?? { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 } })
+  devLogWorker('receive', 'syncMesh', { objId }, performance.now() - t0)
 }
 
 export async function workerCsgBoolean(
@@ -227,7 +246,9 @@ export async function workerCsgBoolean(
   transformB?: { x: number; y: number; z: number; rotX: number; rotY: number; rotZ: number; scaleX: number; scaleY: number; scaleZ: number },
 ): Promise<MeshResult> {
   await waitReady()
-  return send<MeshResult>('csgBoolean', { idA, idB, op, resultId, transformA, transformB })
+  const result = await send<MeshResult>('csgBoolean', { idA, idB, op, resultId, transformA, transformB })
+  devLogWorker('receive', 'csgBoolean', { idA, idB, op, resultId, tris: result.tris, vertices: result.vertices.length / 3 }, result.ms)
+  return result
 }
 
 /**
@@ -243,7 +264,9 @@ export async function workerCsgBooleanWithSync(
   shapeB?: { shapeType: ShapeType; params: ShapeParams },
 ): Promise<MeshResult> {
   await waitReady()
-  return send<MeshResult>('csgBooleanSync', { idA, idB, op, resultId, transformA, transformB, shapeA, shapeB })
+  const result = await send<MeshResult>('csgBooleanSync', { idA, idB, op, resultId, transformA, transformB, shapeA, shapeB })
+  devLogWorker('receive', 'csgBooleanSync', { idA, idB, op, resultId, shapeA: shapeA?.shapeType, shapeB: shapeB?.shapeType, tris: result.tris }, result.ms)
+  return result
 }
 
 export async function workerMirrorObject(
@@ -251,24 +274,34 @@ export async function workerMirrorObject(
   mirrorCenter?: { x: number; y: number; z: number },
 ): Promise<MeshResult> {
   await waitReady()
-  return send<MeshResult>('mirrorObject', { objId, plane, shapeType, params, transform, mirrorCenter })
+  const result = await send<MeshResult>('mirrorObject', { objId, plane, shapeType, params, transform, mirrorCenter })
+  devLogWorker('receive', 'mirrorObject', { objId, plane, tris: result.tris }, result.ms)
+  return result
 }
 
 export async function workerRebuildScene(
   operations: unknown[],
 ): Promise<SceneMeshResult> {
   await waitReady()
-  return send<SceneMeshResult>('rebuildScene', { operations })
+  const result = await send<SceneMeshResult>('rebuildScene', { opCount: operations.length })
+  devLogWorker('receive', 'rebuildScene', { opCount: operations.length, resultCount: result.results.length, ms: result.ms })
+  return result
 }
 
 export async function workerDeleteObjects(ids: string[]): Promise<void> {
   await waitReady()
+  devLogWorker('send', 'deleteObjects', { count: ids.length, ids })
+  const t0 = performance.now()
   await send<unknown>('deleteObjects', { ids })
+  devLogWorker('receive', 'deleteObjects', { count: ids.length }, performance.now() - t0)
 }
 
 export async function workerClearAll(): Promise<void> {
   await waitReady()
+  devLogWorker('send', 'clearAll', {})
+  const t0 = performance.now()
   await send<unknown>('clearAll', {})
+  devLogWorker('receive', 'clearAll', {}, performance.now() - t0)
 }
 
 export async function workerRebuildNode(
@@ -287,7 +320,9 @@ export async function workerRebuildNode(
   }>,
 ): Promise<MeshResult> {
   await waitReady()
-  return send<MeshResult>('rebuildTreeNode', { nodeId, nodes })
+  const result = await send<MeshResult>('rebuildTreeNode', { nodeId, nodeCount: nodes.length, nodes })
+  devLogWorker('receive', 'rebuildTreeNode', { nodeId, tris: result.tris, vertices: result.vertices.length / 3 }, result.ms)
+  return result
 }
 
 export function isWorkerReady(): boolean { return _ready }
