@@ -46,6 +46,39 @@
 
 ---
 
+### ✅ ИСПРАВЛЕНО — CSG-TRANSFORM-IS-CENTROID (CSG-результат позиционируется со сдвигом для асимметричной геометрии) (2026-10-07)
+
+**Проблема:** CSG-результат рендерился со сдвигом для асимметричной геометрии (куб+призма). `extractAndCenterGetAABB` центрировал вершины по `bboxCenter` (centroid CSG-результата = 21,20,20), но pivot стоял в `transformA` (20,20,20). Для асимметричной геометрии `bboxCenter ≠ transformA`.
+
+**Математика бага:**
+```
+pivot.position = transformA = (20, 20, 20)
+vertex_local = v_world - bboxCenter = (10, 10, 10) - (21, 20, 20) = (-11, -10, -10)
+world = pivot + vertex_local = (20-11, 20-10, 20-10) = (9, 10, 10) ❌
+должно: (10, 10, 10) ✅
+```
+
+**Логи-доказательство:**
+```
+[CSG:center] {
+  bboxCenter: '(21.00,20.00,20.00)',
+  assignedLocal: '(20.00,20.00,20.00)',   ← transformA (после 1-го фикса)
+  diff: { dx: 1, dy: 0, dz: 0 }           ← centroid смещён на +1
+}
+```
+
+**Корень проблемы:** вершины центрированы по `bboxCenter`, pivot в `transformA`. Разница = сдвиг.
+
+**Решение:**
+1. Создана `extractCenteredAt(vertices, center)` — центрирует вершины относительно заданной точки (не bbox center)
+2. `csgBoolean`: вершины центрируются по `transformA` → `pivot(transformA) + vertex(centered_at_transformA) = world_vertex` ✅
+3. `extrudeSelected`: вершины центрируются по `obj.transform`
+4. `resultCenter` в `GroupOperation` = `transformA` для корректного rebuild из истории
+
+**Файлы:** `store/document-store.ts` (функции `csgBoolean`, `extrudeSelected`), `store/helpers.ts` (`extractCenteredAt`)
+
+---
+
 ### ✅ ИСПРАВЛЕНО — CYCLE-CSG (Cannot create cycle in tree при rebuildBuildTree) (2026-08-08)
 
 **Проблема:** Ошибка `Cannot create cycle in tree: obj_7 → csg_8 or obj_5 → csg_8` при `jumpToHistory`, `loadFromProject`, `undo/redo`. При восстановлении дерева из истории boolean-узлы создавались без проверки существования детей (`op.ids[0]`, `op.ids[1]`). Дети могли быть удалены из `objects` (через `delete`), но оставаться в операции `group` → `createBooleanNode` падал с ошибкой циклической зависимости.
@@ -123,6 +156,7 @@
 | **Фаза 7.5** | **✅ Завершена (2026-08-13)** |
 | **Фаза 7.6** | **✅ Завершена (2026-08-13)** |
 | **🎉 РЕЛИЗ v1.0.0** | **✅ 2026-08-19** |
+| **REBUILD-TREE-NODE-CRASH** (2026-10-07) | `workerRebuildNode` терял массив `nodes` при отправке в воркер — `msg.nodes is not iterable` при resize | **✅ Исправлено** |
 | Точность ревью (Раунд 16) | ~50% (8/18 полностью верных) |
 | Точность ревью (Раунд 17 + SourceCraft) | ~83% (12.5/15 подтверждено) |
 | Точность ревью (Раунд 18) | ✅ ЗАВЕРШЕНО (138/138 закрыто) |
@@ -142,6 +176,48 @@
 ---
 
 *Полная история всех код-ревью с детальным описанием каждого раунда: [`CODE_REVIEW_ARCHIVE.md`](CODE_REVIEW_ARCHIVE.md)*
+
+---
+
+## 🔴 REBUILD-TREE-NODE-CRASH — `msg.nodes is not iterable` при resize (2026-10-07)
+
+**Приоритет:** CRITICAL
+**Статус:** ✅ **ИСПРАВЛЕНО**
+
+### Проблема
+
+При resize примитивов (призма, куб) воркер падал с ошибкой:
+```
+[WORKER:error:rebuildTreeNode] Error: TypeError: msg.nodes is not iterable
+    at Worker._messageHandler (worker-client.ts:45:36)
+```
+
+**Resize не выполнялся** → призма оставалась `sides=6` → диагностика CSG-багов с `sides=3` была заблокирована.
+
+### Корень проблемы
+
+Функция `workerRebuildNode` (`worker-client.ts:323`) принимала параметр `nodes`, но **не передавала его в сообщение воркеру**:
+
+```typescript
+// ❌ Было:
+const result = await send<MeshResult>('rebuildTreeNode', { nodeId, nodeCount: nodes.length })
+
+// ✅ Стало:
+const result = await send<MeshResult>('rebuildTreeNode', { nodeId, nodeCount: nodes.length, nodes })
+```
+
+Воркер `handleRebuildTreeNode` (`worker-handlers.ts:661`) ожидал `msg.nodes` и пытался итерировать:
+```typescript
+for (const n of msg.nodes) {  // ← TypeError: msg.nodes is not iterable
+```
+
+### Исправление
+
+Добавлено `nodes` в объект сообщения `send()`. Массив сериализуется через `structuredClone` корректно (Float32Array поддерживается).
+
+### Файлы
+
+`csg/worker-client.ts`
 
 ---
 

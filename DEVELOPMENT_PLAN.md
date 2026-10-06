@@ -550,6 +550,7 @@ web-app/
 | | **MIRROR-DOUBLE-TRANSLATE** — Зеркало CSG давало ломанные, непредсказуемые копии (двойной translation: `moveTreeNode` сдвигал детей в дереве + root localTransform содержит translation) | **CRITICAL** | ✅ **ИСПРАВЛЕНО** (2026-08-18) |
 | | **MIRROR-TREE-PRESERVE** — Повторное зеркалирование CSG-результата создавало примитив `cube` вместо boolean-ноды (mirrorObject удалял клонированное поддерево через deleteNode, rebuildBuildTree падалбэкал в createPrimitiveNode('cube')) | **CRITICAL** | ✅ **ИСПРАВЛЕНО** (2026-08-18) |
 | | **CSG-RESIZE-NO-BAKE** — Ресайз CSG-результата запекал scale в вершины через `rebuildNode` (двойное scale при boolean/Viewport3D) | **HIGH** | ✅ **ИСПРАВЛЕНО** (2026-08-18) |
+| | **CSG-TRANSFORM-IS-CENTROID** — `extractAndCenterGetAABB` центрировал вершины по `bboxCenter` CSG-результата, pivot стоял в `transformA`. Для асимметричной геометрии `bboxCenter ≠ transformA` → сдвиг. Исправлено: `extractCenteredAt(vertices, transformA)` центрирует вершины относительно `transformA`, pivot и вершины согласованы. | **CRITICAL** | ✅ **ИСПРАВЛЕНО** (2026-10-07) |
 | | **OPT (MIRROR-CACHE)** — Дублированная работа previewMirror и mirrorSelected | **PERFORMANCE** | ✅ **ИСПРАВЛЕНО** (2026-08-07) |
 | | ~~MIRROR-19-11: as unknown as в rebuild.ts~~ | **MEDIUM** | ✅ НЕ БАГ |
 | | CRIT-R16-3: `any` в worker | WARN | ✅ Исправлено |

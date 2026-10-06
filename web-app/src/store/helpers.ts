@@ -114,6 +114,34 @@ export function extractAndCenterGetAABB(vertices: Float32Array): {
   return { cx, cy, cz, aabb: { min: { x: cMinX, y: cMinY, z: cMinZ }, max: { x: cMaxX, y: cMaxY, z: cMaxZ } } }
 }
 
+/** Extract AABB and center vertices relative to a GIVEN point (not bbox center).
+ *
+ * FIX (CSG-TRANSFORM-IS-CENTROID): For CSG results, vertices must be centered
+ * relative to transformA (first operand position), NOT the CSG bbox center.
+ * The bbox center differs from transformA for asymmetric geometry (e.g., cube+prism),
+ * causing the CSG result to render at a shifted position.
+ *
+ * This function centers vertices at `center` and returns the AABB of the
+ * CENTERED geometry. Single-pass: O(n).
+ */
+export function extractCenteredAt(vertices: Float32Array, center: { x: number; y: number; z: number }): {
+  aabb: { min: Vec3; max: Vec3 }
+} {
+  if (vertices.length === 0) return { aabb: { min: { x: 0, y: 0, z: 0 }, max: { x: 0, y: 0, z: 0 } } }
+
+  // Shift vertices relative to `center` + compute centered AABB in one pass
+  let cMinX = Infinity, cMaxX = -Infinity
+  let cMinY = Infinity, cMaxY = -Infinity
+  let cMinZ = Infinity, cMaxZ = -Infinity
+  for (let i = 0; i < vertices.length; i += 3) {
+    vertices[i] -= center.x; if (vertices[i] < cMinX) cMinX = vertices[i]; if (vertices[i] > cMaxX) cMaxX = vertices[i]
+    vertices[i + 1] -= center.y; if (vertices[i + 1] < cMinY) cMinY = vertices[i + 1]; if (vertices[i + 1] > cMaxY) cMaxY = vertices[i + 1]
+    vertices[i + 2] -= center.z; if (vertices[i + 2] < cMinZ) cMinZ = vertices[i + 2]; if (vertices[i + 2] > cMaxZ) cMaxZ = vertices[i + 2]
+  }
+
+  return { aabb: { min: { x: cMinX, y: cMinY, z: cMinZ }, max: { x: cMaxX, y: cMaxY, z: cMaxZ } } }
+}
+
 /** Creates a SceneObject with cached AABB. Use everywhere a new object is created. */
 // FIX (LOW-18-6): Accept optional pre-computed AABB to avoid redundant computeAABB calls.
 export function makeObject(partial: Omit<SceneObject, 'aabb'> & { aabb?: SceneObject['aabb'] }): SceneObject {
