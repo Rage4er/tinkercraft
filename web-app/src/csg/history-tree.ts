@@ -883,26 +883,11 @@ function mirrorNodeRecursive(
   }
 
   if (node.type === 'primitive') {
-    // FIX (MIRROR-PRIMITIVE-NEGATIVE-SCALE):
-    // Для primitive-нод (призма, конус, текст) — flip sign scale
-    // по перпендикулярной оси плоскости зеркала.
-    // Это даёт истинное геометрическое зеркало для несимметричных примитивов.
-    //
-    // Математическое обоснование:
-    // M_x · R_x(rotX) · R_y(rotY) · R_z(rotZ) · v
-    // = R_x(rotX) · R_y(-rotY) · R_z(-rotZ) · S_x(-1) · v
-    //
-    // Это в точности mirrorEuler + scaleX=-1. Двойного отражения нет.
-    //
-    // Flip sign (not -Math.abs) so double mirror restores original:
-    // 1st mirror: 1 → -1, 2nd mirror: -1 → 1
-    if (plane === 'YZ') {
-      scaleX = -scaleX  // X перпендикулярна YZ
-    } else if (plane === 'XZ') {
-      scaleY = -scaleY  // Y перпендикулярна XZ
-    } else if (plane === 'XY') {
-      scaleZ = -scaleZ  // Z перпендикулярна XY
-    }
+    // Для всех нод: scale всегда положительный (abs).
+    // Mirror geometry is done via matrix transform, NOT via negative scale.
+    scaleX = Math.abs(scaleX)
+    scaleY = Math.abs(scaleY)
+    scaleZ = Math.abs(scaleZ)
   } else {
     // Для baked-нод (CSG, import_mesh) — scale всегда положительный.
     // Зеркало геометрии уже сделано через mirror matrix в worker

@@ -311,6 +311,94 @@ for (const n of msg.nodes) {  // ← TypeError: msg.nodes is not iterable
 
 ---
 
+## 🔄 Известные проблемы Фазы 8 (запланированы)
+
+### CSG-PRESERVE-RS — Потеря rotation/scale в CSG-результате
+
+**Статус:** 🔲 Фаза 8 (известная проблема)
+**Обнаружена:** 2026-10-07
+**Компонент:** `store/document-store.ts` → `csgBoolean`
+**Приоритет:** Высокий
+
+#### Симптом
+`csgBoolean` создаёт `resultTransform` с **только позицией** центроида, **сбрасывая rotation/scale в identity**. Это приводит к:
+1. CSG с rotation/scale → результат теряет ориентацию/масштаб
+2. CSG+CSG → второй CSG оперирует "плоской" геометрией первого
+3. Зеркальная призма + CSG → смещение из-за потери отрицательного scale
+
+#### Корневая причина
+`resultTransform` копировал только позицию центроида, сбрасывая rotation/scale в identity.
+
+#### Решение (запланировано)
+Копировать rotation/scale от operand A. Вершины CSG центрированы в origin (`extractCenteredAt`), transform несёт полный TRS — применяется при рендере через pivot и в worker через `handleSyncMesh`.
+
+#### Затронуто
+- `store/document-store.ts` → `csgBoolean`
+
+---
+
+### MIRROR-CSG-CHILD-RS-LOSS — Сброс RS дочерних примитивов при зеркале CSG
+
+**Статус:** 🔲 Фаза 8 (известная проблема)
+**Обнаружена:** 2026-10-07
+**Компонент:** `csg/history-tree.ts` → `mirrorNodeRecursive`
+**Приоритет:** Высокий
+
+#### Симптом
+Зеркалирование CSG, полученного объединением двух отзеркаленных копий,
+**сбрасывает масштаб и поворот** у дочерних примитивов. `mirrorNodeRecursive`
+применяется к `localTransform` примитивов, но **RS живёт в root-ноде CSG-поддерева**,
+а у примитивов `localTransform = identity` по rot/scale → после клонирования/зеркала
+`relativeToParent` теряет `rotationDelta` / `scaleRatio`.
+
+#### Воспроизведение
+1. Призма `sides=3` с rotation → CSG Union
+2. Зеркало CSG
+3. **Ожидалось:** дочерняя призма сохраняет rotation
+   **Фактически:** rotation сбрасывается
+
+#### Корневая причина
+`mirrorNodeRecursive` зеркалит `localTransform` примитивов, но для CSG-результатов
+rotation/scale живёт в root-ноде boolean-поддерева, а не в дочерних примитивах.
+После зеркала `relativeToParent` не пересчитывается правильно.
+
+#### Затронуто
+- `csg/history-tree.ts` → `mirrorNodeRecursive`
+- `store/document-store.ts` → `mirrorSelected`
+
+---
+
+### CSG-CSG-POSITION-DRIFT — Смещение операндов при CSG двух CSG-результатов
+
+**Статус:** 🔲 Фаза 8 (известная проблема)
+**Обнаружена:** 2026-10-07
+**Компонент:** `csg/worker-handlers.ts` → `handleCsgBooleanSync`
+**Приоритет:** Высокий
+
+#### Симптом
+Булевые операции между двумя CSG-результатами приводят к **смещению операндов**
+относительно друг друга. Worker принимает меши через `handleSyncMesh` с полным TRS,
+но при boolean между двумя CSG-результатами `extractAndCenter` результата даёт
+`hasSR=false` и **теряется относительное позиционирование**.
+
+#### Воспроизведение
+1. Куб → CSG Union → CSG-результат `csg_1`
+2. Куб → CSG Union → CSG-результат `csg_2`
+3. CSG Union `csg_1 + csg_2`
+4. **Ожидалось:** результат на месте
+   **Фактически:** операнды смещены относительно друг друга
+
+#### Корневая причина
+`extractAndCenter` центрирует вершины результата в origin, но не сохраняет
+относительное позиционирование операндов. Для CSG-результатов с `hasSR=true`
+(rotation/scale в transform) это приводит к потере относительных позиций.
+
+#### Затронуто
+- `csg/worker-handlers.ts` → `handleCsgBooleanSync`, `extractAndCenter`
+- `store/document-store.ts` → `csgBoolean`
+
+---
+
 ## 📌 Будущие направления
 
 ### Параметрическая история операций (Фаза 8)

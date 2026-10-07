@@ -518,19 +518,14 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
 
       // Pivot is at transformA — vertices are centered relative to it.
       // World position: pivot(transformA) + vertex(centered_at_transformA) = original world vertex.
-      //
-      // FIX (CSG-PRESERVE-RS): Preserve rotation/scale from operand A.
-      // CSG result vertices are centered at origin (extractCenteredAt).
-      // Transform carries the full TRS — applied at render time via pivot
-      // and in worker via handleSyncMesh for subsequent boolean operations.
+      // CSG result: vertices are centered at origin (extractCenteredAt).
+      // Transform carries position (centroid) only — rotation/scale are identity.
+      // RS is applied at render time via pivot and in worker via handleSyncMesh
+      // for subsequent boolean operations (FIX MIRROR-CSG-RS).
       const resultTransform: TransformNR = {
         x: transformA.x, y: transformA.y, z: transformA.z,
-        rotX: transformA.rotX,
-        rotY: transformA.rotY,
-        rotZ: transformA.rotZ,
-        scaleX: transformA.scaleX,
-        scaleY: transformA.scaleY,
-        scaleZ: transformA.scaleZ,
+        rotX: 0, rotY: 0, rotZ: 0,
+        scaleX: 1, scaleY: 1, scaleZ: 1,
       }
 
       // DIAG: compute original bbox center (before centering) for comparison

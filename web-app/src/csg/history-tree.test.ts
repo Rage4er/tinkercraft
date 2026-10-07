@@ -545,39 +545,40 @@ describe('TreeStore', () => {
   })
 })
 
+
 // ============================================================
-// MIRROR-PRIMITIVE-NEGATIVE-SCALE: negative scale for asymmetric primitives
+// MIRROR-SCALE-POSITIVE: scale is always Math.abs() after mirror
 // ============================================================
-describe('mirrorNodeRecursive — negative scale for primitives', () => {
+describe('mirrorNodeRecursive — scale is always positive', () => {
   beforeEach(() => {
     clearTree()
   })
 
-  describe('YZ plane (scaleX = -scaleX)', () => {
-    it('primitive prism sides=3 gets negative scaleX', () => {
+  describe('YZ plane (Math.abs(scaleX))', () => {
+    it('primitive prism sides=3 gets positive scaleX after mirror', () => {
       createPrimitiveNode('p', 'prism', { radius: 12, height: 20, sides: 3 },
         { x: 10, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 })
 
       mirrorTreeNode('p', 'YZ', { x: 0, y: 0, z: 0 })
 
       const t = getNode('p')!.localTransform!
-      expect(t.x).toBe(-10)                             // позиция отзеркалена
-      expect(t.scaleX).toBe(-1)                         // ✅ отрицательный scale
-      expect(t.scaleY).toBe(1)                          // Y unchanged
-      expect(t.scaleZ).toBe(1)                          // Z unchanged
-      expect(Math.abs(t.rotY)).toBeLessThan(1e-10)  // rotY=0 → mirrorEuler → ±0 (floating point)
+      expect(t.x).toBe(-10)
+      expect(t.scaleX).toBe(1)
+      expect(t.scaleY).toBe(1)
+      expect(t.scaleZ).toBe(1)
+      expect(Math.abs(t.rotY)).toBeLessThan(1e-10)
     })
 
-    it('primitive with rotY=30° gets negative scaleX and mirrored rotation', () => {
+    it('primitive with rotY=30 gets mirrored rotation', () => {
       createPrimitiveNode('p', 'prism', { radius: 12, height: 20, sides: 3 },
         { x: 10, y: 0, z: 0, rotX: 0, rotY: 30, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 })
 
       mirrorTreeNode('p', 'YZ', { x: 0, y: 0, z: 0 })
 
       const t = getNode('p')!.localTransform!
-      expect(t.scaleX).toBe(-1)                         // ✅ отрицательный scale
-      expect(t.rotY).toBe(-30)                          // ✅ mirrorEuler инвертировал
-      expect(t.rotX).toBe(0)                            // perpendicular — unchanged
+      expect(t.scaleX).toBe(1)
+      expect(t.rotY).toBe(-30)
+      expect(t.rotX).toBe(0)
       expect(t.x).toBe(-10)
     })
 
@@ -588,27 +589,27 @@ describe('mirrorNodeRecursive — negative scale for primitives', () => {
       mirrorTreeNode('p', 'YZ', { x: 0, y: 0, z: 0 })
 
       const t = getNode('p')!.localTransform!
-      expect(t.scaleX).toBe(-1)
-      expect(t.rotX).toBe(20)                           // perpendicular — unchanged
-      expect(t.rotY).toBe(-30)                          // in-plane — negated
-      expect(t.rotZ).toBe(-10)                          // in-plane — negated
+      expect(t.scaleX).toBe(1)
+      expect(t.rotX).toBe(20)
+      expect(t.rotY).toBe(-30)
+      expect(t.rotZ).toBe(-10)
     })
 
-    it('cone gets negative scaleX', () => {
+    it('cone gets positive scaleX after mirror', () => {
       createPrimitiveNode('c', 'cone', { radius: 10, height: 24 },
         { x: 15, y: 0, z: 0, rotX: 0, rotY: 90, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 })
 
       mirrorTreeNode('c', 'YZ', { x: 0, y: 0, z: 0 })
 
       const t = getNode('c')!.localTransform!
-      expect(t.scaleX).toBe(-1)
-      expect(t.rotY).toBe(-90)                          // mirrorEuler
+      expect(t.scaleX).toBe(1)
+      expect(t.rotY).toBe(-90)
       expect(t.x).toBe(-15)
     })
   })
 
-  describe('XZ plane (scaleY = -scaleY)', () => {
-    it('primitive gets negative scaleY', () => {
+  describe('XZ plane (Math.abs(scaleY))', () => {
+    it('primitive gets positive scaleY after mirror', () => {
       createPrimitiveNode('p', 'prism', { radius: 12, height: 20, sides: 3 },
         { x: 0, y: 10, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 })
 
@@ -616,14 +617,14 @@ describe('mirrorNodeRecursive — negative scale for primitives', () => {
 
       const t = getNode('p')!.localTransform!
       expect(t.scaleX).toBe(1)
-      expect(t.scaleY).toBe(-1)                         // ✅ отрицательный scale
+      expect(t.scaleY).toBe(1)
       expect(t.scaleZ).toBe(1)
       expect(t.y).toBe(-10)
     })
   })
 
-  describe('XY plane (scaleZ = -scaleZ)', () => {
-    it('primitive gets negative scaleZ', () => {
+  describe('XY plane (Math.abs(scaleZ))', () => {
+    it('primitive gets positive scaleZ after mirror', () => {
       createPrimitiveNode('p', 'prism', { radius: 12, height: 20, sides: 3 },
         { x: 0, y: 0, z: 10, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 })
 
@@ -632,46 +633,13 @@ describe('mirrorNodeRecursive — negative scale for primitives', () => {
       const t = getNode('p')!.localTransform!
       expect(t.scaleX).toBe(1)
       expect(t.scaleY).toBe(1)
-      expect(t.scaleZ).toBe(-1)                         // ✅ отрицательный scale
+      expect(t.scaleZ).toBe(1)
       expect(t.z).toBe(-10)
-    })
-  })
-
-  describe('double mirror restores original', () => {
-    it('primitive: double YZ mirror restores position and scale', () => {
-      createPrimitiveNode('p', 'prism', { radius: 12, height: 20, sides: 3 },
-        { x: 10, y: 5, z: 0, rotX: 0, rotY: 30, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 })
-
-      mirrorTreeNode('p', 'YZ', { x: 0, y: 0, z: 0 })
-      expect(getNode('p')!.localTransform!.scaleX).toBe(-1)
-      expect(getNode('p')!.localTransform!.rotY).toBe(-30)
-
-      mirrorTreeNode('p', 'YZ', { x: 0, y: 0, z: 0 })
-      const t = getNode('p')!.localTransform!
-      expect(t.scaleX).toBe(1)                          // (-1)·(-1) = 1
-      expect(t.rotY).toBe(30)                           // -(-30) = 30
-      expect(t.x).toBe(10)                              // -(-10) = 10
-    })
-
-    it('primitive: double mirror on different planes', () => {
-      createPrimitiveNode('p', 'prism', { radius: 12, height: 20, sides: 3 },
-        { x: 10, y: 20, z: 30, rotX: 15, rotY: 30, rotZ: 45, scaleX: 1, scaleY: 1, scaleZ: 1 })
-
-      mirrorTreeNode('p', 'YZ', { x: 0, y: 0, z: 0 })
-      mirrorTreeNode('p', 'XZ', { x: 0, y: 0, z: 0 })
-      mirrorTreeNode('p', 'XY', { x: 0, y: 0, z: 0 })
-
-      // After 3 mirrors: scaleX=-1, scaleY=-1, scaleZ=-1
-      const t = getNode('p')!.localTransform!
-      expect(t.scaleX).toBe(-1)
-      expect(t.scaleY).toBe(-1)
-      expect(t.scaleZ).toBe(-1)
     })
   })
 
   describe('baked nodes use abs(scale)', () => {
     it('CSG result (baked) uses positive scale after mirror', () => {
-      // Создаём CSG результат (baked node) — boolean-нода без детей, только transform
       const node: TreeNode = {
         id: 'csg',
         type: 'baked',
@@ -684,7 +652,7 @@ describe('mirrorNodeRecursive — negative scale for primitives', () => {
       mirrorTreeNode('csg', 'YZ', { x: 0, y: 0, z: 0 })
 
       const t = getNode('csg')!.localTransform!
-      expect(t.scaleX).toBe(2)                          // ✅ abs, не отрицательный
+      expect(t.scaleX).toBe(2)
       expect(t.scaleY).toBe(3)
       expect(t.scaleZ).toBe(4)
       expect(t.x).toBe(-10)
@@ -703,13 +671,13 @@ describe('mirrorNodeRecursive — negative scale for primitives', () => {
       mirrorTreeNode('imp', 'YZ', { x: 0, y: 0, z: 0 })
 
       const t = getNode('imp')!.localTransform!
-      expect(t.scaleX).toBe(2)                          // ✅ abs
+      expect(t.scaleX).toBe(2)
       expect(t.x).toBe(-10)
     })
   })
 
   describe('boolean nodes with primitive children', () => {
-    it('boolean children get negative scale', () => {
+    it('boolean children get positive scale (Math.abs)', () => {
       createPrimitiveNode('a', 'prism', { radius: 12, height: 20, sides: 3 },
         { x: 5, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 })
       createPrimitiveNode('b', 'cube', { width: 20, height: 20, depth: 20 },
@@ -720,18 +688,16 @@ describe('mirrorNodeRecursive — negative scale for primitives', () => {
 
       mirrorTreeNode('csg', 'YZ', { x: 0, y: 0, z: 0 })
 
-      // Boolean node itself: abs scale
       const csgT = getNode('csg')!.localTransform!
-      expect(csgT.scaleX).toBe(1)                       // abs
+      expect(csgT.scaleX).toBe(1)
       expect(csgT.x).toBe(-10)
 
-      // Children (primitives): negative scale
       const aT = getNode('a')!.localTransform!
-      expect(aT.scaleX).toBe(-1)                        // ✅ отрицательный
+      expect(aT.scaleX).toBe(1)
       expect(aT.x).toBe(-5)
 
       const bT = getNode('b')!.localTransform!
-      expect(bT.scaleX).toBe(-1)                        // ✅ отрицательный
+      expect(bT.scaleX).toBe(1)
       expect(bT.x).toBe(-15)
     })
   })
