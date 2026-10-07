@@ -518,10 +518,19 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
 
       // Pivot is at transformA — vertices are centered relative to it.
       // World position: pivot(transformA) + vertex(centered_at_transformA) = original world vertex.
+      //
+      // FIX (CSG-PRESERVE-RS): Preserve rotation/scale from operand A.
+      // CSG result vertices are centered at origin (extractCenteredAt).
+      // Transform carries the full TRS — applied at render time via pivot
+      // and in worker via handleSyncMesh for subsequent boolean operations.
       const resultTransform: TransformNR = {
         x: transformA.x, y: transformA.y, z: transformA.z,
-        rotX: 0, rotY: 0, rotZ: 0,
-        scaleX: 1, scaleY: 1, scaleZ: 1,
+        rotX: transformA.rotX,
+        rotY: transformA.rotY,
+        rotZ: transformA.rotZ,
+        scaleX: transformA.scaleX,
+        scaleY: transformA.scaleY,
+        scaleZ: transformA.scaleZ,
       }
 
       // DIAG: compute original bbox center (before centering) for comparison
@@ -532,6 +541,17 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         transformA: fmtTransform(transformA),
         transformB: fmtTransform(srOf(idB)),
         centeredAabb: { min: fmtPoint(aabb.min), max: fmtPoint(aabb.max) },
+      })
+
+      // DIAG: CSG children — relative positions within the boolean result
+      const childAObj = objects[idA]
+      const childBObj = objects[idB]
+      devLogCsg('children', {
+        id: resultId,
+        op,
+        csgTransform: resultTransform,
+        childA: { id: idA, rel: childAObj.transform, abs: childAObj.transform },
+        childB: { id: idB, rel: childBObj.transform, abs: childBObj.transform },
       })
       // Store original bbox size for CSG results — used to compute scale relative to original dimensions
       const originalBboxSize = { x: aabb.max.x - aabb.min.x, y: aabb.max.y - aabb.min.y, z: aabb.max.z - aabb.min.z }

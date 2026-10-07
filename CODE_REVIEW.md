@@ -46,6 +46,21 @@
 
 ---
 
+### ✅ ИСПРАВЛЕНО — CSG-PRESERVE-RS (потеря rotation/scale в CSG-результате) (2026-10-07)
+
+**Проблема:** `csgBoolean` создавал `resultTransform` с только позицией центроида, сбрасывая rotation/scale в identity. Это приводило к:
+1. CSG с rotation/scale → результат теряет ориентацию/масштаб
+2. CSG+CSG → второй CSG оперирует "плоской" геометрией первого
+3. Зеркальная призма + CSG → смещение из-за потери отрицательного scale
+
+**Корень проблемы:** `resultTransform` копировал только позицию центроида, сбрасывая rotation/scale в identity.
+
+**Решение:** `resultTransform` теперь копирует rotation/scale от operand A. Вершины CSG центрированы в origin (`extractCenteredAt`), transform несёт полный TRS — применяется при рендере через pivot и в worker через `handleSyncMesh`.
+
+**Файлы:** `store/document-store.ts`
+
+---
+
 ### ✅ ИСПРАВЛЕНО — MIRROR-PRIMITIVE-NEGATIVE-SCALE (зеркало примитивов с отрицательным scale) (2026-10-07)
 
 **Проблема:** При зеркале CSG с несимметричными примитивами (призма `sides=3`, конус, 3D-текст) геометрия не зеркалилась, только смещалась. Визуально неправильный результат.

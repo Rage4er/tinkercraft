@@ -4,6 +4,7 @@
 
 import { describe, it, expect } from 'vitest'
 import { computeAABB, extractAndCenterInPlace } from './document-store'
+import { useDocumentStore } from './document-store'
 
 describe('computeAABB', () => {
   it('computes correct min/max for a simple box', () => {
@@ -117,3 +118,77 @@ describe('extractAndCenterInPlace', () => {
     expect(verts).toEqual(original)
   })
 })
+
+// ============================================================
+// CSG-PRESERVE-RS: csgBoolean preserves rotation/scale from operand A
+//
+// NOTE: These tests require a Worker/WASM environment and cannot run
+// in jsdom. They are kept as documentation for the expected behavior.
+// Run manually in the browser or with a proper worker mock.
+// ============================================================
+
+/*
+describe('csgBoolean preserves rotation/scale', () => {
+  it('copies rotation/scale from operand A', async () => {
+    const store = useDocumentStore.getState()
+
+    // Создать куб с rotation/scale
+    await store.addShape('cube', { width: 20, height: 20, depth: 20 })
+    // Применяем custom transform через moveObject (rotate + scale)
+    const objA = Object.values(store.objects)[0]
+    await store.moveObject(objA.id, {
+      x: objA.transform.x, y: objA.transform.y, z: objA.transform.z,
+      rotX: 20, rotY: 20, rotZ: 20,
+      scaleX: 1, scaleY: 1, scaleZ: 0.5,
+    })
+
+    // Создать второй куб
+    await store.addShape('cube', { width: 20, height: 20, depth: 20 })
+
+    // Выделить оба и сделать CSG union
+    const ids = Object.values(store.objects).filter(o => o.shapeType === 'cube').map(o => o.id)
+    store.selectObjects(ids, false)
+    await store.csgBoolean('union')
+
+    // Проверить результат
+    const csgResult = Object.values(store.objects).find(o => o.shapeType === 'csg')
+
+    expect(csgResult).toBeDefined()
+    expect(csgResult!.transform.rotX).toBe(20)
+    expect(csgResult!.transform.rotY).toBe(20)
+    expect(csgResult!.transform.rotZ).toBe(20)
+    expect(csgResult!.transform.scaleX).toBe(1)
+    expect(csgResult!.transform.scaleY).toBe(1)
+    expect(csgResult!.transform.scaleZ).toBe(0.5)
+  })
+
+  it('CSG with mirrored prism preserves negative scale', async () => {
+    const store = useDocumentStore.getState()
+
+    // Призма sides=3
+    await store.addShape('prism', { radius: 12, height: 20, sides: 3 })
+
+    // Зеркало YZ → scaleX=-1
+    const prism = Object.values(store.objects)[0]
+    store.selectObjects([prism.id], false)
+    await store.mirrorSelected('YZ')
+
+    const mirroredPrism = Object.values(store.objects).find(o => o.shapeType === 'prism')!
+    expect(mirroredPrism).toBeDefined()
+    expect(mirroredPrism!.transform.scaleX).toBe(-1)
+
+    // Куб
+    await store.addShape('cube', { width: 20, height: 20, depth: 20 })
+
+    // CSG union
+    const ids = Object.values(store.objects).map(o => o.id)
+    store.selectObjects(ids, false)
+    await store.csgBoolean('union')
+
+    const csg = Object.values(store.objects).find(o => o.shapeType === 'csg')!
+
+    // Проверить что отрицательный scale сохранён
+    expect(csg.transform.scaleX).toBe(-1)
+  })
+})
+*/
