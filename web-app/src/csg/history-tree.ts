@@ -153,6 +153,15 @@ export function createBakedNode(
   return node
 }
 
+/** Register an imported mesh node (alias for createBakedNode with mesh object) */
+export function createImportedNode(
+  id: string,
+  mesh: { vertices: Float32Array; indices: Uint32Array; normals: Float32Array | null },
+  transform: TransformNR,
+): TreeNode {
+  return createBakedNode(id, mesh.vertices, mesh.indices, mesh.normals, transform)
+}
+
 // ---------------------------------------------------------------------------
 // Bounding box (with memoization)
 // ---------------------------------------------------------------------------
@@ -851,161 +860,91 @@ function mirrorNodeRecursive(
   plane: 'XY' | 'XZ' | 'YZ',
   center: Point3D = { x: 0, y: 0, z: 0 },
 ): void {
-  // FIX (MIRROR-19-7): Если у primitive нет localTransform, используем identity
-  // вместо молчаливого пропуска. Это предотвращает потерю нод при mirror.
+  // 1. Зеркало позиции (относительно center)
+  let mirroredPos: Point3D
+  let mirroredRot: { x: number; y: number; z: number }
+  let scaleX: number, scaleY: number, scaleZ: number
+
+  if (node.localTransform) {
+    const t = node.localTransform
+
+    mirroredPos = mirrorPoint({ x: t.x, y: t.y, z: t.z }, plane, center)
+    mirroredRot = mirrorEuler({ x: t.rotX, y: t.rotY, z: t.rotZ }, plane)
+    scaleX = t.scaleX
+    scaleY = t.scaleY
+    scaleZ = t.scaleZ
+  } else {
+    // No localTransform — use identity for position/rot/scale
+    mirroredPos = { x: 0, y: 0, z: 0 }
+    mirroredRot = { x: 0, y: 0, z: 0 }
+    scaleX = 1
+    scaleY = 1
+    scaleZ = 1
+  }
+
   if (node.type === 'primitive') {
-    const t = node.localTransform ?? {
-      x: 0, y: 0, z: 0,
-      rotX: 0, rotY: 0, rotZ: 0,
-      scaleX: 1, scaleY: 1, scaleZ: 1,
-    }
-    if (!node.localTransform) {
-      devWarn('mirrorNodeRecursive', `nodeId=${node.id} type=primitive: localTransform отсутствует, используется identity`)
-    }
-
-    const mirroredPos = mirrorPoint({ x: t.x, y: t.y, z: t.z }, plane, center)
-
-    // FIX (MIRROR-9): Euler rotation mirroring via SIMPLE SIGN FLIP.
+    // FIX (MIRROR-PRIMITIVE-NEGATIVE-SCALE):
+    // Для primitive-нод (призма, конус, текст) — flip sign scale
+    // по перпендикулярной оси плоскости зеркала.
+    // Это даёт истинное геометрическое зеркало для несимметричных примитивов.
     //
-    // quaternion-based mirror DOES NOT WORK! Quaternion represents rotations
-    // (SO(3), det = +1), but mirror is reflection (O(3), det = -1).
-    // Trying to mirror via quaternion gives APPROXIMATE results, NOT correct.
+    // Математическое обоснование:
+    // M_x · R_x(rotX) · R_y(rotY) · R_z(rotZ) · v
+    // = R_x(rotX) · R_y(-rotY) · R_z(-rotZ) · S_x(-1) · v
     //
-    // The CORRECT way to mirror Euler angles is simple sign flip:
-    // - Axes IN the mirror plane change sign
-    // - Perpendicular axis stays unchanged
+    // Это в точности mirrorEuler + scaleX=-1. Двойного отражения нет.
     //
-    // This works for ANY Euler angles. Used by Fusion 360, SolidWorks, etc.
-    const mirroredRot = mirrorEuler(
-      { x: t.rotX, y: t.rotY, z: t.rotZ },
-      plane,
-    )
-
-    // FIX (MIRROR-SCALE): Scale is always positive (abs). Mirror geometry
-    // is done via matrix transform, NOT via negative scale.
-    const newScaleX = Math.abs(t.scaleX)
-    const newScaleY = Math.abs(t.scaleY)
-    const newScaleZ = Math.abs(t.scaleZ)
-
-    node.localTransform = {
-      ...t,
-      x: mirroredPos.x,
-      y: mirroredPos.y,
-      z: mirroredPos.z,
-      rotX: mirroredRot.x,
-      rotY: mirroredRot.y,
-      rotZ: mirroredRot.z,
-      scaleX: newScaleX,
-      scaleY: newScaleY,
-      scaleZ: newScaleZ,
+    // Flip sign (not -Math.abs) so double mirror restores original:
+    // 1st mirror: 1 → -1, 2nd mirror: -1 → 1
+    if (plane === 'YZ') {
+      scaleX = -scaleX  // X перпендикулярна YZ
+    } else if (plane === 'XZ') {
+      scaleY = -scaleY  // Y перпендикулярна XZ
+    } else if (plane === 'XY') {
+      scaleZ = -scaleZ  // Z перпендикулярна XY
     }
-    // FIX (MED-18-23): Use setNode for immutable update so React can detect changes
-    setNode(node.id, { ...node, localTransform: node.localTransform })
-    devLog('mirrorNodeRecursive', { nodeId: node.id, type: 'primitive', plane, center, localTransform: node.localTransform })
-    return
+  } else {
+    // Для baked-нод (CSG, import_mesh) — scale всегда положительный.
+    // Зеркало геометрии уже сделано через mirror matrix в worker
+    // (handleMirrorObject).
+    scaleX = Math.abs(scaleX)
+    scaleY = Math.abs(scaleY)
+    scaleZ = Math.abs(scaleZ)
   }
 
-  // FIX (MIRROR-19-7): Если у baked нет localTransform, используем identity
-  if (node.type === 'baked') {
-    const t = node.localTransform ?? {
-      x: 0, y: 0, z: 0,
-      rotX: 0, rotY: 0, rotZ: 0,
-      scaleX: 1, scaleY: 1, scaleZ: 1,
-    }
-    if (!node.localTransform) {
-      devWarn('mirrorNodeRecursive', `nodeId=${node.id} type=baked: localTransform отсутствует, используется identity`)
-    }
-    // FIX (MIRROR-BAKED-2): For baked nodes (CSG results, imports), rotation/scale
-    // are applied by Viewport3D at render time (Three.js pivot transform), NOT by
-    // transformBakedMesh (which applies only translation).
-    //
-    // To mirror a baked node correctly:
-    // 1. Mirror vertex positions across the plane (negate perpendicular axis)
-    // 2. Mirror rotation via mirrorEuler (same as primitive)
-    // 3. Mirror position via mirrorPoint (same as primitive)
-    // 4. Apply abs() to scale (same as primitive)
-    //
-    // Viewport3D will apply the mirrored rotation/scale at render time.
-    // transformBakedMesh applies only translation — which is correct because
-    // the geometry is centered at origin and rotation/scale are render-time.
-
-    // Step 1: Mirror vertex positions across the plane + исправляем winding order.
-    // FIX (MIRROR-WINDING): инвертирование одной оси переворачивает CCW→CW.
-    // После зеркала меняем v1↔v2 в каждом треугольнике, иначе булевы операции не работают.
-    if (node.vertices) {
-      mirrorVerticesInPlace(node.vertices, node.normals, plane)
-      if (node.indices) {
-        for (let i = 0; i < node.indices.length; i += 3) {
-          const tmp = node.indices[i + 1]
-          node.indices[i + 1] = node.indices[i + 2]
-          node.indices[i + 2] = tmp
-        }
-      }
-    }
-
-    // Step 2: Mirror rotation (same as primitive)
-    const mirroredRot = mirrorEuler(
-      { x: t.rotX, y: t.rotY, z: t.rotZ },
-      plane,
-    )
-
-    // Step 3: Mirror position (same as primitive)
-    const mirroredPos = mirrorPoint({ x: t.x, y: t.y, z: t.z }, plane, center)
-
-    // Step 4: Abs scale (same as primitive)
-    const newScaleX = Math.abs(t.scaleX)
-    const newScaleY = Math.abs(t.scaleY)
-    const newScaleZ = Math.abs(t.scaleZ)
-
-    node.localTransform = {
-      ...t,
-      x: mirroredPos.x,
-      y: mirroredPos.y,
-      z: mirroredPos.z,
-      rotX: mirroredRot.x,
-      rotY: mirroredRot.y,
-      rotZ: mirroredRot.z,
-      scaleX: newScaleX,
-      scaleY: newScaleY,
-      scaleZ: newScaleZ,
-    }
-    // FIX (MED-18-23): Use setNode for immutable update so React can detect changes
-    setNode(node.id, { ...node, localTransform: node.localTransform })
-    devLog('mirrorNodeRecursive', { nodeId: node.id, type: 'baked', plane, center, localTransform: node.localTransform })
-    return
+  const newTransform: TransformNR = {
+    x: mirroredPos.x,
+    y: mirroredPos.y,
+    z: mirroredPos.z,
+    rotX: mirroredRot.x,
+    rotY: mirroredRot.y,
+    rotZ: mirroredRot.z,
+    scaleX,
+    scaleY,
+    scaleZ,
   }
 
-  // FIX (MIRROR-19-8): boolean без children — логируем предупреждение
-  if (node.type === 'boolean') {
-    if (!node.children || node.children.length === 0) {
-      devWarn('mirrorNodeRecursive', `nodeId=${node.id} type=boolean: children отсутствуют или пусты, нода пропущена`)
-      return
-    }
+  setNode(node.id, {
+    ...node,
+    localTransform: newTransform,
+  })
 
-    // FIX (MIRROR-CSG-BOOLEAN-TRANSFORM): Зеркалим собственный localTransform булевой ноды.
-    // Для вложенных CSG (CSG из CSG-результатов) inner-boolean нода несёт в localTransform
-    // позицию центроида результата. Воркер применяет этот transform после центрирования
-    // внутреннего CSG-результата, чтобы вернуть его в мировые координаты.
-    // Для root-ноды transform применяется в applyCSGMeshes (history-tree.ts).
-    if (node.localTransform) {
-      const t = node.localTransform
-      const mp = mirrorPoint({ x: t.x, y: t.y, z: t.z }, plane, center)
-      const mr = mirrorEuler({ x: t.rotX, y: t.rotY, z: t.rotZ }, plane)
-      node.localTransform = {
-        ...t,
-        x: mp.x, y: mp.y, z: mp.z,
-        rotX: mr.x, rotY: mr.y, rotZ: mr.z,
-        scaleX: Math.abs(t.scaleX),
-        scaleY: Math.abs(t.scaleY),
-        scaleZ: Math.abs(t.scaleZ),
-      }
-      setNode(node.id, { ...node })
-    }
+  devLog('mirrorNodeRecursive', {
+    nodeId: node.id,
+    type: node.type,
+    plane,
+    scale: { scaleX, scaleY, scaleZ },
+    localTransform: newTransform,
+  })
 
-    node.children.forEach(childId => {
+  // Рекурсивно зеркалим детей (для boolean-нод)
+  if (node.type === 'boolean' && node.children) {
+    for (const childId of node.children) {
       const child = treeStore.getNode(childId)
-      if (child) mirrorNodeRecursive(child, plane, center)
-    })
+      if (child) {
+        mirrorNodeRecursive(child, plane, center)
+      }
+    }
   }
 }
 

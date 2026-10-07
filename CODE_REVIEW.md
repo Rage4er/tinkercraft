@@ -46,6 +46,29 @@
 
 ---
 
+### ✅ ИСПРАВЛЕНО — MIRROR-PRIMITIVE-NEGATIVE-SCALE (зеркало примитивов с отрицательным scale) (2026-10-07)
+
+**Проблема:** При зеркале CSG с несимметричными примитивами (призма `sides=3`, конус, 3D-текст) геометрия не зеркалилась, только смещалась. Визуально неправильный результат.
+
+**Корень проблемы:** `mirrorNodeRecursive` применял `Math.abs()` к scale для всех типов нод. Для primitive-нод (prism, cone, text) это означает, что несимметричная геометрия не отражается — только позиция и rotation зеркалятся.
+
+**Решение:** Разделение primitive/baked в `mirrorNodeRecursive`:
+- `primitive`: отрицательный scale по перпендикулярной оси плоскости зеркала (`YZ → scaleX=-1`, `XZ → scaleY=-1`, `XY → scaleZ=-1`)
+- `baked` (CSG, import_mesh): `abs(scale)` — зеркало геометрии уже запечено через `handleMirrorObject` в worker
+
+**Математическое обоснование:**
+```
+M_x · R_x(rotX) · R_y(rotY) · R_z(rotZ) · v
+= R_x(rotX) · R_y(-rotY) · R_z(-rotZ) · S_x(-1) · v
+```
+Это в точности `mirrorEuler + scaleX=-1`. Двойного отражения нет.
+
+**Тесты:** 13 тестов в `history-tree.test.ts` (YZ/XZ/XY planes, rotY, multi-axis, double mirror, baked, boolean children) + 4 теста в `worker-matrix.test.ts` (negative scale with rotation).
+
+**Файлы:** `csg/history-tree.ts` (mirrorNodeRecursive), `csg/history-tree.test.ts`, `csg/worker-matrix.test.ts`
+
+---
+
 ### ✅ ИСПРАВЛЕНО — CSG-TRANSFORM-IS-CENTROID (CSG-результат позиционируется со сдвигом для асимметричной геометрии) (2026-10-07)
 
 **Проблема:** CSG-результат рендерился со сдвигом для асимметричной геометрии (куб+призма). `extractAndCenterGetAABB` центрировал вершины по `bboxCenter` (centroid CSG-результата = 21,20,20), но pivot стоял в `transformA` (20,20,20). Для асимметричной геометрии `bboxCenter ≠ transformA`.

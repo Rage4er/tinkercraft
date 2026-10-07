@@ -266,3 +266,71 @@ describe('buildTransformMatrix', () => {
     expect(result.z).toBeCloseTo(0.0252, 3)
   })
 })
+
+// ============================================================
+// buildTransformMatrix with negative scale — FIX (MIRROR-PRIMITIVE-NEGATIVE-SCALE)
+// ============================================================
+describe('buildTransformMatrix with negative scale', () => {
+  it('negative scaleX reflects geometry correctly with rotation', () => {
+    const m = buildTransformMatrix(
+      { x: 0, y: 0, z: 0 },
+      { rotX: 0, rotY: 30, rotZ: 0 },
+      { scaleX: -1, scaleY: 1, scaleZ: 1 },
+    )
+    // RS matrix for scaleX=-1, rotY=30°:
+    // r00=cy*cz*Sx = 0.866*1*(-1) = -0.866
+    // r02=sy_*Sz = 0.5*1 = 0.5
+    // r20=(-cx*sy_*cz+sx_*sz_)*Sx = (-1*0.5*1+0)*(-1) = 0.5
+    // v = (12, 0, 0): x = -0.866*12 = -10.39, z = 0.5*12 = 6
+    const result = applyMatrix4ToVec3(m, { x: 12, y: 0, z: 0 })
+    expect(result.x).toBeCloseTo(-10.39, 1)
+    expect(result.y).toBeCloseTo(0, 3)
+    expect(result.z).toBeCloseTo(6, 1)
+  })
+
+  it('negative scaleY reflects geometry correctly', () => {
+    const m = buildTransformMatrix(
+      { x: 0, y: 0, z: 0 },
+      { rotX: 0, rotY: 0, rotZ: 0 },
+      { scaleX: 1, scaleY: -1, scaleZ: 1 },
+    )
+    // v = (0, 5, 0) → (0, -5, 0)
+    const result = applyMatrix4ToVec3(m, { x: 0, y: 5, z: 0 })
+    expect(result.x).toBeCloseTo(0, 3)
+    expect(result.y).toBeCloseTo(-5, 3)
+    expect(result.z).toBeCloseTo(0, 3)
+  })
+
+  it('negative scaleZ reflects geometry correctly with rotation', () => {
+    const m = buildTransformMatrix(
+      { x: 0, y: 0, z: 0 },
+      { rotX: 45, rotY: 0, rotZ: 0 },
+      { scaleX: 1, scaleY: 1, scaleZ: -1 },
+    )
+    // RS matrix for scaleZ=-1, rotX=45°:
+    // r12=-sx_*cy*Sz = -0.707*1*(-1) = 0.707
+    // r21=(cx*sy_*sz_+sx_*cz)*Sy = (0.707*1)*1 = 0.707
+    // r22=cx*cy*Sz = 0.707*1*(-1) = -0.707
+    // v = (0, 0, 10): y = 0.707*10 = 7.07, z = -0.707*10 = -7.07
+    const result = applyMatrix4ToVec3(m, { x: 0, y: 0, z: 10 })
+    expect(result.x).toBeCloseTo(0, 3)
+    expect(result.y).toBeCloseTo(7.07, 1)
+    expect(result.z).toBeCloseTo(-7.07, 1)
+  })
+
+  it('all negative scales (inversion) with rotation', () => {
+    const m = buildTransformMatrix(
+      { x: 0, y: 0, z: 0 },
+      { rotX: 0, rotY: 90, rotZ: 0 },
+      { scaleX: -1, scaleY: -1, scaleZ: -1 },
+    )
+    // RS matrix for all neg, rotY=90°:
+    // r02=sy_*Sz = 1*(-1) = -1
+    // r20=(-cx*sy_*cz+sx_*sz_)*Sx = (-1*1*1)*(-1) = 1
+    // v = (1, 2, 3): x = -1*3 = -3, y = -1*2 = -2, z = 1*1 = 1
+    const result = applyMatrix4ToVec3(m, { x: 1, y: 2, z: 3 })
+    expect(result.x).toBeCloseTo(-3, 3)
+    expect(result.y).toBeCloseTo(-2, 3)
+    expect(result.z).toBeCloseTo(1, 3)
+  })
+})
