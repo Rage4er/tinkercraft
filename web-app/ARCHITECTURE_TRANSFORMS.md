@@ -283,11 +283,128 @@ interface TreeNode {
 
 ---
 
-## 11. ИСТОРИЯ ИЗМЕНЕНИЙ
+## 11. ПРОГРЕСС ЭТАПОВ (ЧЕК-ЛИСТ)
+
+> Агент отмечает прогресс по мере выполнения этапов.
+> Легенда: 🔲 не начато · 🔄 в работе · ✅ готово
+> **Правило:** этап отмечается ✅ только после `pnpm typecheck` = 0 ошибок И `pnpm test` = все зелёные.
+
+| Этап | Описание | Статус |
+|------|----------|--------|
+| 0 | Подготовка — бэкап, WIP-коммит, документ | ✅ 2026-10-08 |
+| 1 | Модель данных — `RelativeTransform`, `TreeNode.relativeToParent` | 🔲 |
+| 2 | Утилиты — `composeTransforms`, `subtractTransform`, `centerMassAtOrigin` + тесты | 🔲 |
+| 3 | `createBooleanNode` — заполнить `relativeToParent` детей | 🔲 |
+| 4 | `mirrorNodeRecursive` — зеркалить `relativeToParent` | 🔲 |
+| 5 | `rebuildNode` — `worldTransform = parentWorld ∘ relativeToParent` (критический) | 🔲 |
+| 6 | Worker — кэш в origin, transform один раз | 🔲 |
+| 7 | `resizeObject` — не записывать mesh в `vertices` | 🔲 |
+| 8 | Проверка — 8 сценариев + тесты + документация | 🔲 |
+| 9 | Релиз — v1.1.0, тег, деплой | 🔲 |
+
+### Детальный чек-лист
+
+#### Этап 0 — Подготовка ✅ 2026-10-08
+
+- [x] `git status` — рабочее дерево разобрано (WIP `AGENTS.md` закоммичен)
+- [x] Ветка `backup-before-phase-8` создана (указывает на `11ac75d`)
+- [x] Ветка `backup-before-phase-8` запушена на GitHub
+- [x] WIP-коммит `4d96322` «состояние перед Фазой 8»
+- [x] `ARCHITECTURE_TRANSFORMS.md` закоммичен `58a328d`
+- [x] Базовая проверка: `pnpm typecheck` — 0 ошибок, `pnpm test` — 272/272 (18 файлов)
+
+#### Этап 1 — Модель данных 🔲
+
+- [ ] Тип `RelativeTransform` в `csg/types.ts` (`positionDelta`, `rotationDelta`, `scaleRatio`)
+- [ ] `TreeNode.relativeToParent: RelativeTransform | null` — обязательное поле
+- [ ] `localTransform` помечен комментарием как вычисляемый (не удалять!)
+- [ ] `relativeToParent: null` во всех фабриках: `createPrimitiveNode`, `createBooleanNode`, `createBakedNode`, `cloneRecursive`
+- [ ] `relativeToParent` в `WorkerNode` / сериализации (если нужно воркеру)
+- [ ] Комментарии в `SceneObject`: `vertices` — в origin, `transform` — мировой pivot
+- [ ] Тестовые фикстуры, создающие `TreeNode`, обновлены
+- [ ] `pnpm typecheck` — 0 ошибок, `pnpm test` — 272/272
+- [ ] Логика ещё НЕ читает `relativeToParent` (только добавлено поле)
+
+#### Этап 2 — Утилиты 🔲
+
+- [ ] `composeTransforms(parent, relative)` в `csg/worker-matrix.ts`
+- [ ] `subtractTransform(world, parent)` в `csg/worker-matrix.ts`
+- [ ] Round-trip: `compose(parent, subtract(world, parent)) === world`
+- [ ] `centerMassAtOrigin(vertices, indices)` в `store/helpers.ts` (центр масс по площади треугольников, НЕ BBox)
+- [ ] Тесты `composeTransforms` / `subtractTransform` (worker-matrix.test.ts)
+- [ ] Тесты `centerMassAtOrigin`: куб, призма sides=3, пустой массив
+- [ ] `pnpm typecheck` — 0, `pnpm test` — все зелёные
+
+#### Этап 3 — `createBooleanNode` 🔲
+
+- [ ] При создании boolean-узла вычислять `relativeToParent` детей (`subtractTransform(childWorld, parentWorld)`)
+- [ ] `relativeToParent = null` для корневого boolean-узла
+- [ ] `localTransform` остаётся заполненным (обратная совместимость до Этапа 8)
+- [ ] Тест: `relativeToParent` ребёнка = `childWorld − parentWorld`
+- [ ] `pnpm typecheck` — 0, `pnpm test` — все зелёные
+
+#### Этап 4 — `mirrorNodeRecursive` 🔲
+
+- [ ] Зеркалить `relativeToParent` (`mirrorPoint`/`mirrorEuler` от дельты), не абсолютный `localTransform`
+- [ ] После зеркала пересчитывать `localTransform = composeTransforms(parentWorld, mirroredRelative)`
+- [ ] Тест: mirror примитива → `relativeToParent` зеркалится
+- [ ] Тест: mirror CSG → `relativeToParent` детей зеркалится
+- [ ] Тест: двойное зеркало → identity
+- [ ] `pnpm typecheck` — 0, `pnpm test` — все зелёные
+
+#### Этап 5 — `rebuildNode` (критический) 🔲
+
+- [ ] `worldTransform = composeTransforms(parentWorld, node.relativeToParent)` при `relativeToParent !== null`
+- [ ] Ребёстроит mesh в origin, transform применяется ровно один раз
+- [ ] `collectSubtreeForWorker` передаёт вычисленный `localTransform` (UI-контракт с воркером не ломать)
+- [ ] Тест: primitive с `relativeToParent` → правильная позиция
+- [ ] Тест: CSG из двух примитивов → на месте
+- [ ] Тест: rebuild после mirror → без сдвига
+- [ ] **Правило отката:** тесты упали — `git revert`, дальше не идти
+- [ ] `pnpm typecheck` — 0, `pnpm test` — все зелёные
+
+#### Этап 6 — Worker 🔲
+
+- [ ] `handleRebuildTreeNode`: root boolean центрирует, inner boolean — нет (единая логика)
+- [ ] `handleCsgBooleanSync`: transform применяется один раз перед boolean
+- [ ] `handleSyncMesh`: кэш в origin
+- [ ] `pnpm typecheck` — 0, `pnpm test` — все зелёные
+
+#### Этап 7 — `resizeObject` 🔲
+
+- [ ] Не записывать пересчитанный mesh с transform в `SceneObject.vertices`
+- [ ] Resize примитива — только `params` (+ `localTransform` позиции по anchor)
+- [ ] Тест: призма → rotate → scale → resize → vertices не удваиваются
+- [ ] `pnpm typecheck` — 0, `pnpm test` — все зелёные
+
+#### Этап 8 — Проверка 🔲
+
+- [ ] Сценарий 1: куб + призма sides=3 → CSG Union → на месте
+- [ ] Сценарий 2: призма → rotate → scale → resize → не удваивается
+- [ ] Сценарий 3: призма → CSG → зеркало YZ → зеркальна
+- [ ] Сценарий 4: CSG → CSG Union → на месте
+- [ ] Сценарий 5: куб (scale 0.5) + призма (rot 20,20,20) → CSG → на месте
+- [ ] Сценарий 6: Export STL → правильные координаты
+- [ ] Сценарий 7: Undo/redo → восстанавливается
+- [ ] Сценарий 8: Save/load `.doodle` → восстанавливается
+- [ ] `CHANGELOG.md` — запись про Фазу 8
+- [ ] `CODE_REVIEW.md` — закрыты CSG-PRISM-OFFSET / MIRROR-CSG-CHILD-RS-LOSS / CSG-CSG-POSITION-DRIFT
+- [ ] Статусы этапов в этом чек-листе обновлены
+
+#### Этап 9 — Релиз 🔲
+
+- [ ] Версия `1.0.0` → `1.1.0` в `web-app/package.json`
+- [ ] Тег `v1.1.0`, push
+- [ ] GitHub Pages (CI соберёт)
+
+---
+
+## 12. ИСТОРИЯ ИЗМЕНЕНИЙ
 
 | Дата | Версия | Изменения |
 |------|--------|-----------|
 | 2026-10-08 | 1.0 | Первая версия, план Фазы 8 |
+| 2026-10-08 | 1.1 | Добавлен чек-лист прогресса этапов (§11); Этап 0 выполнен |
 
 ---
 
