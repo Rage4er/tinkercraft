@@ -740,6 +740,31 @@ export function useMeshSync(
                     THREE.MathUtils.degToRad(obj.transform.rotZ),
                 );
                 pivot.scale.set(obj.transform.scaleX, obj.transform.scaleY, obj.transform.scaleZ);
+
+                // DIAG: RENDER:csg — verify world position of CSG vertices
+                if (obj.shapeType === 'csg') {
+                    const geo = rawMesh.geometry as THREE.BufferGeometry;
+                    const pos = geo.attributes.position;
+                    if (pos) {
+                        const verts = pos.array as Float32Array;
+                        const firstV = { x: verts[0], y: verts[1], z: verts[2] };
+                        const { min, max } = computeAABB(verts);
+                        const cx = (min.x + max.x) / 2, cy = (min.y + max.y) / 2, cz = (min.z + max.z) / 2;
+                        devLogStore('RENDER:csg', {
+                            id: obj.id,
+                            local: firstV,
+                            mesh: { position: { x: rawMesh.position.x, y: rawMesh.position.y, z: rawMesh.position.z } },
+                            pivot: { position: { x: pivot.position.x, y: pivot.position.y, z: pivot.position.z } },
+                            world: {
+                                x: pivot.position.x + firstV.x,
+                                y: pivot.position.y + firstV.y,
+                                z: pivot.position.z + firstV.z,
+                            },
+                            bbox: { min, max, center: { x: cx, y: cy, z: cz } },
+                        });
+                    }
+                }
+
                 scene.add(pivot);
                 map.set(obj.id, { mesh: rawMesh, pivot });
             }

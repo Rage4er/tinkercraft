@@ -191,6 +191,9 @@ export function safePostMessage(msg: unknown, transferList?: ArrayBuffer[]): voi
 export function buildPrimitive(shapeType: string, params: Record<string, number>): ManifoldObject {
   const wasm = getWasm()
   const { Manifold } = wasm
+
+  let m: ManifoldObject
+
   switch (shapeType) {
     case 'cube': {
       let width = params.width
@@ -199,29 +202,33 @@ export function buildPrimitive(shapeType: string, params: Record<string, number>
       if (width === undefined || width <= 0) width = 20
       if (height === undefined || height <= 0) height = 20
       if (depth === undefined || depth <= 0) depth = 20
-      return Manifold.cube([width, height, depth], true)
+      m = Manifold.cube([width, height, depth], true)
+      break
     }
     case 'sphere': {
       const r = params.radius ?? 12
       const seg = params.segments ?? 48
       if (r <= 0) return Manifold.cube([20, 20, 20], true)
-      return Manifold.sphere(r, seg)
+      m = Manifold.sphere(r, seg)
+      break
     }
     case 'cylinder': {
       const h = params.height ?? 30
       const r = params.radius ?? 10
       const seg = params.segments ?? 48
       if (h <= 0 || r <= 0) return Manifold.cube([20, 20, 20], true)
-      return Manifold.cylinder(h, r, r, seg, true)
+      m = Manifold.cylinder(h, r, r, seg, true)
+      break
     }
     case 'cone':
-      return Manifold.cylinder(
+      m = Manifold.cylinder(
         params.height ?? 30,
         params.radius ?? 10,
         0,
         params.segments ?? 48,
         true,
       )
+      break
     case 'torus': {
       const torusRadius = params.torusRadius ?? 15
       const tubeRadius = params.tubeRadius ?? 4
@@ -234,31 +241,44 @@ export function buildPrimitive(shapeType: string, params: Record<string, number>
       // Dispose intermediate CrossSection WASM objects
       translated.delete()
       circle.delete()
-      return result
+      m = result
+      break
     }
     case 'prism': {
       const sides = Math.max(3, Math.round(params.sides ?? 6))
-      return Manifold.cylinder(
+      // center=true: от -h/2 до h/2, центр масс в origin (FIX CSG-PRISM-OFFSET)
+      m = Manifold.cylinder(
         params.height ?? 20,
         params.radius ?? 12,
         params.radius ?? 12,
         sides,
         true,
       )
+      break
     }
     case 'pyramid': {
       const sides = Math.max(3, Math.round(params.sides ?? 4))
-      return Manifold.cylinder(
+      // center=true: от -h/2 до h/2, центр масс в origin (FIX CSG-PRISM-OFFSET)
+      m = Manifold.cylinder(
         params.height ?? 20,
         params.radius ?? 12,
         0,
         sides,
         true,
       )
+      break
     }
     default:
-      return Manifold.cube([20, 20, 20], true)
+      m = Manifold.cube([20, 20, 20], true)
   }
+
+  // Все примитивы центрированы в origin через API manifold-3d:
+  // cube: center=true, sphere: origin, cylinder: center=true,
+  // cone: center=true, torus: revolve around origin,
+  // prism: center=true (FIX CSG-PRISM-OFFSET), pyramid: center=true (FIX)
+  // Дополнительное центрирование не требуется.
+
+  return m
 }
 
 /** Build a rounded box via warp + refine (only for cube). */
@@ -1201,6 +1221,18 @@ export async function handleCsgBoolean(msg: CsgBooleanMessage): Promise<void> {
     verts: mesh.vertices.length / 3, tris: mesh.tris, ms: performance.now() - t0,
   })
   devLogCsg('verts', { id: msg.resultId, firstVertex: { x: mesh.vertices[0], y: mesh.vertices[1], z: mesh.vertices[2] }, transformA: msg.transformA })
+
+  // DIAG: CSG result — full picture for debugging position shifts
+  devLogCsg('result', {
+    id: msg.resultId,
+    op: msg.op,
+    firstVertex: { x: mesh.vertices[0], y: mesh.vertices[1], z: mesh.vertices[2] },
+    bbox: { min: rMin, max: rMax, center: { x: rCx, y: rCy, z: rCz } },
+    size: { x: rMax.x - rMin.x, y: rMax.y - rMin.y, z: rMax.z - rMin.z },
+    verts: mesh.vertices.length / 3,
+    tris: mesh.tris,
+    ms: performance.now() - t0,
+  })
 
   safePostMessage(
     {

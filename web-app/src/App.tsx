@@ -219,61 +219,66 @@ export default function App() {
       const ctrl = e.ctrlKey || e.metaKey;
       if ((e.target as HTMLElement).tagName === "INPUT") return;
       const kb = kbRef.current;
-      if (e.key === "Delete" || e.key === "Backspace") {
+
+      // e.code — physical key position, works regardless of keyboard layout
+      // e.key — character value, depends on layout (use only for non-letter keys)
+      const code = e.code
+
+      if (code === "Backspace" || code === "Delete") {
         e.preventDefault();
         kb.deleteSelected();
       }
-      if (ctrl && e.key === "z" && !e.shiftKey) {
+      if (ctrl && code === "KeyZ" && !e.shiftKey) {
         e.preventDefault();
         kb.undo();
       }
-      if (ctrl && (e.key === "y" || (e.key === "z" && e.shiftKey))) {
+      if (ctrl && (code === "KeyY" || (code === "KeyZ" && e.shiftKey))) {
         e.preventDefault();
         kb.redo();
       }
-      if (ctrl && e.key === "a") {
+      if (ctrl && code === "KeyA") {
         e.preventDefault();
         kb.selectObjects(Object.keys(kb.objects), false);
       }
-      if (ctrl && e.key === "s") {
+      if (ctrl && code === "KeyS") {
         e.preventDefault()
         // FIX (HIGH-18-18): Allow Ctrl+S to save even when gizmo is active
         // The gizmo handles `s` key for toggle (without ctrl), but Ctrl+S should always save
         kb.saveDoodle()
       }
-      if (ctrl && e.key === "o") {
+      if (ctrl && code === "KeyO") {
         e.preventDefault();
         kb.openDoodle();
       }
-      if (ctrl && e.key === "c") {
+      if (ctrl && code === "KeyC") {
         e.preventDefault();
         kb.copySelected();
       }
-      if (ctrl && e.key === "v") {
+      if (ctrl && code === "KeyV") {
         e.preventDefault();
         kb.pasteClipboard();
       }
-      if (!ctrl && e.key === "f") {
+      if (!ctrl && code === "KeyF") {
         e.preventDefault();
         fitViewRef.current?.();
       }
-      if (!ctrl && e.key === "h") {
+      if (!ctrl && code === "KeyH") {
         e.preventDefault();
         resetViewRef.current?.();
       }
-      if (!ctrl && e.key === "g") {
+      if (!ctrl && code === "KeyG") {
         e.preventDefault();
         setGizmoMode((m) => (m === "translate" ? "none" : "translate"));
       }
-      if (!ctrl && e.key === "r") {
+      if (!ctrl && code === "KeyR") {
         e.preventDefault();
         setGizmoMode((m) => (m === "rotate" ? "none" : "rotate"));
       }
-      if (!ctrl && e.key === "s") {
+      if (!ctrl && code === "KeyS") {
         e.preventDefault();
         setGizmoMode((m) => (m === "scale" ? "none" : "scale"));
       }
-      if (e.key === "Escape") {
+      if (code === "Escape") {
         // FIX (MED-18-39): Don't clear selection / gizmo if a modal is open
         if (showTextModal || showPM) return
         setGizmoMode("none");
