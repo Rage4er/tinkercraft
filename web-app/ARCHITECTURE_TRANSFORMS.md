@@ -292,8 +292,8 @@ interface TreeNode {
 | Этап | Описание | Статус |
 |------|----------|--------|
 | 0 | Подготовка — бэкап, WIP-коммит, документ | ✅ 2026-10-08 |
-| 1 | Модель данных — `RelativeTransform`, `TreeNode.relativeToParent` | 🔲 |
-| 2 | Утилиты — `composeTransforms`, `subtractTransform`, `centerMassAtOrigin` + тесты | 🔲 |
+| 1 | Модель данных — `RelativeTransform`, `TreeNode.relativeToParent` | ✅ |
+| 2 | Утилиты — `composeTransforms`, `subtractTransform`, `centerMassAtOrigin` + тесты | ✅ |
 | 3 | `createBooleanNode` — заполнить `relativeToParent` детей | 🔲 |
 | 4 | `mirrorNodeRecursive` — зеркалить `relativeToParent` | 🔲 |
 | 5 | `rebuildNode` — `worldTransform = parentWorld ∘ relativeToParent` (критический) | 🔲 |
@@ -313,7 +313,7 @@ interface TreeNode {
 - [x] `ARCHITECTURE_TRANSFORMS.md` закоммичен `58a328d`
 - [x] Базовая проверка: `pnpm typecheck` — 0 ошибок, `pnpm test` — 272/272 (18 файлов)
 
-#### Этап 1 — Модель данных 🔲
+#### Этап 1 — Модель данных ✅
 
 - [ ] Тип `RelativeTransform` в `csg/types.ts` (`positionDelta`, `rotationDelta`, `scaleRatio`)
 - [ ] `TreeNode.relativeToParent: RelativeTransform | null` — обязательное поле
@@ -325,7 +325,7 @@ interface TreeNode {
 - [ ] `pnpm typecheck` — 0 ошибок, `pnpm test` — 272/272
 - [ ] Логика ещё НЕ читает `relativeToParent` (только добавлено поле)
 
-#### Этап 2 — Утилиты 🔲
+#### Этап 2 — Утилиты ✅
 
 - [ ] `composeTransforms(parent, relative)` в `csg/worker-matrix.ts`
 - [ ] `subtractTransform(world, parent)` в `csg/worker-matrix.ts`
