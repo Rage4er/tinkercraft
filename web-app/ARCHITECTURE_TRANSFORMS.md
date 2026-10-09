@@ -293,7 +293,7 @@ interface TreeNode {
 |------|----------|--------|
 | 0 | Подготовка — бэкап, WIP-коммит, документ | ✅ 2026-10-08 |
 | 1 | Модель данных — `RelativeTransform`, `TreeNode.relativeToParent` | ✅ |
-| 2 | Утилиты — `composeTransforms`, `subtractTransform`, `centerMassAtOrigin` + тесты | ✅ |
+| 2 | Утилиты — `composeTransforms`, `subtractTransform`, `centerMassAtOrigin` + тесты | 🔲 |
 | 3 | `createBooleanNode` — заполнить `relativeToParent` детей | 🔲 |
 | 4 | `mirrorNodeRecursive` — зеркалить `relativeToParent` | 🔲 |
 | 5 | `rebuildNode` — `worldTransform = parentWorld ∘ relativeToParent` (критический) | 🔲 |
@@ -325,7 +325,7 @@ interface TreeNode {
 - [ ] `pnpm typecheck` — 0 ошибок, `pnpm test` — 272/272
 - [ ] Логика ещё НЕ читает `relativeToParent` (только добавлено поле)
 
-#### Этап 2 — Утилиты ✅
+#### Этап 2 — Утилиты 🔲
 
 - [ ] `composeTransforms(parent, relative)` в `csg/worker-matrix.ts`
 - [ ] `subtractTransform(world, parent)` в `csg/worker-matrix.ts`

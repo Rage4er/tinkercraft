@@ -153,9 +153,11 @@ export interface SceneObject {
   shapeType: ShapeType
   params: ShapeParams
   color: string
+  /** Мировой pivot — применяется один раз при рендере/экспорте (Фаза 8) */
   transform: TransformNR
   visible: boolean
   locked: boolean
+  /** Вершины ВСЕГДА в origin (центрированы по центру масс) — transform в них не запечён (Фаза 8) */
   vertices: Float32Array
   indices: Uint32Array
   normals?: Float32Array | null
