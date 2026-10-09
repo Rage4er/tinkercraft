@@ -174,6 +174,26 @@ export type CsgBooleanOp = 'union' | 'subtract' | 'intersect'
 /** Type of a build tree node */
 export type TreeNodeType = 'primitive' | 'boolean' | 'baked'
 
+/**
+ * Относительный transform узла относительно родителя (Фаза 8).
+ * Единственный источник истины для трансформов в Build Tree.
+ * `null` — для корневых нод (TransformNR хранится как мировой pivot).
+ *
+ * Семантика компонентов:
+ * - positionDelta — смещение позиции относительно позиции родителя
+ * - rotationDelta — дельта углов (deg) относительно ротации родителя
+ * - scaleRatio    — множитель масштаба относительно масштаба родителя
+ *
+ * Мировой transform: world = composeTransforms(parentWorld, relativeToParent)
+ * Обратная операция:  relativeToParent = subtractTransform(world, parentWorld)
+ * См. csg/worker-matrix.ts, web-app/ARCHITECTURE_TRANSFORMS.md §2.1
+ */
+export interface RelativeTransform {
+  positionDelta: Vec3
+  rotationDelta: Vec3
+  scaleRatio: Vec3
+}
+
 /** 3D point */
 export interface Point3D {
   x: number
@@ -213,7 +233,19 @@ export interface TreeNode {
   shapeType?: ShapeType
   /** Primitive parameters (width, height, depth, radius, ...) */
   params?: ShapeParams
-  /** Local transform — used by both primitive and baked nodes */
+
+  // ── Transform model (Фаза 8) ──
+  /**
+   * ✅ ИСТОЧНИК ИСТИНЫ: transform узла относительно родителя.
+   * `null` — для корневых нод. Любое изменение трансформа = изменение этого поля.
+   * На Этапе 1 поле только добавлено — логика rebuild/mirror ещё читает localTransform.
+   */
+  relativeToParent: RelativeTransform | null
+  /**
+   * ⚠️ ВЫЧИСЛЯЕМЫЙ (для UI / Properties Panel / контракт с worker).
+   * Не использовать как источник истины в rebuildNode (см. ARCHITECTURE_TRANSFORMS.md §1).
+   * Используется primitive- и baked-нодами.
+   */
   localTransform?: TransformNR
 
   // ── Baked nodes (imported STL, non-manifold) ──

@@ -82,6 +82,8 @@ export function createPrimitiveNode(
     type: 'primitive',
     shapeType,
     params: { ...params },
+    // Корневая нода при создании: relativeToParent = null (Фаза 8)
+    relativeToParent: null,
     localTransform: { ...transform },
   }
   treeStore.setNode(id, node)
@@ -118,6 +120,8 @@ export function createBooleanNode(
     type: 'boolean',
     operation,
     children: [childA, childB],
+    // Корневая нода при создании: relativeToParent = null (Фаза 8)
+    relativeToParent: null,
     localTransform: transform ? { ...transform } : undefined,
   }
   treeStore.setNode(id, node)
@@ -146,6 +150,8 @@ export function createBakedNode(
     vertices,
     indices,
     normals,
+    // Корневая нода при создании: relativeToParent = null (Фаза 8)
+    relativeToParent: null,
     localTransform: { ...transform },
   }
   treeStore.setNode(id, node)
@@ -1174,6 +1180,15 @@ function cloneRecursive(
   const clone: TreeNode = {
     id: newId,
     type: source.type,
+    // Фаза 8: копируем relativeToParent (источник истины) структурой,
+    // чтобы клон и оригинал не разделяли один объект дельты
+    relativeToParent: source.relativeToParent
+      ? {
+        positionDelta: { ...source.relativeToParent.positionDelta },
+        rotationDelta: { ...source.relativeToParent.rotationDelta },
+        scaleRatio: { ...source.relativeToParent.scaleRatio },
+      }
+      : null,
   }
 
   if (source.type === 'primitive') {

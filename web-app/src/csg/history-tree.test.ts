@@ -456,7 +456,7 @@ describe('TreeStore', () => {
   })
 
   it('should set and get a node', () => {
-    const node: TreeNode = { id: 'test', type: 'primitive', shapeType: 'cube', params: {}, localTransform: defaultTransform }
+    const node: TreeNode = { id: 'test', type: 'primitive', shapeType: 'cube', params: {}, relativeToParent: null, localTransform: defaultTransform }
     treeStore.setNode('test', node)
     expect(treeStore.getNode('test')).toBe(node)
   })
@@ -466,40 +466,40 @@ describe('TreeStore', () => {
   })
 
   it('should delete a node', () => {
-    treeStore.setNode('test', { id: 'test', type: 'primitive', shapeType: 'cube', params: {}, localTransform: defaultTransform })
+    treeStore.setNode('test', { id: 'test', type: 'primitive', shapeType: 'cube', params: {}, relativeToParent: null, localTransform: defaultTransform })
     treeStore.deleteNode('test')
     expect(treeStore.getNode('test')).toBeUndefined()
   })
 
   it('should clear all nodes', () => {
-    treeStore.setNode('a', { id: 'a', type: 'primitive', shapeType: 'cube', params: {}, localTransform: defaultTransform })
-    treeStore.setNode('b', { id: 'b', type: 'primitive', shapeType: 'cube', params: {}, localTransform: defaultTransform })
+    treeStore.setNode('a', { id: 'a', type: 'primitive', shapeType: 'cube', params: {}, relativeToParent: null, localTransform: defaultTransform })
+    treeStore.setNode('b', { id: 'b', type: 'primitive', shapeType: 'cube', params: {}, relativeToParent: null, localTransform: defaultTransform })
     treeStore.clear()
     expect(treeStore.nodeCount).toBe(0)
   })
 
   it('should return all nodes as array', () => {
-    treeStore.setNode('a', { id: 'a', type: 'primitive', shapeType: 'cube', params: {}, localTransform: defaultTransform })
-    treeStore.setNode('b', { id: 'b', type: 'primitive', shapeType: 'cube', params: {}, localTransform: defaultTransform })
+    treeStore.setNode('a', { id: 'a', type: 'primitive', shapeType: 'cube', params: {}, relativeToParent: null, localTransform: defaultTransform })
+    treeStore.setNode('b', { id: 'b', type: 'primitive', shapeType: 'cube', params: {}, relativeToParent: null, localTransform: defaultTransform })
     expect(treeStore.getAllNodes()).toHaveLength(2)
   })
 
   it('should return node count', () => {
     expect(treeStore.nodeCount).toBe(0)
-    treeStore.setNode('a', { id: 'a', type: 'primitive', shapeType: 'cube', params: {}, localTransform: defaultTransform })
+    treeStore.setNode('a', { id: 'a', type: 'primitive', shapeType: 'cube', params: {}, relativeToParent: null, localTransform: defaultTransform })
     expect(treeStore.nodeCount).toBe(1)
   })
 
   it('should check node existence', () => {
-    treeStore.setNode('a', { id: 'a', type: 'primitive', shapeType: 'cube', params: {}, localTransform: defaultTransform })
+    treeStore.setNode('a', { id: 'a', type: 'primitive', shapeType: 'cube', params: {}, relativeToParent: null, localTransform: defaultTransform })
     expect(treeStore.hasNode('a')).toBe(true)
     expect(treeStore.hasNode('b')).toBe(false)
   })
 
   it('should delete recursively', () => {
-    treeStore.setNode('a', { id: 'a', type: 'primitive', shapeType: 'cube', params: {}, localTransform: defaultTransform })
-    treeStore.setNode('b', { id: 'b', type: 'primitive', shapeType: 'cube', params: {}, localTransform: defaultTransform })
-    treeStore.setNode('parent', { id: 'parent', type: 'boolean', operation: 'union', children: ['a', 'b'] })
+    treeStore.setNode('a', { id: 'a', type: 'primitive', shapeType: 'cube', params: {}, relativeToParent: null, localTransform: defaultTransform })
+    treeStore.setNode('b', { id: 'b', type: 'primitive', shapeType: 'cube', params: {}, relativeToParent: null, localTransform: defaultTransform })
+    treeStore.setNode('parent', { id: 'parent', type: 'boolean', operation: 'union', children: ['a', 'b'], relativeToParent: null })
     treeStore.deleteNode('parent', true)
     expect(treeStore.hasNode('parent')).toBe(false)
     expect(treeStore.hasNode('a')).toBe(false)
@@ -507,9 +507,9 @@ describe('TreeStore', () => {
   })
 
   it('should not delete children when recursive=false', () => {
-    treeStore.setNode('a', { id: 'a', type: 'primitive', shapeType: 'cube', params: {}, localTransform: defaultTransform })
-    treeStore.setNode('b', { id: 'b', type: 'primitive', shapeType: 'cube', params: {}, localTransform: defaultTransform })
-    treeStore.setNode('parent', { id: 'parent', type: 'boolean', operation: 'union', children: ['a', 'b'] })
+    treeStore.setNode('a', { id: 'a', type: 'primitive', shapeType: 'cube', params: {}, relativeToParent: null, localTransform: defaultTransform })
+    treeStore.setNode('b', { id: 'b', type: 'primitive', shapeType: 'cube', params: {}, relativeToParent: null, localTransform: defaultTransform })
+    treeStore.setNode('parent', { id: 'parent', type: 'boolean', operation: 'union', children: ['a', 'b'], relativeToParent: null })
     treeStore.deleteNode('parent', false)
     expect(treeStore.hasNode('parent')).toBe(false)
     expect(treeStore.hasNode('a')).toBe(true)
@@ -517,16 +517,16 @@ describe('TreeStore', () => {
   })
 
   it('should return ReadonlyMap from getAllNodesMap', () => {
-    treeStore.setNode('a', { id: 'a', type: 'primitive', shapeType: 'cube', params: {}, localTransform: defaultTransform })
+    treeStore.setNode('a', { id: 'a', type: 'primitive', shapeType: 'cube', params: {}, relativeToParent: null, localTransform: defaultTransform })
     const map = treeStore.getAllNodesMap()
     expect(map.get('a')).toBeDefined()
     expect(map.size).toBe(1)
   })
 
   it('should reset parentId on children when deleting non-recursively', () => {
-    treeStore.setNode('a', { id: 'a', type: 'primitive', shapeType: 'cube', params: {}, localTransform: defaultTransform })
-    treeStore.setNode('b', { id: 'b', type: 'primitive', shapeType: 'cube', params: {}, localTransform: defaultTransform })
-    treeStore.setNode('parent', { id: 'parent', type: 'boolean', operation: 'union', children: ['a', 'b'] })
+    treeStore.setNode('a', { id: 'a', type: 'primitive', shapeType: 'cube', params: {}, relativeToParent: null, localTransform: defaultTransform })
+    treeStore.setNode('b', { id: 'b', type: 'primitive', shapeType: 'cube', params: {}, relativeToParent: null, localTransform: defaultTransform })
+    treeStore.setNode('parent', { id: 'parent', type: 'boolean', operation: 'union', children: ['a', 'b'], relativeToParent: null })
     // Set parentId on children
     const childA = treeStore.getNode('a')
     const childB = treeStore.getNode('b')
@@ -645,7 +645,7 @@ describe('mirrorNodeRecursive — scale is always positive', () => {
         type: 'baked',
         vertices: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]),
         indices: new Uint32Array([0, 1, 2]),
-        localTransform: { x: 10, y: 0, z: 0, rotX: 0, rotY: 30, rotZ: 0, scaleX: 2, scaleY: 3, scaleZ: 4 },
+        params: {}, relativeToParent: null, localTransform: { x: 10, y: 0, z: 0, rotX: 0, rotY: 30, rotZ: 0, scaleX: 2, scaleY: 3, scaleZ: 4 },
       }
       treeStore.setNode('csg', node)
 
