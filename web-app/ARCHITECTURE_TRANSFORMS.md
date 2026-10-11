@@ -293,8 +293,8 @@ interface TreeNode {
 |------|----------|--------|
 | 0 | Подготовка — бэкап, WIP-коммит, документ | ✅ 2026-10-08 |
 | 1 | Модель данных — `RelativeTransform`, `TreeNode.relativeToParent` | ✅ |
-| 2 | Утилиты — `composeTransforms`, `subtractTransform`, `centerMassAtOrigin` + тесты | 🔲 |
-| 3 | `createBooleanNode` — заполнить `relativeToParent` детей | 🔲 |
+| 2 | Утилиты — `composeTransforms`, `subtractTransform`, `centerMassAtOrigin` + тесты | ✅ |
+| 3 | `createBooleanNode` — заполнить `relativeToParent` детей | ✅ |
 | 4 | `mirrorNodeRecursive` — зеркалить `relativeToParent` | 🔲 |
 | 5 | `rebuildNode` — `worldTransform = parentWorld ∘ relativeToParent` (критический) | 🔲 |
 | 6 | Worker — кэш в origin, transform один раз | 🔲 |
@@ -333,15 +333,15 @@ interface TreeNode {
 - [ ] `centerMassAtOrigin(vertices, indices)` в `store/helpers.ts` (центр масс по площади треугольников, НЕ BBox)
 - [ ] Тесты `composeTransforms` / `subtractTransform` (worker-matrix.test.ts)
 - [ ] Тесты `centerMassAtOrigin`: куб, призма sides=3, пустой массив
-- [ ] `pnpm typecheck` — 0, `pnpm test` — все зелёные
+- [x] `pnpm typecheck` — 0, `pnpm test` — все зелёные
 
-#### Этап 3 — `createBooleanNode` 🔲
+#### Этап 3 — `createBooleanNode` ✅
 
-- [ ] При создании boolean-узла вычислять `relativeToParent` детей (`subtractTransform(childWorld, parentWorld)`)
-- [ ] `relativeToParent = null` для корневого boolean-узла
-- [ ] `localTransform` остаётся заполненным (обратная совместимость до Этапа 8)
-- [ ] Тест: `relativeToParent` ребёнка = `childWorld − parentWorld`
-- [ ] `pnpm typecheck` — 0, `pnpm test` — все зелёные
+- [x] При создании boolean-узла вычислять `relativeToParent` детей (`subtractTransform(childWorld, parentWorld)`)
+- [x] `relativeToParent = null` для корневого boolean-узла
+- [x] `localTransform` остаётся заполненным (обратная совместимость до Этапа 8)
+- [x] Тест: `relativeToParent` ребёнка = `childWorld − parentWorld`
+- [x] `pnpm typecheck` — 0, `pnpm test` — все зелёные
 
 #### Этап 4 — `mirrorNodeRecursive` 🔲
 
@@ -368,14 +368,14 @@ interface TreeNode {
 - [ ] `handleRebuildTreeNode`: root boolean центрирует, inner boolean — нет (единая логика)
 - [ ] `handleCsgBooleanSync`: transform применяется один раз перед boolean
 - [ ] `handleSyncMesh`: кэш в origin
-- [ ] `pnpm typecheck` — 0, `pnpm test` — все зелёные
+- [x] `pnpm typecheck` — 0, `pnpm test` — все зелёные
 
 #### Этап 7 — `resizeObject` 🔲
 
 - [ ] Не записывать пересчитанный mesh с transform в `SceneObject.vertices`
 - [ ] Resize примитива — только `params` (+ `localTransform` позиции по anchor)
 - [ ] Тест: призма → rotate → scale → resize → vertices не удваиваются
-- [ ] `pnpm typecheck` — 0, `pnpm test` — все зелёные
+- [x] `pnpm typecheck` — 0, `pnpm test` — все зелёные
 
 #### Этап 8 — Проверка 🔲
 

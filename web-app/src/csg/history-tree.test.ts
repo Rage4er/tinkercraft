@@ -22,6 +22,7 @@ import {
   printTree,
   treeStore,
 } from '../csg/history-tree'
+import { subtractTransform, composeTransforms } from '../csg/worker-matrix'
 import type { TreeNode, BoundingBox, ExtractedMesh } from '../csg/types'
 
 const defaultTransform = { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
@@ -216,6 +217,113 @@ describe('BuildTree', () => {
 
     it('should return false for non-existent nodes', () => {
       expect(isAncestor('nonexistent', 'parent')).toBe(false)
+    })
+  })
+
+  describe('createBooleanNode relativeToParent (Stage 3)', () => {
+    it('children receive relativeToParent = subtractTransform(childWorld, parentWorld)', () => {
+      // childA: localTransform.x = 5, childB: localTransform.x = -5
+      // parent: localTransform.x = 10
+      // relativeToParent.x = 5 - 10 = -5 (for A), -5 - 10 = -15 (for B)
+      createPrimitiveNode('a', 'cube', { width: 10, height: 10, depth: 10 },
+        { x: 5, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 })
+      createPrimitiveNode('b', 'cube', { width: 10, height: 10, depth: 10 },
+        { x: -5, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 })
+
+      createBooleanNode('csg', 'union', 'a', 'b',
+        { x: 10, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 })
+
+      const aNode = getNode('a')!
+      const bNode = getNode('b')!
+      const csgNode = getNode('csg')!
+
+      expect(aNode.relativeToParent).not.toBeNull()
+      expect(bNode.relativeToParent).not.toBeNull()
+      // parentWorld.x = 10, childWorld.x = 5 → delta = -5
+      expect(aNode.relativeToParent!.positionDelta.x).toBe(-5)
+      // childWorld.x = -5 → delta = -15
+      expect(bNode.relativeToParent!.positionDelta.x).toBe(-15)
+      expect(csgNode.relativeToParent).toBeNull()
+    })
+
+    it('parent node relativeToParent = null (root boolean)', () => {
+      createPrimitiveNode('a', 'cube', { width: 10, height: 10, depth: 10 }, defaultTransform)
+      createPrimitiveNode('b', 'cube', { width: 10, height: 10, depth: 10 }, defaultTransform)
+
+      const node = createBooleanNode('csg', 'union', 'a', 'b')
+      expect(node.relativeToParent).toBeNull()
+    })
+
+    it('parentId on children points to boolean node', () => {
+      createPrimitiveNode('a', 'cube', { width: 10, height: 10, depth: 10 }, defaultTransform)
+      createPrimitiveNode('b', 'cube', { width: 10, height: 10, depth: 10 }, defaultTransform)
+
+      createBooleanNode('csg', 'union', 'a', 'b')
+
+      expect(getNode('a')?.parentId).toBe('csg')
+      expect(getNode('b')?.parentId).toBe('csg')
+    })
+
+    it('child localTransform not modified (backward compat)', () => {
+      createPrimitiveNode('a', 'cube', { width: 10, height: 10, depth: 10 },
+        { x: 5, y: 10, z: 15, rotX: 10, rotY: 20, rotZ: 30, scaleX: 2, scaleY: 3, scaleZ: 0.5 })
+      createPrimitiveNode('b', 'cube', { width: 10, height: 10, depth: 10 }, defaultTransform)
+
+      const beforeA = getNode('a')!.localTransform!
+      createBooleanNode('csg', 'union', 'a', 'b',
+        { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 })
+
+      const afterA = getNode('a')!.localTransform!
+      expect(afterA).toEqual(beforeA)
+      // But relativeToParent should be computed
+      expect(getNode('a')!.relativeToParent).not.toBeNull()
+    })
+
+    it('round-trip: composeTransforms(parentWorld, relativeToParent) ≈ childWorld', () => {
+      createPrimitiveNode('a', 'cube', { width: 10, height: 10, depth: 10 },
+        { x: 5, y: 10, z: 15, rotX: 10, rotY: 20, rotZ: 30, scaleX: 2, scaleY: 3, scaleZ: 0.5 })
+      createPrimitiveNode('b', 'cube', { width: 10, height: 10, depth: 10 },
+        { x: -3, y: 7, z: -2, rotX: -10, rotY: -5, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 })
+
+      const parentTransform = { x: 10, y: 20, z: 5, rotX: 5, rotY: 10, rotZ: 15, scaleX: 2, scaleY: 2, scaleZ: 2 }
+      createBooleanNode('csg', 'union', 'a', 'b', parentTransform)
+
+      const aNode = getNode('a')!
+      const bNode = getNode('b')!
+
+      // Round-trip: composeTransforms(parentTransform, aNode.relativeToParent) ≈ aNode.localTransform
+      const aWorld = composeTransforms(parentTransform, aNode.relativeToParent)
+      const aLocal = aNode.localTransform!
+      expect(Math.abs(aWorld.x - aLocal.x)).toBeLessThan(1e-6)
+      expect(Math.abs(aWorld.y - aLocal.y)).toBeLessThan(1e-6)
+      expect(Math.abs(aWorld.z - aLocal.z)).toBeLessThan(1e-6)
+      expect(Math.abs(aWorld.scaleX - aLocal.scaleX)).toBeLessThan(1e-6)
+      expect(Math.abs(aWorld.scaleY - aLocal.scaleY)).toBeLessThan(1e-6)
+      expect(Math.abs(aWorld.scaleZ - aLocal.scaleZ)).toBeLessThan(1e-6)
+
+      const bWorld = composeTransforms(parentTransform, bNode.relativeToParent)
+      const bLocal = bNode.localTransform!
+      expect(Math.abs(bWorld.x - bLocal.x)).toBeLessThan(1e-6)
+      expect(Math.abs(bWorld.y - bLocal.y)).toBeLessThan(1e-6)
+      expect(Math.abs(bWorld.z - bLocal.z)).toBeLessThan(1e-6)
+    })
+
+    it('multi-axis rotation: round-trip through composeTransforms ≈ childWorld', () => {
+      createPrimitiveNode('a', 'cube', { width: 10, height: 10, depth: 10 },
+        { x: 0, y: 0, z: 0, rotX: 20, rotY: 30, rotZ: 40, scaleX: 1, scaleY: 1, scaleZ: 1 })
+      createPrimitiveNode('b', 'cube', { width: 10, height: 10, depth: 10 },
+        { x: 0, y: 0, z: 0, rotX: -10, rotY: -20, rotZ: -30, scaleX: 1, scaleY: 1, scaleZ: 1 })
+
+      const parentTransform = { x: 0, y: 0, z: 0, rotX: 5, rotY: 10, rotZ: 15, scaleX: 1, scaleY: 1, scaleZ: 1 }
+      createBooleanNode('csg', 'union', 'a', 'b', parentTransform)
+
+      const aNode = getNode('a')!
+      const aWorld = composeTransforms(parentTransform, aNode.relativeToParent)
+      const aLocal = aNode.localTransform!
+      // Rotation round-trip accuracy ±1e-6
+      expect(Math.abs(aWorld.x - aLocal.x)).toBeLessThan(1e-6)
+      expect(Math.abs(aWorld.y - aLocal.y)).toBeLessThan(1e-6)
+      expect(Math.abs(aWorld.z - aLocal.z)).toBeLessThan(1e-6)
     })
   })
 

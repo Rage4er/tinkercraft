@@ -23,7 +23,14 @@ import {
   type ManifoldObject,
   isWasmReady,
 } from './worker-handlers'
-import { buildTransformMatrix } from './worker-matrix'
+import { buildTransformMatrix, subtractTransform } from './worker-matrix'
+
+/** Identity transform — used when a node has no explicit transform. */
+const IDENTITY_TRANSFORM: TransformNR = {
+  x: 0, y: 0, z: 0,
+  rotX: 0, rotY: 0, rotZ: 0,
+  scaleX: 1, scaleY: 1, scaleZ: 1,
+}
 import { workerRebuildNode } from './worker-client'
 import { treeStore } from './tree-store'
 import { devLog, devWarn } from '../utils/debug'
@@ -126,11 +133,21 @@ export function createBooleanNode(
   }
   treeStore.setNode(id, node)
 
-  // Set parentId on children for O(depth) cascade invalidation
+  // Фаза 8 (Этап 3): Set parentId on children for O(depth) cascade invalidation
+  // + вычисляем relativeToParent для каждого ребёнка (ARCHITECTURE_TRANSFORMS.md §3.1):
+  // parentWorld — мировой transform нового boolean-узла (IDENTITY, если transform не передан),
+  // childWorld — мировой transform ребёнка (до Этапа 5 хранится в localTransform),
+  // relativeToParent = childWorld − parentWorld.
+  // localTransform ребёнка НЕ трогаем — обратная совместимость до Этапа 8.
+  const parentWorld: TransformNR = transform ?? IDENTITY_TRANSFORM
   const childANode = treeStore.getNode(childA)
   const childBNode = treeStore.getNode(childB)
-  if (childANode) childANode.parentId = id
-  if (childBNode) childBNode.parentId = id
+  for (const childNode of [childANode, childBNode]) {
+    if (!childNode) continue
+    childNode.parentId = id
+    const childWorld: TransformNR = childNode.localTransform ?? IDENTITY_TRANSFORM
+    childNode.relativeToParent = subtractTransform(childWorld, parentWorld)
+  }
 
   devLog('TREE', { action: 'createBoolean', id, operation, children: [childA, childB], transform })
   return node
