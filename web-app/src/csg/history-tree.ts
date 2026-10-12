@@ -14,6 +14,7 @@ import type {
   ShapeType,
   ShapeParams,
   TransformNR,
+  RelativeTransform,
 } from './types'
 import {
   getWasm,
@@ -878,79 +879,92 @@ export function mirrorVerticesInPlace(
   }
 }
 
+/**
+ * Mirror a node and its entire subtree across a plane.
+ *
+ * Stage 4 (Phase 8): relativeToParent is now mirrored via
+ * subtractTransform(mirroredWorld, mirroredParentWorld), and localTransform
+ * is re-derived via composeTransforms(mirroredParentWorld, mirroredRelative).
+ * Previously only localTransform (absolute) was mirrored while relativeToParent
+ * was left stale — mirrored CSG children lost their rotation/scale relationship
+ * with the parent (MIRROR-CSG-CHILD-RS-LOSS).
+ *
+ * World-space behaviour is preserved: each node's world transform is still
+ * mirrored via mirrorPoint / mirrorEuler / abs(scale) (simple Euler sign flip;
+ * quaternion mirror does not represent reflection — see mirrorEuler docs).
+ *
+ * @param node         — node to mirror
+ * @param plane        — mirror plane (XY, XZ, YZ)
+ * @param center       — mirror plane center (default origin)
+ * @param parentWorld  — the PARENT's already-mirrored world transform
+ *                       (IDENTITY_TRANSFORM for root nodes)
+ */
 function mirrorNodeRecursive(
   node: TreeNode,
   plane: 'XY' | 'XZ' | 'YZ',
   center: Point3D = { x: 0, y: 0, z: 0 },
+  parentWorld: TransformNR = IDENTITY_TRANSFORM,
 ): void {
-  // 1. Зеркало позиции (относительно center)
-  let mirroredPos: Point3D
-  let mirroredRot: { x: number; y: number; z: number }
-  let scaleX: number, scaleY: number, scaleZ: number
-
+  // 1. Compute the mirrored WORLD transform of this node.
+  //    Same math as before (mirrorPoint + mirrorEuler + abs(scale)).
+  let newWorld: TransformNR
   if (node.localTransform) {
     const t = node.localTransform
-
-    mirroredPos = mirrorPoint({ x: t.x, y: t.y, z: t.z }, plane, center)
-    mirroredRot = mirrorEuler({ x: t.rotX, y: t.rotY, z: t.rotZ }, plane)
-    scaleX = t.scaleX
-    scaleY = t.scaleY
-    scaleZ = t.scaleZ
+    const mirroredPos = mirrorPoint({ x: t.x, y: t.y, z: t.z }, plane, center)
+    const mirroredRot = mirrorEuler({ x: t.rotX, y: t.rotY, z: t.rotZ }, plane)
+    newWorld = {
+      x: mirroredPos.x,
+      y: mirroredPos.y,
+      z: mirroredPos.z,
+      rotX: mirroredRot.x,
+      rotY: mirroredRot.y,
+      rotZ: mirroredRot.z,
+      // Scale is always positive (MIRROR-SCALE): geometry mirror is done
+      // via the mirror matrix, NOT via negative scale.
+      scaleX: Math.abs(t.scaleX),
+      scaleY: Math.abs(t.scaleY),
+      scaleZ: Math.abs(t.scaleZ),
+    }
   } else {
-    // No localTransform — use identity for position/rot/scale
-    mirroredPos = { x: 0, y: 0, z: 0 }
-    mirroredRot = { x: 0, y: 0, z: 0 }
-    scaleX = 1
-    scaleY = 1
-    scaleZ = 1
+    // No localTransform — identity (preserves prior behaviour for undefined).
+    newWorld = { ...IDENTITY_TRANSFORM }
   }
 
-  if (node.type === 'primitive') {
-    // Для всех нод: scale всегда положительный (abs).
-    // Mirror geometry is done via matrix transform, NOT via negative scale.
-    scaleX = Math.abs(scaleX)
-    scaleY = Math.abs(scaleY)
-    scaleZ = Math.abs(scaleZ)
-  } else {
-    // Для baked-нод (CSG, import_mesh) — scale всегда положительный.
-    // Зеркало геометрии уже сделано через mirror matrix в worker
-    // (handleMirrorObject).
-    scaleX = Math.abs(scaleX)
-    scaleY = Math.abs(scaleY)
-    scaleZ = Math.abs(scaleZ)
+  // 2. relativeToParent: recompute against mirrored parentWorld (Stage 4).
+  //    Root nodes (relativeToParent === null) keep null.
+  let newRelative: RelativeTransform | null = null
+  if (node.relativeToParent !== null) {
+    newRelative = subtractTransform(newWorld, parentWorld)
   }
 
-  const newTransform: TransformNR = {
-    x: mirroredPos.x,
-    y: mirroredPos.y,
-    z: mirroredPos.z,
-    rotX: mirroredRot.x,
-    rotY: mirroredRot.y,
-    rotZ: mirroredRot.z,
-    scaleX,
-    scaleY,
-    scaleZ,
-  }
+  // 3. localTransform: the exact mirrored world transform.
+  //    Mathematically composeTransforms(parentWorld, newRelative) === newWorld
+  //    (subtract/compose are exact inverses), and the round-trip is verified
+  //    to ±1e-6 in tests. We store newWorld directly because Euler-angle
+  //    extraction inside subtract/compose introduces ~1e-14 FP noise
+  //    (e.g. -30 → -29.999999999999993) that breaks exact equality checks.
+  const newLocal: TransformNR = newWorld
 
   setNode(node.id, {
     ...node,
-    localTransform: newTransform,
+    relativeToParent: newRelative,
+    localTransform: newLocal,
   })
 
   devLog('mirrorNodeRecursive', {
     nodeId: node.id,
     type: node.type,
     plane,
-    scale: { scaleX, scaleY, scaleZ },
-    localTransform: newTransform,
+    scale: { scaleX: newLocal.scaleX, scaleY: newLocal.scaleY, scaleZ: newLocal.scaleZ },
+    localTransform: newLocal,
   })
 
-  // Рекурсивно зеркалим детей (для boolean-нод)
+  // Recursively mirror children — pass this node's NEW world as their parentWorld.
   if (node.type === 'boolean' && node.children) {
     for (const childId of node.children) {
       const child = treeStore.getNode(childId)
       if (child) {
-        mirrorNodeRecursive(child, plane, center)
+        mirrorNodeRecursive(child, plane, center, newLocal)
       }
     }
   }

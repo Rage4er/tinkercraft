@@ -810,3 +810,197 @@ describe('mirrorNodeRecursive — scale is always positive', () => {
     })
   })
 })
+
+// ============================================================
+// Stage 4 — mirrorNodeRecursive mirrors relativeToParent
+// ============================================================
+describe('mirrorNodeRecursive — relativeToParent (Stage 4)', () => {
+  beforeEach(() => {
+    clearTree()
+  })
+
+  it('mirror primitive: relativeToParent mirrored', () => {
+    // Create a node with a non-trivial relativeToParent (parent at x=10)
+    createPrimitiveNode('a', 'cube', { width: 10, height: 10, depth: 10 },
+      { x: 15, y: 5, z: 3, rotX: 10, rotY: 20, rotZ: 30, scaleX: 1, scaleY: 1, scaleZ: 1 })
+    createPrimitiveNode('csg', 'cube', { width: 10, height: 10, depth: 10 },
+      { x: 10, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 })
+    createBooleanNode('parent', 'union', 'a', 'csg',
+      { x: 10, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 })
+
+    // Before mirror
+    const aBefore = getNode('a')!
+    expect(aBefore.relativeToParent).not.toBeNull()
+    const relBefore = aBefore.relativeToParent!
+
+    // Mirror YZ
+    mirrorTreeNode('parent', 'YZ', { x: 0, y: 0, z: 0 })
+
+    const aAfter = getNode('a')!
+    const csgAfter = getNode('csg')!
+    const parentAfter = getNode('parent')!
+
+    // YZ mirror: positionDelta.x negated
+    expect(aAfter.relativeToParent!.positionDelta.x).toBeCloseTo(-relBefore.positionDelta.x, 10)
+    expect(aAfter.relativeToParent!.positionDelta.y).toBeCloseTo(relBefore.positionDelta.y, 10)
+    expect(aAfter.relativeToParent!.positionDelta.z).toBeCloseTo(relBefore.positionDelta.z, 10)
+    // Rotation: YZ → rotX unchanged, rotY/rotZ negated
+    expect(aAfter.relativeToParent!.rotationDelta.x).toBeCloseTo(relBefore.rotationDelta.x, 10)
+    expect(aAfter.relativeToParent!.rotationDelta.y).toBeCloseTo(-relBefore.rotationDelta.y, 10)
+    expect(aAfter.relativeToParent!.rotationDelta.z).toBeCloseTo(-relBefore.rotationDelta.z, 10)
+    // Parent's relativeToParent stays null
+    expect(parentAfter.relativeToParent).toBeNull()
+  })
+
+  it('mirror CSG: children relativeToParent mirrored', () => {
+    createPrimitiveNode('a', 'cube', { width: 10, height: 10, depth: 10 },
+      { x: 5, y: 0, z: 0, rotX: 10, rotY: 20, rotZ: 30, scaleX: 1, scaleY: 1, scaleZ: 1 })
+    createPrimitiveNode('b', 'cube', { width: 10, height: 10, depth: 10 },
+      { x: 15, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 })
+    createBooleanNode('csg', 'union', 'a', 'b',
+      { x: 10, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 })
+
+    const aBefore = getNode('a')!
+    const bBefore = getNode('b')!
+
+    mirrorTreeNode('csg', 'YZ', { x: 0, y: 0, z: 0 })
+
+    const aAfter = getNode('a')!
+    const bAfter = getNode('b')!
+    const csgAfter = getNode('csg')!
+
+    // Children relativeToParent X negated, Y/Z unchanged
+    expect(aAfter.relativeToParent!.positionDelta.x).toBeCloseTo(-aBefore.relativeToParent!.positionDelta.x, 10)
+    expect(bAfter.relativeToParent!.positionDelta.x).toBeCloseTo(-bBefore.relativeToParent!.positionDelta.x, 10)
+
+    // Rotation YZ: rotX unchanged, rotY/rotZ negated
+    expect(aAfter.relativeToParent!.rotationDelta.x).toBeCloseTo(aBefore.relativeToParent!.rotationDelta.x, 10)
+    expect(aAfter.relativeToParent!.rotationDelta.y).toBeCloseTo(-aBefore.relativeToParent!.rotationDelta.y, 10)
+    expect(aAfter.relativeToParent!.rotationDelta.z).toBeCloseTo(-aBefore.relativeToParent!.rotationDelta.z, 10)
+
+    // CSG root relativeToParent stays null
+    expect(csgAfter.relativeToParent).toBeNull()
+  })
+
+  it('double mirror returns to original', () => {
+    createPrimitiveNode('a', 'cube', { width: 10, height: 10, depth: 10 },
+      { x: 15, y: 7, z: 11, rotX: 10, rotY: 20, rotZ: 30, scaleX: 2, scaleY: 3, scaleZ: 0.5 })
+    createPrimitiveNode('b', 'cube', { width: 10, height: 10, depth: 10 },
+      { x: 5, y: -3, z: 8, rotX: -10, rotY: -5, rotZ: 15, scaleX: 1, scaleY: 2, scaleZ: 1 })
+    createBooleanNode('csg', 'union', 'a', 'b',
+      { x: 10, y: 5, z: 0, rotX: 5, rotY: 10, rotZ: 15, scaleX: 2, scaleY: 2, scaleZ: 2 })
+
+    const csgBefore = getNode('csg')!
+    const aBefore = getNode('a')!
+
+    // First mirror YZ
+    mirrorTreeNode('csg', 'YZ', { x: 0, y: 0, z: 0 })
+    // Second mirror YZ (should restore)
+    mirrorTreeNode('csg', 'YZ', { x: 0, y: 0, z: 0 })
+
+    const csgAfter = getNode('csg')!
+    const aAfter = getNode('a')!
+
+    // localTransform ≈ original (±1e-6)
+    expect(Math.abs(csgAfter.localTransform!.x - csgBefore.localTransform!.x)).toBeLessThan(1e-6)
+    expect(Math.abs(csgAfter.localTransform!.y - csgBefore.localTransform!.y)).toBeLessThan(1e-6)
+    expect(Math.abs(csgAfter.localTransform!.z - csgBefore.localTransform!.z)).toBeLessThan(1e-6)
+    expect(Math.abs(csgAfter.localTransform!.rotX - csgBefore.localTransform!.rotX)).toBeLessThan(1e-6)
+    expect(Math.abs(csgAfter.localTransform!.rotY - csgBefore.localTransform!.rotY)).toBeLessThan(1e-6)
+    expect(Math.abs(csgAfter.localTransform!.rotZ - csgBefore.localTransform!.rotZ)).toBeLessThan(1e-6)
+    expect(Math.abs(csgAfter.localTransform!.scaleX - csgBefore.localTransform!.scaleX)).toBeLessThan(1e-6)
+    expect(Math.abs(csgAfter.localTransform!.scaleY - csgBefore.localTransform!.scaleY)).toBeLessThan(1e-6)
+    expect(Math.abs(csgAfter.localTransform!.scaleZ - csgBefore.localTransform!.scaleZ)).toBeLessThan(1e-6)
+
+    // relativeToParent children ≈ original
+    expect(Math.abs(aAfter.relativeToParent!.positionDelta.x - aBefore.relativeToParent!.positionDelta.x)).toBeLessThan(1e-6)
+    expect(Math.abs(aAfter.relativeToParent!.rotationDelta.y - aBefore.relativeToParent!.rotationDelta.y)).toBeLessThan(1e-6)
+  })
+
+  it('composeTransforms(parentWorld, mirroredRelative) ≈ mirroredLocal', () => {
+    createPrimitiveNode('a', 'cube', { width: 10, height: 10, depth: 10 },
+      { x: 15, y: 7, z: 11, rotX: 10, rotY: 20, rotZ: 30, scaleX: 2, scaleY: 3, scaleZ: 0.5 })
+    createPrimitiveNode('b', 'cube', { width: 10, height: 10, depth: 10 },
+      { x: 5, y: -3, z: 8, rotX: -10, rotY: -5, rotZ: 15, scaleX: 1, scaleY: 2, scaleZ: 1 })
+    createBooleanNode('csg', 'union', 'a', 'b',
+      { x: 10, y: 5, z: 0, rotX: 5, rotY: 10, rotZ: 15, scaleX: 2, scaleY: 2, scaleZ: 2 })
+
+    mirrorTreeNode('csg', 'YZ', { x: 0, y: 0, z: 0 })
+
+    const aNode = getNode('a')!
+    const csgNode = getNode('csg')!
+    const csgLocal = csgNode.localTransform!
+    const csgWorld = csgLocal // root: local = world
+
+    // Compose parent (identity for root) with child's relative → child's world
+    const aRel = aNode.relativeToParent!
+    const aComposedWorld = composeTransforms(csgWorld, aRel)
+    const aLocal = aNode.localTransform!
+
+    // ±1e-6
+    expect(Math.abs(aComposedWorld.x - aLocal.x)).toBeLessThan(1e-6)
+    expect(Math.abs(aComposedWorld.y - aLocal.y)).toBeLessThan(1e-6)
+    expect(Math.abs(aComposedWorld.z - aLocal.z)).toBeLessThan(1e-6)
+    expect(Math.abs(aComposedWorld.scaleX - aLocal.scaleX)).toBeLessThan(1e-6)
+    expect(Math.abs(aComposedWorld.scaleY - aLocal.scaleY)).toBeLessThan(1e-6)
+    expect(Math.abs(aComposedWorld.scaleZ - aLocal.scaleZ)).toBeLessThan(1e-6)
+  })
+
+  it('CSG with mirrored children preserves rotation/scale (MIRROR-CSG-CHILD-RS-LOSS)', () => {
+    // This is the core regression test for the MIRROR-CSG-CHILD-RS-LOSS bug
+    createPrimitiveNode('a', 'cube', { width: 10, height: 10, depth: 10 },
+      { x: 5, y: 0, z: 0, rotX: 10, rotY: 20, rotZ: 30, scaleX: 2, scaleY: 0.5, scaleZ: 3 })
+    createPrimitiveNode('b', 'cube', { width: 10, height: 10, depth: 10 },
+      { x: 15, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 })
+    createBooleanNode('csg', 'union', 'a', 'b',
+      { x: 10, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 })
+
+    const aBefore = getNode('a')!
+    const scaleXBefore = aBefore.localTransform!.scaleX
+
+    mirrorTreeNode('csg', 'YZ', { x: 0, y: 0, z: 0 })
+
+    const aAfter = getNode('a')!
+
+    // Scale must be positive (Math.abs) — NOT zero or negative
+    expect(aAfter.localTransform!.scaleX).toBeCloseTo(Math.abs(scaleXBefore), 10)
+    expect(aAfter.localTransform!.scaleY).toBeCloseTo(Math.abs(aBefore.localTransform!.scaleY), 10)
+    expect(aAfter.localTransform!.scaleZ).toBeCloseTo(Math.abs(aBefore.localTransform!.scaleZ), 10)
+
+    // Rotation: YZ mirror → rotX unchanged, rotY/rotZ negated
+    expect(aAfter.localTransform!.rotX).toBeCloseTo(aBefore.localTransform!.rotX, 10)
+    expect(aAfter.localTransform!.rotY).toBeCloseTo(-aBefore.localTransform!.rotY, 10)
+    expect(aAfter.localTransform!.rotZ).toBeCloseTo(-aBefore.localTransform!.rotZ, 10)
+
+    // relativeToParent scale is also positive
+    expect(aAfter.relativeToParent!.scaleRatio.x).toBeCloseTo(Math.abs(aBefore.relativeToParent!.scaleRatio.x), 10)
+  })
+
+  it('multi-axis rotation after mirror: round-trip', () => {
+    createPrimitiveNode('a', 'cube', { width: 10, height: 10, depth: 10 },
+      { x: 15, y: 0, z: 0, rotX: 20, rotY: 30, rotZ: 40, scaleX: 1, scaleY: 1, scaleZ: 1 })
+    createPrimitiveNode('b', 'cube', { width: 10, height: 10, depth: 10 },
+      { x: 5, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 })
+    createBooleanNode('csg', 'union', 'a', 'b',
+      { x: 10, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 })
+
+    mirrorTreeNode('csg', 'YZ', { x: 0, y: 0, z: 0 })
+
+    const aNode = getNode('a')!
+    const csgLocal = getNode('csg')!.localTransform!
+    const rel = aNode.relativeToParent!
+
+    // Round-trip: composeTransforms(parentWorld, relativeToParent) ≈ localTransform
+    const composed = composeTransforms(csgLocal, rel)
+    const local = aNode.localTransform!
+    expect(Math.abs(composed.x - local.x)).toBeLessThan(1e-6)
+    expect(Math.abs(composed.y - local.y)).toBeLessThan(1e-6)
+    expect(Math.abs(composed.z - local.z)).toBeLessThan(1e-6)
+    expect(Math.abs(composed.rotX - local.rotX)).toBeLessThan(1e-6)
+    expect(Math.abs(composed.rotY - local.rotY)).toBeLessThan(1e-6)
+    expect(Math.abs(composed.rotZ - local.rotZ)).toBeLessThan(1e-6)
+    expect(Math.abs(composed.scaleX - local.scaleX)).toBeLessThan(1e-6)
+    expect(Math.abs(composed.scaleY - local.scaleY)).toBeLessThan(1e-6)
+    expect(Math.abs(composed.scaleZ - local.scaleZ)).toBeLessThan(1e-6)
+  })
+})

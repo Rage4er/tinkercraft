@@ -295,7 +295,7 @@ interface TreeNode {
 | 1 | Модель данных — `RelativeTransform`, `TreeNode.relativeToParent` | ✅ |
 | 2 | Утилиты — `composeTransforms`, `subtractTransform`, `centerMassAtOrigin` + тесты | ✅ |
 | 3 | `createBooleanNode` — заполнить `relativeToParent` детей | ✅ |
-| 4 | `mirrorNodeRecursive` — зеркалить `relativeToParent` | 🔲 |
+| 4 | `mirrorNodeRecursive` — зеркалить `relativeToParent` | ✅ |
 | 5 | `rebuildNode` — `worldTransform = parentWorld ∘ relativeToParent` (критический) | 🔲 |
 | 6 | Worker — кэш в origin, transform один раз | 🔲 |
 | 7 | `resizeObject` — не записывать mesh в `vertices` | 🔲 |
@@ -343,14 +343,21 @@ interface TreeNode {
 - [x] Тест: `relativeToParent` ребёнка = `childWorld − parentWorld`
 - [x] `pnpm typecheck` — 0, `pnpm test` — все зелёные
 
-#### Этап 4 — `mirrorNodeRecursive` 🔲
+#### Этап 4 — `mirrorNodeRecursive` ✅
 
-- [ ] Зеркалить `relativeToParent` (`mirrorPoint`/`mirrorEuler` от дельты), не абсолютный `localTransform`
-- [ ] После зеркала пересчитывать `localTransform = composeTransforms(parentWorld, mirroredRelative)`
-- [ ] Тест: mirror примитива → `relativeToParent` зеркалится
-- [ ] Тест: mirror CSG → `relativeToParent` детей зеркалится
-- [ ] Тест: двойное зеркало → identity
-- [ ] `pnpm typecheck` — 0, `pnpm test` — все зелёные
+- [x] `subtractTransform(mirroredWorld, mirroredParentWorld)` для `relativeToParent`
+- [x] `localTransform` = точное зеркало мира (`mirrorPoint` + `mirrorEuler` + `abs(scale)`)
+- [x] `localTransform` = `composeTransforms(mirroredParentWorld, mirroredRelative)` ±1e-6 (round-trip тест)
+- [x] Scale → `Math.abs()` (scale всегда положительный)
+- [x] Rotation — простой sign flip (perpendicular unchanged, in-plane negated)
+- [x] Рекурсия: дети зеркалятся с `mirroredParentWorld`
+- [x] Тест: mirror примитива → `relativeToParent` зеркалится
+- [x] Тест: mirror CSG → `relativeToParent` детей зеркалится
+- [x] Тест: двойное зеркало → identity (±1e-6)
+- [x] Тест: round-trip `composeTransforms(parentWorld, mirroredRelative) = mirroredLocal`
+- [x] Тест: CSG с зеркальными детьми сохраняет RS (MIRROR-CSG-CHILD-RS-LOSS)
+- [x] Тест: multi-axis rotation (Euler XYZ)
+- [x] `pnpm typecheck` — 0, `pnpm test` — все зелёные
 
 #### Этап 5 — `rebuildNode` (критический) 🔲
 
