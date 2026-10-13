@@ -24,7 +24,7 @@ import {
   type ManifoldObject,
   isWasmReady,
 } from './worker-handlers'
-import { buildTransformMatrix, subtractTransform } from './worker-matrix'
+import { buildTransformMatrix, subtractTransform, composeTransforms } from './worker-matrix'
 
 /** Identity transform — used when a node has no explicit transform. */
 const IDENTITY_TRANSFORM: TransformNR = {
@@ -401,9 +401,15 @@ function invalidateCache(nodeId: string, depth = 0): void {
  * Rebuild mesh for a node from the tree.
  * Uses cache — if hash matches, returns cached result.
  */
-export async function rebuildNode(nodeId: string): Promise<ExtractedMesh> {
+export async function rebuildNode(nodeId: string, parentWorld: TransformNR = IDENTITY_TRANSFORM): Promise<ExtractedMesh> {
   const node = treeStore.getNode(nodeId)
   if (!node) throw new Error(`Node ${nodeId} not found in tree`)
+
+  // Stage 5 (Phase 8): worldTransform = composeTransforms(parentWorld, relativeToParent)
+  // Fallback to localTransform for nodes created before Stage 3 (relativeToParent === null)
+  const worldTransform: TransformNR = node.relativeToParent
+    ? composeTransforms(parentWorld, node.relativeToParent)
+    : (node.localTransform ?? parentWorld)
 
   const hash = computeNodeHash(node)
   if (node.cachedMesh && node.cacheHash === hash) {
@@ -416,11 +422,11 @@ export async function rebuildNode(nodeId: string): Promise<ExtractedMesh> {
   if (isWasmReady()) {
     // Local rebuild with WASM
     if (node.type === 'primitive') {
-      result = rebuildPrimitive(node)
+      result = rebuildPrimitive(node, worldTransform)
     } else if (node.type === 'baked') {
-      result = transformBakedMesh(node)
+      result = transformBakedMesh(node, worldTransform)
     } else if (node.type === 'boolean' && node.children) {
-      result = await applyCSGMeshes(node)
+      result = await applyCSGMeshes(node, worldTransform)
     } else {
       throw new Error(`Unknown node type: ${node.type}`)
     }
@@ -513,7 +519,7 @@ function collectSubtreeForWorker(rootId: string): WorkerNode[] {
  * and apply boolean node's localTransform. Children have their transforms applied (world coords),
  * so boolean result is also in world coordinates. We must center it and apply localTransform.
  */
-async function applyCSGMeshes(node: TreeNode): Promise<ExtractedMesh> {
+async function applyCSGMeshes(node: TreeNode, parentWorld: TransformNR): Promise<ExtractedMesh> {
   if (!node.children || node.children.length !== 2) {
     throw new Error(`Boolean node needs exactly 2 children`)
   }
@@ -559,9 +565,9 @@ async function applyCSGMeshes(node: TreeNode): Promise<ExtractedMesh> {
   const indices = new Uint32Array(result.indices);
   const normals = result.normals ? new Float32Array(result.normals) : null;
 
-  // Apply localTransform if it exists
-  if (node.localTransform) {
-    const t = node.localTransform;
+  // Apply worldTransform (computed from relativeToParent or localTransform)
+  if (parentWorld) {
+    const t = parentWorld;
     const matrix = buildTransformMatrix(
       { x: t.x, y: t.y, z: t.z },
       { rotX: t.rotX, rotY: t.rotY, rotZ: t.rotZ },
@@ -597,22 +603,21 @@ async function applyCSGMeshes(node: TreeNode): Promise<ExtractedMesh> {
 }
 
 /** Rebuild a primitive node */
-function rebuildPrimitive(node: TreeNode): ExtractedMesh {
+function rebuildPrimitive(node: TreeNode, worldTransform: TransformNR): ExtractedMesh {
   // FIX (MED-18-21): Use safe access instead of non-null assertions
   const shapeType = node.shapeType
   const params = node.params
-  const lt = node.localTransform
-  if (!shapeType || !params || !lt) {
-    throw new Error(`Primitive node ${node.id} missing required fields: shapeType=${!!shapeType}, params=${!!params}, localTransform=${!!lt}`)
+  if (!shapeType || !params) {
+    throw new Error(`Primitive node ${node.id} missing required fields: shapeType=${!!shapeType}, params=${!!params}`)
   }
 
   const wasm = getWasm()
   const m = buildPrimitive(shapeType, sanitizeParams(params as Record<string, unknown>))
   try {
     const matrix = buildTransformMatrix(
-      { x: lt.x, y: lt.y, z: lt.z },
-      { rotX: lt.rotX, rotY: lt.rotY, rotZ: lt.rotZ },
-      { scaleX: lt.scaleX, scaleY: lt.scaleY, scaleZ: lt.scaleZ },
+      { x: worldTransform.x, y: worldTransform.y, z: worldTransform.z },
+      { rotX: worldTransform.rotX, rotY: worldTransform.rotY, rotZ: worldTransform.rotZ },
+      { scaleX: worldTransform.scaleX, scaleY: worldTransform.scaleY, scaleZ: worldTransform.scaleZ },
     )
     const transformed = m.transform(matrix)
     m.delete()
@@ -627,12 +632,11 @@ function rebuildPrimitive(node: TreeNode): ExtractedMesh {
 }
 
 /** Transform a baked mesh (STL, non-manifold) with its localTransform */
-function transformBakedMesh(node: TreeNode): ExtractedMesh {
+function transformBakedMesh(node: TreeNode, worldTransform: TransformNR): ExtractedMesh {
   if (!node.vertices || !node.indices) {
     throw new Error(`Baked node ${node.id} has no geometry`)
   }
 
-  const t = node.localTransform!
   const wasm = getWasm()
   const { Manifold } = wasm
 
@@ -644,20 +648,14 @@ function transformBakedMesh(node: TreeNode): ExtractedMesh {
     })
 
     // Baked geometry is centered at origin. Apply the node's world transform.
-    // FIX (CRIT-CSG-7 / MIRROR-CSG-RS): Translation-only path applies when the
-    // transform has no rotation/scale. Rotation/scale are NOT baked into the
-    // geometry of mirrored CSG results / CSG results moved with rotation/scale
-    // — they live in the transform (applied by the render pivot). When such a
-    // node is rebuilt as a nested operand of a boolean tree, the full TRS must
-    // be applied here, otherwise booleans lose rotation/scale.
-    const hasRS = Math.abs(t.rotX) > 1e-6 || Math.abs(t.rotY) > 1e-6 || Math.abs(t.rotZ) > 1e-6 ||
-      Math.abs(t.scaleX - 1) > 1e-6 || Math.abs(t.scaleY - 1) > 1e-6 || Math.abs(t.scaleZ - 1) > 1e-6
+    const hasRS = Math.abs(worldTransform.rotX) > 1e-6 || Math.abs(worldTransform.rotY) > 1e-6 || Math.abs(worldTransform.rotZ) > 1e-6 ||
+      Math.abs(worldTransform.scaleX - 1) > 1e-6 || Math.abs(worldTransform.scaleY - 1) > 1e-6 || Math.abs(worldTransform.scaleZ - 1) > 1e-6
     let matrix: number[]
     if (hasRS) {
       matrix = buildTransformMatrix(
-        { x: t.x, y: t.y, z: t.z },
-        { rotX: t.rotX, rotY: t.rotY, rotZ: t.rotZ },
-        { scaleX: t.scaleX, scaleY: t.scaleY, scaleZ: t.scaleZ },
+        { x: worldTransform.x, y: worldTransform.y, z: worldTransform.z },
+        { rotX: worldTransform.rotX, rotY: worldTransform.rotY, rotZ: worldTransform.rotZ },
+        { scaleX: worldTransform.scaleX, scaleY: worldTransform.scaleY, scaleZ: worldTransform.scaleZ },
       )
     } else {
       // Fast path: translation only (geometry centered at origin).
@@ -665,7 +663,7 @@ function transformBakedMesh(node: TreeNode): ExtractedMesh {
         1, 0, 0, 0,
         0, 1, 0, 0,
         0, 0, 1, 0,
-        t.x, t.y, t.z, 1,
+        worldTransform.x, worldTransform.y, worldTransform.z, 1,
       ]
     }
     const transformed = m.transform(matrix)

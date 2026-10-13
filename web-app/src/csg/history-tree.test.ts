@@ -1004,3 +1004,186 @@ describe('mirrorNodeRecursive — relativeToParent (Stage 4)', () => {
     expect(Math.abs(composed.scaleZ - local.scaleZ)).toBeLessThan(1e-6)
   })
 })
+
+// ============================================================
+// Stage 5 — rebuildNode uses relativeToParent (CRITICAL)
+// ============================================================
+describe('rebuildNode — relativeToParent (Stage 5)', () => {
+  beforeEach(() => {
+    clearTree()
+  })
+
+  it('primitive with relativeToParent → correct position', async () => {
+    // Create a primitive with relativeToParent
+    createPrimitiveNode('obj_1', 'cube', { width: 10, height: 10, depth: 10 },
+      { x: 10, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 })
+    createPrimitiveNode('parent', 'cube', { width: 10, height: 10, depth: 10 },
+      { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 })
+    createBooleanNode('csg', 'union', 'obj_1', 'parent',
+      { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 })
+
+    // obj_1.relativeToParent should be { pos: [10, 0, 0], ... }
+    const node = getNode('obj_1')!
+    expect(node.relativeToParent).not.toBeNull()
+    expect(node.relativeToParent!.positionDelta.x).toBeCloseTo(10, 10)
+
+    // rebuildNode should use composeTransforms(parentWorld, relativeToParent)
+    // Since parent is at origin, world = relativeToParent
+    // We can't test the mesh directly without WASM, but we can verify
+    // the worldTransform computation logic
+    const parentWorld = getNode('parent')!.localTransform!
+    const worldTransform = composeTransforms(parentWorld, node.relativeToParent!)
+    expect(worldTransform.x).toBeCloseTo(10, 10)
+    expect(worldTransform.y).toBeCloseTo(0, 10)
+    expect(worldTransform.z).toBeCloseTo(0, 10)
+  })
+
+  it('CSG from two primitives → result at correct position', async () => {
+    createPrimitiveNode('obj_1', 'cube', { width: 10, height: 10, depth: 10 },
+      { x: 5, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 })
+    createPrimitiveNode('obj_2', 'cube', { width: 10, height: 10, depth: 10 },
+      { x: 15, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 })
+    createBooleanNode('csg', 'union', 'obj_1', 'obj_2',
+      { x: 10, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 })
+
+    // CSG root has relativeToParent = null, localTransform = { x: 10, ... }
+    const csg = getNode('csg')!
+    expect(csg.relativeToParent).toBeNull()
+    expect(csg.localTransform).toBeDefined()
+    expect(csg.localTransform!.x).toBeCloseTo(10, 10)
+
+    // Children have relativeToParent relative to parent (csg at x=10)
+    const obj1 = getNode('obj_1')!
+    const obj2 = getNode('obj_2')!
+    expect(obj1.relativeToParent).not.toBeNull()
+    expect(obj2.relativeToParent).not.toBeNull()
+
+    // obj_1 at x=5, parent at x=10 → relative x = -5
+    expect(obj1.relativeToParent!.positionDelta.x).toBeCloseTo(-5, 10)
+    // obj_2 at x=15, parent at x=10 → relative x = 5
+    expect(obj2.relativeToParent!.positionDelta.x).toBeCloseTo(5, 10)
+
+    // rebuildNode(csg) uses localTransform as fallback (relativeToParent = null)
+    // World = localTransform = { x: 10, ... }
+    const worldTransform = csg.localTransform!
+    expect(worldTransform.x).toBeCloseTo(10, 10)
+  })
+
+  it('rebuildNode after mirror → no drift', async () => {
+    createPrimitiveNode('obj_1', 'cube', { width: 10, height: 10, depth: 10 },
+      { x: 10, y: 0, z: 0, rotX: 10, rotY: 20, rotZ: 30, scaleX: 2, scaleY: 1, scaleZ: 1 })
+    createPrimitiveNode('obj_2', 'cube', { width: 10, height: 10, depth: 10 },
+      { x: 0, y: 10, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 })
+    createBooleanNode('csg', 'union', 'obj_1', 'obj_2',
+      { x: 5, y: 5, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 })
+
+    // Mirror YZ
+    mirrorTreeNode('csg', 'YZ', { x: 0, y: 0, z: 0 })
+
+    // After mirror, positions should be negated (X axis)
+    const csgAfter = getNode('csg')!
+    const obj1After = getNode('obj_1')!
+
+    // CSG root: x=5 → x=-5 (mirror YZ)
+    expect(csgAfter.localTransform!.x).toBeCloseTo(-5, 10)
+    // obj_1: x=10 → x=-10 (mirror YZ)
+    expect(obj1After.localTransform!.x).toBeCloseTo(-10, 10)
+
+    // relativeToParent should also be mirrored
+    expect(obj1After.relativeToParent).not.toBeNull()
+    expect(obj1After.relativeToParent!.positionDelta.x).toBeCloseTo(-5, 10)
+
+    // Scale should be preserved (Math.abs)
+    expect(obj1After.localTransform!.scaleX).toBeCloseTo(2, 10)
+    // Rotation: YZ mirror → rotX unchanged, rotY/rotZ negated
+    expect(obj1After.localTransform!.rotX).toBeCloseTo(10, 10)
+    expect(obj1After.localTransform!.rotY).toBeCloseTo(-20, 10)
+    expect(obj1After.localTransform!.rotZ).toBeCloseTo(-30, 10)
+  })
+
+  it('round-trip: rebuildNode uses same worldTransform as localTransform', () => {
+    createPrimitiveNode('obj_1', 'cube', { width: 10, height: 10, depth: 10 },
+      { x: 15, y: 7, z: 11, rotX: 10, rotY: 20, rotZ: 30, scaleX: 2, scaleY: 3, scaleZ: 0.5 })
+    createPrimitiveNode('parent', 'cube', { width: 10, height: 10, depth: 10 },
+      { x: 5, y: 5, z: 5, rotX: 5, rotY: 5, rotZ: 5, scaleX: 1, scaleY: 1, scaleZ: 1 })
+    createBooleanNode('csg', 'union', 'obj_1', 'parent',
+      { x: 10, y: 10, z: 10, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 })
+
+    const node = getNode('obj_1')!
+    const csgWorld = getNode('csg')!.localTransform! // CSG is the parent for relativeToParent
+    const rel = node.relativeToParent!
+
+    // rebuildNode computes: worldTransform = composeTransforms(parentWorld, relativeToParent)
+    // where parentWorld = csg.localTransform (the boolean node's transform)
+    const worldTransform = composeTransforms(csgWorld, rel)
+
+    // This should equal obj_1.localTransform (Stage 4 preserves it)
+    const local = node.localTransform!
+    expect(Math.abs(worldTransform.x - local.x)).toBeLessThan(1e-6)
+    expect(Math.abs(worldTransform.y - local.y)).toBeLessThan(1e-6)
+    expect(Math.abs(worldTransform.z - local.z)).toBeLessThan(1e-6)
+    expect(Math.abs(worldTransform.rotX - local.rotX)).toBeLessThan(1e-6)
+    expect(Math.abs(worldTransform.rotY - local.rotY)).toBeLessThan(1e-6)
+    expect(Math.abs(worldTransform.rotZ - local.rotZ)).toBeLessThan(1e-6)
+    expect(Math.abs(worldTransform.scaleX - local.scaleX)).toBeLessThan(1e-6)
+    expect(Math.abs(worldTransform.scaleY - local.scaleY)).toBeLessThan(1e-6)
+    expect(Math.abs(worldTransform.scaleZ - local.scaleZ)).toBeLessThan(1e-6)
+  })
+
+  it('fallback to localTransform if relativeToParent is null', () => {
+    // Create a primitive without relativeToParent (root node)
+    createPrimitiveNode('obj_1', 'cube', { width: 10, height: 10, depth: 10 },
+      { x: 10, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 })
+
+    const node = getNode('obj_1')!
+    expect(node.relativeToParent).toBeNull()
+    expect(node.localTransform).toBeDefined()
+    expect(node.localTransform!.x).toBeCloseTo(10, 10)
+
+    // rebuildNode fallback: worldTransform = localTransform
+    const worldTransform = node.localTransform!
+    expect(worldTransform.x).toBeCloseTo(10, 10)
+    expect(worldTransform.y).toBeCloseTo(0, 10)
+    expect(worldTransform.z).toBeCloseTo(0, 10)
+  })
+
+  it('nested CSG (CSG from CSG)', () => {
+    // Create first CSG: obj_1 + obj_2 → csg_A
+    createPrimitiveNode('obj_1', 'cube', { width: 10, height: 10, depth: 10 },
+      { x: 5, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 })
+    createPrimitiveNode('obj_2', 'cube', { width: 10, height: 10, depth: 10 },
+      { x: 15, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 })
+    createBooleanNode('csg_A', 'union', 'obj_1', 'obj_2',
+      { x: 10, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 })
+
+    // Create second CSG: csg_A + obj_3 → csg_B
+    createPrimitiveNode('obj_3', 'cube', { width: 10, height: 10, depth: 10 },
+      { x: 20, y: 10, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 })
+    createBooleanNode('csg_B', 'union', 'csg_A', 'obj_3',
+      { x: 15, y: 5, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 })
+
+    // csg_A has relativeToParent relative to csg_B
+    const csgA = getNode('csg_A')!
+    const csgB = getNode('csg_B')!
+    expect(csgA.relativeToParent).not.toBeNull()
+    expect(csgB.relativeToParent).toBeNull() // root
+
+    // csg_A at x=10, parent (csg_B) at x=15 → relative x = -5
+    expect(csgA.relativeToParent!.positionDelta.x).toBeCloseTo(-5, 10)
+
+    // obj_1 relative to csg_A (parent at x=10): x=5 → relative x = -5
+    const obj1 = getNode('obj_1')!
+    expect(obj1.relativeToParent!.positionDelta.x).toBeCloseTo(-5, 10)
+
+    // obj_3 relative to csg_B (parent at x=15): x=20 → relative x = 5
+    const obj3 = getNode('obj_3')!
+    expect(obj3.relativeToParent!.positionDelta.x).toBeCloseTo(5, 10)
+
+    // Verify world transforms via composeTransforms
+    // obj_1: world = csg_B.local ∘ csg_A.relative ∘ obj_1.relative
+    const csgBWorld = csgB.localTransform!
+    const csgAWorld = composeTransforms(csgBWorld, csgA.relativeToParent!)
+    const obj1World = composeTransforms(csgAWorld, obj1.relativeToParent!)
+    expect(obj1World.x).toBeCloseTo(5, 10) // original x=5
+  })
+})

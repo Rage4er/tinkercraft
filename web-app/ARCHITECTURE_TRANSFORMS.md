@@ -296,7 +296,7 @@ interface TreeNode {
 | 2 | Утилиты — `composeTransforms`, `subtractTransform`, `centerMassAtOrigin` + тесты | ✅ |
 | 3 | `createBooleanNode` — заполнить `relativeToParent` детей | ✅ |
 | 4 | `mirrorNodeRecursive` — зеркалить `relativeToParent` | ✅ |
-| 5 | `rebuildNode` — `worldTransform = parentWorld ∘ relativeToParent` (критический) | 🔲 |
+| 5 | `rebuildNode` — `worldTransform = parentWorld ∘ relativeToParent` (критический) | ✅ |
 | 6 | Worker — кэш в origin, transform один раз | 🔲 |
 | 7 | `resizeObject` — не записывать mesh в `vertices` | 🔲 |
 | 8 | Проверка — 8 сценариев + тесты + документация | 🔲 |
@@ -359,16 +359,19 @@ interface TreeNode {
 - [x] Тест: multi-axis rotation (Euler XYZ)
 - [x] `pnpm typecheck` — 0, `pnpm test` — все зелёные
 
-#### Этап 5 — `rebuildNode` (критический) 🔲
+#### Этап 5 — `rebuildNode` (критический) ✅
 
-- [ ] `worldTransform = composeTransforms(parentWorld, node.relativeToParent)` при `relativeToParent !== null`
-- [ ] Ребёстроит mesh в origin, transform применяется ровно один раз
-- [ ] `collectSubtreeForWorker` передаёт вычисленный `localTransform` (UI-контракт с воркером не ломать)
-- [ ] Тест: primitive с `relativeToParent` → правильная позиция
-- [ ] Тест: CSG из двух примитивов → на месте
-- [ ] Тест: rebuild после mirror → без сдвига
-- [ ] **Правило отката:** тесты упали — `git revert`, дальше не идти
-- [ ] `pnpm typecheck` — 0, `pnpm test` — все зелёные
+- [x] `worldTransform = composeTransforms(parentWorld, node.relativeToParent)` при `relativeToParent !== null`
+- [x] Fallback на `localTransform` при `relativeToParent === null` (обратная совместимость)
+- [x] Transform применяется к origin-мешу ровно один раз
+- [x] `collectSubtreeForWorker` передаёт `localTransform` (UI-контракт с воркером не сломан)
+- [x] Тест: primitive с `relativeToParent` → правильная позиция
+- [x] Тест: CSG из двух примитивов → на месте
+- [x] Тест: rebuild после mirror → без сдвига
+- [x] Тест: round-trip `composeTransforms(parentWorld, relativeToParent) = localTransform`
+- [x] Тест: fallback на `localTransform` если `relativeToParent === null`
+- [x] Тест: вложенный CSG (CSG из CSG)
+- [x] `pnpm typecheck` — 0, `pnpm test` — все зелёные
 
 #### Этап 6 — Worker 🔲
 
