@@ -1324,20 +1324,13 @@ export interface CsgBooleanSyncMessage {
 export async function handleCsgBooleanSync(msg: CsgBooleanSyncMessage): Promise<void> {
   const t0 = performance.now()
 
-  // Sync operand A — build primitive at origin, apply TRS
-  // FIX (CRIT-CSG-3): Always rebuild from shapeType/params when available,
-  // regardless of cache state. This ensures the operand has the correct
-  // position/rotation/scale for the boolean operation.
+  // Sync operand A — build primitive at origin, cache in origin (no transform yet)
   if (msg.shapeA) {
     const params = sanitizeParams(msg.shapeA.params)
     const m = buildPrimitive(msg.shapeA.shapeType, params)
-    const fullMatrix = buildTransformMatrix(
-      { x: msg.transformA.x, y: msg.transformA.y, z: msg.transformA.z },
-      { rotX: msg.transformA.rotX, rotY: msg.transformA.rotY, rotZ: msg.transformA.rotZ },
-      { scaleX: msg.transformA.scaleX, scaleY: msg.transformA.scaleY, scaleZ: msg.transformA.scaleZ },
-    )
-    setCached(msg.idA, m.transform(fullMatrix))
-    // FIX (HIGH-18-11): Dispose operand primitive after applying transform to prevent WASM memory leak
+    // Stage 6: cache in origin — transform applied ONE TIME before boolean
+    setCached(msg.idA, m)
+    // FIX (HIGH-18-11): Dispose operand primitive after caching to prevent WASM memory leak
     m.delete()
   }
   // If shapeA is undefined (CSG result or imported mesh), skip rebuild —
@@ -1347,20 +1340,34 @@ export async function handleCsgBooleanSync(msg: CsgBooleanSyncMessage): Promise<
   if (msg.shapeB) {
     const params = sanitizeParams(msg.shapeB.params)
     const m = buildPrimitive(msg.shapeB.shapeType, params)
-    const fullMatrix = buildTransformMatrix(
-      { x: msg.transformB.x, y: msg.transformB.y, z: msg.transformB.z },
-      { rotX: msg.transformB.rotX, rotY: msg.transformB.rotY, rotZ: msg.transformB.rotZ },
-      { scaleX: msg.transformB.scaleX, scaleY: msg.transformB.scaleY, scaleZ: msg.transformB.scaleZ },
-    )
-    setCached(msg.idB, m.transform(fullMatrix))
-    // FIX (HIGH-18-11): Dispose operand primitive after applying transform to prevent WASM memory leak
+    // Stage 6: cache in origin — transform applied ONE TIME before boolean
+    setCached(msg.idB, m)
+    // FIX (HIGH-18-11): Dispose operand primitive after caching to prevent WASM memory leak
     m.delete()
   }
 
-  // Perform boolean
-  const a = cache.get(msg.idA)
-  const b = cache.get(msg.idB)
-  if (!a || !b) throw new Error(`Objects not found: ${msg.idA}, ${msg.idB}`)
+  // Perform boolean: apply transform ONE TIME to each operand
+  const aOrig = cache.get(msg.idA)
+  const bOrig = cache.get(msg.idB)
+  if (!aOrig || !bOrig) throw new Error(`Objects not found: ${msg.idA}, ${msg.idB}`)
+
+  // Apply transform A
+  const matrixA = buildTransformMatrix(
+    { x: msg.transformA.x, y: msg.transformA.y, z: msg.transformA.z },
+    { rotX: msg.transformA.rotX, rotY: msg.transformA.rotY, rotZ: msg.transformA.rotZ },
+    { scaleX: msg.transformA.scaleX, scaleY: msg.transformA.scaleY, scaleZ: msg.transformA.scaleZ },
+  )
+  const a = aOrig.transform(matrixA)
+  aOrig.delete()
+
+  // Apply transform B
+  const matrixB = buildTransformMatrix(
+    { x: msg.transformB.x, y: msg.transformB.y, z: msg.transformB.z },
+    { rotX: msg.transformB.rotX, rotY: msg.transformB.rotY, rotZ: msg.transformB.rotZ },
+    { scaleX: msg.transformB.scaleX, scaleY: msg.transformB.scaleY, scaleZ: msg.transformB.scaleZ },
+  )
+  const b = bOrig.transform(matrixB)
+  bOrig.delete()
 
   let result: ManifoldObject
   switch (msg.op) {
@@ -1369,23 +1376,46 @@ export async function handleCsgBooleanSync(msg: CsgBooleanSyncMessage): Promise<
     default: result = a.intersect(b)
   }
 
-  disposeCached(msg.idA)
-  disposeCached(msg.idB)
-  setCached(msg.resultId, result)
+  a.delete()
+  b.delete()
 
-  const mesh = extractMesh(result)
+  // Stage 6: Center result at origin — frontend pivot applies TRS
+  const mesh = result.getMesh()
+  const verts = mesh.vertProperties
+  const numVerts = verts.length / mesh.numProp
+  let cx = 0, cy = 0, cz = 0
+  for (let i = 0; i < numVerts; i++) {
+    cx += verts[i * mesh.numProp]
+    cy += verts[i * mesh.numProp + 1]
+    cz += verts[i * mesh.numProp + 2]
+  }
+  cx /= numVerts; cy /= numVerts; cz /= numVerts
+
+  const centerMatrix = buildTransformMatrix(
+    { x: -cx, y: -cy, z: -cz },
+    { rotX: 0, rotY: 0, rotZ: 0 },
+    { scaleX: 1, scaleY: 1, scaleZ: 1 },
+  )
+  const centered = result.transform(centerMatrix)
+  result.delete()
+
+  setCached(msg.resultId, centered)
+
+  const centeredMesh = extractMesh(centered)
+  centered.delete()
+
   safePostMessage(
     {
       reqId: msg.reqId,
       type: 'mesh',
       objId: msg.resultId,
-      vertices: mesh.vertices,
-      indices: mesh.indices,
-      normals: mesh.normals,
-      tris: mesh.tris,
+      vertices: centeredMesh.vertices,
+      indices: centeredMesh.indices,
+      normals: centeredMesh.normals,
+      tris: centeredMesh.tris,
       ms: performance.now() - t0,
     },
-    buildTransferList(mesh),
+    buildTransferList(centeredMesh),
   )
 }
 
@@ -1529,9 +1559,8 @@ export interface SyncMeshMessage {
  * Sync a mesh into worker cache from raw vertices/indices.
  * Used for CSG results and imported meshes that cannot be rebuilt from shapeType+params.
  *
- * FIX (CRIT-CSG-5 / MIRROR-CSG-RS): CSG result meshes are centered at origin.
- * The transform carries the full TRS (position + rotation + scale). Rotation/scale
- * are applied at render time via the Three.js pivot (Viewport3D), so the stored
+ * Stage 6 (Phase 8): Mesh is cached in ORIGIN (without transform). The transform
+ * is applied at render time via the Three.js pivot (Viewport3D), so the stored
  * vertices do NOT have rotation/scale baked in.
  *
  * For booleans to work, the worker cache manifold must be at the object's true
@@ -1548,32 +1577,15 @@ export async function handleSyncMesh(msg: SyncMeshMessage): Promise<void> {
   const wasm = getWasm()
   const verts = new Float32Array(msg.vertices)
   const tris = new Uint32Array(msg.indices)
-  const hasRotationOrScale = hasSR(msg.transform)
-  if (import.meta.env.DEV) console.log(`[DIAG:handleSyncMesh] objId=${msg.objId} verts=${verts.length} tris=${tris.length} transform=(${msg.transform.x}, ${msg.transform.y}, ${msg.transform.z}) hasSR=${hasRotationOrScale}`)
   try {
     let m = new wasm.Manifold({
       numProp: 3,
       vertProperties: verts,
       triVerts: tris,
     })
-    if (import.meta.env.DEV) console.log(`[DIAG:handleSyncMesh] Manifold created successfully for ${msg.objId}`)
-    // Geometry is centered at origin. Apply the object's world transform so the
-    // cached manifold is at the correct world position with rotation/scale.
-    let matrix: number[]
-    if (hasRotationOrScale) {
-      // Full TRS: v' = RS·v + pos (geometry centered at origin).
-      matrix = buildTransformMatrix(
-        { x: msg.transform.x, y: msg.transform.y, z: msg.transform.z },
-        { rotX: msg.transform.rotX, rotY: msg.transform.rotY, rotZ: msg.transform.rotZ },
-        { scaleX: msg.transform.scaleX, scaleY: msg.transform.scaleY, scaleZ: msg.transform.scaleZ },
-      )
-    } else {
-      // Fast path: translation only (normal CSG results have translation-only transform).
-      matrix = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, msg.transform.x, msg.transform.y, msg.transform.z, 1]
-    }
-    m = m.transform(matrix)
+    // Stage 6: Cache mesh in ORIGIN — do NOT apply transform here.
+    // Transform is applied at render time via the Three.js pivot.
     setCached(msg.objId, m)
-    if (import.meta.env.DEV) console.log(`[DIAG:handleSyncMesh] Cached ${msg.objId} as ManifoldObject`)
     safePostMessage({ reqId: msg.reqId, type: 'ok' })
   } catch (me) {
     // Non-manifold — cache as null (CSG not supported for this object)

@@ -297,7 +297,7 @@ interface TreeNode {
 | 3 | `createBooleanNode` — заполнить `relativeToParent` детей | ✅ |
 | 4 | `mirrorNodeRecursive` — зеркалить `relativeToParent` | ✅ |
 | 5 | `rebuildNode` — `worldTransform = parentWorld ∘ relativeToParent` (критический) | ✅ |
-| 6 | Worker — кэш в origin, transform один раз | 🔲 |
+| 6 | Worker — кэш в origin, transform один раз | ✅ |
 | 7 | `resizeObject` — не записывать mesh в `vertices` | 🔲 |
 | 8 | Проверка — 8 сценариев + тесты + документация | 🔲 |
 | 9 | Релиз — v1.1.0, тег, деплой | 🔲 |
@@ -373,11 +373,11 @@ interface TreeNode {
 - [x] Тест: вложенный CSG (CSG из CSG)
 - [x] `pnpm typecheck` — 0, `pnpm test` — все зелёные
 
-#### Этап 6 — Worker 🔲
+#### Этап 6 — Worker ✅
 
-- [ ] `handleRebuildTreeNode`: root boolean центрирует, inner boolean — нет (единая логика)
-- [ ] `handleCsgBooleanSync`: transform применяется один раз перед boolean
-- [ ] `handleSyncMesh`: кэш в origin
+- [x] `handleRebuildTreeNode`: root boolean центрирует, inner boolean — нет (единая логика)
+- [x] `handleCsgBooleanSync`: transform применяется один раз перед boolean, результат центрируется
+- [x] `handleSyncMesh`: кэш в origin (без transform)
 - [x] `pnpm typecheck` — 0, `pnpm test` — все зелёные
 
 #### Этап 7 — `resizeObject` 🔲
