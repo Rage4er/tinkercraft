@@ -5,6 +5,9 @@
 // ============================================================
 
 import { buildSRTMatrixAroundCenter, buildTransformMatrix } from './worker-matrix'
+// Фаза 8, Этап 6.5: единая формула центрирования (объёмный центроид) —
+// та же функция, что использует frontend (store/helpers реэкспортирует её).
+import { centerMassAtOrigin } from './geometry-utils'
 import { FILLET_EPSILON, FILLET_MIN_RADIUS } from '../constants.ts'
 import type { RebuildTransform } from './rebuildOps'
 import { applyMoveDelta, applyMirrorToTransform, applyAlignToTransform } from './rebuildOps'
@@ -774,17 +777,17 @@ export async function handleRebuildTreeNode(msg: RebuildTreeNodeMessage): Promis
         // to each other and to sibling primitives (sphere). Root centering preserves
         // these relative positions while removing the absolute offset.
         if (id === rootId) {
-          // Center root boolean — frontend pivot applies mirrored TRS
+          // Stage 6.5: Center root boolean by CENTER OF MASS (centerMassAtOrigin,
+          // объёмный центроид) — единая формула со frontend (store/helpers) и
+          // rebuildNode. Раньше был vertex centroid (среднее по вершинам) — для
+          // несимметричных CSG (куб+призма) он расходится с центром масс на
+          // единицы (численный тест: diff = 3.89), что возвращало
+          // CSG-PRISM-OFFSET. Frontend pivot применяет mirrored TRS.
           const mesh = m.getMesh()
-          const verts = mesh.vertProperties
-          const numVerts = verts.length / mesh.numProp
-          let cx = 0, cy = 0, cz = 0
-          for (let i = 0; i < numVerts; i++) {
-            cx += verts[i * mesh.numProp]
-            cy += verts[i * mesh.numProp + 1]
-            cz += verts[i * mesh.numProp + 2]
-          }
-          cx /= numVerts; cy /= numVerts; cz /= numVerts
+          const { cx, cy, cz } = centerMassAtOrigin(
+            new Float32Array(mesh.vertProperties),
+            new Uint32Array(mesh.triVerts),
+          )
 
           const centerMatrix = buildTransformMatrix(
             { x: -cx, y: -cy, z: -cz },
@@ -1155,13 +1158,28 @@ export async function handleRebuildScene(msg: RebuildSceneMessage): Promise<void
 /** Handle csgBoolean message. */
 export async function handleCsgBoolean(msg: CsgBooleanMessage): Promise<void> {
   const t0 = performance.now()
-  let a = cache.get(msg.idA)
-  let b = cache.get(msg.idB)
-  if (!a || !b) throw new Error(`Objects not found: ${msg.idA}, ${msg.idB}`)
+  const aOrig = cache.get(msg.idA)
+  const bOrig = cache.get(msg.idB)
+  if (!aOrig || !bOrig) throw new Error(`Objects not found: ${msg.idA}, ${msg.idB}`)
 
-  // Note: caller (document-store.csgBoolean) must call workerSyncObjects() first
-  // to ensure worker cache has geometry with correct position/rotation/scale.
-  // The transformA/transformB parameters are legacy and kept for backward compat.
+  // Stage 6.5 (regression fix): cache holds ORIGIN-CENTERED meshes (handleSyncMesh
+  // stopped baking TRS in Stage 6). Apply transformA/transformB ONE TIME here,
+  // exactly like handleCsgBooleanSync does. Identity when a transform is omitted.
+  const IDT = { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
+  const tA = msg.transformA ?? IDT
+  const tB = msg.transformB ?? IDT
+  const a = aOrig.transform(buildTransformMatrix(
+    { x: tA.x, y: tA.y, z: tA.z },
+    { rotX: tA.rotX, rotY: tA.rotY, rotZ: tA.rotZ },
+    { scaleX: tA.scaleX, scaleY: tA.scaleY, scaleZ: tA.scaleZ },
+  ))
+  const b = bOrig.transform(buildTransformMatrix(
+    { x: tB.x, y: tB.y, z: tB.z },
+    { rotX: tB.rotX, rotY: tB.rotY, rotZ: tB.rotZ },
+    { scaleX: tB.scaleX, scaleY: tB.scaleY, scaleZ: tB.scaleZ },
+  ))
+  disposeCached(msg.idA)
+  disposeCached(msg.idB)
 
   // DIAG: operand BBox before CSG
   const aMesh = a.getMesh()
@@ -1200,11 +1218,22 @@ export async function handleCsgBoolean(msg: CsgBooleanMessage): Promise<void> {
       result = a.intersect(b)
   }
 
-  disposeCached(msg.idA)
-  disposeCached(msg.idB)
-  setCached(msg.resultId, result)
+  a.delete()
+  b.delete()
+
+  // Stage 6.5: cache holds a COM-centered copy (§6.1 «cache in origin»), the
+  // RESPONSE carries the WORLD mesh — frontend computes the pivot itself with
+  // the same centerMassAtOrigin (document-store csgBoolean flow).
+  const resultMeshData = result.getMesh()
+  const { cx: comX, cy: comY, cz: comZ } = centerMassAtOrigin(
+    new Float32Array(resultMeshData.vertProperties),
+    new Uint32Array(resultMeshData.triVerts),
+  )
+  const centered = result.transform([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -comX, -comY, -comZ, 1])
+  setCached(msg.resultId, centered)
 
   const mesh = extractMesh(result)
+  result.delete()
 
   // DIAG: result BBox
   const rMin = { x: Infinity, y: Infinity, z: Infinity }, rMax = { x: -Infinity, y: -Infinity, z: -Infinity }
@@ -1324,14 +1353,13 @@ export interface CsgBooleanSyncMessage {
 export async function handleCsgBooleanSync(msg: CsgBooleanSyncMessage): Promise<void> {
   const t0 = performance.now()
 
-  // Sync operand A — build primitive at origin, cache in origin (no transform yet)
+  // Sync operand A — build primitive at origin, cache in origin (no transform baked).
+  // Stage 6.5 lifetime fix: cache OWNS the object — do NOT delete it after setCached.
   if (msg.shapeA) {
     const params = sanitizeParams(msg.shapeA.params)
     const m = buildPrimitive(msg.shapeA.shapeType, params)
     // Stage 6: cache in origin — transform applied ONE TIME before boolean
     setCached(msg.idA, m)
-    // FIX (HIGH-18-11): Dispose operand primitive after caching to prevent WASM memory leak
-    m.delete()
   }
   // If shapeA is undefined (CSG result or imported mesh), skip rebuild —
   // rely on previous syncObjectsForOperation that called workerSyncMesh.
@@ -1342,11 +1370,9 @@ export async function handleCsgBooleanSync(msg: CsgBooleanSyncMessage): Promise<
     const m = buildPrimitive(msg.shapeB.shapeType, params)
     // Stage 6: cache in origin — transform applied ONE TIME before boolean
     setCached(msg.idB, m)
-    // FIX (HIGH-18-11): Dispose operand primitive after caching to prevent WASM memory leak
-    m.delete()
   }
 
-  // Perform boolean: apply transform ONE TIME to each operand
+  // Perform boolean: apply transform ONE TIME to each origin-centered operand
   const aOrig = cache.get(msg.idA)
   const bOrig = cache.get(msg.idB)
   if (!aOrig || !bOrig) throw new Error(`Objects not found: ${msg.idA}, ${msg.idB}`)
@@ -1358,7 +1384,7 @@ export async function handleCsgBooleanSync(msg: CsgBooleanSyncMessage): Promise<
     { scaleX: msg.transformA.scaleX, scaleY: msg.transformA.scaleY, scaleZ: msg.transformA.scaleZ },
   )
   const a = aOrig.transform(matrixA)
-  aOrig.delete()
+  disposeCached(msg.idA)
 
   // Apply transform B
   const matrixB = buildTransformMatrix(
@@ -1367,7 +1393,7 @@ export async function handleCsgBooleanSync(msg: CsgBooleanSyncMessage): Promise<
     { scaleX: msg.transformB.scaleX, scaleY: msg.transformB.scaleY, scaleZ: msg.transformB.scaleZ },
   )
   const b = bOrig.transform(matrixB)
-  bOrig.delete()
+  disposeCached(msg.idB)
 
   let result: ManifoldObject
   switch (msg.op) {
@@ -1379,43 +1405,33 @@ export async function handleCsgBooleanSync(msg: CsgBooleanSyncMessage): Promise<
   a.delete()
   b.delete()
 
-  // Stage 6: Center result at origin — frontend pivot applies TRS
-  const mesh = result.getMesh()
-  const verts = mesh.vertProperties
-  const numVerts = verts.length / mesh.numProp
-  let cx = 0, cy = 0, cz = 0
-  for (let i = 0; i < numVerts; i++) {
-    cx += verts[i * mesh.numProp]
-    cy += verts[i * mesh.numProp + 1]
-    cz += verts[i * mesh.numProp + 2]
-  }
-  cx /= numVerts; cy /= numVerts; cz /= numVerts
-
-  const centerMatrix = buildTransformMatrix(
-    { x: -cx, y: -cy, z: -cz },
-    { rotX: 0, rotY: 0, rotZ: 0 },
-    { scaleX: 1, scaleY: 1, scaleZ: 1 },
+  // Stage 6.5: cache holds a COM-centered copy (§6.1 «cache in origin»), the
+  // RESPONSE carries the WORLD mesh — the frontend computes the pivot itself
+  // with the same centerMassAtOrigin (document-store csgBoolean flow), so
+  // worker and frontend agree by construction (same function, same mesh).
+  const resultMeshData = result.getMesh()
+  const { cx, cy, cz } = centerMassAtOrigin(
+    new Float32Array(resultMeshData.vertProperties),
+    new Uint32Array(resultMeshData.triVerts),
   )
-  const centered = result.transform(centerMatrix)
-  result.delete()
-
+  const centered = result.transform([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -cx, -cy, -cz, 1])
   setCached(msg.resultId, centered)
 
-  const centeredMesh = extractMesh(centered)
-  centered.delete()
+  const mesh = extractMesh(result)
+  result.delete()
 
   safePostMessage(
     {
       reqId: msg.reqId,
       type: 'mesh',
       objId: msg.resultId,
-      vertices: centeredMesh.vertices,
-      indices: centeredMesh.indices,
-      normals: centeredMesh.normals,
-      tris: centeredMesh.tris,
+      vertices: mesh.vertices,
+      indices: mesh.indices,
+      normals: mesh.normals,
+      tris: mesh.tris,
       ms: performance.now() - t0,
     },
-    buildTransferList(centeredMesh),
+    buildTransferList(mesh),
   )
 }
 

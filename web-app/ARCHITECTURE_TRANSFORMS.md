@@ -147,26 +147,54 @@ flowchart TD
 
 ### 5.2. CSG-результаты
 
-**CSG-результаты центрируются по ЦЕНТРУ МАСС в origin** через `extractAndCenterInPlace`.
+**CSG-результаты центрируются по ЦЕНТРУ МАСС в origin** через `centerMassAtOrigin`
+(Этап 6.5; раньше — `extractAndCenterInPlace` (BBox) и `extractCenteredAt(transformA)`).
 
 **Не по BBox!** — иначе при повороте сдвиг.
 
 ### 5.3. `centerMassAtOrigin`
 
-**Единая функция центрирования** (в `helpers.ts`):
+**Единая функция центрирования** (с Этапа 6.5 — в `csg/geometry-utils.ts`,
+`store/helpers.ts` реэкспортирует для совместимости):
 
 ```typescript
-function centerMassAtOrigin(vertices, indices): { cx, cy, cz } {
-  // Вычисляет центр масс (взвешенный по площади треугольников)
-  // Сдвигает вершины в origin
-  // Возвращает смещение (cx, cy, cz)
+function centerMassAtOrigin(vertices: Float32Array, indices: Uint32Array): { cx, cy, cz } {
+  // Замкнутая mesh — объёмный центроид (теорема дивергенции)
+  // Незамкнутая — площадной центроид (взвешенный по площади)
+  // Мутирует vertices in-place, возвращает смещение
 }
 ```
 
 **Используется:**
-- В `buildPrimitive` (для prism/pyramid — на всякий случай)
-- В `createBooleanNode` (для CSG-результата)
-- В `extractMesh` (для CSG)
+- Worker: `handleRebuildTreeNode` (root boolean), `handleCsgBoolean`, `handleCsgBooleanSync`
+- Frontend: `document-store.csgBoolean`, `document-store.extrudeSelected`
+- `store/rebuild.ts` (CSG-результаты без baked vertices)
+
+### 5.4. Унификация центрирования (Этап 6.5)
+
+**Проблема:** до Этапа 6.5 центрирование было рассогласовано между слоями —
+три разных центра масс для одного CSG-результата:
+
+| Слой | Формула до 6.5 | Численный тест (union куб 10 + куб 5@x=10) |
+|------|----------------|---------------------------------------------|
+| Worker (`handleRebuildTreeNode`, `handleCsgBooleanSync`) | vertex centroid (среднее по вершинам) | cx = 5.0 |
+| Frontend (`document-store`) | `extractCenteredAt(transformA)` (pivot = позиция 1-го операнда) | cx = x(A) |
+| `store/helpers.centerMassAtOrigin` | объёмный центроид (Этап 2) | cx = 10/9 ≈ 1.111 |
+
+Разница vertex centroid vs center of mass = **3.89** для union куб+призма —
+это возвращало CSG-PRISM-OFFSET / CSG-CSG-POSITION-DRIFT на Этапе 8.
+
+**Решение:** **единая** функция `centerMassAtOrigin` (объёмный центроид,
+`csg/geometry-utils.ts`) во всех слоях:
+- Worker: `centerMassAtOrigin(verts, tris)` → кэш держит COM-центрированную копию
+- Frontend: `centerMassAtOrigin(verts, indices)` → pivot = COM
+- `rebuildNode`/`rebuild.ts`: `centerMassAtOrigin(verts, indices)`
+
+Инвариант: `pivot(COM) + vertex(centered) = world` — сходится по построению,
+потому что worker и frontend вызывают одну и ту же функцию на том же мешe
+(diff = 0, а не 1e-6 — это один и тот же код).
+
+**Не использовать:** vertex centroid, BBox-center, `extractCenteredAt(transformA)`.
 
 ---
 
@@ -298,6 +326,7 @@ interface TreeNode {
 | 4 | `mirrorNodeRecursive` — зеркалить `relativeToParent` | ✅ |
 | 5 | `rebuildNode` — `worldTransform = parentWorld ∘ relativeToParent` (критический) | ✅ |
 | 6 | Worker — кэш в origin, transform один раз | ✅ |
+| 6.5 | Унификация центрирования (centerMassAtOrigin во всех слоях) | ✅ |
 | 7 | `resizeObject` — не записывать mesh в `vertices` | 🔲 |
 | 8 | Проверка — 8 сценариев + тесты + документация | 🔲 |
 | 9 | Релиз — v1.1.0, тег, деплой | 🔲 |
@@ -379,6 +408,23 @@ interface TreeNode {
 - [x] `handleCsgBooleanSync`: transform применяется один раз перед boolean, результат центрируется
 - [x] `handleSyncMesh`: кэш в origin (без transform)
 - [x] `pnpm typecheck` — 0, `pnpm test` — все зелёные
+
+#### Этап 6.5 — Унификация центрирования ✅
+
+- [x] `centerMassAtOrigin` + `isClosedMesh` перенесены в `csg/geometry-utils.ts` (worker-совместимый слой), `store/helpers.ts` реэкспортирует
+- [x] Worker `handleRebuildTreeNode` (root boolean): vertex centroid → `centerMassAtOrigin`
+- [x] Worker `handleCsgBooleanSync`: vertex centroid → `centerMassAtOrigin`; lifetime-фиксы (кэш владеет объектом, `disposeCached` вместо `delete()` кэш-записи); response = WORLD mesh, кэш = COM-центрированная копия
+- [x] Worker `handleCsgBoolean` (регрессия Этапа 6): применяет `transformA/transformB` ОДИН РАЗ к origin-кэшу; кэш = COM-копия, response = world
+- [x] Frontend `document-store.csgBoolean`: `extractCenteredAt(transformA)` → `centerMassAtOrigin`, pivot = COM, `resultCenter` = COM
+- [x] Frontend `document-store.extrudeSelected`: → `workerCsgBooleanWithSync` (origin-конвенция) + COM-центрирование
+- [x] `store/rebuild.ts`: CSG-результаты без baked vertices → `centerMassAtOrigin` + запись центрированной копии обратно (фикс двойного смещения legacy-документов)
+- [x] 6 тестов `csg/geometry-utils.test.ts` (COM union = 10/9, diff 3.89, инвариант no-offset < 1e-6, fallback, пустой mesh, паритет слоёв)
+- [x] `pnpm typecheck` — 0, `pnpm test` — 323/323
+
+**Остаточный долг (зафиксирован в DEVELOPMENT_PLAN.md):** `handleRebuildScene`
+внутренне использует world-кэш (самосогласован); pivot legacy-документов
+(центрирование по transformA) не мигрирован; extrude/CSG филlet-примитивов
+теряет fillet при rebuild из params (buildPrimitive).
 
 #### Этап 7 — `resizeObject` 🔲
 

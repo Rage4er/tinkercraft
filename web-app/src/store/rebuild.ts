@@ -8,7 +8,7 @@ import type {
   TransformNR, Vec3, AlignOperation,
 } from '../csg/types'
 import { workerRebuildScene } from '../csg/worker-client'
-import { extractAndCenterInPlace, makeObject } from './helpers'
+import { centerMassAtOrigin, makeObject } from './helpers'
 import {
   applyMoveDelta,
   applyMirrorToTransform,
@@ -220,9 +220,15 @@ export async function rebuildFromHistory(
         }
         continue
       }
-      // FIX (LOW-18-9): extractAndCenterInPlace mutates in-place, so vertices are already centered.
-      // Only update meta with the center offset.
-      const { cx, cy, cz } = extractAndCenterInPlace(new Float32Array(m.vertices))
+      // Stage 6.5 (CSG-CENTER-MASS, §5.4): CSG-результаты центрируются по ЦЕНТРУ
+      // МАСС (centerMassAtOrigin) — та же функция, что у worker и document-store.
+      // FIX (быв. LOW-18-9): раньше extractAndCenterInPlace мутировал ВРЕМЕННУЮ
+      // копию, которая выбрасывалась — m.vertices оставался в мировых координатах,
+      // а transform получал центр (двойное смещение для legacy-документов без
+      // baked resultVertices). Теперь центрированная копия записывается обратно.
+      const vertsC = new Float32Array(m.vertices)
+      const { cx, cy, cz } = centerMassAtOrigin(vertsC, new Uint32Array(m.indices))
+      m.vertices = vertsC
       meta[id] = { ...meta[id], transform: { ...meta[id].transform, x: cx, y: cy, z: cz } }
     }
   }

@@ -546,6 +546,8 @@ web-app/
 
 | # | Проблема | Приоритет | Статус |
 |---|----------|-----------|--------|
+| | **CENTERING-INCONSISTENCY** — три разных центра масс в проекте: worker (vertex centroid), frontend (`extractCenteredAt(transformA)`), helpers (`centerMassAtOrigin`). Для несимметричных CSG-результатов diff = 3.89 (численный тест union куб+призма). Риск CSG-PRISM-OFFSET на Этапе 8. Унифицировано: единая `centerMassAtOrigin` (`csg/geometry-utils.ts`) в worker + frontend + rebuild. | **CRITICAL** | ✅ **ИСПРАВЛЕНО** (2026-10-14, Этап 6.5) |
+| | **CENTERING-RESIDUAL** — остаточный долг 6.5: (1) `handleRebuildScene` внутренне использует world-кэш (самосогласован, но вне origin-конвенции); (2) pivot legacy-документов (центрирование по transformA) не мигрирован — tree-rebuild старых CSG может дать смещение (baked resultVertices путь не затронут); (3) extrude/CSG филлет-примитивов rebuild'ится через `buildPrimitive` без fillet. | **MEDIUM** | 🔲 Этап 7/8 |
 | | **CYCLE-CSG** — `Cannot create cycle in tree` при `jumpToHistory`/`loadFromProject` (дети CSG отсутствуют в дереве при rebuildBuildTree) | **CRITICAL** | ✅ **ИСПРАВЛЕНО** (2026-08-08) |
 | | **MIRROR-CSG-RS** — Потеря rotation/scale при булевых операциях над зеркальными CSG-результатами | **CRITICAL** | ✅ **ИСПРАВЛЕНО** (2026-08-07) |
 | | **MIRROR-DOUBLE-TRANSLATE** — Зеркало CSG давало ломанные, непредсказуемые копии (двойной translation: `moveTreeNode` сдвигал детей в дереве + root localTransform содержит translation) | **CRITICAL** | ✅ **ИСПРАВЛЕНО** (2026-08-18) |

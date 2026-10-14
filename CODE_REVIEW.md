@@ -46,6 +46,31 @@
 
 ---
 
+### ✅ ИСПРАВЛЕНО — CENTERING-INCONSISTENCY (три разных центра масс; регрессии lifetime Этапа 6) (2026-10-14, Этап 6.5)
+
+**Проблема:**
+1. Worker центрировал CSG vertex centroid (среднее по вершинам), frontend —
+   `extractCenteredAt(transformA)`, helpers — объёмный центроид. Для union
+   куб+призма diff vertex centroid vs COM = **3.89** → риск CSG-PRISM-OFFSET.
+2. Регрессии Этапа 6 (обнаружены аудитом): `handleCsgBooleanSync` кешировал
+   объект и тут же `delete()`-ил его (висячий WASM-хэндл), response был
+   центрированным, а frontend сдвигал ещё на -transformA (двойное смещение);
+   `handleCsgBoolean` не применял transformA/B, хотя `handleSyncMesh` с
+   Этапа 6 кеширует в origin (CSG+CSG лег бы в overlap).
+3. `store/rebuild.ts` (LOW-18-9): `extractAndCenterInPlace` мутировал временную
+   копию, которая выбрасывалась — vertices оставались мировыми при transform=центр.
+
+**Исправление:** единая `centerMassAtOrigin` (объёмный центроид) в
+`csg/geometry-utils.ts` во всех слоях (worker, document-store, rebuild);
+worker response = world mesh, кэш = COM-центрированная копия; lifetime-фиксы
+(`setCached` владеет объектом, `disposeCached` для операндов); extrude
+переведён на `workerCsgBooleanWithSync`. Заменяет подход CSG-TRANSFORM-IS-CENTROID
+(pivot = transformA) на pivot = COM — согласован с worker по построению.
+
+**Файлы:** `csg/geometry-utils.ts` (новый), `csg/geometry-utils.test.ts` (6 тестов),
+`csg/worker-handlers.ts`, `store/helpers.ts` (реэкспорт), `store/document-store.ts`,
+`store/rebuild.ts`. **Тесты:** 323/323.
+
 ### ✅ ИСПРАВЛЕНО — CSG-PRESERVE-RS (потеря rotation/scale в CSG-результате) (2026-10-07)
 
 **Проблема:** `csgBoolean` создавал `resultTransform` с только позицией центроида, сбрасывая rotation/scale в identity. Это приводило к:
