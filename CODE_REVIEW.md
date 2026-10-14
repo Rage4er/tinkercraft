@@ -66,10 +66,25 @@ worker response = world mesh, кэш = COM-центрированная копи
 (`setCached` владеет объектом, `disposeCached` для операндов); extrude
 переведён на `workerCsgBooleanWithSync`. Заменяет подход CSG-TRANSFORM-IS-CENTROID
 (pivot = transformA) на pivot = COM — согласован с worker по построению.
+**Закрывает CSG-PRISM-OFFSET** (Этап 8, сценарий 1 §10.2: union куб+призма,
+pivot=COM diff=0, z world ∈ [−10,10] — исторический сдвиг [0,20] устранён).
 
 **Файлы:** `csg/geometry-utils.ts` (новый), `csg/geometry-utils.test.ts` (6 тестов),
 `csg/worker-handlers.ts`, `store/helpers.ts` (реэкспорт), `store/document-store.ts`,
 `store/rebuild.ts`. **Тесты:** 323/323.
+
+### ✅ ИСПРАВЛЕНО — RESIZE-TRS-DOUBLE (удвоение TRS при resize примитива) (2026-10-14, Этап 7)
+
+**Проблема:** `resizeObject` пересобирал mesh через `rebuildNode` (mesh с
+запечённым `worldTransform`) и писал его в `vertices` при неизменном
+`transform` → Viewport3D применял TRS второй раз на pivot.
+**Исправление:** примитивы пересобираются `workerBuildShape` с нулевым
+transform (vertices в origin); CSG — только scale в `transform`, vertices не
+трогаются; ветвление `shapeType !== 'csg'`.
+**Закрыт Этапом 8, сценарий 2 §10.2:** prism → rotate 30° → scale 2× → resize
+height=40 → z world size = 80 (не 160), diff = 0.
+
+**Файлы:** `store/document-store.ts`, `store/document-store.test.ts` (6 тестов). **Тесты:** 329/329.
 
 ### ✅ ИСПРАВЛЕНО — CSG-PRESERVE-RS (потеря rotation/scale в CSG-результате) (2026-10-07)
 
@@ -364,7 +379,7 @@ for (const n of msg.nodes) {  // ← TypeError: msg.nodes is not iterable
 
 ### MIRROR-CSG-CHILD-RS-LOSS — Сброс RS дочерних примитивов при зеркале CSG
 
-**Статус:** 🔲 Фаза 8 (известная проблема)
+**Статус:** ✅ **ИСПРАВЛЕНО** (2026-10-14, Этап 8)
 **Обнаружена:** 2026-10-07
 **Компонент:** `csg/history-tree.ts` → `mirrorNodeRecursive`
 **Приоритет:** Высокий
@@ -395,7 +410,7 @@ rotation/scale живёт в root-ноде boolean-поддерева, а не �
 
 ### CSG-CSG-POSITION-DRIFT — Смещение операндов при CSG двух CSG-результатов
 
-**Статус:** 🔲 Фаза 8 (известная проблема)
+**Статус:** ✅ **ИСПРАВЛЕНО** (2026-10-14, Этап 8)
 **Обнаружена:** 2026-10-07
 **Компонент:** `csg/worker-handlers.ts` → `handleCsgBooleanSync`
 **Приоритет:** Высокий

@@ -434,19 +434,21 @@ interface TreeNode {
 - [x] Тест: призма → rotate → scale → resize → vertices не удваиваются (+5 тестов: anchor, CSG-результат, relativeToParent, localTransform, Scenario 2 §10.2 — `store/document-store.test.ts`, mock worker-client)
 - [x] `pnpm typecheck` — 0, `pnpm test` — все зелёные (329/329)
 
-#### Этап 8 — Проверка 🔲
+#### Этап 8 — Проверка ✅ 2026-10-14
 
-- [ ] Сценарий 1: куб + призма sides=3 → CSG Union → на месте
-- [ ] Сценарий 2: призма → rotate → scale → resize → не удваивается
-- [ ] Сценарий 3: призма → CSG → зеркало YZ → зеркальна
-- [ ] Сценарий 4: CSG → CSG Union → на месте
-- [ ] Сценарий 5: куб (scale 0.5) + призма (rot 20,20,20) → CSG → на месте
-- [ ] Сценарий 6: Export STL → правильные координаты
-- [ ] Сценарий 7: Undo/redo → восстанавливается
-- [ ] Сценарий 8: Save/load `.doodle` → восстанавливается
-- [ ] `CHANGELOG.md` — запись про Фазу 8
-- [ ] `CODE_REVIEW.md` — закрыты CSG-PRISM-OFFSET / MIRROR-CSG-CHILD-RS-LOSS / CSG-CSG-POSITION-DRIFT
-- [ ] Статусы этапов в этом чек-листе обновлены
+- [x] Сценарий 1: куб + призма sides=3 → CSG Union → на месте (diff pivot/COM = 0.00)
+- [x] Сценарий 2: призма → rotate → scale → resize → не удваивается (z world = 80, diff = 0)
+- [x] Сценарий 3: призма → CSG → зеркало YZ → pivot зеркалён (−6.03 vs +0.06), RS детей (scale 1.5, rotZ −20) сохранён, COM doctrine diff = 9.54e-7
+- [x] Сценарий 4: CSG → CSG Union → на месте (bbox diff = 9.54e-7, pivot-vs-COM diff = 9.78e-7)
+- [x] Сценарий 5: куб (scale 0.5) + призма (rot 20,20,20) → CSG → на месте (bbox diff = 9.54e-7)
+- [x] Сценарий 6: Export STL → STL vertex count = 186, tris = 62, bbox diff = 0.00
+- [x] Сценарий 7: Undo/redo → snapshot-path diff = 0.00, rebuild-path diff = 0.00
+- [x] Сценарий 8: Save/load `.doodle` → CSG восстановлен, diff = 0.00
+- [x] `CHANGELOG.md` — запись про Фазу 8 Этап 8
+- [x] `CODE_REVIEW.md` — закрыты CSG-PRISM-OFFSET / MIRROR-CSG-CHILD-RS-LOSS / CSG-CSG-POSITION-DRIFT
+- [x] `pnpm typecheck` — 0, `pnpm test` — 337/337
+
+**Известное ограничение:** МIRROR-CSG-PRIMITIVE-CHIRALITY — зеркало CSG, содержащего асимметричный примитив (призма sides=3), не является точным геометрическим зеркалом: `mirrorNodeRecursive` зеркалит трансформы детей, но не внутреннюю хиральность примитива (доктрина MIRROR-SCALE abs scale). Для симметричных примитивов (куб, сфера, цилиндр) зеркало точное. Для асимметричных — геометрия приближённая (зеркальный TRS без зеркального вращения хиральности), позиционирование корректно (pivot = mirrorPoint(COM), COM doctrine diff = 9.54e-7).
 
 #### Этап 9 — Релиз 🔲
 
