@@ -1051,11 +1051,16 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       }
     }
 
-    // Для примитивов: обновляем params в дереве и пересобираем
-    if (obj.shapeType && obj.params) {
+    // Для примитивов: обновляем params в дереве и пересобираем меш В ORIGIN.
+    // Stage 7 (RESIZE-TRS-DOUBLE): раньше сюда попадали и CSG-результаты
+    // (shapeType='csg', params={} — truthy!), а rebuildNode(id) возвращает меш
+    // С worldTransform (для корневой ноды === localTransform), записанным в
+    // vertices, при transform остался → Viewport3D применяет TRS повторно (pivot).
+    if (obj.shapeType && obj.shapeType !== 'csg' && obj.params) {
       const mergedParams = { ...obj.params, ...params }
 
-      // Обновляем params в ноде дерева (иммутабельно через setNode)
+      // Обновляем params в ноде дерева (иммутабельно через setNode).
+      // relativeToParent и localTransform НЕ трогаем — resize меняет только params.
       const node = getNode(id)
       if (node && node.type === 'primitive') {
         setNode(id, { ...node, params: { ...mergedParams } })
@@ -1064,10 +1069,20 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       set({ busy: true })
       try {
         const t0 = performance.now()
-        // Пересобираем меш с новыми параметрами
-        const mesh = await rebuildNode(id)
+        // Stage 7: пересобираем меш В ORIGIN, а НЕ через rebuildNode(id).
+        // rebuildNode возвращает mesh с запечённым worldTransform (= localTransform
+        // для корневого примитива) — запись его в vertices при неизменном transform
+        // даёт двойное применение TRS (RESIZE-TRS-DOUBLE). workerBuildShape с
+        // нулевым transform возвращает origin-центрированный меш (примитивы
+        // центрированы в origin через manifold API, §5.1) и кэширует origin-манifold
+        // в worker (§6.1).
+        const ZERO_TRANSFORM: TransformNR = { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
+        const mesh = await workerBuildShape(id, obj.shapeType, mergedParams, ZERO_TRANSFORM)
         const ms = performance.now() - t0
 
+        // Anchor: resizeObject не имеет параметра anchor/anchorDelta (grep anchor →
+        // только alignSelected). Текущая семантика = центральный anchor:
+        // transform (включая position) НЕ меняется.
         const newObj = makeObject({
           ...obj,
           params: mergedParams,
@@ -1097,9 +1112,13 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
           z: bbox.max.z - bbox.min.z,
         }
 
-        const targetWidth = params.width ?? currentSize.x
-        const targetHeight = params.height ?? currentSize.y
-        const targetDepth = params.depth ?? currentSize.z
+        // Stage 7: ветка теперь реально достижима для CSG (условие первой ветки
+        // исключает shapeType='csg'; раньше CSG попадали в примитивную ветку,
+        // т.к. params={} truthy). Для осей без переданного param scale сохраняем
+        // текущий (иначе target=currentSize сбрасывал scale до 1).
+        const targetWidth = params.width ?? currentSize.x * obj.transform.scaleX
+        const targetHeight = params.height ?? currentSize.y * obj.transform.scaleY
+        const targetDepth = params.depth ?? currentSize.z * obj.transform.scaleZ
 
         // Вычисляем новый scale
         const newTransform = {

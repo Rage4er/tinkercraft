@@ -327,7 +327,7 @@ interface TreeNode {
 | 5 | `rebuildNode` — `worldTransform = parentWorld ∘ relativeToParent` (критический) | ✅ |
 | 6 | Worker — кэш в origin, transform один раз | ✅ |
 | 6.5 | Унификация центрирования (centerMassAtOrigin во всех слоях) | ✅ |
-| 7 | `resizeObject` — не записывать mesh в `vertices` | 🔲 |
+| 7 | `resizeObject` — не записывать mesh в `vertices` | ✅ 2026-10-14 |
 | 8 | Проверка — 8 сценариев + тесты + документация | 🔲 |
 | 9 | Релиз — v1.1.0, тег, деплой | 🔲 |
 
@@ -426,12 +426,13 @@ interface TreeNode {
 (центрирование по transformA) не мигрирован; extrude/CSG филlet-примитивов
 теряет fillet при rebuild из params (buildPrimitive).
 
-#### Этап 7 — `resizeObject` 🔲
+#### Этап 7 — `resizeObject` ✅ (2026-10-14)
 
-- [ ] Не записывать пересчитанный mesh с transform в `SceneObject.vertices`
-- [ ] Resize примитива — только `params` (+ `localTransform` позиции по anchor)
-- [ ] Тест: призма → rotate → scale → resize → vertices не удваиваются
-- [x] `pnpm typecheck` — 0, `pnpm test` — все зелёные
+- [x] Не записывать пересчитанный mesh с transform в `SceneObject.vertices` (примитивы — `workerBuildShape` с нулевым transform, mesh в origin; CSG — `vertices` не трогаются вовсе)
+- [x] Resize примитива — только `params` (+ `localTransform` позиции по anchor; anchor в API `resizeObject` отсутствует — grep: только `alignSelected` — семантика центрального anchor, `transform.position` не меняется)
+- [x] Ветвление исправлено: `shapeType !== 'csg'` — раньше CSG попадали в примитивную ветку (`params: {}` truthy); scale-ветка CSG сохраняет scale по непереданным осям
+- [x] Тест: призма → rotate → scale → resize → vertices не удваиваются (+5 тестов: anchor, CSG-результат, relativeToParent, localTransform, Scenario 2 §10.2 — `store/document-store.test.ts`, mock worker-client)
+- [x] `pnpm typecheck` — 0, `pnpm test` — все зелёные (329/329)
 
 #### Этап 8 — Проверка 🔲
 
