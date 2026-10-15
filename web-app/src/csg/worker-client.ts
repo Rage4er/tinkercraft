@@ -201,7 +201,7 @@ export async function workerBuildImportedMesh(
   objId: string, vertices: Float32Array | number[], indices: Uint32Array | number[],
 ): Promise<MeshResult> {
   await waitReady()
-  const result = await send<MeshResult>('buildImportedMesh', { objId, vertexCount: vertices.length, indexCount: indices.length })
+  const result = await send<MeshResult>('buildImportedMesh', { objId, vertices, indices })
   devLogWorker('receive', 'buildImportedMesh', { objId, tris: result.tris, vertices: result.vertices.length / 3 }, result.ms)
   return result
 }
@@ -283,7 +283,7 @@ export async function workerRebuildScene(
   operations: unknown[],
 ): Promise<SceneMeshResult> {
   await waitReady()
-  const result = await send<SceneMeshResult>('rebuildScene', { opCount: operations.length })
+  const result = await send<SceneMeshResult>('rebuildScene', { operations })
   devLogWorker('receive', 'rebuildScene', { opCount: operations.length, resultCount: result.results.length, ms: result.ms })
   return result
 }
