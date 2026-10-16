@@ -9,9 +9,12 @@
 
 ## [Unreleased]
 
+### Fixed
+- **VIEWPORT-DOUBLE-CENTERING (CSG-результат рендерился со сдвигом):** `useMeshSync` вычитал `bboxCenter` из вершин **всех** объектов (`centerGeometry`, update-путь, mirror-preview). Для примитивов это правильно: `handleBuildShape` запекает spawn-трансляцию в вершины, и вычитание её снимает. Но CSG-вершины уже центрированы по **центру масс** (§5.4, `centerMassAtOrigin`), а pivot = COM — повторное вычитание `bboxCenter` смещало меш на `bboxCenter(centered)`. Для асимметричной геометрии COM ≠ bboxCenter: union куба (origin) и призмы (10,0,0) рендерился со сдвигом **4.2491** ед. по X. Исправлено: добавлен продакшн-предикат `isPivotCenteredGeometry(shapeType)` (`csg/geometry-utils.ts`), bbox-центрирование пропускается для CSG в трёх местах вьюпорта и синхронно в STL-экспорте (`applyTransformToVertices`), чтобы экспорт не расходился с рендером. Измерено после фикса: `|render − data| = 0.00000000`. Тесты: `viewport-mesh-sync.test.ts` (4 теста, вызывают **настоящий** `useMeshSync` и сравнивают world-координаты меша из scene graph с data-world: CSG create/update-путь, поворот rotZ=30 вокруг pivot, контроль примитива — позиция не удваивается), `csg-invariants.test.ts` INVARIANT 4, `phase-8-scenarios.test.ts` Scenario 6 (модель ожидания использует тот же предикат). (`csg/geometry-utils.ts`, `components/viewport-hooks.ts`, `io/stl-export.ts`)
+
 ### Known Limitations
-- **MIRROR-CHIRALITY** — зеркало CSG с асимметричными примитивами (prism sides=3, пирамида, конус sides=3) — приближённое. Доктрина MIRROR-SCALE (abs scale + rotation sign flip) не даёт точного отражения хиральности примитива. **Fix:** `mirrorVerticesInPlace` для primitive (следующая фаза).
-- **CENTERING-RESIDUAL** — pivot legacy-документов (центрирование по transformA) не мигрирован на COM-конвенцию.
+- **MIRROR-CHIRALITY** — зеркало CSG с асимметричными примитивами (prism sides=3, пирамида, конус sides=3) — приближённое. Доктрина MIRROR-SCALE (abs scale + rotation sign flip) не даёт точного отражения хиральности примитива: `mirrorNodeRecursive` зеркалит **трансформы** детей, но не геометрию примитива, поэтому призма sides=3 на origin (position = 0 → `mirrorPoint(0) = 0`) остаётся незеркалённой. Измерено: union куба и призмы sides=3, mirror YZ — bbox расходится с эталоном на **2.5** ед. (куб+sphere и куб+pyramid sides=4 — 0.0, они симметричны). **Fix:** зеркалить геометрию результата (`mirrorVerticesInPlace` + смена winding) после `rebuildNode` в `mirrorObject`. Воспроизводится: `csg-mirror-chirality.test.ts` (помечен `it.fails`).
+- **CENTERING-RESIDUAL** — pivot legacy-документов (центрирование по transformA) не мигрирован на COM-конвенцию. (Двойное центрирование вьюпорта устранено — см. VIEWPORT-DOUBLE-CENTERING; остаток касается только старых файлов, где pivot ≠ COM.)
 
 ---
 

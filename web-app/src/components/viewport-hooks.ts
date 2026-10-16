@@ -17,6 +17,7 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { TransformControls } from "three/examples/jsm/controls/TransformControls.js";
 import type { SceneObject, TransformNR } from "../csg/types";
 import { computeAABB } from "../store/helpers";
+import { isPivotCenteredGeometry } from "../csg/geometry-utils";
 import {
     findNearestSnap,
     createSnapIndicator,
@@ -404,11 +405,15 @@ function computeVertsHash(vertices: Float32Array): number {
 
 /**
  * Centers mesh geometry and returns a container (pivot).
+ *
+ * FIX (VIEWPORT-DOUBLE-CENTERING): CSG-результаты хранят COM-центрированные
+ * вершины (§5.4), повторное bbox-центрирование смещает их на bboxCenter.
+ * Для таких объектов геометрия оставляется как есть — pivot уже в COM.
  */
-function centerGeometry(mesh: THREE.Mesh, objectId: string): THREE.Object3D {
+function centerGeometry(mesh: THREE.Mesh, objectId: string, pivotCentered = false): THREE.Object3D {
     const geo = mesh.geometry as THREE.BufferGeometry;
     const pos = geo.attributes.position;
-    if (pos) {
+    if (pos && !pivotCentered) {
         const vertices = pos.array as Float32Array;
         const { min, max } = computeAABB(vertices);
         const cx = (min.x + max.x) / 2, cy = (min.y + max.y) / 2, cz = (min.z + max.z) / 2;
@@ -564,10 +569,15 @@ export function useMeshSync(
                     existing.mesh.geometry.computeBoundingSphere();
 
                     // Re-center geometry
-                    const box = existing.mesh.geometry.boundingBox!;
-                    const center = new THREE.Vector3();
-                    box.getCenter(center);
-                    existing.mesh.geometry.translate(-center.x, -center.y, -center.z);
+                    // FIX (VIEWPORT-DOUBLE-CENTERING): CSG-вершины уже центрированы
+                    // по COM (§5.4), повторное вычитание bbox-центра сдвигает
+                    // асимметричный CSG (измерено 4.2491 ед. для cube+prism).
+                    if (!isPivotCenteredGeometry(obj.shapeType)) {
+                        const box = existing.mesh.geometry.boundingBox!;
+                        const center = new THREE.Vector3();
+                        box.getCenter(center);
+                        existing.mesh.geometry.translate(-center.x, -center.y, -center.z);
+                    }
                     existing.mesh.geometry.computeBoundingBox();
                     existing.mesh.geometry.computeBoundingSphere();
 
@@ -729,7 +739,7 @@ export function useMeshSync(
                 rawMesh.castShadow = true;
                 rawMesh.receiveShadow = true;
                 rawMesh.userData.objectId = obj.id;
-                const pivot = centerGeometry(rawMesh, obj.id);
+                const pivot = centerGeometry(rawMesh, obj.id, isPivotCenteredGeometry(obj.shapeType));
                 // UB2-4: рёбра по выраженным граням, «на пару тонов» темнее
                 // (ребёнок меша — наследует visibility/трансформы родителя)
                 attachShapeEdges(rawMesh, obj.color);
@@ -1028,14 +1038,20 @@ export function useMirrorPreview(
         // Центрируем геометрию (как в useMeshSync для обычных объектов).
         // FIX (MIRROR-PREVIEW-CENTER): computeBoundingBox() нужно вызвать явно —
         // geometry.boundingBox равен null по умолчанию и заполняется только после вызова этого метода.
+        // FIX (VIEWPORT-DOUBLE-CENTERING): CSG-вершины уже центрированы по COM —
+        // повторное центрирование сместило бы превью относительно pivot
+        // (и превью разошлось бы с подтверждённым результатом).
         geometry.computeBoundingBox();
-        const box = geometry.boundingBox;
-        if (box) {
-            const center = new THREE.Vector3();
-            box.getCenter(center);
-            geometry.translate(-center.x, -center.y, -center.z);
-            geometry.computeBoundingBox();
-            geometry.computeBoundingSphere();
+        geometry.computeBoundingSphere();
+        if (!isPivotCenteredGeometry(previewObject.shapeType)) {
+            const box = geometry.boundingBox;
+            if (box) {
+                const center = new THREE.Vector3();
+                box.getCenter(center);
+                geometry.translate(-center.x, -center.y, -center.z);
+                geometry.computeBoundingBox();
+                geometry.computeBoundingSphere();
+            }
         }
 
         const material = new THREE.MeshStandardMaterial({

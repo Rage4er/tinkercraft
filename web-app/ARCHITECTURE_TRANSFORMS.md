@@ -196,6 +196,32 @@ function centerMassAtOrigin(vertices: Float32Array, indices: Uint32Array): { cx,
 
 **Не использовать:** vertex centroid, BBox-center, `extractCenteredAt(transformA)`.
 
+### 5.5. Конвенция рендера/экспорта (FIX VIEWPORT-DOUBLE-CENTERING)
+
+Вьюпорт и STL-экспорт применяют один и тот же вид трансформации:
+
+```
+world = pivot + R·S·(v − c)
+```
+
+где `c` зависит от того, **что лежит в `obj.vertices`** (`isPivotCenteredGeometry`):
+
+| Тип объекта | `obj.vertices` | `c` | Почему |
+|---|---|---|---|
+| примитив | origin-геометрия **+ запечённая spawn-трансляция** (`handleBuildShape` применяет T) | `bboxCenter(v)` | вычитание снимает spawn, иначе позиция применится дважды |
+| `import_mesh` | сырые координаты файла | `bboxCenter(v)` | произвольный offset импорта приводится к pivot |
+| **CSG** | **уже COM-центрированы (§5.4)**, pivot = COM | **0** | повторное вычитание смещало бы на `bboxCenter(centered)` |
+
+**Ловушка:** у асимметричной геометрии `COM ≠ bboxCenter`, поэтому «универсальное»
+центрирование по bbox для CSG давало сдвиг **4.2491** ед. (union куба на origin
+и призмы на (10,0,0)). Проверка — `viewport-mesh-sync.test.ts`: вызывает
+настоящий `useMeshSync` и сверяет world-координаты меша из scene graph с
+data-world (§5.4). После фикса diff = `0.00000000`.
+
+**Правило:** любой новый потребитель `obj.vertices` (рендер, экспорт, снап,
+preview) обязан использовать `isPivotCenteredGeometry(shapeType)`, а не
+вычитать bbox-центр «на всякий случай».
+
 ---
 
 ## 6. WORKER

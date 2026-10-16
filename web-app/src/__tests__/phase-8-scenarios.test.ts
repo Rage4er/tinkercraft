@@ -11,7 +11,9 @@
 // - примитивы: vertices = origin-геометрия + запечённая spawn-трансляция;
 //   workerWorld = T·R·S·(v − spawnT)   (как handleCsgBooleanSync)
 // - CSG-результаты: vertices = COM-центрированные; world = pivot + vertex (§5.4)
-// - рендер/STL: world = R·S·(v − bboxCenter(v)) + t (viewport/stl-export)
+// - рендер/STL: world = R·S·(v − c) + t, где c = bboxCenter(v) для примитивов
+//   (spawn запечён в вершинах) и c = 0 для CSG (FIX VIEWPORT-DOUBLE-CENTERING:
+//   CSG-вершины уже COM-центрированы, повторное центрирование сдвигало меш)
 
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 
@@ -40,7 +42,7 @@ import { useDocumentStore } from '../store/document-store'
 import { clearSnapshots } from '../store/snapshots'
 import { workerBuildShape, workerClearAll, workerCsgBooleanWithSync } from '../csg/worker-client'
 import { clearTree, getNode } from '../csg/history-tree'
-import { centerMassAtOrigin } from '../csg/geometry-utils'
+import { centerMassAtOrigin, isPivotCenteredGeometry } from '../csg/geometry-utils'
 import { buildTransformMatrix } from '../csg/worker-matrix'
 import { exportToStl } from '../io/stl-export'
 import { serializeDoodle, parseDoodle } from '../io/doodle-io'
@@ -183,8 +185,17 @@ function lastGroupResultId(): string {
 function expectedStlBBox(objects: SceneObject[]): BB {
   let expected: BB = { min: [Infinity, Infinity, Infinity], max: [-Infinity, -Infinity, -Infinity] }
   for (const o of objects) {
-    const b = bboxOf(o.vertices)
-    const c = [(b.min[0] + b.max[0]) / 2, (b.min[1] + b.max[1]) / 2, (b.min[2] + b.max[2]) / 2]
+    // FIX (VIEWPORT-DOUBLE-CENTERING): конвенция рендера/STL —
+    // world = R·S·(v − c) + t, где c = bboxCenter(v) только для объектов с
+    // запечённой трансляцией (примитивы/импорт). CSG-вершины уже
+    // COM-центрированы (§5.4) → c = 0. Предикат — продакшн, чтобы
+    // модель теста не могла разойтись с кодом.
+    const c = isPivotCenteredGeometry(o.shapeType)
+      ? [0, 0, 0]
+      : (() => {
+        const b = bboxOf(o.vertices)
+        return [(b.min[0] + b.max[0]) / 2, (b.min[1] + b.max[1]) / 2, (b.min[2] + b.max[2]) / 2]
+      })()
     const m = buildTransformMatrix(
       { x: o.transform.x, y: o.transform.y, z: o.transform.z },
       { rotX: o.transform.rotX, rotY: o.transform.rotY, rotZ: o.transform.rotZ },
@@ -462,7 +473,8 @@ describe('Фаза 8 §10.2 — 8 сценариев (in-process manifold bridge
     }
     const stlBB = bboxOf(new Float32Array(parsed))
 
-    // Ожидание — формула стл-экспорта/вьюпорта: world = R·S·(v − bboxCenter(v)) + t
+    // Ожидание — формула стл-экспорта/вьюпорта: world = R·S·(v − c) + t,
+    // c = bboxCenter для примитивов, c = 0 для CSG (§5.4 + VIEWPORT-DOUBLE-CENTERING)
     const expected = expectedStlBBox(objects)
 
     const diff = bboxClose(stlBB, expected, 1e-2, 'scenario6 STL bbox')
