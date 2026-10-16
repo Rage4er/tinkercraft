@@ -258,6 +258,18 @@ export interface TreeNode {
   /** Normal data for baked geometry (null = no normals) */
   normals?: Float32Array | null
 
+  /**
+   * Mirror plane used when baking this node (Variant B fix for MIRROR-CHIRALITY).
+   * Set when a primitive is converted to baked during mirror: the node's
+   * vertices were reflected across this plane. Kept so that future child-edit
+   * flows can rebuild geometry from params and re-apply the same mirror.
+   * `undefined` — not a mirrored node (original primitive or non-mirrored baked).
+   *
+   * Double-mirror (same plane twice) clears this field (geometry returns to original).
+   * Different planes: leave unchanged (the edit flow composes them — separate task).
+   */
+  mirroredPlane?: 'XY' | 'XZ' | 'YZ'
+
   // ── Boolean operations (internal nodes) ──
   /** Boolean operation type */
   operation?: 'union' | 'subtract' | 'intersect'

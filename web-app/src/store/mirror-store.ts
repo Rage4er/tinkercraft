@@ -43,6 +43,7 @@ import {
     mirrorPoint,
     mirrorEuler,
     logMirrorTreeSnapshot,
+    bakeMirroredSubtree,
 } from '../csg/history-tree'
 import { workerSyncObjects, workerSyncMesh } from '../csg/worker-client'
 import { devLog, devWarn } from '../utils/debug'
@@ -192,6 +193,16 @@ export async function mirrorObject(
         // 3. Зеркалим всё поддерево (примитивы + inner boolean localTransforms)
         mirrorTreeNode(newId, plane)
         logMirrorTreeSnapshot(newId, `clone-after-mirror plane=${plane} source=${id}`)
+
+        // 3.5. FIX (MIRROR-CHIRALITY, Variant B): bakeMirroredSubtree converts primitive
+        // children to baked with mirrored vertices (reflects geometry, not just transforms).
+        // Without this, asymmetric primitives (prism sides=3, pyramid, cone) retain their
+        // original chirality — a left-handed prism stays left-handed after mirror.
+        // Math: M·T(p)·R(e)·S·v = T(M·p)·R(mirrorEuler(e))·S·(M·v), so baking M·v
+        // with the already-mirrored TRS gives exact mirror when worker applies localTransform.
+        // shapeType + params are preserved for future child-edit flow.
+        await bakeMirroredSubtree(newId, plane)
+        logMirrorTreeSnapshot(newId, `clone-after-bake plane=${plane} source=${id}`)
 
         // 4. Сбрасываем root в identity → rebuildNode вернёт центрированную геометрию
         //    (translation-only shape, без rotation/scale — они применяются через

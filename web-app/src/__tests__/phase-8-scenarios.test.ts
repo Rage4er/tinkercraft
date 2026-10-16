@@ -364,29 +364,21 @@ describe('Фаза 8 §10.2 — 8 сценариев (in-process manifold bridge
     //    retains scale 1.5 и rotation (зеркальный, mirrorEuler YZ)
     const diffCOM = expectPivotIsCOM(g2)
 
-    // Независимая проверка: worker-union детей с зеркальными TRS →
-    // COM-центрирование → pivot = mirrorPoint(pivot g1) — та же формула,
-    // что mirrorObject для CSG (MIRROR-SCALE doctrine).
-    const mirroredCubeT: TransformNR = { ...cubeT0, x: -cubeT0.x, rotY: -cubeT0.rotY, rotZ: -cubeT0.rotZ }
-    const mirroredPrismT: TransformNR = { ...prismT0, x: -prismT0.x, rotY: -prismT0.rotY, rotZ: -prismT0.rotZ }
-    const oracleMesh = await workerCsgBooleanWithSync(
-      'oracle-a', 'oracle-b', 'union', 'oracle-r',
-      mirroredCubeT, mirroredPrismT,
-      { shapeType: 'cube', params: { width: 20, height: 20, depth: 20 } },
-      { shapeType: 'prism', params: { radius: 12, height: 20, sides: 3 } },
-    )
-    // centerMassAtOrigin мутатирует массив in-place (строки 128-133 geometry-utils.ts)!
-    // COM-центрируем копию и ставим на pivot g2
-    const oracleVerts = new Float32Array(oracleMesh.vertices)
-    const ocom = centerMassAtOrigin(oracleVerts, oracleMesh.indices) // мутация ✓
-    for (let i = 0; i < oracleVerts.length; i += 3) {
-      oracleVerts[i] += g2.transform.x
-      oracleVerts[i + 1] += g2.transform.y
-      oracleVerts[i + 2] += g2.transform.z
+    // FIX (MIRROR-CHIRALITY): старый оракл (workerCsgBooleanWithSync с
+    // зеркальными TRS) давал НЕТОЧНОЕ зеркало — геометрия детей не отражалась.
+    // После FIX (MIRROR-CHIRALITY, Variant B) baked-дети имеют отражённые
+    // вершины, поэтому production-путь даёт ТОЧНОЕ зеркало.
+    // Новый оракл: mirror(original CSG world vertices) — true mirror oracle.
+    const origWorldVerts = csgWorldVerts(g1)
+    const mirrorVerts = new Float32Array(origWorldVerts.length)
+    for (let i = 0; i < origWorldVerts.length; i += 3) {
+      mirrorVerts[i] = -origWorldVerts[i]    // YZ mirror: x → -x
+      mirrorVerts[i + 1] = origWorldVerts[i + 1]
+      mirrorVerts[i + 2] = origWorldVerts[i + 2]
     }
-    const expected3 = bboxOf(oracleVerts)
+    const expected3 = bboxOf(mirrorVerts)
     const b2 = bboxOf(csgWorldVerts(g2))
-    const diff3 = bboxClose(b2, expected3, 1e-2, 'scenario3 mirrored geometry doctrine')
+    const diff3 = bboxClose(b2, expected3, 1e-2, 'scenario3 mirrored geometry (true mirror)')
 
     console.log(`Mirrored CSG center = [${g2.transform.x.toFixed(4)}, ${g2.transform.y.toFixed(4)}, ${g2.transform.z.toFixed(4)}]`)
     console.log(`Scale preserved = [${g2.transform.scaleX}, ${g2.transform.scaleY}, ${g2.transform.scaleZ}] (COM diff = ${diffCOM.toExponential(2)}, geometry doctrine diff = ${diff3.toExponential(2)})`)

@@ -969,6 +969,120 @@ function mirrorNodeRecursive(
 }
 
 /**
+ * Bake primitive children as mirrored (Variant B fix for MIRROR-CHIRALITY).
+ *
+ * Root cause: mirrorNodeRecursive mirrors child transforms (position + Euler + scale)
+ * but does NOT mirror primitive geometry. For symmetric primitives (cube, sphere) the
+ * visual result is correct. For asymmetric primitives (prism, pyramid, cone) the geometry
+ * retains its original chirality — a left-handed object stays left-handed after mirror.
+ *
+ * Fix: convert mirrored primitives to baked, with vertices reflected across the same
+ * plane. Math: M·T(p)·R(e)·S·v = T(M·p)·(M·R·M)·S·(M·v), where M·R·M = mirrorEuler(e)
+ * (exact conjugation, verified: for YZ flip rotY/rotZ, rotX unchanged).
+ * The child's baked geometry = M·v (origin-centered primitive reflected),
+ * localTransform = T(M·p)·R(mirrorEuler)·S (already set by mirrorNodeRecursive).
+ * Worker applies localTransform to baked vertices → exact mirror. ✓
+ *
+ * For existing baked nodes (repeated mirror or import child inside CSG):
+ *   mirror vertices in-place + swap winding.
+ * Double-mirror (same plane twice) restores original geometry (v → -v → v, winding twice).
+ *
+ * @param nodeId   — root node of the subtree to bake
+ * @param plane    — mirror plane
+ * @returns number of nodes that were baked/mirrored
+ */
+export async function bakeMirroredSubtree(
+  nodeId: string,
+  plane: 'XY' | 'XZ' | 'YZ',
+): Promise<number> {
+  const node = treeStore.getNode(nodeId)
+  if (!node) return 0
+
+  let bakedCount = 0
+
+  if (node.type === 'primitive' && node.shapeType && node.params) {
+    // 1. Build origin-centered geometry (COM at origin, no transform).
+    const mesh = await buildOriginMeshForPrimitive(node)
+
+    // 2. Mirror vertices and normals across the plane.
+    mirrorVerticesInPlace(mesh.vertices, mesh.normals, plane)
+
+    // 3. Swap winding to restore CCW orientation (flip + rewind = exact mirror).
+    swapWindingInPlace(mesh.indices)
+
+    // 4. Convert to baked — retain shapeType + params for future child editing.
+    treeStore.setNode(node.id, {
+      ...node,
+      type: 'baked',
+      vertices: mesh.vertices,
+      indices: mesh.indices,
+      normals: mesh.normals ?? null,
+      mirroredPlane: plane,
+      cachedMesh: undefined,
+      cachedBBox: undefined,
+      cacheHash: undefined,
+    })
+    bakedCount++
+  } else if (node.type === 'baked' && node.vertices && node.indices) {
+    // Already-baked child: mirror vertices in-place + swap winding.
+    mirrorVerticesInPlace(node.vertices, node.normals, plane)
+    swapWindingInPlace(node.indices)
+
+    // Track mirror plane for double-mirror detection.
+    // Same plane → double mirror cancels (geometry returns to original).
+    // Different plane → leave as-is (edit flow composes them — separate task).
+    if (!node.mirroredPlane) {
+      node.mirroredPlane = plane
+    } else if (node.mirroredPlane === plane) {
+      delete node.mirroredPlane
+    } else {
+      devWarn('mirror', `bakeMirroredSubtree: node ${nodeId} already mirrored on plane ${node.mirroredPlane}, new plane ${plane} — edit flow must compose (separate task)`)
+    }
+
+    invalidateCache(node.id)
+    bakedCount++
+  } else if (node.type === 'boolean' && node.children) {
+    // Recurse into children (boolean node transform is mirrored by mirrorNodeRecursive).
+    for (const childId of node.children) {
+      bakedCount += await bakeMirroredSubtree(childId, plane)
+    }
+  }
+
+  return bakedCount
+}
+
+/** Build origin-centered mesh for a primitive node (WASM or worker fallback). */
+async function buildOriginMeshForPrimitive(node: TreeNode): Promise<ExtractedMesh> {
+  if (isWasmReady()) {
+    return rebuildPrimitive(node, IDENTITY_TRANSFORM)
+  }
+  // Fallback: ask worker to build primitive with identity transform (no centering for primitives).
+  const mesh = await workerRebuildNode(node.id, [{
+    id: node.id,
+    type: 'primitive',
+    shapeType: node.shapeType,
+    params: node.params as Record<string, number>,
+    localTransform: IDENTITY_TRANSFORM,
+  }])
+  return {
+    vertices: new Float32Array(mesh.vertices),
+    indices: new Uint32Array(mesh.indices),
+    normals: mesh.normals ? new Float32Array(mesh.normals) : null,
+    tris: mesh.tris,
+    ms: mesh.ms,
+  }
+}
+
+/** Swap winding in-place: [i0, i1, i2] → [i0, i2, i1] (flip triangle orientation). */
+function swapWindingInPlace(indices: Uint32Array): void {
+  for (let i = 0; i < indices.length; i += 3) {
+    const tmp = indices[i + 1]
+    indices[i + 1] = indices[i + 2]
+    indices[i + 2] = tmp
+  }
+}
+
+/**
  * Reset localTransform of all primitives in a subtree to identity (pos=0, rot=0, scale=1).
  * Used after mirror + cloneSubtree for boolean nodes, where the geometry already
  * has the mirrored transform baked in by rebuildNode. Without this reset,
@@ -1232,6 +1346,7 @@ function cloneRecursive(
     clone.indices = new Uint32Array(source.indices!)
     clone.normals = source.normals ? new Float32Array(source.normals) : null
     clone.localTransform = { ...source.localTransform! }
+    clone.mirroredPlane = source.mirroredPlane
   }
 
   if (source.type === 'boolean' && source.children) {
