@@ -40,3 +40,44 @@ bowler
 # Added by cargo
 
 /target
+
+# === qwen-code artifacts (root only) ===
+/node_modules/
+/pnpm-lock.yaml
+/pnpm-workspace.yaml
+
+# === Node.js (universal) ===
+node_modules/
+dist/
+build/
+*.tsbuildinfo
+
+# === IDE ===
+.idea/
+.vscode/
+*.swp
+.gigacode_vsc/
+
+# === OS ===
+.DS_Store
+Thumbs.db
+
+# === Logs ===
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# === Env ===
+.env
+.env.local
+
+# === Vite ===
+.vite/
+
+# === Test coverage ===
+coverage/
+
+# === Java (CaDoodle legacy) ===
+*.class
+target/
+.gradle/
