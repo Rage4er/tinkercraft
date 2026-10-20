@@ -187,14 +187,42 @@ function centerMassAtOrigin(vertices: Float32Array, indices: Uint32Array): { cx,
 **Решение:** **единая** функция `centerMassAtOrigin` (объёмный центроид,
 `csg/geometry-utils.ts`) во всех слоях:
 - Worker: `centerMassAtOrigin(verts, tris)` → кэш держит COM-центрированную копию
-- Frontend: `centerMassAtOrigin(verts, indices)` → pivot = COM
+- Frontend: `centerMassAtOrigin(verts, indices)` → pivot = COM → затем сдвиг `(COM − transformA)` → pivot = transformA
 - `rebuildNode`/`rebuild.ts`: `centerMassAtOrigin(verts, indices)`
 
-Инвариант: `pivot(COM) + vertex(centered) = world` — сходится по построению,
+Инвариант: `pivot(transformA) + vertex(pivot-centered) = world` — сходится по построению,
 потому что worker и frontend вызывают одну и ту же функцию на том же мешe
 (diff = 0, а не 1e-6 — это один и тот же код).
 
 **Не использовать:** vertex centroid, BBox-center, `extractCenteredAt(transformA)`.
+
+### 5.4b. Pivot = transformA (FIX PIVOT-TRANSFORMA, Bug 3)
+
+Позиция pivot CSG-результата = **transformA** (позиция первого операнда), а не COM.
+Gizmo CSG прикрепляется к pivot — пользователь ожидает gizmo на месте первого операнда.
+`centerMassAtOrigin` по-прежнему центрирует вершины по COM (тот же центр, что и worker-кэш),
+затем применяется остаточный сдвиг:
+
+```
+v_COM = v_world − COM
+v_new = v_COM + (COM − transformA) = v_world − transformA
+pivot = transformA
+world = pivot + v_new = transformA + (v_world − transformA) = v_world  ✅
+```
+
+Для **зеркала CSG** (`mirror-store.ts`): воркер центрирует пересобранный результат по COM,
+pivot = M(transformA) — вершины корректируются: `v += M(srcCom)` где
+`srcCom = COM(вершины первого операнда)`. Для legacy-объектов (pivot = COM) `srcCom ≈ 0`
+→ поведение не меняется.
+
+**Известный остаток:** CENTERING-RESIDUAL (pivot legacy-документов ≠ transformA при
+старом resultCenter = COM) — задокументирован, baked resultVertices путь не затронут.
+
+### 5.4c. Фаза 8.5 — Унификация отрисовки (plan)
+
+**Фаза 8.5** устраняет остатки: `centerGeometry` и `isPivotCenteredGeometry` удаляются полностью.
+`SceneObject.vertices` всегда в origin (COM), `transform` — мировой pivot. Render = data.
+См. `web-app/ARCHITECTURE_RENDER.md`.
 
 ### 5.5. Конвенция рендера/экспорта (FIX VIEWPORT-DOUBLE-CENTERING)
 
@@ -210,9 +238,9 @@ world = pivot + R·S·(v − c)
 |---|---|---|---|
 | примитив | origin-геометрия **+ запечённая spawn-трансляция** (`handleBuildShape` применяет T) | `bboxCenter(v)` | вычитание снимает spawn, иначе позиция применится дважды |
 | `import_mesh` | сырые координаты файла | `bboxCenter(v)` | произвольный offset импорта приводится к pivot |
-| **CSG** | **уже COM-центрированы (§5.4)**, pivot = COM | **0** | повторное вычитание смещало бы на `bboxCenter(centered)` |
+| **CSG** | **pivot-центрированы (§5.4, FIX PIVOT-TRANSFORMA)**, pivot = transformA | **0** | повторное вычитание смещало бы на `bboxCenter(centered)` |
 
-**Ловушка:** у асимметричной геометрии `COM ≠ bboxCenter`, поэтому «универсальное»
+**Ловушка:** у асимметричной геометрии `COM ≠ transformA`, поэтому «универсальное»
 центрирование по bbox для CSG давало сдвиг **4.2491** ед. (union куба на origin
 и призмы на (10,0,0)). Проверка — `viewport-mesh-sync.test.ts`: вызывает
 настоящий `useMeshSync` и сверяет world-координаты меша из scene graph с
@@ -250,6 +278,7 @@ preview) обязан использовать `isPivotCenteredGeometry(shapeTyp
 | **Сдвиг CSG с призмой** | `vertices` в мировых + transform как pivot | `vertices` в origin, transform один раз |
 | **Зеркало примитивов не работает** | mirror меняет `localTransform` (абсолютный) | mirror меняет `relativeToParent` |
 | **Удвоение TRS при resize** | `resizeObject` записывает mesh с transform | `resizeObject` не трогает `vertices` |
+| **RENDER-PRISM-BBOX-OFFSET** | `centerGeometry` вычитал bboxCenter вместо spawn → сдвиг | Решён в 8.5.3 — `centerGeometry` удалён |
 | **Потеря RS при mirror CSG** | RS в `localTransform`, mirror не трогает | RS в `relativeToParent` |
 | **CSG-CSG drift** | root boolean центрирует, inner — нет | Единая модель: все центрируются в origin |
 
@@ -327,6 +356,7 @@ interface TreeNode {
 | 6 | Export STL | Правильные координаты |
 | 7 | Undo/redo | Восстанавливается |
 | 8 | Save/load `.doodle` | Восстанавливается |
+| 9 | render = data для всех объектов | `render_world_vertex === data_world_vertex` (diff < 1e-6) |
 
 ### 10.3. Метрики
 
@@ -354,8 +384,8 @@ interface TreeNode {
 | 6 | Worker — кэш в origin, transform один раз | ✅ |
 | 6.5 | Унификация центрирования (centerMassAtOrigin во всех слоях) | ✅ |
 | 7 | `resizeObject` — не записывать mesh в `vertices` | ✅ 2026-10-14 |
-| 8 | Проверка — 8 сценариев + тесты + документация | 🔲 |
-| 9 | Релиз — v1.1.0, тег, деплой | 🔲 |
+| 8 | Проверка — 8 сценариев + тесты + документация | ✅ |
+| 8.5 | Унификация отрисовки и данных ( Фаза 8.5, v1.2.0) | 🔄 |
 
 ### Детальный чек-лист
 
@@ -484,6 +514,20 @@ interface TreeNode {
 - [x] AGENTS.md — Фаза 8 ✅
 - [x] Тег `v1.1.0`, push
 - [x] GitHub Pages (CI соберёт)
+
+#### Этап 8.5 — Унификация отрисовки и данных (Фаза 8.5, v1.2.0) 🔄
+
+Полная унификация: `vertices` всегда в origin (COM), `transform` — мировой pivot, render = data.
+
+| Подэтап | Что | Статус |
+|---------|-----|--------|
+| 8.5.0 | Подготовка + ARCHITECTURE_RENDER.md | ✅ 2026-10-20 |
+| 8.5.1 | Worker возвращает origin для всех primitive | 🔲 |
+| 8.5.2 | Store применяет spawn к transform, не к vertices | 🔲 |
+| 8.5.3 | Удалить `centerGeometry` и `isPivotCenteredGeometry` | 🔲 |
+| 8.5.4 | Миграция `.doodle` → `.3dtc` | 🔲 |
+| 8.5.5 | CI-тест `render-data-invariant.test.ts` | 🔲 |
+
 
 ---
 

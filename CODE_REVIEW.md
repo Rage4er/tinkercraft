@@ -441,7 +441,18 @@ rotation/scale живёт в root-ноде boolean-поддерева, а не �
 
 ## 📌 Будущие направления
 
-### Параметрическая история операций (Фаза 8)
+### 🔲 ЗАПЛАНИРОВАНО — RENDER-PRISM-BBOX-OFFSET (Фаза 8.5, Этап 8.5.3)
+
+**Проблема:** `centerGeometry` (`viewport-hooks.ts:413`) вычитал `bboxCenter` из вершин primitive. Для призмы sides=3 `bboxCenter = (28,0,0)` при spawn = `(25,0,0)` → сдвиг **3.000 мм** на отрисовке. Ruler показывал `12.67 мм` вместо `10.74 мм`.
+
+**Решение (запланировано в Фазе 8.5):** удалить `centerGeometry` полностью. `SceneObject.vertices` всегда в origin (COM), `transform` = spawn + user. `mesh.position = transform`, `geometry = vertices`. Render = data.
+
+**Этап:** 8.5.3
+**Тесты:** `render-data-invariant.test.ts` — render === data для всех типов.
+
+---
+
+### Параметрическая история операций (Фаза 9)
 
 Следующий этап улучшения после завершения всех раундов ревью:
 

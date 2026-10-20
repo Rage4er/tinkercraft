@@ -14,7 +14,7 @@
 - **manifold-3d** (WASM) — CSG операции в Web Worker
 - **Zustand 5** — стейт-менеджмент
 - **Vite 6** — сборка
-- **Vitest 4** — тесты (~272 тестов, 18 файлов)
+- **Vitest 4** — тесты (~387 тестов, 34 файла)
 - **pnpm** — пакетный менеджер
 
 ## Команды
@@ -33,9 +33,13 @@ pnpm typecheck    # tsc --noEmit
 |------|----------|--------|
 | 0–7.6 | Ядро CAD, CSG, UI, Mirror, Timeline | ✅ Завершены |
 | **8** | **Единая модель трансформов** | ✅ Завершена (v1.1.0) |
-| 9 | Яндекс.Игры — монетизация | 🔲 Запланирована |
+| **8.5** | **Унификация отрисовки и данных** | 🔄 В работе (v1.2.0) |
+| 9 | Параметрическая история (Timeline edit, редактор детей CSG) | 🔲 Запланирована |
+| 10 | Яндекс.Игры — монетизация | 🔲 Запланирована |
+| 11 | Будущее (SVG, 3MF, STEP, Rapier) | 🔲 Запланирована |
 
-**Фаза 8 в деталях:** см. `web-app/ARCHITECTURE_TRANSFORMS.md`.
+**Фаза 8 в деталях:** `web-app/ARCHITECTURE_TRANSFORMS.md`
+**Фаза 8.5 в деталях:** `web-app/ARCHITECTURE_RENDER.md`
 
 ## Ветки
 
@@ -96,6 +100,7 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 | `src/io/stl-import.ts` | Импорт STL (бинарный + ASCII) |
 | `src/io/stl-export.ts` | Экспорт в бинарный STL |
 | `src/io/doodle-io.ts` | Формат .doodle (ZIP + JSON) |
+| `src/io/3dtc-io.ts` | Формат .3dtc (ZIP + JSON) — заменяет .doodle |
 | `src/io/autosave.ts` | Автосохранение в IndexedDB |
 | **Platform (yandex-games ветка)** | |
 | `src/platform/index.ts` | Абстракция платформы (clean / yandex) |
@@ -129,6 +134,15 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 - **`vertices`** — всегда в origin (центрированы по центру масс)
 - Transform применяется **один раз** (в `rebuildNode` или worker)
 - См. `web-app/ARCHITECTURE_TRANSFORMS.md`
+
+### Единый источник (Фаза 8.5)
+- **`vertices`** — всегда в origin (центр масс)
+- **`transform`** — мировой pivot (spawn + user)
+- **Отрисовка** = `mesh.position = transform`, `geometry = vertices`
+- **`centerGeometry` — НЕТ** (удалён)
+- **`isPivotCenteredGeometry` — НЕТ** (удалён)
+- **Render = data** — CI-тест `render-data-invariant.test.ts`
+- См. `web-app/ARCHITECTURE_RENDER.md`
 
 ### Тесты
 - Type-level тесты: `src/csg/types.test.ts`
@@ -226,6 +240,7 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 ## Документация
 
 - `ARCHITECTURE_TRANSFORMS.md` — единая модель трансформов (Фаза 8)
+- `ARCHITECTURE_RENDER.md` — единый источник данных и отрисовки (Фаза 8.5)
 - `CODE_REVIEW.md` — результаты код-ревью с приоритетами
 - `DEVELOPMENT_PLAN.md` — план разработки (Фазы 0–7)
 - `ARCHITECTURE.md` — описание архитектуры

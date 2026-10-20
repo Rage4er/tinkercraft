@@ -98,10 +98,13 @@ undo/redo, но требует очистки кэша при удалении �
 
 ### Центрирование CSG-результатов
 
-CSG-результаты от manifold-3d имеют смещённый bbox. Store применяет `extractAndCenter()`:
-вычисляет bbox-центр, сдвигает вершины к нулю, сохраняет центр как `transform.x/y/z`.
-Viewport3D `centerGeometry()` центрирует обычные примитивы. Для CSG-результатов это
-безвредный no-op. `cachedRawVertices` предотвращает повторное центрирование.
+CSG-результаты центрируются по **центру масс** (COM) в origin через `centerMassAtOrigin`
+(см. `ARCHITECTURE_TRANSFORMS.md` §5.4b, `csg/geometry-utils.ts`). Worker и frontend вызывают
+одну и ту же функцию — pivot CSG-результата = `transformA` (позиция первого операнда).
+
+**Viewport3D:** `centerGeometry()` **удалён** (Фаза 8.5). `SceneObject.vertices` всегда в origin,
+`transform` — мировой pivot. Отрисовка = `mesh.position = transform`, `geometry = vertices`.
+Render = data (см. `web-app/ARCHITECTURE_RENDER.md`).
 
 ### История операций (undo/redo)
 
@@ -131,8 +134,8 @@ interface SceneObject {
   name: string;
   shapeType: ShapeType;          // 'cube' | 'sphere' | 'cylinder' | ...
   params: Record<string, number>; // width, height, radius, ...
-  transform: TransformNR;         // position, rotation, scale
-  vertices: number[];             // flat array [x,y,z, x,y,z, ...]
+  transform: TransformNR;         // position, rotation, scale (мировой pivot)
+  vertices: number[];             // ВСЕГДА в origin (COM) — см. ARCHITECTURE_RENDER.md
   indices: number[];              // triangle indices
   visible: boolean;
   color: string;
