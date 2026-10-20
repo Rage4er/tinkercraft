@@ -139,9 +139,15 @@ async function makeCSGObject(
   )
   const vertices = new Float32Array(res.vertices)
   const indices = new Uint32Array(res.indices)
-  // document-store: COM-центрирование in-place, pivot = COM (§5.4)
+  // document-store (FIX PIVOT-TRANSFORMA, Bug 3): COM-центрирование in-place,
+  // затем остаточный сдвиг (COM − transformA) → pivot = transformA, v = v_world − transformA
   const com = centerMassAtOrigin(vertices, indices)
-  const transform: TransformNR = { ...IDENTITY, x: com.cx, y: com.cy, z: com.cz }
+  const transform: TransformNR = { ...IDENTITY, x: cubeT.x, y: cubeT.y, z: cubeT.z }
+  for (let i = 0; i < vertices.length; i += 3) {
+    vertices[i] -= com.cx - cubeT.x
+    vertices[i + 1] -= com.cy - cubeT.y
+    vertices[i + 2] -= com.cz - cubeT.z
+  }
   return {
     id, shapeType: 'csg', params: {}, color: '#ff0000',
     transform, visible: true, locked: false,

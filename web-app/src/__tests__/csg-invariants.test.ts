@@ -11,7 +11,7 @@
 // Используем worker-bridge (настоящий manifold WASM + настоящие handlers).
 // Мокается только postMessage-транспорт.
 
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import * as bridge from './worker-bridge'
 import type { TransformNR, ShapeParams } from '../csg/types'
 import {
@@ -20,6 +20,33 @@ import {
   buildTransformMatrix,
 } from '../csg/worker-matrix'
 import { centerMassAtOrigin, isPivotCenteredGeometry } from '../csg/geometry-utils'
+
+// Мокаем только postMessage-транспорт worker-client — document-store вызывает
+// CSG через него, а реализация та же (bridge → настоящие handlers + manifold WASM).
+vi.mock('../csg/worker-client', async () => {
+  const b = await import('./worker-bridge')
+  return {
+    workerBuildShape: b.workerBuildShape,
+    workerApplyFillet: b.workerApplyFillet,
+    workerBuildImportedMesh: b.workerBuildImportedMesh,
+    workerSyncObjects: b.workerSyncObjects,
+    workerSyncMesh: b.workerSyncMesh,
+    workerCsgBoolean: b.workerCsgBoolean,
+    workerCsgBooleanWithSync: b.workerCsgBooleanWithSync,
+    workerMirrorObject: b.workerMirrorObject,
+    workerRebuildScene: b.workerRebuildScene,
+    workerDeleteObjects: b.workerDeleteObjects,
+    workerClearAll: b.workerClearAll,
+    workerRebuildNode: b.workerRebuildNode,
+    isWorkerReady: b.isWorkerReady,
+    disposeWorker: b.disposeWorker,
+  }
+})
+
+import { useDocumentStore } from '../store/document-store'
+import { clearSnapshots } from '../store/snapshots'
+import { clearTree } from '../csg/history-tree'
+import type { GroupOperation, SceneObject } from '../csg/types'
 
 // ======================== helpers ========================
 
@@ -545,21 +572,23 @@ describe('INVARIANT 4: UI mesh world coords (viewport bbox-centering)', () => {
     const csgVerts = csgResult.vertices
     const csgCount = csgVerts.length / 3
 
-    // 4. Pivot CSG = COM (как в document-store.ts)
+    // 4. Pivot CSG = transformA (FIX PIVOT-TRANSFORMA, Bug 3, document-store.ts)
     const comMesh = new Float32Array(csgVerts)
     const comIndices = new Uint32Array(csgResult.indices)
     const { cx, cy, cz } = centerMassAtOrigin(comMesh, comIndices)
 
-    // Pivot = COM
-    const pivotTransform: TransformNR = { x: cx, y: cy, z: cz, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
+    // Pivot = transformA; вершины сдвинуты на (COM − transformA):
+    // world = pivot + vertex сохраняется
+    const pivotTransform: TransformNR = { x: cubeTransform.x, y: cubeTransform.y, z: cubeTransform.z, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
+    const offX = cx - cubeTransform.x, offY = cy - cubeTransform.y, offZ = cz - cubeTransform.z
 
-    // 5. Вершины центрированы: vertices = world_v - pivot
+    // 5. Вершины pivot-центрированы: vertices = world_v - pivot
     //    world_v = pivot + vertex (для identity rot/scale)
     const csgCenteredVerts: number[][] = []
     for (let i = 0; i < csgCount; i++) {
-      const vx = csgVerts[i * 3] + cx
-      const vy = csgVerts[i * 3 + 1] + cy
-      const vz = csgVerts[i * 3 + 2] + cz
+      const vx = csgVerts[i * 3] - offX + pivotTransform.x
+      const vy = csgVerts[i * 3 + 1] - offY + pivotTransform.y
+      const vz = csgVerts[i * 3 + 2] - offZ + pivotTransform.z
       csgCenteredVerts.push([vx, vy, vz])
     }
 
@@ -603,3 +632,133 @@ describe('INVARIANT 4: UI mesh world coords (viewport bbox-centering)', () => {
 // Production path для CSG mirror: mirrorObject (mirror-store.ts) →
 // cloneSubtree + mirrorTreeNode + rebuildNode.
 // Проверка production path: csg-mirror-chirality.test.ts
+
+// ======================== INVARIANT 6: pivot CSG = transformA (Bug 3) ========================
+// FIX (PIVOT-TRANSFORMA): pivot результата CSG = позиция первого операнда
+// (transformA) — стандарт CAD. Раньше pivot = COM → gizmo «съезжал» с места
+// первого операнда. Инвариант world = pivot + vertex сохранён.
+
+describe('INVARIANT 6: pivot CSG = transformA (первый операнд), не COM', () => {
+  const st = () => useDocumentStore.getState()
+
+  beforeEach(async () => {
+    useDocumentStore.setState({ objects: {}, operations: [], historyIndex: 0, selectedIds: [], busy: false })
+    clearTree()
+    clearSnapshots()
+    await bridge.workerClearAll()
+  }, 30000)
+
+  /** Сценарий пользователя: куб (20,20,20) + призма (20,20,20) rot(20,20,20) scale(1,1,0.5) → union */
+  async function userScenario(): Promise<{ csg: SceneObject; transformA: TransformNR }> {
+    await st().addShape('cube', { width: 20, height: 20, depth: 20 })
+    const cubeId = Object.keys(st().objects).find(id => st().objects[id].shapeType === 'cube')!
+    await st().moveObject(cubeId, { x: 20, y: 20, z: 20, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 })
+    await st().addShape('prism', { radius: 12, height: 20, sides: 3 })
+    const prismId = Object.keys(st().objects).find(id => st().objects[id].shapeType === 'prism')!
+    await st().moveObject(prismId, { x: 20, y: 20, z: 20, rotX: 20, rotY: 20, rotZ: 20, scaleX: 1, scaleY: 1, scaleZ: 0.5 })
+    const transformA = { ...st().objects[cubeId].transform }
+    st().selectObjects([cubeId, prismId], false)
+    await st().csgBoolean('union')
+    const ops = st().operations
+    let resultId = ''
+    for (let i = ops.length - 1; i >= 0; i--) if (ops[i].type === 'group') { resultId = (ops[i] as GroupOperation).resultId!; break }
+    return { csg: st().objects[resultId], transformA }
+  }
+
+  function dataWorld(obj: SceneObject): Float32Array {
+    const out = new Float32Array(obj.vertices.length)
+    for (let i = 0; i < obj.vertices.length; i += 3) {
+      out[i] = obj.vertices[i] + obj.transform.x
+      out[i + 1] = obj.vertices[i + 1] + obj.transform.y
+      out[i + 2] = obj.vertices[i + 2] + obj.transform.z
+    }
+    return out
+  }
+
+  function bboxOf(verts: Float32Array) {
+    const min = [Infinity, Infinity, Infinity], max = [-Infinity, -Infinity, -Infinity]
+    for (let i = 0; i < verts.length; i += 3) {
+      for (let a = 0; a < 3; a++) {
+        if (verts[i + a] < min[a]) min[a] = verts[i + a]
+        if (verts[i + a] > max[a]) max[a] = verts[i + a]
+      }
+    }
+    return { min, max }
+  }
+
+  function bboxDiff(a: { min: number[]; max: number[] }, b: { min: number[]; max: number[] }): number {
+    let d = 0
+    for (let k = 0; k < 3; k++) d = Math.max(d, Math.abs(a.min[k] - b.min[k]), Math.abs(a.max[k] - b.max[k]))
+    return d
+  }
+
+  it('CSG union: pivot === transformA', async () => {
+    const { csg, transformA } = await userScenario()
+    const diff = Math.max(
+      Math.abs(csg.transform.x - transformA.x),
+      Math.abs(csg.transform.y - transformA.y),
+      Math.abs(csg.transform.z - transformA.z),
+    )
+    console.log(`  pivot = [${csg.transform.x.toFixed(6)}, ${csg.transform.y.toFixed(6)}, ${csg.transform.z.toFixed(6)}]`)
+    console.log(`  transformA = [${transformA.x}, ${transformA.y}, ${transformA.z}]  max diff = ${diff.toExponential(2)}`)
+    expect(diff).toBeLessThan(1e-6)
+    // rot/scale результата — identity (RS запечён в геометрию)
+    expect(csg.transform.rotX).toBe(0)
+    expect(csg.transform.scaleX).toBe(1)
+  }, 30000)
+
+  it('CSG union: world vertices === oracle (world = pivot + v не сдвинулся)', async () => {
+    const { csg, transformA } = await userScenario()
+    // Независимый oracle: тот же union, мир = T·R·S вершин детей
+    const oracle = await bridge.workerCsgBooleanWithSync(
+      'inv6-a', 'inv6-b', 'union', 'inv6-r',
+      transformA, { x: 20, y: 20, z: 20, rotX: 20, rotY: 20, rotZ: 20, scaleX: 1, scaleY: 1, scaleZ: 0.5 },
+      { shapeType: 'cube', params: { width: 20, height: 20, depth: 20 } as ShapeParams },
+      { shapeType: 'prism', params: { radius: 12, height: 20, sides: 3 } as ShapeParams },
+    )
+    const oracleBBox = bboxOf(new Float32Array(oracle.vertices))
+    const actualBBox = bboxOf(dataWorld(csg))
+    const diff = bboxDiff(actualBBox, oracleBBox)
+    console.log(`  world bbox: min=[${actualBBox.min.map(n => n.toFixed(4))}] max=[${actualBBox.max.map(n => n.toFixed(4))}]`)
+    console.log(`  oracle bbox: min=[${oracleBBox.min.map(n => n.toFixed(4))}] max=[${oracleBBox.max.map(n => n.toFixed(4))}]`)
+    console.log(`  max diff = ${diff.toExponential(2)}`)
+    expect(diff).toBeLessThan(1e-4)
+  }, 30000)
+
+  it('CSG union: rebuild from history preserves pivot', async () => {
+    const { csg, transformA } = await userScenario()
+    const pivotBefore = { ...csg.transform }
+    // undo → redo: rebuildFromHistory восстанавливает pivot из resultCenter
+    await st().undo()
+    await st().redo()
+    const ops = st().operations
+    let resultId = ''
+    for (let i = ops.length - 1; i >= 0; i--) if (ops[i].type === 'group') { resultId = (ops[i] as GroupOperation).resultId!; break }
+    const rebuilt = st().objects[resultId]
+    expect(rebuilt, 'CSG object exists after undo/redo').toBeTruthy()
+    const diffPivot = Math.max(
+      Math.abs(rebuilt.transform.x - pivotBefore.x),
+      Math.abs(rebuilt.transform.y - pivotBefore.y),
+      Math.abs(rebuilt.transform.z - pivotBefore.z),
+    )
+    const diffA = Math.max(
+      Math.abs(rebuilt.transform.x - transformA.x),
+      Math.abs(rebuilt.transform.y - transformA.y),
+      Math.abs(rebuilt.transform.z - transformA.z),
+    )
+    // Геометрия после rebuild тоже на месте (world == pivot + v совпадает с до-undo)
+    const dwBefore = dataWorld(csg), dwAfter = dataWorld(rebuilt)
+    let diffGeo = 0
+    if (dwBefore.length === dwAfter.length) {
+      for (let i = 0; i < dwBefore.length; i++) diffGeo = Math.max(diffGeo, Math.abs(dwBefore[i] - dwAfter[i]))
+    } else {
+      diffGeo = bboxDiff(bboxOf(dwBefore), bboxOf(dwAfter))
+    }
+    console.log(`  pivot до = [${pivotBefore.x.toFixed(6)}, ${pivotBefore.y.toFixed(6)}, ${pivotBefore.z.toFixed(6)}]`)
+    console.log(`  pivot после = [${rebuilt.transform.x.toFixed(6)}, ${rebuilt.transform.y.toFixed(6)}, ${rebuilt.transform.z.toFixed(6)}]`)
+    console.log(`  diff(pivot до/после) = ${diffPivot.toExponential(2)}, diff(pivot, transformA) = ${diffA.toExponential(2)}, geo diff = ${diffGeo.toExponential(2)}`)
+    expect(diffPivot).toBeLessThan(1e-6)
+    expect(diffA).toBeLessThan(1e-6)
+    expect(diffGeo).toBeLessThan(1e-4)
+  }, 30000)
+})

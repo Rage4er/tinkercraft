@@ -46,6 +46,7 @@ import {
     bakeMirroredSubtree,
 } from '../csg/history-tree'
 import { workerSyncObjects, workerSyncMesh } from '../csg/worker-client'
+import { centerMassAtOrigin } from '../csg/geometry-utils'
 import { devLog, devWarn } from '../utils/debug'
 
 // ── Типы ──
@@ -215,6 +216,27 @@ export async function mirrorObject(
         logMirrorTreeSnapshot(newId, `clone-before-rebuild plane=${plane} source=${id}`)
 
         const rebuiltMesh = await rebuildNode(newId)
+
+        // FIX (PIVOT-TRANSFORMA): воркер центрирует пересобранный boolean-результат
+        // по COM, но новый pivot = M(transformA). Сдвиг вершин:
+        //   r = M(w) − M(COM_w)  →  v = r + M(COM_w − transformA) = r + M(srcCom),
+        // где srcCom = COM исходных вершин (world = pivot + vertex ⇒ COM_w = tA + srcCom).
+        // Для legacy-объектов (вершины COM-центрированы, pivot = COM) srcCom ≈ 0 →
+        // сдвиг ≈ 0 — поведение не меняется.
+        if (isCSGResult) {
+            const srcCom = centerMassAtOrigin(
+                new Float32Array(obj.vertices),
+                new Uint32Array(obj.indices),
+            )
+            const shX = plane === 'YZ' ? -srcCom.cx : srcCom.cx
+            const shY = plane === 'XZ' ? -srcCom.cy : srcCom.cy
+            const shZ = plane === 'XY' ? -srcCom.cz : srcCom.cz
+            for (let i = 0; i < rebuiltMesh.vertices.length; i += 3) {
+                rebuiltMesh.vertices[i] += shX
+                rebuiltMesh.vertices[i + 1] += shY
+                rebuiltMesh.vertices[i + 2] += shZ
+            }
+        }
 
         // FIX (MIRROR-TREE-PRESERVE): Do NOT delete the cloned subtree.
         //

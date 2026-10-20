@@ -162,11 +162,12 @@ function objOf(id: string): SceneObject {
   return o
 }
 
-/** Инвариант §5.4: pivot == COM(world mesh) */
-function expectPivotIsCOM(obj: SceneObject): number {
-  const world = csgWorldVerts(obj)
-  const com = centerMassAtOrigin(world, obj.indices)
-  const diff = Math.max(Math.abs(com.cx - obj.transform.x), Math.abs(com.cy - obj.transform.y), Math.abs(com.cz - obj.transform.z))
+/**
+ * Инвариант (FIX PIVOT-TRANSFORMA, Bug 3): pivot == transformA — позиция первого
+ * операнда CSG (стандарт CAD). gizmo attach к pivot ⇒ gizmo на месте первого операнда.
+ */
+function expectPivotIsTransformA(obj: SceneObject, transformA: { x: number; y: number; z: number }): number {
+  const diff = Math.max(Math.abs(transformA.x - obj.transform.x), Math.abs(transformA.y - obj.transform.y), Math.abs(transformA.z - obj.transform.z))
   return diff
 }
 
@@ -187,8 +188,8 @@ function expectedStlBBox(objects: SceneObject[]): BB {
   for (const o of objects) {
     // FIX (VIEWPORT-DOUBLE-CENTERING): конвенция рендера/STL —
     // world = R·S·(v − c) + t, где c = bboxCenter(v) только для объектов с
-    // запечённой трансляцией (примитивы/импорт). CSG-вершины уже
-    // COM-центрированы (§5.4) → c = 0. Предикат — продакшн, чтобы
+    // запечённой трансляцией (примитивы/импорт). CSG-вершины pivot-центрированы
+    // (§5.4, pivot = transformA) → c = 0. Предикат — продакшн, чтобы
     // модель теста не могла разойтись с кодом.
     const c = isPivotCenteredGeometry(o.shapeType)
       ? [0, 0, 0]
@@ -252,11 +253,12 @@ describe('Фаза 8 §10.2 — 8 сценариев (in-process manifold bridge
     const cubeW = bboxOf(worldOf(objOf(cubeId)))
     const prismW = bboxOf(worldOf(objOf(prismId)))
     const expected = bboxUnion(cubeW, prismW)
+    const cubeT0 = { ...objOf(cubeId).transform }
 
     const gId = await unionIds(cubeId, prismId)
     const g = objOf(gId)
 
-    // Результат — CSG-нода с pivot=COM, vertices COM-центрированы
+    // Результат — CSG-нода с pivot=transformA, vertices pivot-центрированы
     expect(g.shapeType).toBe('csg')
     expect(g.children).toEqual([cubeId, prismId])
 
@@ -264,17 +266,17 @@ describe('Фаза 8 §10.2 — 8 сценариев (in-process manifold bridge
     const w = bboxOf(csgWorldVerts(g))
     const diffBBox = bboxClose(w, expected, 1e-2, 'scenario1 union bbox')
 
-    // Инвариант §5.4: pivot == COM(world)
-    const diffCOM = expectPivotIsCOM(g)
+    // Инвариант (PIVOT-TRANSFORMA): pivot == transformA (первый операнд)
+    const diffPivot = expectPivotIsTransformA(g, cubeT0)
 
     // Исторический CSG-PRISM-OFFSET: z призмы [0,20] вместо [-10,10]
     expect(w.min[2]).toBeCloseTo(-10, 1)
     expect(w.max[2]).toBeCloseTo(10, 1)
 
-    console.log(`CSG center = [${g.transform.x.toFixed(4)}, ${g.transform.y.toFixed(4)}, ${g.transform.z.toFixed(4)}]`)
-    console.log(`Expected (centerMassAtOrigin) = [${(g.transform.x).toFixed(4)}, ...] — diff(pivot,COM) = ${diffCOM.toExponential(2)}`)
+    console.log(`CSG center (pivot) = [${g.transform.x.toFixed(4)}, ${g.transform.y.toFixed(4)}, ${g.transform.z.toFixed(4)}]`)
+    console.log(`transformA = [${cubeT0.x.toFixed(4)}, ${cubeT0.y.toFixed(4)}, ${cubeT0.z.toFixed(4)}] — diff(pivot,transformA) = ${diffPivot.toExponential(2)}`)
     console.log(`union bbox diff vs operands = ${diffBBox.toExponential(2)}`)
-    expect(diffCOM).toBeLessThan(1e-3)
+    expect(diffPivot).toBeLessThan(1e-6)
   }, 30000)
 
   // ------------------------------------------------------------
@@ -359,10 +361,10 @@ describe('Фаза 8 §10.2 — 8 сценариев (in-process manifold bridge
     expect(clonePrism!.localTransform!.rotZ).toBeCloseTo(-20, 4)
     expect(clonePrism!.localTransform!.x).toBeCloseTo(-15, 4)
 
-    // 3) Геометрия: COM-центрирована, pivot = COM (§5.4)
+    // 3) Геометрия: pivot-центрирована, pivot = M(transformA) (PIVOT-TRANSFORMA)
     //    MIRROR-CSG-CHILD-RS-LOSS: в клонированном дереве призма-ребёнок
     //    retains scale 1.5 и rotation (зеркальный, mirrorEuler YZ)
-    const diffCOM = expectPivotIsCOM(g2)
+    const diffPivot = expectPivotIsTransformA(g2, { x: -cubeT0.x, y: cubeT0.y, z: cubeT0.z })
 
     // FIX (MIRROR-CHIRALITY): старый оракл (workerCsgBooleanWithSync с
     // зеркальными TRS) давал НЕТОЧНОЕ зеркало — геометрия детей не отражалась.
@@ -380,8 +382,9 @@ describe('Фаза 8 §10.2 — 8 сценариев (in-process manifold bridge
     const b2 = bboxOf(csgWorldVerts(g2))
     const diff3 = bboxClose(b2, expected3, 1e-2, 'scenario3 mirrored geometry (true mirror)')
 
-    console.log(`Mirrored CSG center = [${g2.transform.x.toFixed(4)}, ${g2.transform.y.toFixed(4)}, ${g2.transform.z.toFixed(4)}]`)
-    console.log(`Scale preserved = [${g2.transform.scaleX}, ${g2.transform.scaleY}, ${g2.transform.scaleZ}] (COM diff = ${diffCOM.toExponential(2)}, geometry doctrine diff = ${diff3.toExponential(2)})`)
+    console.log(`Mirrored CSG center (pivot) = [${g2.transform.x.toFixed(4)}, ${g2.transform.y.toFixed(4)}, ${g2.transform.z.toFixed(4)}]`)
+    console.log(`Scale preserved = [${g2.transform.scaleX}, ${g2.transform.scaleY}, ${g2.transform.scaleZ}] (pivot-vs-M(transformA) diff = ${diffPivot.toExponential(2)}, geometry doctrine diff = ${diff3.toExponential(2)})`)
+    expect(diffPivot).toBeLessThan(1e-3)
   }, 30000)
 
   // ------------------------------------------------------------
@@ -402,6 +405,7 @@ describe('Фаза 8 §10.2 — 8 сценариев (in-process manifold bridge
     const b1 = bboxOf(worldOf(objOf(g1Id)))
     const b2 = bboxOf(worldOf(objOf(g2Id)))
     const expected = bboxUnion(b1, b2)
+    const g1T0 = { ...objOf(g1Id).transform }
 
     // Оба операнда — CSG → путь workerCsgBoolean
     const g3Id = await unionIds(g1Id, g2Id)
@@ -409,12 +413,12 @@ describe('Фаза 8 §10.2 — 8 сценариев (in-process manifold bridge
 
     const w = bboxOf(csgWorldVerts(g3))
     const diffBBox = bboxClose(w, expected, 1e-2, 'scenario4 CSG+CSG bbox (drift check)')
-    const diffCOM = expectPivotIsCOM(g3)
-    expect(diffCOM).toBeLessThan(1e-3)
+    const diffPivot = expectPivotIsTransformA(g3, g1T0)
+    expect(diffPivot).toBeLessThan(1e-6)
 
-    console.log(`CSG_3 center = [${g3.transform.x.toFixed(4)}, ${g3.transform.y.toFixed(4)}, ${g3.transform.z.toFixed(4)}]`)
-    console.log(`Expected = [${((expected.min[0] + expected.max[0]) / 2).toFixed(4)}, ...] (bbox center reference)`)
-    console.log(`bbox diff = ${diffBBox.toExponential(2)}, pivot-vs-COM diff = ${diffCOM.toExponential(2)} (должно быть < 1e-3)`)
+    console.log(`CSG_3 center (pivot) = [${g3.transform.x.toFixed(4)}, ${g3.transform.y.toFixed(4)}, ${g3.transform.z.toFixed(4)}]`)
+    console.log(`transformA (g1) = [${g1T0.x.toFixed(4)}, ${g1T0.y.toFixed(4)}, ${g1T0.z.toFixed(4)}]`)
+    console.log(`bbox diff = ${diffBBox.toExponential(2)}, pivot-vs-transformA diff = ${diffPivot.toExponential(2)} (должно быть < 1e-6)`)
   }, 30000)
 
   // ------------------------------------------------------------
@@ -427,16 +431,17 @@ describe('Фаза 8 §10.2 — 8 сценариев (in-process manifold bridge
     const bCube = bboxOf(worldOf(objOf(cubeId)))
     const bPrism = bboxOf(worldOf(objOf(prismId)))
     const expected = bboxUnion(bCube, bPrism)
+    const cubeT0 = { ...objOf(cubeId).transform }
 
     const gId = await unionIds(cubeId, prismId)
     const g = objOf(gId)
 
     const w = bboxOf(csgWorldVerts(g))
     const diffBBox = bboxClose(w, expected, 1e-2, 'scenario5 scaled+rotated union bbox')
-    const diffCOM = expectPivotIsCOM(g)
-    expect(diffCOM).toBeLessThan(1e-3)
+    const diffPivot = expectPivotIsTransformA(g, cubeT0)
+    expect(diffPivot).toBeLessThan(1e-6)
 
-    console.log(`CSG center = [${g.transform.x.toFixed(4)}, ${g.transform.y.toFixed(4)}, ${g.transform.z.toFixed(4)}]`)
+    console.log(`CSG center (pivot) = [${g.transform.x.toFixed(4)}, ${g.transform.y.toFixed(4)}, ${g.transform.z.toFixed(4)}] (transformA = [-10, 0, 0])`)
     console.log(`bbox diff vs operands (scale 0.5 + rot 20,20,20) = ${diffBBox.toExponential(2)}`)
   }, 30000)
 

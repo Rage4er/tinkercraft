@@ -507,29 +507,42 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         )
       }
       const ms = performance.now() - t0
-      // Stage 6.5 (CSG-CENTER-MASS, §5.4): vertices are centered by CENTER OF MASS
-      // (centerMassAtOrigin — объёмный центроид) — the SAME function the worker uses
-      // for its origin-cache copy. Pivot = COM makes pivot + vertex = world exact,
-      // and the pivot is stable across creation/rebuild/mirror (unlike the previous
-      // extractCenteredAt(transformA) which disagreed with the worker's centering).
-      // Worker response carries the WORLD mesh; centerMassAtOrigin mutates it in-place.
+      // FIX (PIVOT-TRANSFORMA, Bug 3): pivot CSG = transformA (позиция первого
+      // операнда) — стандарт CAD (Fusion360/Onshape/Tinkercad позиционируют
+      // результат CSG на месте первого операнда). Раньше pivot = COM
+      // (Stage 6.5) — gizmo «съезжал» с transformA на (COM − transformA)
+      // (измерено 0.0192 для куб+призма rot(20,20,20) scale(1,1,0.5)).
+      //
+      // Инвариант §5.4 сохраняется: world = pivot + vertex.
+      // centerMassAtOrigin центрирует вершины по COM: v_COM = v_world − COM
+      // (тот же центр, что и worker-кэш). После сдвига на (COM − transformA):
+      //   v = v_COM + (COM − transformA) = v_world − transformA
+      //   world = pivot + v = transformA + (v_world − transformA) = v_world ✅
+      // Вёркер и рендер используют только world = pivot + TRS·v — конвенция
+      // pivot-центрированных вершин (isPivotCenteredGeometry) не меняется.
       const { cx: comX, cy: comY, cz: comZ } = centerMassAtOrigin(mesh.vertices, mesh.indices)
+      const tA0 = srOf(idA)
+      const offX = comX - tA0.x, offY = comY - tA0.y, offZ = comZ - tA0.z
+      for (let i = 0; i < mesh.vertices.length; i += 3) {
+        mesh.vertices[i] += offX
+        mesh.vertices[i + 1] += offY
+        mesh.vertices[i + 2] += offZ
+      }
       const aabb = computeAABB(mesh.vertices)
 
-      // Pivot is at the center of mass — vertices are centered relative to it.
-      // World position: pivot(COM) + vertex(centered_at_COM) = original world vertex.
-      // Transform carries position only — rotation/scale are identity.
-      // RS is applied at render time via pivot and in worker via handleCsgBoolean
-      // / handleCsgBooleanSync (transform applied ONE TIME before boolean).
+      // Pivot = transformA (позиция первого операнда), rot/scale = identity —
+      // RS уже запечён в геометрию (мировые координаты операндов).
+      // world = pivot + vertex = transformA + (v_world − transformA) = v_world ✅
       const resultTransform: TransformNR = {
-        x: comX, y: comY, z: comZ,
+        x: tA0.x, y: tA0.y, z: tA0.z,
         rotX: 0, rotY: 0, rotZ: 0,
         scaleX: 1, scaleY: 1, scaleZ: 1,
       }
 
-      // DIAG: centering info (Stage 6.5: pivot = center of mass)
+      // DIAG: centering info (Bug 3: pivot = transformA)
       devLogCsg('center', {
         assignedLocal: fmtPoint(resultTransform),
+        com: { x: comX, y: comY, z: comZ },
         transformA: fmtTransform(srOf(idA)),
         transformB: fmtTransform(srOf(idB)),
         centeredAabb: { min: fmtPoint(aabb.min), max: fmtPoint(aabb.max) },
@@ -552,9 +565,9 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const newObjects = { ...objects }; delete newObjects[idA]; delete newObjects[idB]; newObjects[resultId] = newObj
       // Store result vertices/indices AND center position in GroupOperation
       // so rebuildFromHistory can reconstruct the CSG result geometry at the correct position.
-      // Stage 6.5 (CSG-CENTER-MASS): resultCenter = center of mass — the same point
+      // FIX (PIVOT-TRANSFORMA): resultCenter = pivot = transformA — the same point
       // the vertices were centered around (pivot + vertex = world).
-      const histOp: GroupOperation = { type: 'group', ids: [idA, idB], resultId, resultVertices: mesh.vertices, resultIndices: mesh.indices, resultNormals: mesh.normals ?? undefined, resultCenter: { x: comX, y: comY, z: comZ }, originalBboxSize: originalBboxSize, treeOperation: op as 'union' | 'subtract' | 'intersect', shapeType: 'csg', color: objects[idA].color }
+      const histOp: GroupOperation = { type: 'group', ids: [idA, idB], resultId, resultVertices: mesh.vertices, resultIndices: mesh.indices, resultNormals: mesh.normals ?? undefined, resultCenter: { x: tA0.x, y: tA0.y, z: tA0.z }, originalBboxSize: originalBboxSize, treeOperation: op as 'union' | 'subtract' | 'intersect', shapeType: 'csg', color: objects[idA].color }
       const newOps = [...operations.slice(0, historyIndex), histOp]
       // Ensure children are registered in build tree.
       // CSG results (shapeType='csg') and import_mesh are registered as BAKED nodes
@@ -1216,14 +1229,20 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       // FIX (R17-11): Clean up temporary slab from worker cache to prevent memory leak
       workerDeleteObjects([slabId]).catch(() => { })
       const ms = performance.now() - t0
-      // Stage 6.5 (CSG-CENTER-MASS, §5.4): center by CENTER OF MASS — same function
-      // as the worker uses. Pivot = COM, pivot + vertex = world. Replaces
-      // extractCenteredAt(obj.transform) which disagreed with worker centering.
+      // FIX (PIVOT-TRANSFORMA, Bug 3): pivot = transformA (позиция исходного
+      // объекта) — как в csgBoolean. v = v_COM + (COM − transformA) = v_world − transformA,
+      // инвариант world = pivot + vertex сохраняется.
       const { cx: comX, cy: comY, cz: comZ } = centerMassAtOrigin(resultMesh.vertices, resultMesh.indices)
+      const offX = comX - obj.transform.x, offY = comY - obj.transform.y, offZ = comZ - obj.transform.z
+      for (let i = 0; i < resultMesh.vertices.length; i += 3) {
+        resultMesh.vertices[i] += offX
+        resultMesh.vertices[i + 1] += offY
+        resultMesh.vertices[i + 2] += offZ
+      }
       const aabb = computeAABB(resultMesh.vertices)
-      const newObj: SceneObject = { id: resultId, shapeType: 'csg', params: {}, color: obj.color, transform: { x: comX, y: comY, z: comZ, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }, visible: true, locked: false, vertices: resultMesh.vertices, indices: resultMesh.indices, normals: resultMesh.normals, aabb }
+      const newObj: SceneObject = { id: resultId, shapeType: 'csg', params: {}, color: obj.color, transform: { x: obj.transform.x, y: obj.transform.y, z: obj.transform.z, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }, visible: true, locked: false, vertices: resultMesh.vertices, indices: resultMesh.indices, normals: resultMesh.normals, aabb }
       const addOp: AddShapeOperation = { type: 'add_shape', id: slabId, shapeType: 'cube', params: slabP, color: obj.color, transform: slabT }
-      const grpOp: GroupOperation = { type: 'group', ids: [id, slabId], resultId, resultVertices: resultMesh.vertices, resultIndices: resultMesh.indices, resultNormals: resultMesh.normals ?? undefined, resultCenter: { x: comX, y: comY, z: comZ } }
+      const grpOp: GroupOperation = { type: 'group', ids: [id, slabId], resultId, resultVertices: resultMesh.vertices, resultIndices: resultMesh.indices, resultNormals: resultMesh.normals ?? undefined, resultCenter: { x: obj.transform.x, y: obj.transform.y, z: obj.transform.z } }
       const newObjects = { ...objects }; delete newObjects[id]; newObjects[resultId] = newObj
       const newOps = [...operations.slice(0, historyIndex), addOp, grpOp]
       set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, selectedIds: [resultId], modified: true, busy: false, lastCsgMs: ms })

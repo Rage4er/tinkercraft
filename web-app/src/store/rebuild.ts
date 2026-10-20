@@ -220,8 +220,12 @@ export async function rebuildFromHistory(
         }
         continue
       }
-      // Stage 6.5 (CSG-CENTER-MASS, §5.4): CSG-результаты центрируются по ЦЕНТРУ
+      // Stage 6.5 (CSG-CENTER-MASS): CSG-результаты центрируются по ЦЕНТРУ
       // МАСС (centerMassAtOrigin) — та же функция, что у worker и document-store.
+      // FIX (PIVOT-TRANSFORMA): resultCenter хранит pivot = transformA (позиция
+      // первого операнда), а не COM. Но если resultVertices отсутствуют (legacy
+      // fallback), pivot восстанавливается из COM — это задокументированная
+      // CENTERING-RESIDUAL конвенция для старых .doodle файлов.
       // FIX (быв. LOW-18-9): раньше extractAndCenterInPlace мутировал ВРЕМЕННУЮ
       // копию, которая выбрасывалась — m.vertices оставался в мировых координатах,
       // а transform получал центр (двойное смещение для legacy-документов без
