@@ -91,8 +91,8 @@ function spawnTransform(id: string): TransformNR {
 }
 
 /** workerWorld примитива: T·R·S·(v − spawnT) — как handleCsgBooleanSync */
+/** world = T·R·S·v, vertices в origin (Фаза 8.5: worker не печёт spawn) */
 function workerWorldVerts(obj: SceneObject): Float32Array {
-  const sp = spawnTransform(obj.id)
   const t = obj.transform
   const m = buildTransformMatrix(
     { x: t.x, y: t.y, z: t.z },
@@ -101,9 +101,9 @@ function workerWorldVerts(obj: SceneObject): Float32Array {
   )
   const out = new Float32Array(obj.vertices.length)
   for (let i = 0; i < obj.vertices.length; i += 3) {
-    const x = obj.vertices[i] - sp.x
-    const y = obj.vertices[i + 1] - sp.y
-    const z = obj.vertices[i + 2] - sp.z
+    const x = obj.vertices[i]
+    const y = obj.vertices[i + 1]
+    const z = obj.vertices[i + 2]
     out[i] = m[0] * x + m[4] * y + m[8] * z + m[12]
     out[i + 1] = m[1] * x + m[5] * y + m[9] * z + m[13]
     out[i + 2] = m[2] * x + m[6] * y + m[10] * z + m[14]
@@ -127,16 +127,9 @@ function worldOf(obj: SceneObject): Float32Array {
   return obj.shapeType === 'csg' ? csgWorldVerts(obj) : workerWorldVerts(obj)
 }
 
-/** origin-геометрия примитива: vertices минус запечённая spawn-трансляция */
+/** vertices уже в origin (Фаза 8.5) — minusSpawn не нужен, возвращаем как есть */
 function minusSpawn(obj: SceneObject): Float32Array {
-  const sp = spawnTransform(obj.id)
-  const out = new Float32Array(obj.vertices.length)
-  for (let i = 0; i < obj.vertices.length; i += 3) {
-    out[i] = obj.vertices[i] - sp.x
-    out[i + 1] = obj.vertices[i + 1] - sp.y
-    out[i + 2] = obj.vertices[i + 2] - sp.z
-  }
-  return out
+  return new Float32Array(obj.vertices)
 }
 
 /** world = T·R·S·v (manifold-конвенция, как buildTransformMatrix в воркере) */

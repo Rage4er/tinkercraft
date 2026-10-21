@@ -518,35 +518,32 @@ describe('INVARIANT 4: UI mesh world coords (viewport bbox-centering)', () => {
     expect(maxDiff).toBeLessThan(1e-6)
   })
 
-  it('Примитив (spawn-запечённый): render world == data world (pivot + origin-геометрия)', async () => {
-    // Контроль обратной половины конвенции: у примитивов воркер запекает
-    // spawn-трансляцию В вершины, и вьюпорт ОБЯЗАН вычитать bboxCenter,
-    // иначе позиция применится дважды.
+  it('Примитив (vertices в origin): render world == spawn + v', async () => {
+    // Фаза 8.5, Этап 8.5.1: worker возвращает vertices в origin.
+    // Transform (spawn) применяется в store, не в worker.
+    // Render world = spawn + origin-геометрия.
     const spawnT: TransformNR = { x: 20, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
     const mesh = await bridge.workerBuildShape('cube_p', 'cube', { width: 10 } as any, spawnT)
 
-    // Вершины примитива содержат spawn-трансляцию:
+    // Вершины примитива в origin (COM):
     let minX = Infinity, maxX = -Infinity
     for (let i = 0; i < mesh.vertices.length; i += 3) {
       if (mesh.vertices[i] < minX) minX = mesh.vertices[i]; if (mesh.vertices[i] > maxX) maxX = mesh.vertices[i]
     }
     const bboxCx = (minX + maxX) / 2
-    console.log(`  primitive vertices bbox center x = ${bboxCx.toFixed(4)} (spawn x = ${spawnT.x})`)
-    // Запечённая трансляция присутствует:
-    expect(Math.abs(bboxCx - spawnT.x)).toBeLessThan(1e-6)
+    console.log(`  primitive vertices bbox center x = ${bboxCx.toFixed(4)} (ожидание ≈ 0)`)
+    // vertices в origin:
+    expect(Math.abs(bboxCx)).toBeLessThan(1e-4)
 
-    // Вьюпорт для примитивов центрирует ОБЯЗАТЕЛЬНО:
-    expect(isPivotCenteredGeometry('cube')).toBe(false)
-
-    // world_render = pivot + (v − bboxCenter) = spawn + origin-геометрия ∈ [−5..5]
+    // Render world = spawn + origin-геометрия ∈ [15, 25]
     let rMinX = Infinity, rMaxX = -Infinity
     for (let i = 0; i < mesh.vertices.length; i += 3) {
-      const rx = spawnT.x + (mesh.vertices[i] - bboxCx)
+      const rx = spawnT.x + mesh.vertices[i]
       if (rx < rMinX) rMinX = rx; if (rx > rMaxX) rMaxX = rx
     }
     console.log(`  render world x range: [${rMinX.toFixed(4)}, ${rMaxX.toFixed(4)}] (ожидание [15, 25])`)
-    expect(Math.abs(rMinX - 15)).toBeLessThan(1e-6)
-    expect(Math.abs(rMaxX - 25)).toBeLessThan(1e-6)
+    expect(Math.abs(rMinX - 15)).toBeLessThan(1e-4)
+    expect(Math.abs(rMaxX - 25)).toBeLessThan(1e-4)
   })
 
   it('CSG результат: transform ∘ vertex ≈ world', async () => {

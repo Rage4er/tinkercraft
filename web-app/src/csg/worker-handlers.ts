@@ -30,6 +30,7 @@ export interface ManifoldObject {
   getMesh(): ManifoldMesh
   refine(recursions: number): ManifoldObject
   warp(fn: (v: number[]) => void): ManifoldObject
+  translate(x: number, y?: number, z?: number): ManifoldObject
   /** Frees the WASM memory — must be called when the object is no longer needed. */
   delete(): void
 }
@@ -223,15 +224,15 @@ export function buildPrimitive(shapeType: string, params: Record<string, number>
       m = Manifold.cylinder(h, r, r, seg, true)
       break
     }
-    case 'cone':
-      m = Manifold.cylinder(
-        params.height ?? 30,
-        params.radius ?? 10,
-        0,
-        params.segments ?? 48,
-        true,
-      )
+    case 'cone': {
+      const h = params.height ?? 30
+      m = Manifold.cylinder(h, params.radius ?? 10, 0, params.segments ?? 48, true)
+      // COM для конуса = h/4 от основания (BBox-центр ≠ COM) — центрируем по COM
+      // Manifold.cylinder(..., center=true) центрирует BBox, не COM для cone/pyramid
+      // COM z = -5 при h=20 → translate +h/4 = +5 → COM → 0
+      m = m.translate(0, 0, h / 4)
       break
+    }
     case 'torus': {
       const torusRadius = params.torusRadius ?? 15
       const tubeRadius = params.tubeRadius ?? 4
@@ -260,15 +261,10 @@ export function buildPrimitive(shapeType: string, params: Record<string, number>
       break
     }
     case 'pyramid': {
-      const sides = Math.max(3, Math.round(params.sides ?? 4))
-      // center=true: от -h/2 до h/2, центр масс в origin (FIX CSG-PRISM-OFFSET)
-      m = Manifold.cylinder(
-        params.height ?? 20,
-        params.radius ?? 12,
-        0,
-        sides,
-        true,
-      )
+      const h = params.height ?? 20
+      m = Manifold.cylinder(h, params.radius ?? 12, 0, Math.max(3, Math.round(params.sides ?? 4)), true)
+      // COM для пирамиды = h/4 от основания (BBox-центр ≠ COM) — центрируем по COM
+      m = m.translate(0, 0, h / 4)
       break
     }
     default:
@@ -532,14 +528,10 @@ export async function handleBuildShape(msg: BuildShapeMessage): Promise<void> {
   const safeP = sanitizeParams(msg.params)
 
   // Rebuild primitive using buildPrimitive (DRY: WARN-R8-3)
+  // ⚠️ НЕ применяем transform к вершинам — vertices остаются в origin (COM).
+  // Transform применяется в store (addShape) как spawn-позиция SceneObject.transform.
+  // FIX (Phase 8.5, Stage 8.5.1): vertices в origin, render = data.
   let m = buildPrimitive(shapeType, safeP)
-
-  // Apply translation
-  const t = msg.transform
-  const transformMatrix = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, t.x, t.y, t.z, 1]
-  const transformed = m.transform(transformMatrix)
-  m.delete()
-  m = transformed
 
   setCached(msg.objId, m)
 
@@ -567,14 +559,8 @@ export async function handleApplyFillet(msg: ApplyFilletMessage): Promise<void> 
   const radius = clamp(msg.radius, 0, 1e4)
 
   // DRY: use buildPrimitiveWithFillet instead of duplicated switch (WARN-R8-3)
+  // ⚠️ НЕ применяем transform к вершинам — vertices остаются в origin (COM).
   let m = buildPrimitiveWithFillet(shapeType, safeP, radius)
-
-  // Apply translation
-  const t = msg.transform
-  const transformMatrix = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, t.x, t.y, t.z, 1]
-  const transformed = m.transform(transformMatrix)
-  m.delete()
-  m = transformed
 
   setCached(msg.objId, m)
 
