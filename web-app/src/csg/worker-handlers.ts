@@ -192,6 +192,23 @@ export function safePostMessage(msg: unknown, transferList?: ArrayBuffer[]): voi
 // --- Build primitives ---
 
 /** Build a manifold primitive from shape type and params. */
+/**
+ * Center a manifold at its center of mass (COM). Universal — works for any shape,
+ * including truncated cones/pyramids where the h/4 formula does not apply.
+ * Returns a new object (the original is deleted); if COM is already at the
+ * origin, returns the original untouched.
+ */
+export function centerManifoldToCOM(m: ManifoldObject): ManifoldObject {
+  const mesh = extractMesh(m)
+  const verts = new Float32Array(mesh.vertices)
+  const tris = new Uint32Array(mesh.indices)
+  const { cx, cy, cz } = centerMassAtOrigin(verts, tris)
+  if (Math.abs(cx) < 1e-6 && Math.abs(cy) < 1e-6 && Math.abs(cz) < 1e-6) return m
+  const centered = m.translate(-cx, -cy, -cz)
+  m.delete()
+  return centered
+}
+
 export function buildPrimitive(shapeType: string, params: Record<string, number>): ManifoldObject {
   const wasm = getWasm()
   const { Manifold } = wasm
@@ -225,12 +242,11 @@ export function buildPrimitive(shapeType: string, params: Record<string, number>
       break
     }
     case 'cone': {
-      const h = params.height ?? 30
-      m = Manifold.cylinder(h, params.radius ?? 10, 0, params.segments ?? 48, true)
-      // COM для конуса = h/4 от основания (BBox-центр ≠ COM) — центрируем по COM
-      // Manifold.cylinder(..., center=true) центрирует BBox, не COM для cone/pyramid
-      // COM z = -5 при h=20 → translate +h/4 = +5 → COM → 0
-      m = m.translate(0, 0, h / 4)
+      m = Manifold.cylinder(params.height ?? 30, params.radius ?? 10, 0, params.segments ?? 48, true)
+      // COM центрируем универсально (centerMassAtOrigin): Manifold.cylinder(center=true)
+      // центрирует BBox, не COM. Формула h/4 верна только для radiusTop=0 —
+      // centerManifoldToCOM корректна и для усечённых конусов.
+      m = centerManifoldToCOM(m)
       break
     }
     case 'torus': {
@@ -261,10 +277,9 @@ export function buildPrimitive(shapeType: string, params: Record<string, number>
       break
     }
     case 'pyramid': {
-      const h = params.height ?? 20
-      m = Manifold.cylinder(h, params.radius ?? 12, 0, Math.max(3, Math.round(params.sides ?? 4)), true)
-      // COM для пирамиды = h/4 от основания (BBox-центр ≠ COM) — центрируем по COM
-      m = m.translate(0, 0, h / 4)
+      m = Manifold.cylinder(params.height ?? 20, params.radius ?? 12, 0, Math.max(3, Math.round(params.sides ?? 4)), true)
+      // COM центрируем универсально (centerMassAtOrigin): см. cone
+      m = centerManifoldToCOM(m)
       break
     }
     default:
