@@ -522,8 +522,8 @@ interface TreeNode {
 | Подэтап | Что | Статус |
 |---------|-----|--------|
 | 8.5.0 | Подготовка + ARCHITECTURE_RENDER.md | ✅ 2026-10-20 |
-| 8.5.1 | Worker возвращает origin для всех primitive | 🔲 |
-| 8.5.2 | Store применяет spawn к transform, не к vertices | 🔲 |
+| 8.5.1 | Worker возвращает origin для всех primitive | ✅ 2026-10-21 |
+| 8.5.2 | Store применяет spawn к transform, не к vertices | ✅ 2026-10-21 |
 | 8.5.3 | Удалить `centerGeometry` и `isPivotCenteredGeometry` | 🔲 |
 | 8.5.4 | Миграция `.doodle` → `.3dtc` | 🔲 |
 | 8.5.5 | CI-тест `render-data-invariant.test.ts` | 🔲 |

@@ -60,8 +60,8 @@ render_world_vertex === data_world_vertex (diff < 1e-6)
 | Этап | Что | Статус |
 |------|-----|--------|
 | 8.5.0 | Подготовка + документация | 🔄 |
-| 8.5.1 | Worker возвращает origin для всех primitive | 🔲 |
-| 8.5.2 | Store применяет spawn к transform, не к vertices | 🔲 |
+| 8.5.1 | Worker возвращает origin для всех primitive | ✅ 2026-10-21 |
+| 8.5.2 | Store применяет spawn к transform, не к vertices | ✅ 2026-10-21 |
 | 8.5.3 | Удалить `centerGeometry` из viewport | 🔲 |
 | 8.5.4 | Миграция `.doodle` → `.3dtc` | 🔲 |
 | 8.5.5 | CI-тест «render = data» для всех объектов | 🔲 |

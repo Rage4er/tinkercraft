@@ -7,13 +7,12 @@
 // (загружается в vitest — проверено спайком). Мокается только postMessage
 // транспорт, ничего из CSG-математики и центрирования не подделано.
 //
-// Конвенции данных (ARCHITECTURE_TRANSFORMS.md §5):
-// - примитивы: vertices = origin-геометрия + запечённая spawn-трансляция;
-//   workerWorld = T·R·S·(v − spawnT)   (как handleCsgBooleanSync)
-// - CSG-результаты: vertices = COM-центрированные; world = pivot + vertex (§5.4)
-// - рендер/STL: world = R·S·(v − c) + t, где c = bboxCenter(v) для примитивов
-//   (spawn запечён в вершинах) и c = 0 для CSG (FIX VIEWPORT-DOUBLE-CENTERING:
-//   CSG-вершины уже COM-центрированы, повторное центрирование сдвигало меш)
+// Конвенции данных (ARCHITECTURE_RENDER.md, Фаза 8.5):
+// - примитивы: vertices = origin (COM), spawn живёт в transform.position;
+//   workerWorld = T·R·S·v   (без вычитания spawn — Фаза 8.5.1/8.5.2)
+// - CSG-результаты: vertices = pivot-центрированные; world = pivot + vertex (§5.4)
+// - рендер/STL: world = applyTRS(transform, vertices) — render = data
+//   (centerGeometry/isPivotCenteredGeometry — удаляются в Этапе 8.5.3)
 
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 
