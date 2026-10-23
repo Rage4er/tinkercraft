@@ -178,8 +178,9 @@ export async function rebuildFromHistory(
   // FIX (UB-0): фолбэк для import_mesh, которых НЕТ в ответе воркера
   // (non-manifold STL → cache=null; слишком большие меши — skip). Без фолбэка
   // импортированная геометрия исчезала при загрузке проекта/.doodle.
-  // Восстанавливаем «живую» конвенцию: сырые вершины из операции + transform
-  // из meta (применяется на рендере через pivot).
+  // FIX (8.5.2.5): конвенция единого источника — вершины центрируются по COM,
+  // смещение отдаётся как centerOffset (main loop прибавит его к pivot).
+  // Раньше «живая» конвенция была: сырые вершины + transform на pivot.
   const returnedIds = new Set(result.results.map(m => m.objId))
   for (const op of ops) {
     if (op.type !== 'import_mesh') continue
@@ -189,13 +190,17 @@ export async function rebuildFromHistory(
     const vertCount = verts ? verts.length : 0
     const idxCount = idxs ? idxs.length : 0
     if (vertCount < 9 || vertCount > 10_000_000 || idxCount < 3 || idxCount > 30_000_000) continue
+    const vertsCopy = new Float32Array(verts)
+    const idxCopy = new Uint32Array(idxs)
+    const com = centerMassAtOrigin(vertsCopy, idxCopy)
     result.results.push({
       objId: op.id,
-      vertices: new Float32Array(verts),
-      indices: new Uint32Array(idxs),
+      vertices: vertsCopy,
+      indices: idxCopy,
       normals: null,
       tris: idxCount / 3,
       ms: 0,
+      centerOffset: { x: com.cx, y: com.cy, z: com.cz },
     })
   }
 
@@ -243,13 +248,21 @@ export async function rebuildFromHistory(
     // For CSG results, use originalBboxSize if available
     const metaWithMesh = meta[m.objId] as RebuildMeta & { resultVertices?: Float32Array | number[]; resultIndices?: Uint32Array | number[]; resultNormals?: Float32Array | number[]; originalBboxSize?: { x: number; y: number; z: number } }
     const originalBboxSize = metaWithMesh.originalBboxSize
+    // FIX (8.5.2.5): воркер вернул COM-центрированные вершины (примитивы,
+    // import_mesh) и смещение COM — прибавляем его к pivot, чтобы
+    // render = pivot + vertex = та же world-позиция, что и до фикса.
+    const baseT = (info?.transform ?? (makeDefaultTransform() as TransformNR)) as TransformNR
+    const off = m.centerOffset
+    const finalT: TransformNR = off && (off.x !== 0 || off.y !== 0 || off.z !== 0)
+      ? { ...baseT, x: baseT.x + off.x, y: baseT.y + off.y, z: baseT.z + off.z }
+      : baseT
     objects[m.objId] = makeObject({
       id: m.objId,
       name: info?.name,
       shapeType: info?.shapeType ?? 'cube',
       params: info?.params ?? {},
       color: info?.color ?? '#89b4fa',
-      transform: info?.transform ?? makeDefaultTransform() as TransformNR,
+      transform: finalT,
       visible: info?.visible ?? true,
       locked: false,
       vertices: m.vertices,

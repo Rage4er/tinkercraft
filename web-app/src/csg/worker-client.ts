@@ -12,6 +12,10 @@ export interface MeshResult {
   normals: Float32Array | null
   tris: number
   ms: number
+  /** FIX (8.5.2.5): смещение COM, вычтенное из вершин в results-петле воркера.
+   *  Воркер снимает запечённую трансляцию и центрирует вершины по COM; main
+   *  thread добавляет это смещение к pivot (transform), чтобы render = data. */
+  centerOffset?: { x: number; y: number; z: number }
 }
 
 export interface SceneMeshResult {

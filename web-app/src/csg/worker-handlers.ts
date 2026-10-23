@@ -855,6 +855,12 @@ export async function handleRebuildScene(msg: RebuildSceneMessage): Promise<void
     const wasm = getWasm()
     const shapeInfos: Map<string, { shapeType: string; params: Record<string, number>; filletRadius: number }> = new Map()
     const currentTransforms: Map<string, RebuildTransform> = new Map()
+    // FIX (8.5.2.5): CSG-результаты group-операций исключаются из центрирования
+    // в results-петле — rebuild.ts использует сохранённые pivot-центрированные
+    // resultVertices (или сам COM-центрит legacy-фолбэк). Для всех остальных
+    // объектов (примитивы, import_mesh) results-петля снимает запечённую
+    // трансляцию и центрирует вершины по COM.
+    const booleanResultIds = new Set<string>()
     const ops = msg.operations as Record<string, unknown>[]
 
     for (const op of ops) {
@@ -991,6 +997,10 @@ export async function handleRebuildScene(msg: RebuildSceneMessage): Promise<void
                 const mirrored = origManifold.transform(flip)
                 setCached(newId, mirrored)
                 currentTransforms.set(newId, nt)
+                // FIX (8.5.2.5): зеркальный потомок CSG-результата сохраняет
+                // pivot-центрированную конвенцию §5.4 — не центрируется в
+                // results-петле (store сам задаёт pivot из mirror-транспорта).
+                if (booleanResultIds.has(origId)) booleanResultIds.add(newId)
               }
             }
           }
@@ -1039,6 +1049,10 @@ export async function handleRebuildScene(msg: RebuildSceneMessage): Promise<void
       } else if (op.type === 'group') {
         const ids = op.ids as string[]
         const resultId = op.resultId as string | undefined
+        // FIX (8.5.2.5): CSG-результат не центрируется в results-петле
+        // (pivot-центрированная конвенция §5.4, rebuild.ts использует
+        // resultVertices либо сам COM-центрит legacy-фолбэк).
+        if (resultId) booleanResultIds.add(resultId)
         // FIX (CRIT-CSG-2): If resultVertices/resultIndices are stored in the
         // operation, use them directly instead of rebuilding from operands.
         // This preserves exact CSG geometry through undo/redo.
@@ -1127,13 +1141,38 @@ export async function handleRebuildScene(msg: RebuildSceneMessage): Promise<void
       indices: Uint32Array
       normals: Float32Array | null
       tris: number
+      centerOffset?: { x: number; y: number; z: number }
     }> = []
     const transfers: ArrayBuffer[] = []
     for (const [objId, m] of cache) {
       if (!m) continue
       try {
         const { vertices, indices, normals, tris } = extractMesh(m)
-        results.push({ objId, vertices, indices, normals, tris })
+        // FIX (8.5.2.5): конвенция единого источника (Фаза 8.5) — вершины
+        // SceneObject ВСЕГДА в origin (центрированы по COM), transform — pivot.
+        // Кэш воркера держит spawn-трансляцию, запечённую В вершины
+        // (add_shape/import_mesh/move/align/resize). Снимаем её (−t.xyz),
+        // затем центрируем по COM (centerMassAtOrigin — та же формула, что у
+        // handleBuildShape после 8.5.1) и отдаём offset: main thread прибавит
+        // его к pivot, поэтому world-позиция НЕ меняется:
+        //   render = (pivot + COM) + (v − COM) = pivot + v = world.
+        // CSG-результаты не трогаем: они уже в pivot-центрированной конвенции
+        // §5.4, store использует resultVertices из операции (или сам
+        // COM-центрит legacy-фолбэк в rebuild.ts).
+        let centerOffset: { x: number; y: number; z: number } | undefined
+        if (!booleanResultIds.has(objId)) {
+          const t = currentTransforms.get(objId)
+          if (t) {
+            for (let i = 0; i < vertices.length; i += 3) {
+              vertices[i] -= t.x
+              vertices[i + 1] -= t.y
+              vertices[i + 2] -= t.z
+            }
+          }
+          const com = centerMassAtOrigin(vertices, indices)
+          centerOffset = { x: com.cx, y: com.cy, z: com.cz }
+        }
+        results.push({ objId, vertices, indices, normals, tris, centerOffset })
         transfers.push(vertices.buffer as ArrayBuffer, indices.buffer as ArrayBuffer)
         if (normals) transfers.push(normals.buffer as ArrayBuffer)
       } catch (extractErr) {

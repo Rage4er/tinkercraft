@@ -50,11 +50,17 @@ describe('rebuildFromHistory — baked import_mesh (UB-0)', () => {
     expect(objects['imp_1']).toBeDefined()
     expect(objects['imp_1'].vertices).toHaveLength(9)
     expect(objects['imp_1'].indices).toHaveLength(3)
-    expect(Array.from(objects['imp_1'].vertices)).toEqual([0, 0, 0, 10, 0, 0, 0, 10, 0])
+    // FIX (8.5.2.5): фолбэк центрирует вершины по центроидy (для незамкнутой
+    // пластины из 1 треугольника — площадной центроид (10/3, 10/3, 0)),
+    // а смещение уходит в pivot. world = pivot + vertex == прежние координаты.
+    const com = 10 / 3
+    const expectedVerts = [0 - com, 0 - com, 0, 10 - com, 0 - com, 0, 0 - com, 10 - com, 0]
+    expectedVerts.forEach((v, i) => expect(objects['imp_1'].vertices[i]).toBeCloseTo(v, 5))
     expect(objects['imp_1'].shapeType).toBe('import_mesh')
-    // Позиция — из meta (transform операции), вершины остаются «сырыми»:
-    // конвенция живого объекта (pivot применяет transform на рендере)
-    expect(objects['imp_1'].transform.x).toBe(25)
+    // Позиция = transform операции (25) + центроид меша (10/3) —
+    // вершины в origin, world-позиция сохранена
+    expect(objects['imp_1'].transform.x).toBeCloseTo(25 + com, 5)
+    expect(objects['imp_1'].transform.y).toBeCloseTo(0 + com, 5)
     expect(objects['imp_1'].name).toBe('деталь.stl')
   })
 
@@ -74,7 +80,8 @@ describe('rebuildFromHistory — baked import_mesh (UB-0)', () => {
     const objects = await rebuildFromHistory([makeImport('imp_1')])
 
     expect(Object.keys(objects)).toHaveLength(1)
-    // Приоритет у ответа воркера (в нём запечён translation)
+    // Приоритет у ответа воркера (FIX 8.5.2.5: он возвращает origin-центрированные
+    // вершины + centerOffset; mock без centerOffset → вершины берутся как есть)
     expect(Array.from(objects['imp_1'].vertices)).toEqual([1, 1, 1, 2, 1, 1, 1, 2, 1])
   })
 
