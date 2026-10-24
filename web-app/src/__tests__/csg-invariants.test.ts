@@ -19,7 +19,7 @@ import {
   subtractTransform,
   buildTransformMatrix,
 } from '../csg/worker-matrix'
-import { centerMassAtOrigin, isPivotCenteredGeometry } from '../csg/geometry-utils'
+import { centerMassAtOrigin } from '../csg/geometry-utils'
 
 // Мокаем только postMessage-транспорт worker-client — document-store вызывает
 // CSG через него, а реализация та же (bridge → настоящие handlers + manifold WASM).
@@ -460,13 +460,13 @@ describe('INVARIANT 3: mirror — вершины примитивов', () => {
 
 // ======================== INVARIANT 4: UI mesh world coords ========================
 
-describe('INVARIANT 4: UI mesh world coords (viewport bbox-centering)', () => {
-  // FIX (VIEWPORT-DOUBLE-CENTERING): render-конвенция вьюпорта:
-  //   world_render = pivot + R·S·(vertex − center),
-  // где center = bboxCenter(vertex) для объектов с запечённой трансляцией
-  // (примитивы, import) и center = 0 для CSG (§5.4: вершины уже COM-центрированы).
-  // Тест использует ПРОДАКШН-предикат isPivotCenteredGeometry — если логика
-  // вьюпорта и конвенция данных разойдутся, тест упадёт.
+describe('INVARIANT 4: UI mesh world coords (render = data)', () => {
+  // FIX (8.5.3): render-конвенция вьюпорта (после удаления centerGeometry):
+  //   world_render = pivot + R·S·vertex
+  // для ВСЕХ типов объектов. Конвенция данных (ARCHITECTURE_RENDER.md §1):
+  //   SceneObject.vertices — ВСЕГДА в origin (COM)
+  //   SceneObject.transform — мировой pivot
+  // Поэтому world_render == data_world без каких-либо вычитаний.
 
   it('CSG union (куб+призма): render world == data world (pivot + v)', async () => {
     // Куб на origin, призма на (10,0,0) — COM union != bboxCenter union
@@ -484,22 +484,11 @@ describe('INVARIANT 4: UI mesh world coords (viewport bbox-centering)', () => {
     const dataVerts = new Float32Array(csgResult.vertices)
     const com = centerMassAtOrigin(dataVerts, new Uint32Array(csgResult.indices))
 
-    // Render-конвенция вьюпорта: center = bboxCenter, если объект НЕ pivot-центрированный.
-    const pivotCentered = isPivotCenteredGeometry('csg')
-    let cx = 0, cy = 0, cz = 0
-    if (!pivotCentered) {
-      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity, minZ = Infinity, maxZ = -Infinity
-      for (let i = 0; i < dataVerts.length; i += 3) {
-        if (dataVerts[i] < minX) minX = dataVerts[i]; if (dataVerts[i] > maxX) maxX = dataVerts[i]
-        if (dataVerts[i + 1] < minY) minY = dataVerts[i + 1]; if (dataVerts[i + 1] > maxY) maxY = dataVerts[i + 1]
-        if (dataVerts[i + 2] < minZ) minZ = dataVerts[i + 2]; if (dataVerts[i + 2] > maxZ) maxZ = dataVerts[i + 2]
-      }
-      cx = (minX + maxX) / 2; cy = (minY + maxY) / 2; cz = (minZ + maxZ) / 2
-    }
+    // FIX (8.5.3): render больше НЕ вычитает ничего — center === 0 для всех типов.
+    const cx = 0, cy = 0, cz = 0
 
-    // world_render = pivot + (v − center)   (RS = identity у CSG-результата)
-    // data_world    = pivot + v              (§5.4)
-    // max diff = |center| → для CSG должен быть ровно 0.
+    // world_render = pivot + (v − 0) = pivot + v   (RS = identity у CSG-результата)
+    // data_world    = pivot + v                     (§5.4)
     let maxDiff = 0
     for (let i = 0; i < dataVerts.length; i += 3) {
       const rx = dataVerts[i] - cx, ry = dataVerts[i + 1] - cy, rz = dataVerts[i + 2] - cz
@@ -509,12 +498,9 @@ describe('INVARIANT 4: UI mesh world coords (viewport bbox-centering)', () => {
     }
 
     console.log(`  COM: [${com.cx.toFixed(4)}, ${com.cy.toFixed(4)}, ${com.cz.toFixed(4)}]`)
-    console.log(`  pivotCentered(csg) = ${pivotCentered}`)
-    console.log(`  render center = [${cx.toFixed(4)}, ${cy.toFixed(4)}, ${cz.toFixed(4)}]`)
+    console.log(`  render center = [${cx.toFixed(4)}, ${cy.toFixed(4)}, ${cz.toFixed(4)}] (8.5.3: всегда 0)`)
     console.log(`  max |render − data| = ${maxDiff.toFixed(8)}`)
 
-    // До фикса center = bboxCenter(centered) = 4.2491 → maxDiff = 4.2491 (БАГ).
-    // После фикса center = 0 → maxDiff = 0.
     expect(maxDiff).toBeLessThan(1e-6)
   })
 

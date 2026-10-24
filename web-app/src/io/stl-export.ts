@@ -5,7 +5,6 @@
 
 import type { SceneObject, TransformNR } from '../csg/types'
 import { computeRSMatrix } from '../csg/worker-matrix'
-import { isPivotCenteredGeometry } from '../csg/geometry-utils'
 import i18n from '../i18n'
 
 /**
@@ -15,48 +14,23 @@ import i18n from '../i18n'
  * совместимости с Three.js Euler 'XYZ' (Rx · Ry · Rz). Раньше была
  * дублированная матрица Rz × Ry × Rx, которая расходилась с рендером
  * при многоосевом повороте.
- * FIX (UB-0): bbox-центр вершин вычитается ДО применения RS+position.
- * Вьюпорт (viewport-hooks.ts → centerGeometry) центрирует геометрию КАЖДОГО
- * объекта и применяет transform к pivot'у: world = R·S·(v − center) + t.
- * Примитивы хранят позицию спавна, запечённую воркером В вершины
- * (handleBuildShape → m.transform([T])), и ДУБЛИРУЮТ её в obj.transform —
- * без вычитания центра позиция применялась дважды, и при экспорте
- * нескольких фигур они «разлетались» относительно друг друга.
- * FIX (VIEWPORT-DOUBLE-CENTERING): CSG-результаты хранят вершины, уже
- * центрированными по ЦЕНТРУ МАСС (§5.4), pivot = COM: world = pivot + v.
- * Вычитать bbox-центр у них НЕЛЬЗЯ — для асимметричной геометрии
- * (cube+prism) COM ≠ bboxCenter, и экспорт расходился бы с рендером
- * на величину до 4.25 ед. Для таких объектов center принимается равным 0
- * (параметр pivotCentered).
+ * FIX (8.5.3): bbox-центр больше НЕ вычитается. Конвенция единого источника
+ * (ARCHITECTURE_RENDER.md): SceneObject.vertices — ВСЕГДА в origin (COM),
+ * transform — мировой pivot, поэтому
+ *   world = R·S·v + pos   — и для рендера, и для экспорта, и для данных.
+ * Раньше экспорт повторял компенсацию вьюпорта (centerGeometry) и для
+ * асимметричных примитивов (cone/prism/pyramid) расходился с рендером на
+ * (bboxCenter − COM), например h/4 для конуса.
  */
 function applyTransformToVertices(
   vertices: Float32Array,
   transform: { x: number; y: number; z: number; rotX: number; rotY: number; rotZ: number; scaleX: number; scaleY: number; scaleZ: number },
-  pivotCentered = false,
 ): Float32Array {
   const count = vertices.length / 3;
   if (count === 0) return vertices;
 
-  // FIX (UB-0): bbox-центр «сырых» вершин (один проход O(n))
-  // FIX (VIEWPORT-DOUBLE-CENTERING): у pivot-центрированных объектов (CSG)
-  // вершины уже центрированы — центр считается нулевым.
-  let cx = 0, cy = 0, cz = 0
-  if (!pivotCentered) {
-    let minX = Infinity, maxX = -Infinity
-    let minY = Infinity, maxY = -Infinity
-    let minZ = Infinity, maxZ = -Infinity
-    for (let i = 0; i < vertices.length; i += 3) {
-      if (vertices[i] < minX) minX = vertices[i]; if (vertices[i] > maxX) maxX = vertices[i]
-      if (vertices[i + 1] < minY) minY = vertices[i + 1]; if (vertices[i + 1] > maxY) maxY = vertices[i + 1]
-      if (vertices[i + 2] < minZ) minZ = vertices[i + 2]; if (vertices[i + 2] > maxZ) maxZ = vertices[i + 2]
-    }
-    cx = (minX + maxX) / 2; cy = (minY + maxY) / 2; cz = (minZ + maxZ) / 2
-  }
-
-  // Identity-трансформ и уже отцентрированная геометрия (CSG-результаты) —
-  // возвращаем как есть (optimization)
+  // Identity-трансформ — возвращаем как есть (optimization)
   if (
-    cx === 0 && cy === 0 && cz === 0 &&
     transform.x === 0 && transform.y === 0 && transform.z === 0 &&
     transform.rotX === 0 && transform.rotY === 0 && transform.rotZ === 0 &&
     transform.scaleX === 1 && transform.scaleY === 1 && transform.scaleZ === 1
@@ -70,14 +44,14 @@ function applyTransformToVertices(
     { scaleX: transform.scaleX, scaleY: transform.scaleY, scaleZ: transform.scaleZ },
   )
 
-  // Apply rotation + scale around the geometry center, then translation —
-  // точно как pivot во вьюпорте: R·S·(v − center) + pos
+  // Apply rotation + scale around origin, then translation —
+  // точно как pivot во вьюпорте: R·S·v + pos
   const transformed = new Float32Array(count * 3);
 
   for (let i = 0; i < count; i++) {
-    const vx = vertices[i * 3] - cx;
-    const vy = vertices[i * 3 + 1] - cy;
-    const vz = vertices[i * 3 + 2] - cz;
+    const vx = vertices[i * 3];
+    const vy = vertices[i * 3 + 1];
+    const vz = vertices[i * 3 + 2];
 
     // RS × v + pos (column-major matrix multiplication)
     transformed[i * 3] = r00 * vx + r01 * vy + r02 * vz + transform.x;
@@ -194,9 +168,8 @@ export function exportToStl(objects: SceneObject[], maxTriangles: number = MAX_T
     const { vertices, indices, normals } = obj
 
     // FIX (WARN-R3-8): Apply transform to vertices before exporting
-    // FIX (VIEWPORT-DOUBLE-CENTERING): CSG-вершины уже COM-центрированы —
-    // центр не вычитаем (иначе экспорт разойдётся с рендером).
-    const transformedVerts = applyTransformToVertices(vertices, obj.transform, isPivotCenteredGeometry(obj.shapeType))
+    // FIX (8.5.3): world = R·S·v + pos — без bbox-вычитания (render = data)
+    const transformedVerts = applyTransformToVertices(vertices, obj.transform)
 
     // FIX (MED-18-43): Transform normals when object has rotation — unrotated objects pass through
     const hasRotation = obj.transform.rotX !== 0 || obj.transform.rotY !== 0 || obj.transform.rotZ !== 0

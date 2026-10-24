@@ -66,8 +66,9 @@ describe('exportToStl', () => {
   })
 
   // FIX (WARN-R3-8): Tests for transform application
-  // FIX (UB-0): трансформ применяется К bbox-центрированной геометрии —
-  // так же, как во вьюпорте (centerGeometry + transform на pivot).
+  // FIX (8.5.3): world = R·S·v + t — bbox-центр больше НЕ вычитается.
+  // Вершины SceneObject всегда в origin (COM), transform — мировой pivot,
+  // поэтому экспорт = рендер = данные (ARCHITECTURE_RENDER.md §1).
   it('applies translation transform to vertices', async () => {
     const obj = makeObj({
       vertices: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]),
@@ -77,7 +78,7 @@ describe('exportToStl', () => {
     const blob = exportToStl([obj])
     expect(blob.size).toBe(84 + 50 * 1)
 
-    // First vertex (0,0,0) → centered (−0.5,−0.5,0) → +(10,20,30) = (9.5,19.5,30)
+    // FIX (8.5.3): первая вершина (0,0,0) → без центрирования → +(10,20,30) = (10,20,30)
     const buf = new ArrayBuffer(blob.size)
     new Uint8Array(buf).set(new Uint8Array(await blob.arrayBuffer()))
     const dv = new DataView(buf)
@@ -85,26 +86,27 @@ describe('exportToStl', () => {
     const ax = dv.getFloat32(84 + 12, true)
     const ay = dv.getFloat32(84 + 12 + 4, true)
     const az = dv.getFloat32(84 + 12 + 8, true)
-    expect(ax).toBeCloseTo(9.5, 5)
-    expect(ay).toBeCloseTo(19.5, 5)
+    expect(ax).toBeCloseTo(10, 5)
+    expect(ay).toBeCloseTo(20, 5)
     expect(az).toBeCloseTo(30, 5)
   })
 
-  // FIX (UB-0): позиция спавна, запечённая воркером в вершины, НЕ должна
-  // применяться дважды. Примитив создан с transform.x=25 → воркер запёк +25
-  // в вершины, store записал +25 в transform. Экспорт обязан дать +25, а не +50.
-  it('spawn position baked into vertices is not double-applied (UB-0)', async () => {
-    // «Куб» у origin: вершины мировые (t=0), transform x=0
+  // FIX (UB-0 → 8.5.3): spawn НЕ запекается в вершины (Этап 8.5.1/8.5.2),
+  // поэтому экспорт обязан давать ровно transform, а не 2×transform.
+  // Раньше тест моделировал «запечённый spawn» в вершинах; теперь вершины
+  // origin-центрированы, и проверка сводится к world = pivot + v.
+  it('spawn position is applied once — vertices in origin (8.5.3)', async () => {
+    // Куб у origin: вершины в origin, transform = identity
     const objA = makeObj({
       id: 'a',
-      vertices: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]),
+      vertices: new Float32Array([-0.5, -0.5, 0, 0.5, -0.5, 0, -0.5, 0.5, 0]),
       indices: new Uint32Array([0, 1, 2]),
       transform: { ...T },
     })
-    // «Куб» со спавном x=25: воркер запёк +25 в вершины, transform x=25
+    // Тот же куб со spawn x=25: вершины НЕ изменены, только transform
     const objB = makeObj({
       id: 'b',
-      vertices: new Float32Array([25, 0, 0, 26, 0, 0, 25, 1, 0]),
+      vertices: new Float32Array([-0.5, -0.5, 0, 0.5, -0.5, 0, -0.5, 0.5, 0]),
       indices: new Uint32Array([0, 1, 2]),
       transform: { ...T, x: 25 },
     })
@@ -116,10 +118,10 @@ describe('exportToStl', () => {
     const axA = dv.getFloat32(84 + 12, true)
     // Vertex A of triangle 2 (objB): 84 + 50 + normal(12)
     const axB = dv.getFloat32(84 + 50 + 12, true)
-    // Относительное смещение между фигурами = 25 (раньше было 50 — «разлетались»)
+    // Относительное смещение между фигурами = 25 (не 50 — без двойного spawn)
     expect(axB - axA).toBeCloseTo(25, 4)
-    // Абсолютная позиция objB — как во вьюпорте (центр геометрии на x=25):
-    // (25 − 25.5) + 25 = 24.5
+    // Абсолютная позиция: pivot + v = 25 + (−0.5) = 24.5
+    expect(axA).toBeCloseTo(-0.5, 4)
     expect(axB).toBeCloseTo(24.5, 4)
   })
 
@@ -132,14 +134,14 @@ describe('exportToStl', () => {
     const blob = exportToStl([obj])
     expect(blob.size).toBe(84 + 50 * 1)
 
-    // Second vertex (1,0,0) → centered (0.5,−0.5,0) → ×2 = (1,−1,0)
+    // FIX (8.5.3): (1,0,0) → ×2 = (2,0,0) — без центрирования
     // STL layout per triangle: normal(12) + A(12) + B(12) + C(12) + attr(2) = 50 bytes
     // Vertex B is at: header(84) + normal(12) + vertexA(12) = 108
     const buf = new ArrayBuffer(blob.size)
     new Uint8Array(buf).set(new Uint8Array(await blob.arrayBuffer()))
     const dv = new DataView(buf)
     const bx = dv.getFloat32(84 + 12 + 12, true) // normal(12) + vertexA(12)
-    expect(bx).toBeCloseTo(1, 5)
+    expect(bx).toBeCloseTo(2, 5)
   })
 
   it('identity transform produces same output as no transform', async () => {
@@ -160,8 +162,9 @@ describe('exportToStl', () => {
   it('multi-axis rotation matches Three.js XYZ Euler order', async () => {
     // FIX (ROT-XYZ-STL): exportToStl now uses computeRSMatrix (Three.js XYZ).
     // Rotate vertex (1,0,0) by rotX=30, rotY=45, rotZ=0.
-    // FIX (UB-0): трансформ применяется к центрированной геометрии:
-    // (1,0,0) → centered (0.5,−0.5,0) → Rx(30)·Ry(45)·v = (0.3536, −0.2562, −0.5562).
+    // FIX (8.5.3): без центрирования — Rx(30)·Ry(45)·(1,0,0):
+    //   Ry(45)·(1,0,0) = (0.7071, 0, −0.7071)
+    //   Rx(30)·(...)    = (0.7071, 0.3536, −0.6124)
     const obj = makeObj({
       vertices: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]),
       indices: new Uint32Array([0, 1, 2]),
@@ -175,13 +178,13 @@ describe('exportToStl', () => {
     const bx = dv.getFloat32(84 + 12 + 12, true)
     const by = dv.getFloat32(84 + 12 + 12 + 4, true)
     const bz = dv.getFloat32(84 + 12 + 12 + 8, true)
-    expect(bx).toBeCloseTo(0.3536, 3)
-    expect(by).toBeCloseTo(-0.2562, 3)
-    expect(bz).toBeCloseTo(-0.5562, 3)
+    expect(bx).toBeCloseTo(0.7071, 3)
+    expect(by).toBeCloseTo(0.3536, 3)
+    expect(bz).toBeCloseTo(-0.6124, 3)
   })
 
   it('non-uniform scale applies per-axis', async () => {
-    // Vertex (1,1,1) → centered (0.5,0.5,0.5) → scaled X=2, Y=3, Z=4 → (1,1.5,2)
+    // FIX (8.5.3): vertex (1,1,1) → scaled X=2, Y=3, Z=4 → (2,3,4) — без центрирования
     const obj = makeObj({
       vertices: new Float32Array([0, 0, 0, 1, 1, 1, 0, 1, 0]),
       indices: new Uint32Array([0, 1, 2]),
@@ -194,9 +197,9 @@ describe('exportToStl', () => {
     const bx = dv.getFloat32(84 + 12 + 12, true)
     const by = dv.getFloat32(84 + 12 + 12 + 4, true)
     const bz = dv.getFloat32(84 + 12 + 12 + 8, true)
-    expect(bx).toBeCloseTo(1, 5)
-    expect(by).toBeCloseTo(1.5, 5)
-    expect(bz).toBeCloseTo(2, 5)
+    expect(bx).toBeCloseTo(2, 5)
+    expect(by).toBeCloseTo(3, 5)
+    expect(bz).toBeCloseTo(4, 5)
   })
 
   // FIX (E1): лимит треугольников обязан отклонять сцену ЯВНО. Раньше он

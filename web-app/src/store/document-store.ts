@@ -239,12 +239,19 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const t0 = performance.now()
       const result = await workerBuildImportedMesh(id, vertices, indices)
       const ms = performance.now() - t0
-      const obj: SceneObject = makeObject({ id, shapeType: 'import_mesh', params: {}, color, transform, visible: true, locked: false, vertices: result.vertices, indices: result.indices, normals: result.normals })
+      // FIX (8.5.3): конвенция единого источника — вершины ВСЕГДА в origin (COM).
+      // centerMassAtOrigin мутирует result.vertices in-place и возвращает COM,
+      // который прибавляется к pivot: world = pivot + v не меняется.
+      // Операция хранит «рецепт» (сырые вершины + spawn) — rebuild (8.5.2.5)
+      // делает то же центрирование, поэтому live == rebuild.
+      const com = centerMassAtOrigin(result.vertices, result.indices)
+      const pivot: TransformNR = { ...transform, x: transform.x + com.cx, y: transform.y + com.cy, z: transform.z + com.cz }
+      const obj: SceneObject = makeObject({ id, shapeType: 'import_mesh', params: {}, color, transform: pivot, visible: true, locked: false, vertices: result.vertices, indices: result.indices, normals: result.normals })
       const op: ImportMeshOperation = { type: 'import_mesh', id, name, color, transform, vertices, indices }
       const newOps = [...operations.slice(0, historyIndex), op]
       const newObjects = { ...objects, [id]: obj }
       // Register baked node in build tree BEFORE caching snapshot
-      createBakedNode(id, result.vertices, result.indices, result.normals, transform)
+      createBakedNode(id, result.vertices, result.indices, result.normals, pivot)
       set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, selectedIds: [id], modified: true, busy: false, lastCsgMs: ms })
       cacheSnapshotWithTree(newOps.length, newObjects)
       invalidateMirrorCache()
@@ -268,13 +275,22 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const workerResult = await workerBuildImportedMesh(id, result.vertices, result.indices)
       const ms = performance.now() - t0
 
+      // FIX (8.5.3): SceneObject.vertices — ВСЕГДА в origin (COM). Раньше
+      // импорт хранил сырые координаты STL, а вьюпорт (centerGeometry) вычитал
+      // bbox-центр — позиция зависела от рендера, а не от данных, и расходилась
+      // с CSG/rebuild. Теперь COM центрируется здесь, pivot = transform импорта
+      // + COM → world = pivot + v = исходные координаты STL (render = data).
+      const com = centerMassAtOrigin(workerResult.vertices, workerResult.indices)
+      const baseT = result.transform
+      const pivot: TransformNR = { ...baseT, x: baseT.x + com.cx, y: baseT.y + com.cy, z: baseT.z + com.cz }
+
       // BUG-R8-1: Передаём normals в makeObject для корректного рендеринга
-      const obj: SceneObject = makeObject({ id, shapeType: 'import_mesh', params: {}, color, transform: result.transform, visible: true, locked: false, vertices: workerResult.vertices, indices: workerResult.indices, normals: workerResult.normals })
-      const op: ImportMeshOperation = { type: 'import_mesh', id, name: result.name, color, transform: result.transform, vertices: result.vertices, indices: result.indices }
+      const obj: SceneObject = makeObject({ id, shapeType: 'import_mesh', params: {}, color, transform: pivot, visible: true, locked: false, vertices: workerResult.vertices, indices: workerResult.indices, normals: workerResult.normals })
+      const op: ImportMeshOperation = { type: 'import_mesh', id, name: result.name, color, transform: baseT, vertices: result.vertices, indices: result.indices }
       const newOps = [...operations.slice(0, historyIndex), op]
       const newObjects = { ...objects, [id]: obj }
       // Register baked node in build tree BEFORE caching snapshot
-      createBakedNode(id, workerResult.vertices, workerResult.indices, workerResult.normals, result.transform)
+      createBakedNode(id, workerResult.vertices, workerResult.indices, workerResult.normals, pivot)
       set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, selectedIds: [id], modified: true, busy: false, lastCsgMs: ms })
       cacheSnapshotWithTree(newOps.length, newObjects)
       invalidateMirrorCache()
@@ -518,8 +534,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       // (тот же центр, что и worker-кэш). После сдвига на (COM − transformA):
       //   v = v_COM + (COM − transformA) = v_world − transformA
       //   world = pivot + v = transformA + (v_world − transformA) = v_world ✅
-      // Вёркер и рендер используют только world = pivot + TRS·v — конвенция
-      // pivot-центрированных вершин (isPivotCenteredGeometry) не меняется.
+      // Вёркер и рендер используют только world = pivot + TRS·v —
+      // конвенция единого источника (render = data) сохраняется.
       const { cx: comX, cy: comY, cz: comZ } = centerMassAtOrigin(mesh.vertices, mesh.indices)
       const tA0 = srOf(idA)
       const offX = comX - tA0.x, offY = comY - tA0.y, offZ = comZ - tA0.z

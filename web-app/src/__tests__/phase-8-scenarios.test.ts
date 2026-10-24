@@ -11,8 +11,7 @@
 // - примитивы: vertices = origin (COM), spawn живёт в transform.position;
 //   workerWorld = T·R·S·v   (без вычитания spawn — Фаза 8.5.1/8.5.2)
 // - CSG-результаты: vertices = pivot-центрированные; world = pivot + vertex (§5.4)
-// - рендер/STL: world = applyTRS(transform, vertices) — render = data
-//   (centerGeometry/isPivotCenteredGeometry — удаляются в Этапе 8.5.3)
+// - рендер/STL: world = applyTRS(transform, vertices) — render = data (§8.5.3)
 
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 
@@ -41,7 +40,7 @@ import { useDocumentStore } from '../store/document-store'
 import { clearSnapshots } from '../store/snapshots'
 import { workerBuildShape, workerClearAll, workerCsgBooleanWithSync } from '../csg/worker-client'
 import { clearTree, getNode } from '../csg/history-tree'
-import { centerMassAtOrigin, isPivotCenteredGeometry } from '../csg/geometry-utils'
+import { centerMassAtOrigin } from '../csg/geometry-utils'
 import { buildTransformMatrix } from '../csg/worker-matrix'
 import { exportToStl } from '../io/stl-export'
 import { serializeDoodle, parseDoodle } from '../io/doodle-io'
@@ -172,23 +171,14 @@ function lastGroupResultId(): string {
 }
 
 /**
- * Ожидание экспорта: world = R·S·(v − bboxCenter(v)) + t — независимая
- * реализация той же формулы, что stl-export/Viewport3D (FIX UB-0).
- */
+  * Ожидание экспорта: world = R·S·v + t — независимая реализация той же
+  * формулы, что stl-export/Viewport3D.
+  * FIX (8.5.3): bbox-вычитания больше нет ни в экспорте, ни в рендере —
+  * вершины всех типов уже в origin (COM), pivot несёт позицию (render = data).
+  */
 function expectedStlBBox(objects: SceneObject[]): BB {
   let expected: BB = { min: [Infinity, Infinity, Infinity], max: [-Infinity, -Infinity, -Infinity] }
   for (const o of objects) {
-    // FIX (VIEWPORT-DOUBLE-CENTERING): конвенция рендера/STL —
-    // world = R·S·(v − c) + t, где c = bboxCenter(v) только для объектов с
-    // запечённой трансляцией (примитивы/импорт). CSG-вершины pivot-центрированы
-    // (§5.4, pivot = transformA) → c = 0. Предикат — продакшн, чтобы
-    // модель теста не могла разойтись с кодом.
-    const c = isPivotCenteredGeometry(o.shapeType)
-      ? [0, 0, 0]
-      : (() => {
-        const b = bboxOf(o.vertices)
-        return [(b.min[0] + b.max[0]) / 2, (b.min[1] + b.max[1]) / 2, (b.min[2] + b.max[2]) / 2]
-      })()
     const m = buildTransformMatrix(
       { x: o.transform.x, y: o.transform.y, z: o.transform.z },
       { rotX: o.transform.rotX, rotY: o.transform.rotY, rotZ: o.transform.rotZ },
@@ -196,7 +186,7 @@ function expectedStlBBox(objects: SceneObject[]): BB {
     )
     const wv = new Float32Array(o.vertices.length)
     for (let i = 0; i < o.vertices.length; i += 3) {
-      const x = o.vertices[i] - c[0], y = o.vertices[i + 1] - c[1], z = o.vertices[i + 2] - c[2]
+      const x = o.vertices[i], y = o.vertices[i + 1], z = o.vertices[i + 2]
       wv[i] = m[0] * x + m[4] * y + m[8] * z + m[12]
       wv[i + 1] = m[1] * x + m[5] * y + m[9] * z + m[13]
       wv[i + 2] = m[2] * x + m[6] * y + m[10] * z + m[14]

@@ -17,7 +17,6 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { TransformControls } from "three/examples/jsm/controls/TransformControls.js";
 import type { SceneObject, TransformNR } from "../csg/types";
 import { computeAABB } from "../store/helpers";
-import { isPivotCenteredGeometry } from "../csg/geometry-utils";
 import {
     findNearestSnap,
     createSnapIndicator,
@@ -403,27 +402,36 @@ function computeVertsHash(vertices: Float32Array): number {
     return (hash ^ len) | 0;
 }
 
-/**
- * Centers mesh geometry and returns a container (pivot).
- *
- * FIX (VIEWPORT-DOUBLE-CENTERING): CSG-результаты хранят COM-центрированные
- * вершины (§5.4), повторное bbox-центрирование смещает их на bboxCenter.
- * Для таких объектов геометрия оставляется как есть — pivot уже в COM.
- */
-function centerGeometry(mesh: THREE.Mesh, objectId: string, pivotCentered = false): THREE.Object3D {
-    const geo = mesh.geometry as THREE.BufferGeometry;
-    const pos = geo.attributes.position;
-    if (pos && !pivotCentered) {
-        const vertices = pos.array as Float32Array;
-        const { min, max } = computeAABB(vertices);
-        const cx = (min.x + max.x) / 2, cy = (min.y + max.y) / 2, cz = (min.z + max.z) / 2;
-        geo.translate(-cx, -cy, -cz);
-    }
+function createPivot(mesh: THREE.Mesh, objectId: string): THREE.Object3D {
+    const pivot = new THREE.Object3D();
+    pivot.userData.objectId = objectId;
+    pivot.add(mesh);
+    return pivot;
+}
 
-    const container = new THREE.Object3D();
-    container.userData.objectId = objectId;
-    container.add(mesh);
-    return container;
+/**
+ * FIX (8.5.3): единственная точка, где SceneObject.transform превращается
+ * в мировую матрицу рендера. Экспортируется, чтобы CI-тест
+ * `render-data-invariant.test.ts` сверял render с данными ПРОДАКШН-кодом,
+ * а не реимплементацией формулы.
+ *
+ * Конвенция единого источника (ARCHITECTURE_RENDER.md §1):
+ *   geometry = SceneObject.vertices (всегда в origin, COM)
+ *   pivot    = SceneObject.transform (мировой pivot)
+ *   world    = T(pos) · R(XYZ) · S · v   — никаких вычитаний центра.
+ *
+ * Порядок Euler 'XYZ' (по умолчанию у Object3D) = Rx·Ry·Rz — совпадает с
+ * computeRSMatrix в worker-matrix.ts (ROT-XYZ-STL), поэтому render == data ==
+ * worker для многоосевых поворотов.
+ */
+export function applyTransformToPivot(pivot: THREE.Object3D, t: TransformNR): void {
+    pivot.position.set(t.x, t.y, t.z);
+    pivot.rotation.set(
+        THREE.MathUtils.degToRad(t.rotX),
+        THREE.MathUtils.degToRad(t.rotY),
+        THREE.MathUtils.degToRad(t.rotZ),
+    );
+    pivot.scale.set(t.scaleX, t.scaleY, t.scaleZ);
 }
 
 // ============================================================
@@ -568,18 +576,8 @@ export function useMeshSync(
                     existing.mesh.geometry.computeBoundingBox();
                     existing.mesh.geometry.computeBoundingSphere();
 
-                    // Re-center geometry
-                    // FIX (VIEWPORT-DOUBLE-CENTERING): CSG-вершины уже центрированы
-                    // по COM (§5.4), повторное вычитание bbox-центра сдвигает
-                    // асимметричный CSG (измерено 4.2491 ед. для cube+prism).
-                    if (!isPivotCenteredGeometry(obj.shapeType)) {
-                        const box = existing.mesh.geometry.boundingBox!;
-                        const center = new THREE.Vector3();
-                        box.getCenter(center);
-                        existing.mesh.geometry.translate(-center.x, -center.y, -center.z);
-                    }
-                    existing.mesh.geometry.computeBoundingBox();
-                    existing.mesh.geometry.computeBoundingSphere();
+                    // FIX (8.5.3): geometry = vertices как есть — centerGeometry удалён.
+                    // SceneObject.vertices всегда в origin (COM), pivot несёт позицию.
 
                     // UB2-4: геометрия изменилась — пересобираем рёбра
                     detachShapeEdges(existing.mesh);
@@ -587,37 +585,26 @@ export function useMeshSync(
                 }
 
                 // Sync transform from store to pivot
+                // FIX (8.5.3): единая точка применения трансформа (applyTransformToPivot)
+                // — eps-проверка сохранена как оптимизация (не пересобирать матрицу
+                // при подмаштабных изменениях), но формула одна для create/update/preview.
                 const t = obj.transform;
                 const pivotPos = existing.pivot.position;
                 const eps = TRANSFORM_EPS;
-                if (
+                const pivotRot = existing.pivot.rotation;
+                const pivotScl = existing.pivot.scale;
+                const transformChanged =
                     Math.abs(pivotPos.x - t.x) > eps ||
                     Math.abs(pivotPos.y - t.y) > eps ||
-                    Math.abs(pivotPos.z - t.z) > eps
-                ) {
-                    existing.pivot.position.set(t.x, t.y, t.z);
-                    devLogTransform('meshSync', obj.id, t);
-                }
-                const pivotRot = existing.pivot.rotation;
-                if (
+                    Math.abs(pivotPos.z - t.z) > eps ||
                     Math.abs(THREE.MathUtils.radToDeg(pivotRot.x) - t.rotX) > eps ||
                     Math.abs(THREE.MathUtils.radToDeg(pivotRot.y) - t.rotY) > eps ||
-                    Math.abs(THREE.MathUtils.radToDeg(pivotRot.z) - t.rotZ) > eps
-                ) {
-                    existing.pivot.rotation.set(
-                        THREE.MathUtils.degToRad(t.rotX),
-                        THREE.MathUtils.degToRad(t.rotY),
-                        THREE.MathUtils.degToRad(t.rotZ),
-                    );
-                    devLogTransform('meshSync', obj.id, t);
-                }
-                const pivotScl = existing.pivot.scale;
-                if (
+                    Math.abs(THREE.MathUtils.radToDeg(pivotRot.z) - t.rotZ) > eps ||
                     Math.abs(pivotScl.x - t.scaleX) > SCALE_EPS ||
                     Math.abs(pivotScl.y - t.scaleY) > SCALE_EPS ||
-                    Math.abs(pivotScl.z - t.scaleZ) > SCALE_EPS
-                ) {
-                    existing.pivot.scale.set(t.scaleX, t.scaleY, t.scaleZ);
+                    Math.abs(pivotScl.z - t.scaleZ) > SCALE_EPS;
+                if (transformChanged) {
+                    applyTransformToPivot(existing.pivot, t);
                     devLogTransform('meshSync', obj.id, t);
                 }
 
@@ -739,17 +726,11 @@ export function useMeshSync(
                 rawMesh.castShadow = true;
                 rawMesh.receiveShadow = true;
                 rawMesh.userData.objectId = obj.id;
-                const pivot = centerGeometry(rawMesh, obj.id, isPivotCenteredGeometry(obj.shapeType));
+                const pivot = createPivot(rawMesh, obj.id);
                 // UB2-4: рёбра по выраженным граням, «на пару тонов» темнее
                 // (ребёнок меша — наследует visibility/трансформы родителя)
                 attachShapeEdges(rawMesh, obj.color);
-                pivot.position.set(obj.transform.x, obj.transform.y, obj.transform.z);
-                pivot.rotation.set(
-                    THREE.MathUtils.degToRad(obj.transform.rotX),
-                    THREE.MathUtils.degToRad(obj.transform.rotY),
-                    THREE.MathUtils.degToRad(obj.transform.rotZ),
-                );
-                pivot.scale.set(obj.transform.scaleX, obj.transform.scaleY, obj.transform.scaleZ);
+                applyTransformToPivot(pivot, obj.transform);
 
                 // DIAG: RENDER:csg — verify world position of CSG vertices
                 if (obj.shapeType === 'csg') {
@@ -1035,24 +1016,10 @@ export function useMirrorPreview(
         geometry.setIndex(new THREE.BufferAttribute(previewObject.indices, 1));
         geometry.computeVertexNormals();
 
-        // Центрируем геометрию (как в useMeshSync для обычных объектов).
-        // FIX (MIRROR-PREVIEW-CENTER): computeBoundingBox() нужно вызвать явно —
-        // geometry.boundingBox равен null по умолчанию и заполняется только после вызова этого метода.
-        // FIX (VIEWPORT-DOUBLE-CENTERING): CSG-вершины уже центрированы по COM —
-        // повторное центрирование сместило бы превью относительно pivot
-        // (и превью разошлось бы с подтверждённым результатом).
+        // FIX (8.5.3): центрирование убрано — previewObject.vertices уже в origin
+        // (та же конвенция, что у обычных объектов), pivot несёт позицию.
         geometry.computeBoundingBox();
         geometry.computeBoundingSphere();
-        if (!isPivotCenteredGeometry(previewObject.shapeType)) {
-            const box = geometry.boundingBox;
-            if (box) {
-                const center = new THREE.Vector3();
-                box.getCenter(center);
-                geometry.translate(-center.x, -center.y, -center.z);
-                geometry.computeBoundingBox();
-                geometry.computeBoundingSphere();
-            }
-        }
 
         const material = new THREE.MeshStandardMaterial({
             color: 0x4488ff,
@@ -1075,13 +1042,7 @@ export function useMirrorPreview(
         const pivot = new THREE.Object3D();
         pivot.userData.objectId = '__mirror_preview__';
         const t = previewObject.transform;
-        pivot.position.set(t.x, t.y, t.z);
-        pivot.rotation.set(
-            THREE.MathUtils.degToRad(t.rotX),
-            THREE.MathUtils.degToRad(t.rotY),
-            THREE.MathUtils.degToRad(t.rotZ),
-        );
-        pivot.scale.set(t.scaleX, t.scaleY, t.scaleZ);
+        applyTransformToPivot(pivot, t);
         pivot.add(mesh);
         scene.add(pivot);
         mirrorPreviewRef.current = { mesh, pivot };
