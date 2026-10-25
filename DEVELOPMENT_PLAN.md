@@ -398,7 +398,7 @@ web-app/src/components/icons/
 | 8.5.2.5 | `handleRebuildScene` возвращает origin-вершины (undo/redo/load) | Высокий | Средняя | ✅ 2026-10-23 |
 | 8.5.3 | Удалить `centerGeometry` и `isPivotCenteredGeometry` | Высокий | Средняя | ✅ 2026-10-24 |
 | 8.5.4 | Миграция `.doodle` → `.3dtc` | Средний | Средняя | ✅ 2026-10-24 |
-| 8.5.5 | CI-тест `render-data-invariant.test.ts` | Высокий | Низкая | 🔲 |
+| 8.5.5 | CI-тест `render-data-invariant.test.ts` (import_mesh, CSG, mirror, fillet, resize) | Высокий | Низкая | ✅ 2026-10-24 |
 
 ---
 

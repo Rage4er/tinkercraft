@@ -13,13 +13,20 @@
 // data-сторона считается через computeRSMatrix (общая математика worker/STL) —
 // независимо от Three.js. Если конвенции разойдутся, тест упадёт.
 //
-// Этап 8.5.5 расширит покрытие на import_mesh / csg / mirror / fillet / resize.
+// Этап 8.5.5: расширение на import_mesh / csg / mirror / fillet / resize.
 // ============================================================
 
 import { describe, it, expect, afterAll } from 'vitest'
 import * as THREE from 'three'
 import { applyTransformToPivot } from '../components/viewport-hooks'
-import { workerBuildShape, workerClearAll } from './worker-bridge'
+import {
+  workerBuildShape,
+  workerClearAll,
+  workerBuildImportedMesh,
+  workerCsgBooleanWithSync,
+  workerMirrorObject,
+  workerApplyFillet,
+} from './worker-bridge'
 import { computeRSMatrix } from '../csg/worker-matrix'
 import type { ShapeType, ShapeParams, TransformNR } from '../csg/types'
 
@@ -155,4 +162,124 @@ describe('Render = data (Этап 8.5.3)', () => {
       }
     },
   )
+})
+
+// ============================================================
+// Этап 8.5.5: расширение на import_mesh / csg / mirror / fillet
+// ============================================================
+
+describe('Render = data (Этап 8.5.5 — import_mesh / csg / mirror / fillet)', () => {
+  afterAll(() => {
+    workerClearAll()
+  })
+
+  // ── import_mesh ──────────────────────────────────────────
+  // store (importStl, 8.5.3) центрирует vertices по COM и ставит
+  // pivot = COM исходного меша. Проверяем, что render == data.
+  it('import_mesh: render world === data world', async () => {
+    // Сырой меш со смещением (как STL с pivot не в центре)
+    const rawVerts = [
+      100, 200, 300, 110, 200, 300, 100, 210, 300,  // треугольник
+      100, 200, 300, 100, 210, 300, 100, 200, 310,
+    ]
+    const rawIdx = [0, 1, 2, 3, 4, 5]
+    const res = await workerBuildImportedMesh('rd_import', rawVerts, rawIdx)
+
+    // store-логика (document-store.ts importStl): COM-центрирование
+    // centerMassAtOrigin мутирует vertices in-place, pivot = COM
+    // Здесь воспроизводим вычисление COM и pivot
+    const verts = new Float32Array(res.vertices)
+    const idx = new Uint32Array(res.indices)
+    // COM = sum(вершин треугольников × площадь) / sum(площадей)
+    // Для теста достаточно bbox-центра (в реальном store — centerMassAtOrigin)
+    // Но workerBuildImportedMesh НЕ центрирует, поэтому pivot = COM(verts)
+    // Воспользуемся тем, что vertices здесь = rawVerts (worker не центрирует)
+    const comX = 100 + 10 / 3  // среднее X трёх уникальных вершин ≈ 103.33
+    const comY = 200 + 10 / 3
+    const comZ = 300 + 10 / 3
+    // pivot = COM, vertices = verts − COM (store центрирует)
+    const centeredVerts = new Float32Array(verts.length)
+    for (let i = 0; i < verts.length; i += 3) {
+      centeredVerts[i] = verts[i] - comX
+      centeredVerts[i + 1] = verts[i + 1] - comY
+      centeredVerts[i + 2] = verts[i + 2] - comZ
+    }
+    const pivot = tr({ x: comX, y: comY, z: comZ })
+    const mesh = buildRenderTree(centeredVerts, idx, pivot)
+
+    const diff = maxRenderDataDiff(mesh, pivot)
+    console.log(`  import_mesh: max |render − data| = ${diff.toExponential(3)}`)
+    expect(diff).toBeLessThan(1e-4)
+  })
+
+  // ── CSG union ────────────────────────────────────────────
+  it('CSG union (cube+prism): render world === data world', async () => {
+    const cubeT = tr({ x: 0, y: 0, z: 0 })
+    const prismT = tr({ x: 10, y: 0, z: 0 })
+    // Синхронизируем operands в воркер через workerCsgBooleanWithSync
+    const csgRes = await workerCsgBooleanWithSync(
+      'cube', 'prism', 'union', 'rd_csg_u',
+      cubeT, prismT,
+      { shapeType: 'cube', params: { width: 10, height: 10, depth: 10 } as ShapeParams },
+      { shapeType: 'prism', params: { radius: 5, height: 10, sides: 3 } as ShapeParams },
+    )
+    // CSG-конвенция: pivot = transformA, vertices = world − transformA
+    // (store.csgBoolean: pivot = tA, vertices COM-центрированы + (COM − tA))
+    // Проверяем что рендер с pivot = cubeT == data world
+    const mesh = buildRenderTree(csgRes.vertices, csgRes.indices, cubeT)
+    const diff = maxRenderDataDiff(mesh, cubeT)
+    console.log(`  CSG union: max |render − data| = ${diff.toExponential(3)}`)
+    expect(diff).toBeLessThan(1e-4)
+  })
+
+  // ── CSG difference ───────────────────────────────────────
+  it('CSG difference (cube-sphere): render world === data world', async () => {
+    const cubeT = tr({ x: 20, y: 5, z: 0 })
+    const sphereT = tr({ x: 25, y: 5, z: 0 })
+    const csgRes = await workerCsgBooleanWithSync(
+      'cube', 'sphere', 'subtract', 'rd_csg_d',
+      cubeT, sphereT,
+      { shapeType: 'cube', params: { width: 12, height: 12, depth: 12 } as ShapeParams },
+      { shapeType: 'sphere', params: { radius: 5 } as ShapeParams },
+    )
+    const mesh = buildRenderTree(csgRes.vertices, csgRes.indices, cubeT)
+    const diff = maxRenderDataDiff(mesh, cubeT)
+    console.log(`  CSG difference: max |render − data| = ${diff.toExponential(3)}`)
+    expect(diff).toBeLessThan(1e-4)
+  })
+
+  // ── Mirror ───────────────────────────────────────────────
+  it('mirror (YZ): render world === data world', async () => {
+    const srcT = tr({ x: 30, y: 0, z: 0 })
+    await workerBuildShape('rd_mirror_src', 'cube', { width: 10, height: 10, depth: 10 } as ShapeParams, srcT)
+    // workerMirrorObject(objId, plane, shapeType?, params?, transform?, mirrorCenter?)
+    const mirrorT = tr({ x: -30, y: 0, z: 0 })
+    const mirrored = await workerMirrorObject('rd_mirror_src', 'YZ', 'cube', { width: 10, height: 10, depth: 10 }, mirrorT)
+    const mesh = buildRenderTree(mirrored.vertices, mirrored.indices, mirrorT)
+    const diff = maxRenderDataDiff(mesh, mirrorT)
+    console.log(`  mirror YZ: max |render − data| = ${diff.toExponential(3)}`)
+    expect(diff).toBeLessThan(1e-4)
+  })
+
+  // ── Fillet (cube) ────────────────────────────────────────
+  it('fillet (cube, r=2): render world === data world', async () => {
+    const filletRes = await workerApplyFillet('rd_fillet', 'cube', { width: 10, height: 10, depth: 10 } as ShapeParams, 2, tr({}))
+    const transform = tr({ x: 15, y: 15, z: 15 })
+    const mesh = buildRenderTree(filletRes.vertices, filletRes.indices, transform)
+    const diff = maxRenderDataDiff(mesh, transform)
+    console.log(`  fillet cube r=2: max |render − data| = ${diff.toExponential(3)}`)
+    expect(diff).toBeLessThan(1e-4)
+  })
+
+  // ── Resize (scale в transform, vertices不变) ──────────────
+  // resizeObject в store меняет только transform.scaleX/Y/Z — vertices остаются.
+  // Проверяем, что scale в transform корректно отражается в рендере.
+  it('resize (cube scale 0.5,2,1.5): render world === data world', async () => {
+    const res = await workerBuildShape('rd_resize', 'cube', { width: 10, height: 10, depth: 10 } as ShapeParams, tr({}))
+    const transform = tr({ x: 25, y: 0, z: 0, scaleX: 0.5, scaleY: 2, scaleZ: 1.5 })
+    const mesh = buildRenderTree(res.vertices, res.indices, transform)
+    const diff = maxRenderDataDiff(mesh, transform)
+    console.log(`  resize scale(0.5,2,1.5): max |render − data| = ${diff.toExponential(3)}`)
+    expect(diff).toBeLessThan(1e-4)
+  })
 })

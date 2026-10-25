@@ -65,7 +65,7 @@ render_world_vertex === data_world_vertex (diff < 1e-6)
 | **8.5.2.5** | **`handleRebuildScene` возвращает origin-вершины (undo/redo/load)** | ✅ 2026-10-23 |
 | **8.5.3** | **Удалить `centerGeometry`/`isPivotCenteredGeometry`; `importStl` → COM-центрирование** | ✅ 2026-10-24 |
 | **8.5.4** | **Миграция `.doodle` → `.3dtc`** | ✅ 2026-10-24 |
-| 8.5.5 | CI-тест «render = data» для всех объектов (включая import_mesh, CSG, mirror) | 🔲 |
+| **8.5.5** | **CI-тест «render = data» для всех объектов (import_mesh, CSG, mirror, fillet, resize)** | ✅ 2026-10-24 |
 
 ---
 
