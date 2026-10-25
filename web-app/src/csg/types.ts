@@ -1,5 +1,5 @@
 // ============================================================
-// .doodle format types — full compatibility with Java TinkerCraftFile
+// .3dtc format types — ZIP + JSON, vertices in origin (COM), transform = pivot
 // ============================================================
 
 export interface TinkerCraftFile {

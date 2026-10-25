@@ -46,8 +46,8 @@ export interface DocumentStore {
   redo: () => Promise<void>
   jumpToHistory: (index: number) => Promise<void>
   clearScene: () => Promise<void>
-  openDoodle: () => Promise<void>
-  saveDoodle: () => Promise<void>
+  openProject: () => Promise<void>
+  saveProject: () => Promise<void>
   exportStl: () => void
   triggerAutosave: () => Promise<void>
   restoreAutosave: () => Promise<boolean>

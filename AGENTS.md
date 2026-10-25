@@ -99,8 +99,8 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 | **IO** | |
 | `src/io/stl-import.ts` | Импорт STL (бинарный + ASCII) |
 | `src/io/stl-export.ts` | Экспорт в бинарный STL |
-| `src/io/doodle-io.ts` | Формат .doodle (ZIP + JSON) |
-| `src/io/3dtc-io.ts` | Формат .3dtc (ZIP + JSON) — заменяет .doodle |
+| `src/io/doodle-io.ts` | **УСТАРЕЛО**: формат .doodle (legacy, не поддерживается) |
+| `src/io/3dtc-io.ts` | Формат .3dtc (ZIP + JSON) — основной формат проекта (v1.2.0+) |
 | `src/io/autosave.ts` | Автосохранение в IndexedDB |
 | **Platform (yandex-games ветка)** | |
 | `src/platform/index.ts` | Абстракция платформы (clean / yandex) |

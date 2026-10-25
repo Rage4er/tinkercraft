@@ -177,7 +177,7 @@ export async function rebuildFromHistory(
 
   // FIX (UB-0): фолбэк для import_mesh, которых НЕТ в ответе воркера
   // (non-manifold STL → cache=null; слишком большие меши — skip). Без фолбэка
-  // импортированная геометрия исчезала при загрузке проекта/.doodle.
+  // импортированная геометрия исчезала при загрузке проекта/.3dtc.
   // FIX (8.5.2.5): конвенция единого источника — вершины центрируются по COM,
   // смещение отдаётся как centerOffset (main loop прибавит его к pivot).
   // Раньше «живая» конвенция была: сырые вершины + transform на pivot.
@@ -230,7 +230,7 @@ export async function rebuildFromHistory(
       // FIX (PIVOT-TRANSFORMA): resultCenter хранит pivot = transformA (позиция
       // первого операнда), а не COM. Но если resultVertices отсутствуют (legacy
       // fallback), pivot восстанавливается из COM — это задокументированная
-      // CENTERING-RESIDUAL конвенция для старых .doodle файлов.
+      // CENTERING-RESIDUAL конвенция для старых .3dtc файлов.
       // FIX (быв. LOW-18-9): раньше extractAndCenterInPlace мутировал ВРЕМЕННУЮ
       // копию, которая выбрасывалась — m.vertices оставался в мировых координатах,
       // а transform получал центр (двойное смещение для legacy-документов без

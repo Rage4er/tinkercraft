@@ -72,7 +72,7 @@ export default function PropertiesPanel({
   // FIX (COLOR-HISTORY): Comparing draftColor against firstSelected.color was
   // always false — handleColorChange already previews the color into the store,
   // so at blur time they were equal and the 'color' operation was NEVER added
-  // to history. As a result user-assigned colors were not saved to .doodle and
+  // to history. As a result user-assigned colors were not saved to .3dtc and
   // reset to defaults after reload. Track the target object id and the base
   // (committed) color at draft start instead.
   const [draftColor, setDraftColor] = useState<string | null>(null);

@@ -890,7 +890,7 @@ export async function handleRebuildScene(msg: RebuildSceneMessage): Promise<void
         // FIX (UB-0): восстанавливаем baked-геометрию (импорт STL) из
         // op.vertices/op.indices. Раньше здесь запоминался только transform —
         // вершины не попадали в cache, объект отсутствовал в results, и после
-        // загрузки проекта/.doodle импортированная геометрия ИСЧЕЗАЛА.
+        // загрузки проекта/.3dtc импортированная геометрия ИСЧЕЗАЛА.
         // Конвенция как у примитивов: в cache запекается ТОЛЬКО translation
         // (rotation/scale применяются на рендере через pivot и в CSG через
         // applySRAroundCenter). shapeInfos НЕ заполняем: ветки move/mirror/fillet

@@ -24,7 +24,7 @@ import {
   workerDeleteObjects, workerClearAll, workerSyncObjects, workerSyncMesh,
 } from '../csg/worker-client'
 import type { MeshResult } from '../csg/worker-handlers'
-import { parseDoodle, serializeDoodle, openDoodleFilePicker, downloadBlob } from '../io/doodle-io'
+import { parse3dtc, serialize3dtc, open3dtcFilePicker, downloadBlob } from '../io/3dtc-io'
 import { notify } from './notifications'
 import { saveProject as pmSave, updateProject as pmUpdate, loadProject as pmLoad, listProjects as pmList } from '../io/project-manager'
 import { exportToStl, downloadStlBlob, StlTooLargeError } from '../io/stl-export'
@@ -987,39 +987,35 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     invalidateMirrorCache()
   },
 
-  // ── Open .doodle ──
-  openDoodle: async () => {
+  // ── Open .3dtc ──
+  openProject: async () => {
     if (get().busy) return
-    const picked = await openDoodleFilePicker()
+    const picked = await open3dtcFilePicker()
     if (!picked) return
     set({ busy: true })
     try {
-      const doc = await parseDoodle(picked.buffer)
+      const doc = await parse3dtc(picked.buffer)
       await workerClearAll()
       clearSnapshots()
       const t0 = performance.now()
-      const newObjects = await rebuildFromHistory(doc.operations)
+      const newObjects = doc.objects
       // DEBUG: verify CSG objects have mesh data and check children
       if (import.meta.env.DEV) {
         const csgObjs = Object.values(newObjects).filter(o => o.shapeType === 'csg')
-        console.log('[loadDoodle] CSG objects count:', csgObjs.length)
+        console.log('[loadProject] CSG objects count:', csgObjs.length)
         for (const c of csgObjs) {
-          console.log(`[loadDoodle]  ${c.id}: tris=${c.indices.length / 3} verts=${c.vertices.length / 3} rot=${c.transform.rotX}/${c.transform.rotY}/${c.transform.rotZ} scl=${c.transform.scaleX}/${c.transform.scaleY}/${c.transform.scaleZ}`)
-          // Log CSG children from operations
+          console.log(`[loadProject]  ${c.id}: tris=${c.indices.length / 3} verts=${c.vertices.length / 3} rot=${c.transform.rotX}/${c.transform.rotY}/${c.transform.rotZ} scl=${c.transform.scaleX}/${c.transform.scaleY}/${c.transform.scaleZ}`)
           const childrenOps = doc.operations.filter(op => op.type === 'group' && (op as import('../csg/types').GroupOperation).resultId === c.id)
           for (const childOp of childrenOps) {
             const g = childOp as import('../csg/types').GroupOperation
-            console.log(`[loadDoodle]   children of ${c.id}: ids=[${g.ids.join(', ')}] hasMesh=${!!g.resultVertices?.length}`)
-            // Log children details from operations array
+            console.log(`[loadProject]   children of ${c.id}: ids=[${g.ids.join(', ')}] hasMesh=${!!g.resultVertices?.length}`)
             for (const childId of g.ids) {
               const childObj = newObjects[childId]
-              console.log(`[loadDoodle]   child ${childId}: shapeType=${childObj?.shapeType} tris=${childObj?.indices.length / 3} verts=${childObj?.vertices.length / 3}`)
+              console.log(`[loadProject]   child ${childId}: shapeType=${childObj?.shapeType} tris=${childObj?.indices.length / 3} verts=${childObj?.vertices.length / 3}`)
             }
           }
         }
       }
-      // FIX (R17-7): Rebuild build tree after loading from file to ensure
-      // CSG/mirror/align operations have the correct tree structure.
       rebuildBuildTree(doc.operations, newObjects)
       set({ operations: doc.operations, historyIndex: doc.operations.length, objects: newObjects, selectedIds: [], fileName: picked.file.name, modified: false, busy: false, lastCsgMs: performance.now() - t0, currentProjectId: null, currentProjectName: null })
       cacheSnapshotWithTree(doc.operations.length, newObjects)
@@ -1027,12 +1023,17 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     } catch (e) { set({ busy: false }); notify(i18n.t('errors.openFailed', { error: e }), 'error') }
   },
 
-  // ── Save .doodle ──
-  saveDoodle: async () => {
-    const { operations, historyIndex, fileName } = get()
+  // ── Save .3dtc ──
+  saveProject: async () => {
+    const { operations, historyIndex, fileName, objects } = get()
     const opsToSave = operations.slice(0, historyIndex)
-    const blob = await serializeDoodle(opsToSave)
-    downloadBlob(blob, (fileName ?? 'untitled') + (fileName?.endsWith('.doodle') ? '' : '.doodle'))
+    const blob = await serialize3dtc({
+      objects,
+      operations: opsToSave,
+      operationsTrimmed: historyIndex < operations.length,
+      fileName: fileName ?? undefined,
+    })
+    downloadBlob(blob, (fileName ?? 'untitled') + (fileName?.endsWith('.3dtc') ? '' : '.3dtc'))
     set({ modified: false })
   },
 
@@ -1052,7 +1053,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       notify(e instanceof StlTooLargeError ? e.message : i18n.t('errors.stlExportFailed'), 'error')
       return
     }
-    downloadStlBlob(blob, (fileName?.replace(/\.doodle$/, '') ?? i18n.t('app.name')) + '.stl')
+    downloadStlBlob(blob, (fileName?.replace(/\.3dtc$/, '') ?? i18n.t('app.name')) + '.stl')
   },
 
   // ── Resize dims ──

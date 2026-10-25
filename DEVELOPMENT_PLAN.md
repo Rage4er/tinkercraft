@@ -393,10 +393,11 @@ web-app/src/components/icons/
 | # | Задача | Приоритет | Сложность | Статус |
 |---|--------|-----------|-----------|--------|
 | 8.5.0 | Подготовка + ARCHITECTURE_RENDER.md | Высокий | Низкая | ✅ Завершена |
-| 8.5.1 | Worker возвращает origin для всех primitive | Высокий | Средняя | 🔲 |
-| 8.5.2 | Store применяет spawn к transform, не к vertices | Высокий | Средняя | 🔲 |
-| 8.5.3 | Удалить `centerGeometry` и `isPivotCenteredGeometry` | Высокий | Средняя | 🔲 |
-| 8.5.4 | Миграция `.doodle` → `.3dtc` | Средний | Средняя | 🔲 |
+| 8.5.1 | Worker возвращает origin для всех primitive | Высокий | Средняя | ✅ 2026-10-21 |
+| 8.5.2 | Store применяет spawn к transform, не к vertices | Высокий | Средняя | ✅ 2026-10-21 |
+| 8.5.2.5 | `handleRebuildScene` возвращает origin-вершины (undo/redo/load) | Высокий | Средняя | ✅ 2026-10-23 |
+| 8.5.3 | Удалить `centerGeometry` и `isPivotCenteredGeometry` | Высокий | Средняя | ✅ 2026-10-24 |
+| 8.5.4 | Миграция `.doodle` → `.3dtc` | Средний | Средняя | ✅ 2026-10-24 |
 | 8.5.5 | CI-тест `render-data-invariant.test.ts` | Высокий | Низкая | 🔲 |
 
 ---
@@ -511,7 +512,7 @@ web-app/src/components/icons/
 | UI / Состояние | React 18 + Zustand 5 |
 | 3D Рендеринг | Three.js r170 |
 | CSG | manifold-3d 3.0.1+ (WASM, выделенный Worker, типобезопасный интерфейс) |
-| Персистентность | IndexedDB (автосохранение + несколько проектов), JSZip (.doodle) |
+| Персистентность | IndexedDB (автосохранение + несколько проектов), JSZip (.3dtc) |
 | PWA | Vite + manifest.json + COOP/COEP заголовки |
 
 ---
@@ -565,7 +566,8 @@ web-app/
 │   └── io/
 │       ├── stl-import.ts       # Импорт STL
 │       ├── stl-export.ts       # Экспорт STL
-│       ├── doodle-io.ts        # Формат .doodle
+│       ├── 3dtc-io.ts          # Формат .3dtc (основной)
+│       ├── doodle-io.ts        # Формат .doodle (legacy, не поддерживается)
 │       ├── autosave.ts         # Автосохранение
 │       └── project-manager.ts  # Менеджер проектов
 ```
@@ -629,7 +631,7 @@ web-app/
 | | **CSG-CSG-POSITION-DRIFT** — ✅ **ИСПРАВЛЕНО** (2026-10-14, Этап 8) — Булевые операции между двумя CSG-результатами: сценарий 4 §10.2 (CSG+CSG Union, bbox diff=9.54e-7, pivot-vs-COM diff=9.78e-7) подтверждает позиционирование на месте. | **HIGH** | ✅ **ИСПРАВЛЕНО** (2026-10-14, Этап 8) |
 | | **MIRROR-CSG-CHILD-RS-LOSS** — Зеркалирование CSG, полученного объединением двух отзеркаленных копий (`csg_16 = union(mirror_A, mirror_B)` → `mirror(csg_16)`), сбрасывает масштаб и поворот у дочерних примитивов простой геометрии в зеркальной копии. `mirrorNodeRecursive` применяется к `localTransform` примитивов, но RS живёт в root-ноде CSG-поддерева, а у примитивов `localTransform` = identity по rot/scale → после клонирования/зеркала `relativeToParent` теряет `rotationDelta`/`scaleRatio` для вложенных boolean-нод. Смотреть `clone-before-rebuild` фазы в `[TREE]` логах для `obj_17`/`obj_18`/`obj_19`/`obj_20` (источник `csg_16`). | **HIGH** | ✅ **ИСПРАВЛЕНО** (2026-10-07) — `mirrorNodeRecursive` теперь применяет отрицательный scale для primitive-нод по перпендикулярной оси плоскости зеркала |
 | | **CSG-PRESERVE-RS** — `csgBoolean` терял rotation/scale operand A (результат всегда имел identity RS). Исправлено: `resultTransform` копирует rot/scale от operand A. Вершины CSG центрированы в origin, RS живёт в transform. | **HIGH** | ✅ **ИСПРАВЛЕНО** (2026-10-07) |
-| | **RENDER-PRISM-BBOX-OFFSET** — `centerGeometry` (`viewport-hooks.ts`) вычитал `bboxCenter` (28,0,0) вместо spawn (25,0,0) → сдвиг **3.000 мм** на отрисовке. Ruler показывал `12.67 мм` вместо `10.74 мм`. Решение: удалить `centerGeometry` полностью — `vertices` всегда origin, `transform` = pivot, render = data. | **HIGH** | 🔲 **Запланировано** (Фаза 8.5, Этап 8.5.3) |
+| | **RENDER-PRISM-BBOX-OFFSET** — `centerGeometry` (`viewport-hooks.ts`) вычитал `bboxCenter` (28,0,0) вместо spawn (25,0,0) → сдвиг **3.000 мм** на отрисовке. Ruler показывал `12.67 мм` вместо `10.74 мм`. Решение: удалить `centerGeometry` полностью — `vertices` всегда origin, `transform` = pivot, render = data. | **HIGH** | ✅ **Исправлено** (Этап 8.5.3, 2026-10-24) |
 
 ---
 

@@ -103,8 +103,8 @@ export default function App() {
       redo: s.redo,
       jumpToHistory: s.jumpToHistory,
       clearScene: s.clearScene,
-      openDoodle: s.openDoodle,
-      saveDoodle: s.saveDoodle,
+      openProject: s.openProject,
+      saveProject: s.saveProject,
       moveObject: s.moveObject,
       resizeObject: s.resizeObject,
       extrudeSelected: s.extrudeSelected,
@@ -148,8 +148,8 @@ export default function App() {
     redo,
     jumpToHistory,
     clearScene,
-    openDoodle,
-    saveDoodle,
+    openProject,
+    saveProject,
     moveObject,
     resizeObject,
     extrudeSelected,
@@ -205,12 +205,12 @@ export default function App() {
   // ref обновляется каждый рендер, но сам listener не переподключается.
   const kbRef = useRef({
     objects, deleteSelected, undo, redo, selectObjects,
-    saveDoodle, openDoodle, clearSelection, copySelected, pasteClipboard,
+    saveProject, openProject, clearSelection, copySelected, pasteClipboard,
     showTextModal, showPM,
   });
   kbRef.current = {
     objects, deleteSelected, undo, redo, selectObjects,
-    saveDoodle, openDoodle, clearSelection, copySelected, pasteClipboard,
+    saveProject, openProject, clearSelection, copySelected, pasteClipboard,
     showTextModal, showPM,
   };
 
@@ -244,11 +244,11 @@ export default function App() {
         e.preventDefault()
         // FIX (HIGH-18-18): Allow Ctrl+S to save even when gizmo is active
         // The gizmo handles `s` key for toggle (without ctrl), but Ctrl+S should always save
-        kb.saveDoodle()
+        kb.saveProject()
       }
       if (ctrl && code === "KeyO") {
         e.preventDefault();
-        kb.openDoodle();
+        kb.openProject();
       }
       if (ctrl && code === "KeyC") {
         e.preventDefault();
@@ -485,8 +485,8 @@ export default function App() {
         canCsg={canCsg}
         nonManifoldSelected={hasNonManifoldSelected}
         theme={theme}
-        onOpen={openDoodle}
-        onSave={saveDoodle}
+        onOpen={openProject}
+        onSave={saveProject}
         onExportStl={exportStl}
         onImportStl={importStl}
         onShowProjects={() => setShowPM(true)}
