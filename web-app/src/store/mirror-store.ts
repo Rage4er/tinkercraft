@@ -136,24 +136,26 @@ export async function mirrorObject(
 
     if (isPrimitive) {
         // ── Primitive ──────────────────────────────────────────────────────────
-        // ensureInTree создаёт primitive-ноду (не boolean), resetSubtreeTransform
-        // сбрасывает только эту одну ноду к identity, rebuildNode строит геометрию
-        // в origin, mirrorVerticesInPlace отражает вершины.
-
-        // 1. Регистрируем оригинал в дереве
+        // Зеркалим ТЕКУЩИЕ вершины объекта напрямую.
+        //
+        // FIX (MIRROR-DOUBLE): до этого вызывался rebuildNode, который пересобирает
+        // геометрию из params — теряется предыдущее зеркало, запечённое в
+        // obj.vertices. Для двойного зеркала: rebuild params → одинарное зеркало
+        // вместо identity. С 8.5.1/8.5.3 vertices примитива всегда в origin (COM),
+        // поэтому зеркалим obj.vertices напрямую.
+        //
+        // Убедимся, что оригинал зарегистрирован в дереве (для будущего CSG).
         ensureInTree(id, obj)
         syncNodeTransform(id, obj.transform)
 
-        // 2. Клонируем и обнуляем transform у клона (геометрия строится вокруг origin)
-        cloneSubtree(id, newId)
-        resetSubtreeTransform(newId)
-        const rebuiltMesh = await rebuildNode(newId)
+        // Берём текущие вершины (уже origin-центрированы после 8.5.1/8.5.3).
+        // После первого зеркала obj_2.shapeType='prism', но obj_2.vertices
+        // уже зеркальны. Зеркалим их ещё раз — получаем identity.
+        vertices = new Float32Array(obj.vertices)
+        indices = new Uint32Array(obj.indices)
+        normals = obj.normals ? new Float32Array(obj.normals) : null
 
-        vertices = rebuiltMesh.vertices
-        indices = rebuiltMesh.indices
-        normals = rebuiltMesh.normals ?? null
-
-        // 3. Отражаем вершины (negate перпендикулярной оси) и исправляем winding order.
+        // Отражаем вершины (negate перпендикулярной оси) и исправляем winding order.
         //
         // FIX (MIRROR-WINDING): инвертирование одной оси позиций переворачивает CCW→CW.
         // Manifold-3d определяет «снаружи/внутри» по winding order — вывернутый меш
@@ -164,8 +166,6 @@ export async function mirrorObject(
             indices[i + 1] = indices[i + 2]
             indices[i + 2] = tmp
         }
-
-        deleteNode(newId, true)
     } else {
         // ── CSG-результат или import ───────────────────────────────────────────
         //
