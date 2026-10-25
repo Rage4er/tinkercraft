@@ -7,6 +7,40 @@
 
 ---
 
+## [1.2.0] — 2026-10-25
+
+**Фаза 8.5 — Унификация отрисовки и данных (единый источник).**
+
+### Added
+- `ARCHITECTURE_RENDER.md` — единый источник данных и отрисовки
+- CI-тест `render-data-invariant.test.ts` — 26 тестов, `render = data` для всех типов (7 примитивов + TRS + import_mesh + CSG union/subtract + mirror + fillet + resize + 2 CSG-инварианта)
+- Новый формат проекта `.3dtc` (ZIP + JSON, `version: 3dtc-v1`, base64 для mesh)
+- `io/3dtc-io.ts` — `serialize3dtc` / `parse3dtc`
+- `io/3dtc-io.test.ts` — 8 тестов (round-trip, version, thumbnail, reject)
+
+### Changed
+- Worker `buildShape` возвращает `vertices` в origin (COM) для всех primitive
+- `handleRebuildScene` возвращает `vertices` в origin (rebuild = live)
+- `addShape` применяет spawn к `transform`, не к `vertices`
+- `importStl` / `addRawMesh` — `centerMassAtOrigin` + pivot = COM
+- Store: `openProject` / `saveProject` (вместо `openDoodle` / `saveDoodle`)
+- STL-export: всегда `applyTRS(transform, v)` без bbox-вычитания
+
+### Removed
+- `centerGeometry` (`viewport-hooks.ts`, 3 места + определение)
+- `isPivotCenteredGeometry` (`geometry-utils.ts`, `stl-export.ts`)
+
+### Fixed
+- **RENDER-PRISM-BBOX-OFFSET** — устранён вместе с `centerGeometry`
+- **VIEWPORT-DOUBLE-CENTERING** — устранён
+- **PIVOT-CSG** — устранён (pivot = transformA)
+- **STL-export** — теперь совпадает с render (для cone/pyramid был сдвиг на `h/4`)
+
+### Legacy
+- `.doodle` — оставлен как legacy (не используется в UI). Конверсия — отдельно.
+
+---
+
 ## [Unreleased]
 
 ### Added

@@ -282,4 +282,79 @@ describe('Render = data (Этап 8.5.5 — import_mesh / csg / mirror / fillet)
     console.log(`  resize scale(0.5,2,1.5): max |render − data| = ${diff.toExponential(3)}`)
     expect(diff).toBeLessThan(1e-4)
   })
+
+  // ── CSG инварианты (восстановление из 8.5.2.5) ──────────
+  // CSG-union двух непересекающихся объектов: все вершины
+  // операндов должны присутствовать в результате (drift < 1e-6).
+  it('CSG union (cube+prism): vertex count invariant (14 = 8 + 6)', async () => {
+    const cubeT = tr({ x: 0, y: 0, z: 0 })
+    const prismT = tr({ x: 15, y: 0, z: 0 }) // не пересекаются: cube bbox=[-5,5], prism bbox=[10,20]
+    const csgRes = await workerCsgBooleanWithSync(
+      'cube', 'prism', 'union', 'rd_csg_union_vc',
+      cubeT, prismT,
+      { shapeType: 'cube', params: { width: 10, height: 10, depth: 10 } as ShapeParams },
+      { shapeType: 'prism', params: { radius: 5, height: 10, sides: 3 } as ShapeParams },
+    )
+    // cube: 8 вершин, prism: 6 вершин, union: 14 = 8 + 6
+    const csgVertCount = csgRes.vertices.length / 3
+    const expectedVertCount = 8 + 6 // 14
+    console.log(`  CSG union vertex count: ${csgVertCount} (expected ${expectedVertCount})`)
+    expect(csgVertCount).toBe(expectedVertCount)
+  })
+
+  // CSG world-вершины = world-вершины операндов (outside).
+  // Для непересекающихся объектов union = набор всех world-вершин.
+  it('CSG union (cube+prism): all operand world-vertices present', async () => {
+    const cubeT = tr({ x: 0, y: 0, z: 0 })
+    const prismT = tr({ x: 15, y: 0, z: 0 })
+    const csgRes = await workerCsgBooleanWithSync(
+      'cube', 'prism', 'union', 'rd_csg_union_wp',
+      cubeT, prismT,
+      { shapeType: 'cube', params: { width: 10, height: 10, depth: 10 } as ShapeParams },
+      { shapeType: 'prism', params: { radius: 5, height: 10, sides: 3 } as ShapeParams },
+    )
+
+    // Генерируем эталонные world-вершины операндов напрямую через worker
+    const cubeRes = await workerBuildShape('rd_wp_cube', 'cube', { width: 10, height: 10, depth: 10 } as ShapeParams, tr({}))
+    const prismRes = await workerBuildShape('rd_wp_prism', 'prism', { radius: 5, height: 10, sides: 3 } as ShapeParams, tr({}))
+
+    // World-вершины операндов
+    const cubeWorld = new Set<string>()
+    for (let i = 0; i < cubeRes.vertices.length; i += 3) {
+      const [wx, wy, wz] = dataWorld(cubeRes.vertices[i], cubeRes.vertices[i + 1], cubeRes.vertices[i + 2], cubeT)
+      cubeWorld.add(`${wx.toFixed(4)},${wy.toFixed(4)},${wz.toFixed(4)}`)
+    }
+    const prismWorld = new Set<string>()
+    for (let i = 0; i < prismRes.vertices.length; i += 3) {
+      const [wx, wy, wz] = dataWorld(prismRes.vertices[i], prismRes.vertices[i + 1], prismRes.vertices[i + 2], prismT)
+      prismWorld.add(`${wx.toFixed(4)},${wy.toFixed(4)},${wz.toFixed(4)}`)
+    }
+
+    // Проверяем что все world-вершины операндов найдены в CSG
+    const csgPos = csgRes.vertices
+    let foundCube = 0, foundPrism = 0
+    const tolerance = 0.01
+    for (const key of cubeWorld) {
+      const [tx, ty, tz] = key.split(',').map(Number)
+      let found = false
+      for (let i = 0; i < csgPos.length; i += 3) {
+        const dx = csgPos[i] - tx, dy = csgPos[i + 1] - ty, dz = csgPos[i + 2] - tz
+        if (Math.sqrt(dx * dx + dy * dy + dz * dz) < tolerance) { found = true; break }
+      }
+      if (found) foundCube++
+    }
+    for (const key of prismWorld) {
+      const [tx, ty, tz] = key.split(',').map(Number)
+      let found = false
+      for (let i = 0; i < csgPos.length; i += 3) {
+        const dx = csgPos[i] - tx, dy = csgPos[i + 1] - ty, dz = csgPos[i + 2] - tz
+        if (Math.sqrt(dx * dx + dy * dy + dz * dz) < tolerance) { found = true; break }
+      }
+      if (found) foundPrism++
+    }
+
+    console.log(`  CSG union vertex truth: cube=${foundCube}/8, prism=${foundPrism}/6`)
+    expect(foundCube).toBe(8)
+    expect(foundPrism).toBe(6)
+  })
 })

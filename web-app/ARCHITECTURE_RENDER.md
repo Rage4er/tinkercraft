@@ -59,13 +59,14 @@ render_world_vertex === data_world_vertex (diff < 1e-6)
 
 | Этап | Что | Статус |
 |------|-----|--------|
-| 8.5.0 | Подготовка + документация | ✅ 2026-10-21 |
-| 8.5.1 | Worker возвращает origin для всех primitive | ✅ 2026-10-21 |
-| 8.5.2 | Store применяет spawn к transform, не к vertices | ✅ 2026-10-21 |
+| **8.5.0** | **Подготовка + документация** | ✅ 2026-10-21 |
+| **8.5.1** | **Worker возвращает origin для всех primitive** | ✅ 2026-10-21 |
+| **8.5.2** | **Store применяет spawn к transform, не к vertices** | ✅ 2026-10-21 |
 | **8.5.2.5** | **`handleRebuildScene` возвращает origin-вершины (undo/redo/load)** | ✅ 2026-10-23 |
 | **8.5.3** | **Удалить `centerGeometry`/`isPivotCenteredGeometry`; `importStl` → COM-центрирование** | ✅ 2026-10-24 |
 | **8.5.4** | **Миграция `.doodle` → `.3dtc`** | ✅ 2026-10-24 |
 | **8.5.5** | **CI-тест «render = data» для всех объектов (import_mesh, CSG, mirror, fillet, resize)** | ✅ 2026-10-24 |
+| **8.5.6** | **Релиз v1.2.0 (CSG-инварианты, версия, CHANGELOG)** | ✅ 2026-10-25 |
 
 ---
 
