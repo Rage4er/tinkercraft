@@ -7,6 +7,21 @@
 
 ---
 
+## [1.2.1] — 2026-10-26
+
+**Patch: double-mirror primitive fix.**
+
+### Fixed
+- **DOUBLE-MIRROR-PRIMITIVE:** двойное зеркало примитива (YZ → YZ) давало 180°-поворот вместо identity (pivot = identity, vertices = одинарное зеркало). Корень: `mirrorObject` для primitive делал `rebuildNode` (из params), теряя запечённое зеркало vertices. Фикс: зеркалить `obj.vertices` напрямую. Тесты: `mirror-double.test.ts` (6 тестов, double YZ/XZ/XY = identity для prism, cone, pyramid, cube). (`store/mirror-store.ts`)
+
+### Added
+- `mirror-double.test.ts` — 6 тестов на double mirror primitive (identity для YZ/XZ/XY).
+
+### Changed
+- `phase-8-scenarios.test.ts` — Scenario 3 остаётся один mirror (double покрыт отдельно).
+
+---
+
 ## [1.2.0] — 2026-10-25
 
 **Фаза 8.5 — Унификация отрисовки и данных (единый источник).**

@@ -46,6 +46,38 @@
 
 ---
 
+### ✅ ИСПРАВЛЕНО — DOUBLE-MIRROR-PRIMITIVE (двойное зеркало примитива = 180° вместо identity) (2026-10-26, Этап 8.5.7, v1.2.1)
+
+**Проблема:** двойное зеркало призмы (YZ → YZ) давало 180°-поворот вместо
+identity. Pivot — identity (верно), vertices — одинарное зеркало (неверно).
+
+**Корень:** примитивная ветка `mirrorObject` (`mirror-store.ts`) делала
+`rebuildNode`, который пересобирает геометрию **из params**
+(shapeType + params), **не берёт** текущие `obj.vertices`. После 1-го зеркала
+`obj_2` — это `shapeType='prism'` с оригинальными params и зеркальными
+vertices. 2-е зеркало: `rebuild(params)` → оригинальная призма (зеркало
+потеряно), `mirrorVerticesInPlace` → одинарное зеркало.
+
+**Фикс:** зеркалить `obj.vertices` **напрямую** (без `rebuildNode`).
+`mirrorVerticesInPlace` + `swapWinding` + `ensureInTree`/`syncNodeTransform`
+остались. Убраны `cloneSubtree`/`resetSubtreeTransform`/`rebuildNode`/
+`deleteNode` из примитивной ветки. Работает с 8.5.1/8.5.3, когда `vertices`
+примитива всегда origin-центрированы (COM).
+
+**Тесты:** `mirror-double.test.ts` (6 тестов: double YZ/XZ/XY для
+prism sides=3, cone, pyramid, cube — diff = 0.00000000).
+
+**Почему не поймали раньше:** `phase-8-scenarios.test.ts` Scenario 3 —
+**один** mirror, не double. Single-mirror тесты не покрывали регрессию.
+CSG-путь изолирован (`bakeMirroredSubtree` в CSG-ветке не затронут —
+`csg-mirror-chirality.test.ts` 12/12 зелёные).
+
+**Файлы:** `store/mirror-store.ts`, `__tests__/mirror-double.test.ts`.
+
+**Статус:** ✅ **ИСПРАВЛЕНО** (2026-10-26, b038e66)
+
+---
+
 ### ✅ ИСПРАВЛЕНО — CENTERING-INCONSISTENCY (три разных центра масс; регрессии lifetime Этапа 6) (2026-10-14, Этап 6.5)
 
 **Проблема:**
