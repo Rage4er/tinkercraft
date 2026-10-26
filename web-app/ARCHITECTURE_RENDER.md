@@ -67,6 +67,7 @@ render_world_vertex === data_world_vertex (diff < 1e-6)
 | **8.5.4** | **Миграция `.doodle` → `.3dtc`** | ✅ 2026-10-24 |
 | **8.5.5** | **CI-тест «render = data» для всех объектов (import_mesh, CSG, mirror, fillet, resize)** | ✅ 2026-10-24 |
 | **8.5.6** | **Релиз v1.2.0 (CSG-инварианты, версия, CHANGELOG)** | ✅ 2026-10-25 |
+| **8.5.7** | **Double-mirror primitive = identity** | ✅ 2026-10-25 |
 
 ---
 
