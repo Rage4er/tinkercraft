@@ -140,8 +140,19 @@ export function buildRebuildMeta(ops: TinkerCraftOperation[]): {
         // initial transform for CSG results. Without this, the transform would
         // default to {0,0,0} and the CSG geometry would appear at the origin
         // instead of at its actual position after undo/redo.
+        // FIX (CSG-PRESERVE-RS, Stage 8.5.9): restore resultRotation/resultScale
+        // too — vertices are stored WITHOUT RS (un-baked to operand A's local
+        // frame), so the rebuild transform must carry the full TRS. Legacy
+        // documents without these fields keep the baked-RS convention
+        // (identity rot/scale), which matched their vertices.
+        const rot = op.resultRotation
+        const scl = op.resultScale
         const startT: TransformNR = op.resultCenter
-          ? { x: op.resultCenter.x, y: op.resultCenter.y, z: op.resultCenter.z, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
+          ? {
+            x: op.resultCenter.x, y: op.resultCenter.y, z: op.resultCenter.z,
+            rotX: rot?.x ?? 0, rotY: rot?.y ?? 0, rotZ: rot?.z ?? 0,
+            scaleX: scl?.x ?? 1, scaleY: scl?.y ?? 1, scaleZ: scl?.z ?? 1,
+          }
           : makeDefaultTransform() as TransformNR
         meta[op.resultId] = { color: srcColor, shapeType: op.shapeType ?? 'csg', params: {}, transform: startT, visible: true }
         transforms[op.resultId] = startT

@@ -69,6 +69,7 @@ render_world_vertex === data_world_vertex (diff < 1e-6)
 | **8.5.6** | **Релиз v1.2.0 (CSG-инварианты, версия, CHANGELOG)** | ✅ 2026-10-25 |
 | **8.5.7** | **Double-mirror primitive = identity** | ✅ 2026-10-25 |
 | **8.5.8** | **Ревизия + push + релиз v1.2.1** | ✅ 2026-10-26 |
+| **8.5.9** | **CSG preserves rotation/scale of operand A (CSG-PRESERVE-RS): un-bake `v = S⁻¹Rᵀ·(v_world − posA)`, полный TRS A в `resultTransform`; `GroupOperation.resultRotation/resultScale`** | ✅ 2026-10-28 |
 
 ---
 

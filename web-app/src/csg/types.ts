@@ -94,6 +94,14 @@ export interface GroupOperation {
   resultNormals?: Float32Array | number[]
   /** Center position of the CSG result — used to restore transform on rebuild (FIX CRIT-CSG-2) */
   resultCenter?: { x: number; y: number; z: number }
+  /**
+   * FIX (CSG-PRESERVE-RS, Stage 8.5.9): Rotation of the CSG result (= rotation
+   * of operand A). Vertices are stored WITHOUT RS; the full TRS is restored on
+   * rebuild. Absent in legacy documents → identity (baked-RS convention).
+   */
+  resultRotation?: { x: number; y: number; z: number }
+  /** FIX (CSG-PRESERVE-RS): Scale of the CSG result (= scale of operand A). */
+  resultScale?: { x: number; y: number; z: number }
   /** Original bbox size of the CSG result — used to compute scale relative to original dimensions */
   originalBboxSize?: { x: number; y: number; z: number }
   /** Shape type of CSG result — 'csg' for boolean operations */

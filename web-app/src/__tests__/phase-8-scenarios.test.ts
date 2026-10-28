@@ -109,16 +109,10 @@ function workerWorldVerts(obj: SceneObject): Float32Array {
   return out
 }
 
-/** data-world CSG-результата: pivot + vertex (§5.4; RS у CSG-результата identity) */
+/** data-world CSG-результата: полный TRS через pivot (§5.4; CSG-PRESERVE-RS
+ *  Stage 8.5.9: vertices без RS, rot/scale операнда A живут в transform) */
 function csgWorldVerts(obj: SceneObject): Float32Array {
-  const out = new Float32Array(obj.vertices.length)
-  const t = obj.transform
-  for (let i = 0; i < obj.vertices.length; i += 3) {
-    out[i] = obj.vertices[i] + t.x
-    out[i + 1] = obj.vertices[i + 1] + t.y
-    out[i + 2] = obj.vertices[i + 2] + t.z
-  }
-  return out
+  return applyTRSTo(obj.vertices, obj.transform)
 }
 
 function worldOf(obj: SceneObject): Float32Array {

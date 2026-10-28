@@ -33,7 +33,7 @@ pnpm typecheck    # tsc --noEmit
 |------|----------|--------|
 | 0–7.6 | Ядро CAD, CSG, UI, Mirror, Timeline | ✅ Завершены |
 | **8** | **Единая модель трансформов** | ✅ Завершена (v1.1.0) |
-| **8.5** | **Унификация отрисовки и данных** | ✅ Завершена (v1.2.1) |
+| **8.5** | **Унификация отрисовки и данных** | ✅ Завершена (v1.2.1 + 8.5.9) |
 | 9 | Параметрическая история (Timeline edit, редактор детей CSG) | 🔲 Запланирована |
 | 10 | Яндекс.Игры — монетизация | 🔲 Запланирована |
 | 11 | Будущее (SVG, 3MF, STEP, Rapier) | 🔲 Запланирована |
@@ -135,13 +135,14 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 - Transform применяется **один раз** (в `rebuildNode` или worker)
 - См. `web-app/ARCHITECTURE_TRANSFORMS.md`
 
-### Единый источник (Фаза 8.5)
-- **`vertices`** — всегда в origin (центр масс)
-- **`transform`** — мировой pivot (spawn + user)
+### Единый источник (Фаза 8.5 + 8.5.9)
+- **`vertices`** — всегда в origin (центр масс). Для CSG: вершины un-baked'ятся от RS операнда A (`v = S⁻¹Rᵀ·(v_world − posA)`)
+- **`transform`** — мировой pivot (spawn + user). Для CSG: полный TRS операнда A (`resultTransform = transformA`)
 - **Отрисовка** = `mesh.position = transform`, `geometry = vertices`
 - **`centerGeometry` — НЕТ** (удалён)
 - **`isPivotCenteredGeometry` — НЕТ** (удалён)
 - **Render = data** — CI-тест `render-data-invariant.test.ts`
+- **`GroupOperation.resultRotation`/`resultScale`** — история CSG с rot/scale, `rebuild.ts` восстанавливает полный TRS
 - См. `web-app/ARCHITECTURE_RENDER.md`
 
 ### Тесты

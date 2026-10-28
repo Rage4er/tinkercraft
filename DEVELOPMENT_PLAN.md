@@ -402,6 +402,7 @@ web-app/src/components/icons/
 | 8.5.6 | Релиз v1.2.0 (CSG-инварианты, версия, CHANGELOG) | Средний | Низкая | ✅ 2026-10-25 |
 | 8.5.7 | Double-mirror primitive = identity | Высокий | Средняя | ✅ 2026-10-25 |
 | 8.5.8 | Ревизия + push + релиз v1.2.1 (CODE_REVIEW.md) | Средний | Низкая | ✅ 2026-10-26 |
+| 8.5.9 | CSG preserves rotation/scale of operand A (CSG-PRESERVE-RS) | Высокий | Средняя | ✅ 2026-10-28 |
 
 ---
 
@@ -633,9 +634,10 @@ web-app/
 | | — Shadow acne (полосатые грани) | P0 | ✅ ИСПРАВЛЕНО (2026-08-14) |
 | | **CSG-CSG-POSITION-DRIFT** — ✅ **ИСПРАВЛЕНО** (2026-10-14, Этап 8) — Булевые операции между двумя CSG-результатами: сценарий 4 §10.2 (CSG+CSG Union, bbox diff=9.54e-7, pivot-vs-COM diff=9.78e-7) подтверждает позиционирование на месте. | **HIGH** | ✅ **ИСПРАВЛЕНО** (2026-10-14, Этап 8) |
 | | **MIRROR-CSG-CHILD-RS-LOSS** — Зеркалирование CSG, полученного объединением двух отзеркаленных копий (`csg_16 = union(mirror_A, mirror_B)` → `mirror(csg_16)`), сбрасывает масштаб и поворот у дочерних примитивов простой геометрии в зеркальной копии. `mirrorNodeRecursive` применяется к `localTransform` примитивов, но RS живёт в root-ноде CSG-поддерева, а у примитивов `localTransform` = identity по rot/scale → после клонирования/зеркала `relativeToParent` теряет `rotationDelta`/`scaleRatio` для вложенных boolean-нод. Смотреть `clone-before-rebuild` фазы в `[TREE]` логах для `obj_17`/`obj_18`/`obj_19`/`obj_20` (источник `csg_16`). | **HIGH** | ✅ **ИСПРАВЛЕНО** (2026-10-07) — `mirrorNodeRecursive` теперь применяет отрицательный scale для primitive-нод по перпендикулярной оси плоскости зеркала |
-| | **CSG-PRESERVE-RS** — `csgBoolean` терял rotation/scale operand A (результат всегда имел identity RS). Исправлено: `resultTransform` копирует rot/scale от operand A. Вершины CSG центрированы в origin, RS живёт в transform. | **HIGH** | ✅ **ИСПРАВЛЕНО** (2026-10-07) |
+| | **CSG-PRESERVE-RS** — `csgBoolean` терял rotation/scale operand A (результат всегда имел identity RS). Фикс 2026-10-07 (копирование rot/scale) был заменён на baked-RS в 6ffe24b (regression). Финальный фикс (Этап 8.5.9): вершины un-baked'ятся к системе A (`v = S⁻¹Rᵀ·(v_world − posA)`), `resultTransform` = полный TRS A; `GroupOperation.resultRotation/resultScale` + `rebuild.ts`. Тесты: `csg-preserve-rs.test.ts` (5). | **HIGH** | ✅ **Исправлено** (Этап 8.5.9, 2026-10-28) |
 | | **RENDER-PRISM-BBOX-OFFSET** — `centerGeometry` (`viewport-hooks.ts`) вычитал `bboxCenter` (28,0,0) вместо spawn (25,0,0) → сдвиг **3.000 мм** на отрисовке. Ruler показывал `12.67 мм` вместо `10.74 мм`. Решение: удалить `centerGeometry` полностью — `vertices` всегда origin, `transform` = pivot, render = data. | **HIGH** | ✅ **Исправлено** (Этап 8.5.3, 2026-10-24) |
 | | **DOUBLE-MIRROR-PRIMITIVE** — двойное зеркало примитива (YZ→YZ) возвращало pivot = identity, но vertices = одинарное зеркало (для призмы sides=3 — поворот на 180°). Корень: ветка примитива в `mirrorObject` вызывала `rebuildNode` (пересборка из `params`), теряя предыдущее зеркало в `obj.vertices`. Решение: зеркалить `obj.vertices` напрямую, без rebuild. | **HIGH** | ✅ **Исправлено** (Этап 8.5.7, v1.2.1) |
+| | **CSG-MIRROR-PRIMITIVE-PARAMS** — Зеркальный *примитив* (shapeType='prism'/'cube'… с зеркальными vertices) при CSG пересобирается из `params` через `workerSyncObjects` (`syncObjectsForOperation` маршрутизирует примитивы туда) — зеркальная форма теряется, CSG использует un-mirrored геометрию. Mirror-CSG-результатов не касается (workerSyncMesh точен). Обнаружен Этапом 8.5.9 (тест 4, trace). Решение (запланировано): workerSyncMesh для mirror-примитивов. | **HIGH** | 🔴 **Обнаружено** (2026-10-28, Этап 8.5.9) |
 
 ---
 

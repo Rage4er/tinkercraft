@@ -7,6 +7,24 @@
 
 ---
 
+## [Unreleased]
+
+### Fixed
+- **CSG-PRESERVE-RS (Этап 8.5.9):** `csgBoolean` терял rotation/scale операнда A — CSG-результат получал `transform = pos(transformA) rot(0,0,0) scl(1,1,1)`, хотя вершины были в мировых координатах (RS запечён). Несогласованность с конвенцией примитивов/mirror ломала gizmo, PropertiesPanel, resize и render для CSG от повёрнутых/масштабированных операндов. Фикс: вершины CSG приводятся к локальной системе A (`v = S⁻¹Rᵀ·(v_world − posA)`), полный TRS A сохраняется в `resultTransform` (`render = posA + R·S·v = v_world`). Worker не тронут. (`store/document-store.ts`, `csg/worker-matrix.ts`)
+
+### Added
+- `computeInverseRSMatrix`, `transposeRSMatrix` в `csg/worker-matrix.ts` — обратная RS-матрица (S⁻¹Rᵀ) и транспонированная RS (ун-бейк нормалей).
+- `GroupOperation.resultRotation`, `GroupOperation.resultScale` (`csg/types.ts`) — rot/scale CSG-результата в истории; `rebuild.ts` восстанавливает полный TRS при undo/redo (legacy-документы без полей → identity, baked-RS конвенция).
+- `csg-preserve-rs.test.ts` — 5 тестов: rot/scale = transformA; world = union операндов (render = data); undo/redo через форсированный rebuild; CSG от зеркальных примитивов; CSG от зеркального CSG (workerSyncMesh путь).
+
+### Changed
+- `phase-8-scenarios.test.ts` — helper `csgWorldVerts` переведён с pivot+translation (baked-RS) на полный TRS (CSG-PRESERVE-RS конвенция).
+
+### Known issues
+- **CSG-MIRROR-PRIMITIVE-PARAMS (новый, задокументирован):** зеркальный *примитив* (shapeType='prism'/'cube'… с зеркальными vertices) при CSG пересобирается из `params` через `workerSyncObjects` — зеркальная форма теряется. Касается только mirror-примитивов как операндов CSG; mirror-CSG-результатов не касается (workerSyncMesh путь точен). Вне объёма 8.5.9.
+
+---
+
 ## [1.2.1] — 2026-10-26
 
 **Patch: double-mirror primitive fix.**

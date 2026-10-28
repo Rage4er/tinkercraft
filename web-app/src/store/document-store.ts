@@ -34,6 +34,7 @@ import i18n from '../i18n'
 
 export { computeAABB, extractAndCenterInPlace, extractAndCenterGetAABB, computeWorldAABB, extractCenteredAt } from './helpers'
 import { computeAABB, extractAndCenterInPlace, extractAndCenterGetAABB, computeWorldAABB, centerMassAtOrigin, makeObject, nextId, colorForIndex } from './helpers'
+import { computeInverseRSMatrix, transposeRSMatrix } from '../csg/worker-matrix'
 import type { ClipEntry } from './helpers'
 import type { DocumentStore } from './types'
 import { rebuildFromHistory, rebuildBuildTree } from './rebuild'
@@ -544,15 +545,56 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         mesh.vertices[i + 1] += offY
         mesh.vertices[i + 2] += offZ
       }
+      // FIX (CSG-PRESERVE-RS, Stage 8.5.9): un-bake RS операнда A из вершин.
+      //
+      // Worker вычисляет boolean в МИРОВЫХ координатах: к origin-центрированному
+      // кэшу каждый операнда применяется полный TRS (handleCsgBoolean/Sync),
+      // ответ — world-вершины. Раньше RS оставался запечённым в вершинах, а
+      // transform получал только позицию → csg_12 терял rot(20,-20,-20) и
+      // scale(1,1,0.5) зеркальной призмы (несогласованность с конвенцией
+      // примитивов/mirror: vertices без RS, полный TRS в transform).
+      //
+      // Теперь вершины приводятся к локальной системе A:
+      //   v = S⁻¹Rᵀ·(v_world − posA)   (после сдвига выше v_world − posA)
+      // transform = полный TRS A → render world = posA + R·S·v = v_world ✅
+      // (det(R·S) > 0 — mirror использует mirrorEuler + abs(scale), поэтому
+      // winding/mirror-хиральность не затрагиваются: они уже в геометрии A.)
+      // Нормали: v' = M⁻¹v ⇒ n' = normalize(Mᵀn), M = R·S.
+      const hasRS = tA0.rotX !== 0 || tA0.rotY !== 0 || tA0.rotZ !== 0 ||
+        tA0.scaleX !== 1 || tA0.scaleY !== 1 || tA0.scaleZ !== 1
+      if (hasRS) {
+        const [u00, u01, u02, u10, u11, u12, u20, u21, u22] =
+          computeInverseRSMatrix(tA0, tA0)
+        for (let i = 0; i < mesh.vertices.length; i += 3) {
+          const x = mesh.vertices[i], y = mesh.vertices[i + 1], z = mesh.vertices[i + 2]
+          mesh.vertices[i] = u00 * x + u01 * y + u02 * z
+          mesh.vertices[i + 1] = u10 * x + u11 * y + u12 * z
+          mesh.vertices[i + 2] = u20 * x + u21 * y + u22 * z
+        }
+        if (mesh.normals) {
+          const [n00, n01, n02, n10, n11, n12, n20, n21, n22] =
+            transposeRSMatrix(tA0, tA0)
+          for (let i = 0; i < mesh.normals.length; i += 3) {
+            const nx = mesh.normals[i], ny = mesh.normals[i + 1], nz = mesh.normals[i + 2]
+            let tx = n00 * nx + n01 * ny + n02 * nz
+            let ty = n10 * nx + n11 * ny + n12 * nz
+            let tz = n20 * nx + n21 * ny + n22 * nz
+            const len = Math.hypot(tx, ty, tz) || 1
+            tx /= len; ty /= len; tz /= len
+            mesh.normals[i] = tx; mesh.normals[i + 1] = ty; mesh.normals[i + 2] = tz
+          }
+        }
+      }
       const aabb = computeAABB(mesh.vertices)
 
-      // Pivot = transformA (позиция первого операнда), rot/scale = identity —
-      // RS уже запечён в геометрию (мировые координаты операндов).
-      // world = pivot + vertex = transformA + (v_world − transformA) = v_world ✅
+      // Pivot = transformA (позиция первого операнда) + полный TRS операнда A
+      // (CSG-PRESERVE-RS: rot/scale больше не сбрасываются в identity — RS
+      // убран из вершин выше и живёт в transform, как у примитивов и mirror).
+      // world = pivot + R·S·vertex = transformA + (v_world − transformA) = v_world ✅
       const resultTransform: TransformNR = {
         x: tA0.x, y: tA0.y, z: tA0.z,
-        rotX: 0, rotY: 0, rotZ: 0,
-        scaleX: 1, scaleY: 1, scaleZ: 1,
+        rotX: tA0.rotX, rotY: tA0.rotY, rotZ: tA0.rotZ,
+        scaleX: tA0.scaleX, scaleY: tA0.scaleY, scaleZ: tA0.scaleZ,
       }
 
       // DIAG: centering info (Bug 3: pivot = transformA)
@@ -583,7 +625,9 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       // so rebuildFromHistory can reconstruct the CSG result geometry at the correct position.
       // FIX (PIVOT-TRANSFORMA): resultCenter = pivot = transformA — the same point
       // the vertices were centered around (pivot + vertex = world).
-      const histOp: GroupOperation = { type: 'group', ids: [idA, idB], resultId, resultVertices: mesh.vertices, resultIndices: mesh.indices, resultNormals: mesh.normals ?? undefined, resultCenter: { x: tA0.x, y: tA0.y, z: tA0.z }, originalBboxSize: originalBboxSize, treeOperation: op as 'union' | 'subtract' | 'intersect', shapeType: 'csg', color: objects[idA].color }
+      // FIX (CSG-PRESERVE-RS, Stage 8.5.9): resultRotation/resultScale = TRS of
+      // operand A — rebuild must restore the full transform, not position only.
+      const histOp: GroupOperation = { type: 'group', ids: [idA, idB], resultId, resultVertices: mesh.vertices, resultIndices: mesh.indices, resultNormals: mesh.normals ?? undefined, resultCenter: { x: tA0.x, y: tA0.y, z: tA0.z }, resultRotation: { x: tA0.rotX, y: tA0.rotY, z: tA0.rotZ }, resultScale: { x: tA0.scaleX, y: tA0.scaleY, z: tA0.scaleZ }, originalBboxSize: originalBboxSize, treeOperation: op as 'union' | 'subtract' | 'intersect', shapeType: 'csg', color: objects[idA].color }
       const newOps = [...operations.slice(0, historyIndex), histOp]
       // Ensure children are registered in build tree.
       // CSG results (shapeType='csg') and import_mesh are registered as BAKED nodes

@@ -47,6 +47,53 @@ export function computeRSMatrix(
 }
 
 /**
+ * FIX (CSG-PRESERVE-RS, Stage 8.5.9): Inverse RS matrix M⁻¹ = S⁻¹·Rᵀ.
+ *
+ * computeRSMatrix returns M = R·S (row-major 3×3). This returns its inverse,
+ * used to un-bake the rotation/scale that the worker applies to operands when
+ * computing a boolean in world space:
+ *   world = posA + R·S·v_local  ⇒  v_local = S⁻¹·Rᵀ·(world − posA)
+ *
+ * CSG results follow the same single-source convention as primitives and
+ * mirrors: vertices carry the shape WITHOUT RS, transform carries the full TRS.
+ *
+ * @param rot   Rotation in degrees (rotX, rotY, rotZ), Three.js Euler 'XYZ'
+ * @param scale Scale factors (scaleX, scaleY, scaleZ) — must be non-zero
+ * @returns 9 elements (row-major): [m00, m01, m02, m10, m11, m12, m20, m21, m22]
+ */
+export function computeInverseRSMatrix(
+  rot: { rotX: number; rotY: number; rotZ: number },
+  scale: { scaleX: number; scaleY: number; scaleZ: number },
+): [number, number, number, number, number, number, number, number, number] {
+  // Pure rotation R (scale = identity), row-major
+  const [r00, r01, r02, r10, r11, r12, r20, r21, r22] = computeRSMatrix(rot, {
+    scaleX: 1, scaleY: 1, scaleZ: 1,
+  })
+  // (S⁻¹·Rᵀ)[i][j] = R[j][i] / S[i]
+  const ix = 1 / scale.scaleX, iy = 1 / scale.scaleY, iz = 1 / scale.scaleZ
+  return [
+    r00 * ix, r10 * ix, r20 * ix,
+    r01 * iy, r11 * iy, r21 * iy,
+    r02 * iz, r12 * iz, r22 * iz,
+  ]
+}
+
+/**
+ * FIX (CSG-PRESERVE-RS, Stage 8.5.9): Transpose of the RS matrix, Mᵀ = S·Rᵀ.
+ *
+ * Normals un-baking rule: when vertices transform by M⁻¹, normals transform by
+ * (M⁻¹)⁻ᵀ = Mᵀ. Used together with computeInverseRSMatrix to keep CSG result
+ * normals consistent with un-baked vertices.
+ */
+export function transposeRSMatrix(
+  rot: { rotX: number; rotY: number; rotZ: number },
+  scale: { scaleX: number; scaleY: number; scaleZ: number },
+): [number, number, number, number, number, number, number, number, number] {
+  const [r00, r01, r02, r10, r11, r12, r20, r21, r22] = computeRSMatrix(rot, scale)
+  return [r00, r10, r20, r01, r11, r21, r02, r12, r22]
+}
+
+/**
  * Build SRT matrix around object center.
  *
  * Formula: T(pos) × RS × T(-pos), where:

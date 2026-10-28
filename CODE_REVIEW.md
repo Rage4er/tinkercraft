@@ -118,7 +118,7 @@ height=40 → z world size = 80 (не 160), diff = 0.
 
 **Файлы:** `store/document-store.ts`, `store/document-store.test.ts` (6 тестов). **Тесты:** 329/329.
 
-### ✅ ИСПРАВЛЕНО — CSG-PRESERVE-RS (потеря rotation/scale в CSG-результате) (2026-10-07)
+### ✅ ИСПРАВЛЕНО — CSG-PRESERVE-RS (потеря rotation/scale в CSG-результате) (2026-10-07, восстановлено Этапом 8.5.9, 2026-10-28)
 
 **Проблема:** `csgBoolean` создавал `resultTransform` с только позицией центроида, сбрасывая rotation/scale в identity. Это приводило к:
 1. CSG с rotation/scale → результат теряет ориентацию/масштаб
@@ -127,9 +127,15 @@ height=40 → z world size = 80 (не 160), diff = 0.
 
 **Корень проблемы:** `resultTransform` копировал только позицию центроида, сбрасывая rotation/scale в identity.
 
-**Решение:** `resultTransform` теперь копирует rotation/scale от operand A. Вершины CSG центрированы в origin (`extractCenteredAt`), transform несёт полный TRS — применяется при рендере через pivot и в worker через `handleSyncMesh`.
+**Решение (2026-10-07, коммит 2460e49):** `resultTransform` теперь копирует rotation/scale от operand A. Вершины CSG центрированы в origin (`extractCenteredAt`), transform несёт полный TRS — применяется при рендере через pivot и в worker через `handleSyncMesh`.
 
-**Файлы:** `store/document-store.ts`
+**РЕГРЕССИЯ (2026-10-15, коммит 6ffe24b «Variant B»):** при переходе на baked-RS конвенцию (pivot = позиция, RS запечён в вершины) фикс был заменён на `rot(0,0,0) scl(1,1,1)` — rot/scale снова терялись. Symptom (логи пользователя): `[STORE:meshCreate] csg_12 transform: 'pos(-20,4,20) rot(0,0,0) scl(1,1,1)'` при transformA = `rot(20,-20,-20) scl(1,1,0.5)`.
+
+**ФИНАЛЬНЫЙ ФИКС (Этап 8.5.9):** вершины CSG un-baked'ятся к локальной системе A: `v = S⁻¹Rᵀ·(v_world − posA)` (новые `computeInverseRSMatrix`/`transposeRSMatrix` в `worker-matrix.ts`), `resultTransform` = полный TRS A. Render `posA + R·S·v = v_world` — конвенция единого источника (vertices без RS, TRS в transform), согласованная с примитивами и mirror. Worker не тронут (TRS operands применяется один раз при boolean — без изменений). `GroupOperation` хранит `resultRotation`/`resultScale`; `rebuild.ts` восстанавливает полный TRS при undo/redo (legacy-документы без полей → identity = baked-RS, обратная совместимость).
+
+**Тесты:** `csg-preserve-rs.test.ts` (5 тестов: rot/scale = transformA, world = union операндов, undo/redo через форсированный rebuild, CSG от зеркальных примитивов, CSG от зеркального CSG). 438/438.
+
+**Файлы:** `store/document-store.ts`, `csg/worker-matrix.ts`, `csg/types.ts`, `store/rebuild.ts`
 
 ---
 
@@ -387,7 +393,7 @@ for (const n of msg.nodes) {  // ← TypeError: msg.nodes is not iterable
 
 ### CSG-PRESERVE-RS — Потеря rotation/scale в CSG-результате
 
-**Статус:** 🔲 Фаза 8 (известная проблема)
+**Статус:** ✅ **ИСПРАВЛЕНО** (2026-10-28, Этап 8.5.9)
 **Обнаружена:** 2026-10-07
 **Компонент:** `store/document-store.ts` → `csgBoolean`
 **Приоритет:** Высокий
@@ -398,14 +404,49 @@ for (const n of msg.nodes) {  // ← TypeError: msg.nodes is not iterable
 2. CSG+CSG → второй CSG оперирует "плоской" геометрией первого
 3. Зеркальная призма + CSG → смещение из-за потери отрицательного scale
 
+Логи пользователя (Этап 8.5.9): `[STORE:meshCreate] {id: 'csg_12', transform: 'pos(-20,4,20) rot(0,0,0) scl(1,1,1)'}` при transformA = `pos(-20,4,20) rot(20,-20,-20) scl(1,1,0.5)`.
+
 #### Корневая причина
 `resultTransform` копировал только позицию центроида, сбрасывая rotation/scale в identity.
 
-#### Решение (запланировано)
-Копировать rotation/scale от operand A. Вершины CSG центрированы в origin (`extractCenteredAt`), transform несёт полный TRS — применяется при рендере через pivot и в worker через `handleSyncMesh`.
+#### История
+- 2026-10-07 (коммит 2460e49): первая версия фикса — копирование rot/scale в resultTransform.
+- 2026-10-15 (коммит 6ffe24b, «Variant B»): регрессия — при переходе на baked-RS конвенцию фикс заменён на identity (RS запечён в вершины).
+- 2026-10-28 (Этап 8.5.9): финальный фикс — un-bake RS операнда A из вершин + полный TRS в transform.
+
+#### Решение (Этап 8.5.9)
+Вершины CSG un-baked'ятся к локальной системе A: `v = S⁻¹Rᵀ·(v_world − posA)` (`computeInverseRSMatrix`/`transposeRSMatrix` в `csg/worker-matrix.ts`); нормали — `n' = normalize(Mᵀ·n)`. `resultTransform` = полный TRS операнда A. Render `posA + R·S·v = v_world` — конвенция единого источника (vertices без RS, TRS в transform), как у примитивов и mirror. Worker не тронут. `GroupOperation.resultRotation/resultScale` + восстановление в `rebuild.ts`.
+
+#### Тесты
+`csg-preserve-rs.test.ts` — 5 тестов (rot/scale = transformA; world = union операндов; undo/redo через форсированный rebuild; CSG от зеркальных примитивов; CSG от зеркального CSG).
 
 #### Затронуто
 - `store/document-store.ts` → `csgBoolean`
+- `csg/worker-matrix.ts` → новые хелперы
+- `csg/types.ts` → `GroupOperation.resultRotation/resultScale`
+- `store/rebuild.ts` → `buildRebuildMeta` (startT из resultCenter+Rotation+Scale)
+
+---
+
+### CSG-MIRROR-PRIMITIVE-PARAMS — Зеркальный примитив теряет хиральность в CSG
+
+**Статус:** 🔴 **ОБНАРУЖЕНО** (2026-10-28, Этап 8.5.9, вне объёма)
+**Обнаружена:** 2026-10-28
+**Компонент:** `store/document-store.ts` → `syncObjectsForOperation`, `csg/worker-handlers.ts` → `handleSyncObjects`
+**Приоритет:** Высокий
+
+#### Симптом
+Призма → mirror YZ → CSG union с другим объектом: геометрия CSG использует **un-mirrored** форму призмы (из `params`), зеркальная хиральность теряется. Численно: mirror-призма world bbox `x:[-25.27,-15.55]`, CSG world bbox `x:[-24.45,+5.00]` (сфера) — union ожидаемо `[-25.27,...]`, фактически `-24.45`.
+
+#### Корневая причина
+`syncObjectsForOperation` маршрутизирует **примитивы** (shapeType ≠ 'csg') в `workerSyncObjects`, который пересобирает манifold из `buildPrimitive(shapeType, params)` — зеркальная форма примитива (stored в `obj.vertices` через mirrorVerticesInPlace) игнорируется. Для CSG-результатов/import — `workerSyncMesh(obj.vertices)` точен.
+
+#### Решение (запланировано)
+Для mirror-примитивов (флаг `mirrored` в SceneObject или детект по `vertices` ≠ origin-форме params) использовать `workerSyncMesh` вместо `workerSyncObjects`. Либо хранить mirror как отдельный path.
+
+#### Затронуто
+- `store/document-store.ts` → `syncObjectsForOperation`
+- `csg/worker-handlers.ts` → `handleSyncObjects`
 
 ---
 
