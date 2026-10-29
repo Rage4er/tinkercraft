@@ -21,6 +21,7 @@ import {
   createBooleanNode,
   createBakedNode,
   getNode,
+  mirrorVerticesInPlace,
 } from '../csg/history-tree'
 import { notify } from './notifications'
 import i18n from '../i18n'
@@ -39,6 +40,13 @@ export interface RebuildMeta {
   resultIndices?: Uint32Array | number[]
   resultNormals?: Float32Array | number[]
   originalBboxSize?: { x: number; y: number; z: number }
+  /**
+   * FIX (CSG-MIRROR-PRIMITIVE-PARAMS, Stage 8.5.10): плоскость зеркала для
+   * ПРИМИТИВОВ. Worker пересобирает mirror-потомка примитива из params
+   * (buildPrimitive) — зеркальная форма теряется. Main thread до-зеркалит
+   * вершины + swap winding (тот же mirrorVerticesInPlace, что и mirrorObject).
+   */
+  mirrored?: 'XY' | 'XZ' | 'YZ'
 }
 
 /**
@@ -91,7 +99,17 @@ export function buildRebuildMeta(ops: TinkerCraftOperation[]): {
         if (t && meta[origId]) {
           const nt = applyMirrorToTransform(t as unknown as RebuildTransform, op.plane) as TransformNR
           transforms[newId] = nt
-          meta[newId] = { ...meta[origId], transform: nt }
+          // FIX (CSG-MIRROR-PRIMITIVE-PARAMS, Stage 8.5.10): mirror-потомок
+          // ПРИМИТИВА — worker пересобирает его из params (без зеркала).
+          // Флаг mirrored говорит main-thread до-зеркалить вершины.
+          // Двойное зеркало той же плоскости = identity (флаг снимается) —
+          // та же логика, что в mirrorObject.
+          const om = meta[origId]
+          const isPrim = om.shapeType !== 'csg' && om.shapeType !== 'import_mesh'
+          const mirroredOut = isPrim
+            ? (om.mirrored === op.plane ? undefined : op.plane)
+            : om.mirrored
+          meta[newId] = { ...om, transform: nt, mirrored: mirroredOut }
         }
       }
 
@@ -256,6 +274,20 @@ export async function rebuildFromHistory(
   const objects: Record<string, SceneObject> = {}
   for (const m of result.results) {
     const info = meta[m.objId]
+    // FIX (CSG-MIRROR-PRIMITIVE-PARAMS, Stage 8.5.10): worker пересобирает
+    // mirror-потомка примитива из params (buildPrimitive) — зеркальная форма
+    // отсутствует. До-зеркалим COM-центрированные вершины + swap winding —
+    // в точности mirrorVerticesInPlace из mirrorObject (8.5.7). Вершины уже
+    // COM-центрированы (mirror проходит через COM — как в live mirrorObject),
+    // pivot (transform) worker уже отдаёт зеркальным (applyMirrorToTransform).
+    if (info?.mirrored) {
+      mirrorVerticesInPlace(m.vertices, m.normals, info.mirrored)
+      for (let i = 0; i < m.indices.length; i += 3) {
+        const tmp = m.indices[i + 1]
+        m.indices[i + 1] = m.indices[i + 2]
+        m.indices[i + 2] = tmp
+      }
+    }
     // For CSG results, use originalBboxSize if available
     const metaWithMesh = meta[m.objId] as RebuildMeta & { resultVertices?: Float32Array | number[]; resultIndices?: Uint32Array | number[]; resultNormals?: Float32Array | number[]; originalBboxSize?: { x: number; y: number; z: number } }
     const originalBboxSize = metaWithMesh.originalBboxSize
@@ -280,6 +312,9 @@ export async function rebuildFromHistory(
       indices: m.indices,
       normals: m.normals,
       originalBboxSize,
+      // FIX (CSG-MIRROR-PRIMITIVE-PARAMS): флаг сохраняется в SceneObject —
+      // дальнейший CSG маршрутизируется через workerSyncMesh.
+      mirrored: info?.mirrored,
     })
   }
   return objects
@@ -350,14 +385,25 @@ export function rebuildBuildTree(
             }
           } else {
             // No pre-existing node — create appropriate node type
-            const origNode = getNode(origId)
-            if (origNode && origNode.type === 'primitive') {
-              createPrimitiveNode(newId, origNode.shapeType!, { ...origNode.params! }, nt)
-            } else if (origNode && origNode.type === 'baked') {
-              createBakedNode(newId, origNode.vertices!, origNode.indices!, origNode.normals ?? null, nt)
+            // FIX (CSG-MIRROR-PRIMITIVE-PARAMS, Stage 8.5.10): mirror-потомок
+            // ПРИМИТИВА регистрируется как BAKED нода из SceneObject.vertices
+            // (в них зеркало). createPrimitiveNode из params дал бы unmirrored
+            // геометрию при любом последующем rebuildNode/tree-путь CSG.
+            const mirroredObj = objects?.[newId]
+            if (mirroredObj?.mirrored && mirroredObj.vertices.length > 0) {
+              createBakedNode(newId, mirroredObj.vertices, mirroredObj.indices, mirroredObj.normals ?? null, nt)
+              const node = getNode(newId)
+              if (node) node.mirroredPlane = mirroredObj.mirrored
             } else {
-              // Fallback: create a placeholder primitive node
-              createPrimitiveNode(newId, 'cube', {}, nt)
+              const origNode = getNode(origId)
+              if (origNode && origNode.type === 'primitive') {
+                createPrimitiveNode(newId, origNode.shapeType!, { ...origNode.params! }, nt)
+              } else if (origNode && origNode.type === 'baked') {
+                createBakedNode(newId, origNode.vertices!, origNode.indices!, origNode.normals ?? null, nt)
+              } else {
+                // Fallback: create a placeholder primitive node
+                createPrimitiveNode(newId, 'cube', {}, nt)
+              }
             }
           }
         }
@@ -366,8 +412,20 @@ export function rebuildBuildTree(
     } else if (op.type === 'group') {
       for (const id of op.ids) { delete transforms[id] }
       if (op.resultId) {
+        // FIX (CSG-PRESERVE-RS, Stage 8.5.9): начальная трансформация результата
+        // включает rot/scale операнда A (resultRotation/resultScale) — как в
+        // startT в buildRebuildMeta. Без них mirror/align потомков CSG в дереве
+        // теряли вращение/масштаб (double-transform не согласовывался).
         const startT: TransformNR = op.resultCenter
-          ? { x: op.resultCenter.x, y: op.resultCenter.y, z: op.resultCenter.z, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
+          ? {
+            x: op.resultCenter.x, y: op.resultCenter.y, z: op.resultCenter.z,
+            rotX: op.resultRotation?.x ?? 0,
+            rotY: op.resultRotation?.y ?? 0,
+            rotZ: op.resultRotation?.z ?? 0,
+            scaleX: op.resultScale?.x ?? 1,
+            scaleY: op.resultScale?.y ?? 1,
+            scaleZ: op.resultScale?.z ?? 1,
+          }
           : makeDefaultTransform() as TransformNR
         transforms[op.resultId] = startT
         const treeOp = op.treeOperation ?? 'union'

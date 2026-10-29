@@ -175,6 +175,17 @@ export interface SceneObject {
   operation?: CsgBooleanOp
   /** IDs of source objects — only for shapeType='csg' */
   children?: string[]
+  /**
+   * FIX (CSG-MIRROR-PRIMITIVE-PARAMS, Stage 8.5.10): плоскость последнего
+   * зеркала для ПРИМИТИВОВ. Зеркало примитива запечено в `vertices`
+   * (mirrorVerticesInPlace, 8.5.7), но `shapeType`/`params` остаются
+   * оригинальными — геометрия больше НЕ равна buildPrimitive(params).
+   * Флаг маршрутизирует worker-синхронизацию через workerSyncMesh
+   * (vertices), а не workerSyncObjects (params), и регистрацию в дереве
+   * как baked-ноду. Зеркало CSG-результатов/импортов флаг не требует —
+   * они и так идут через vertices.
+   */
+  mirrored?: 'XY' | 'XZ' | 'YZ'
 }
 
 export type CsgBooleanOp = 'union' | 'subtract' | 'intersect'

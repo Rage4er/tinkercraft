@@ -71,7 +71,10 @@ async function syncObjectsForOperation(
 
         const isImport = obj.shapeType === 'import_mesh'
         const isCSG = obj.shapeType === 'csg'
-        if (isCSG || isImport) {
+        // FIX (CSG-MIRROR-PRIMITIVE-PARAMS, Stage 8.5.10): зеркальный
+        // примитив — геометрия в vertices (params без зеркала) → mesh-путь.
+        const isMirroredPrimitive = !!obj.mirrored
+        if (isCSG || isImport || isMirroredPrimitive) {
             meshSyncs.push(
                 workerSyncMesh(id, obj.vertices, obj.indices, obj.transform)
                     .catch(e => console.warn('[Mirror] workerSyncMesh failed:', e)),
@@ -101,7 +104,9 @@ function ensureInTree(id: string, obj: SceneObject): void {
 
     // CSG results (shapeType='csg') and import_mesh are registered as BAKED nodes
     // (they have a ready mesh). Primitives are registered with shapeType + params.
-    const isPrimitive = obj.shapeType !== 'csg' && obj.shapeType !== 'import_mesh'
+    // FIX (CSG-MIRROR-PRIMITIVE-PARAMS, Stage 8.5.10): зеркальный примитив —
+    // baked-нода (vertices с зеркалом; params без зеркала).
+    const isPrimitive = obj.shapeType !== 'csg' && obj.shapeType !== 'import_mesh' && !obj.mirrored
 
     if (isPrimitive && obj.shapeType && obj.params) {
         createPrimitiveNode(id, obj.shapeType, obj.params, obj.transform)
@@ -288,6 +293,13 @@ export async function mirrorObject(
         // примитив → примитив, только import → import_mesh.
         shapeType: (isPrimitive ? obj.shapeType : isCSGResult ? 'csg' : 'import_mesh') as ShapeType,
         params: (isPrimitive ? { ...obj.params } : {}) as ShapeParams,
+        // FIX (CSG-MIRROR-PRIMITIVE-PARAMS, Stage 8.5.10): зеркальный
+        // примитив — vertices авторитетны (запечатано зеркало), params
+        // оригинальны. Флаг маршрутизирует worker-синхронизацию через
+        // workerSyncMesh. Двойное зеркало той же плоскости = identity —
+        // флаг снимается, параметричность возвращается (vertices точно
+        // равны buildPrimitive(params): negate+swap дважды = оригинал).
+        mirrored: isPrimitive ? (obj.mirrored === plane ? undefined : plane) : undefined,
         transform: {
             x: Math.round(mirroredPos.x * 1e6) / 1e6,
             y: Math.round(mirroredPos.y * 1e6) / 1e6,

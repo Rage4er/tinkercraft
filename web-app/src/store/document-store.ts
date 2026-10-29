@@ -147,8 +147,10 @@ async function syncObjectsForOperation(
     if (!obj) continue
     const isImport = obj.shapeType === 'import_mesh'
     const isCSG = obj.shapeType === 'csg'
-    if (import.meta.env?.DEV) console.log(`[DIAG:syncObjectsForOperation] id=${id} shapeType=${obj.shapeType} params=${JSON.stringify(obj.params)} isCSG=${isCSG} isImport=${isImport} route=${isCSG || isImport ? 'workerSyncMesh' : 'workerSyncObjects'}`)
-    if (isCSG || isImport) {
+    // FIX (CSG-MIRROR-PRIMITIVE-PARAMS, Stage 8.5.10): зеркальный примитив —
+    // зеркало запечено в vertices, params оригинальны → workerSyncMesh.
+    const isMirroredPrimitive = !!obj.mirrored
+    if (isCSG || isImport || isMirroredPrimitive) {
       // CSG result or imported mesh — sync mesh data with current transform
       meshSyncs.push(
         workerSyncMesh(id, obj.vertices, obj.indices, obj.transform).catch(e => console.warn('[syncObjectsForOperation] sync failed:', e)),
@@ -505,8 +507,12 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       // Only send shapeType/params for regular primitives (not 'csg', not 'import_mesh').
       // CSG results and imports are already synced via syncObjectsForOperation → workerSyncMesh.
       // import_mesh already excluded by early return above.
-      const isOperandA_Primitive = objects[idA].shapeType !== 'csg'
-      const isOperandB_Primitive = objects[idB].shapeType !== 'csg'
+      // FIX (CSG-MIRROR-PRIMITIVE-PARAMS, Stage 8.5.10): зеркальный примитив
+      // (mirrored) тоже НЕ пересобирается из params — syncObjectsForOperation
+      // уже синхронизировал его зеркальные vertices через workerSyncMesh,
+      // а handleCsgBooleanSync при shapeA=undefined использует этот кэш.
+      const isOperandA_Primitive = objects[idA].shapeType !== 'csg' && !objects[idA].mirrored
+      const isOperandB_Primitive = objects[idB].shapeType !== 'csg' && !objects[idB].mirrored
       let mesh: MeshResult
 
       // FIX (CSG-BOOLEAN-CSG): When both operands are CSG results, workerCsgBooleanWithSync
@@ -637,7 +643,9 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         if (!getNode(id)) {
           const obj = objects[id]
           if (obj) {
-            const isPrimitive = obj.shapeType !== 'csg' && obj.shapeType !== 'import_mesh'
+            // FIX (CSG-MIRROR-PRIMITIVE-PARAMS, Stage 8.5.10): зеркальный
+            // примитив регистрируется как baked-нода (vertices с зеркалом).
+            const isPrimitive = obj.shapeType !== 'csg' && obj.shapeType !== 'import_mesh' && !obj.mirrored
             if (isPrimitive && obj.shapeType && obj.params) {
               createPrimitiveNode(id, obj.shapeType, obj.params, obj.transform)
             } else {
@@ -971,7 +979,11 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         // avoids full geometry rebuild via workerBuildShape).
         const isImport = obj.shapeType === 'import_mesh'
         const isCSG = obj.shapeType === 'csg'
-        if (isCSG || isImport) {
+        // FIX (CSG-MIRROR-PRIMITIVE-PARAMS, Stage 8.5.10): зеркальный примитив —
+        // зеркало запечено в vertices, params оригинальны → workerSyncObjects
+        // (buildPrimitive из params) терял зеркало. Маршрут — workerSyncMesh.
+        const isMirroredPrimitive = !!obj.mirrored
+        if (isCSG || isImport || isMirroredPrimitive) {
           devLog('ALIGN:workerSyncMesh', { id })
           await workerSyncMesh(id, obj.vertices, obj.indices, nt).catch(() => { })
           newObjects[id] = { ...obj, transform: nt }
@@ -1116,7 +1128,9 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     if (!treeExists) {
       // FIX (MIRROR-CSG-KEEPTYPE): CSG-результаты (shapeType='csg') → baked нода.
       // import_mesh уже отфильтрован ранним return выше.
-      const isPrimitive = obj.shapeType !== 'csg'
+      // FIX (CSG-MIRROR-PRIMITIVE-PARAMS, Stage 8.5.10): зеркальный примитив →
+      // baked (vertices с зеркалом; params без зеркала).
+      const isPrimitive = obj.shapeType !== 'csg' && !obj.mirrored
       if (isPrimitive && obj.shapeType && obj.params) {
         createPrimitiveNode(id, obj.shapeType, obj.params, obj.transform)
       } else {
@@ -1130,7 +1144,10 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     // (shapeType='csg', params={} — truthy!), а rebuildNode(id) возвращает меш
     // С worldTransform (для корневой ноды === localTransform), записанным в
     // vertices, при transform остался → Viewport3D применяет TRS повторно (pivot).
-    if (obj.shapeType && obj.shapeType !== 'csg' && obj.params) {
+    // FIX (CSG-MIRROR-PRIMITIVE-PARAMS, Stage 8.5.10): зеркальный примитив
+    // (mirrored) идёт в scale-ветку (как CSG): пересборка из params сбросила
+    // бы зеркало — вместо этого resize только через transform.scale.
+    if (obj.shapeType && obj.shapeType !== 'csg' && obj.params && !obj.mirrored) {
       const mergedParams = { ...obj.params, ...params }
 
       // Обновляем params в ноде дерева (иммутабельно через setNode).

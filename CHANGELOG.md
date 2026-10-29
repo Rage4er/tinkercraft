@@ -10,9 +10,13 @@
 ## [Unreleased]
 
 ### Fixed
+- **CSG-MIRROR-PRIMITIVE-PARAMS (Этап 8.5.10):** зеркальный *примитив* терял зеркальную форму при CSG. `mirrorObject` запечатывает зеркало в `vertices` (8.5.7), но `shapeType`/`params` остаются оригинальными; `syncObjectsForOperation` маршрутизировал такие объекты в `workerSyncObjects` (`buildPrimitive(params)`) → CSG получал unmirrored геометрию (визуально «отвернулась на 180°»). Фикс: новое поле `SceneObject.mirrored` (`'XY'|'XZ'|'YZ'`) — флаг маршрутизирует зеркальный примитив через `workerSyncMesh` (vertices), регистрирует baked-ноду в Build Tree, до-зеркалит вершины при `rebuildFromHistory` (undo/redo). Двойное зеркало той же плоскости снимает флаг (parametric identity). Resize зеркального примитива идёт через transform-scale (как CSG), не пересобирая из params. (`store/mirror-store.ts`, `store/document-store.ts`, `store/rebuild.ts`, `csg/types.ts`)
 - **CSG-PRESERVE-RS (Этап 8.5.9):** `csgBoolean` терял rotation/scale операнда A — CSG-результат получал `transform = pos(transformA) rot(0,0,0) scl(1,1,1)`, хотя вершины были в мировых координатах (RS запечён). Несогласованность с конвенцией примитивов/mirror ломала gizmo, PropertiesPanel, resize и render для CSG от повёрнутых/масштабированных операндов. Фикс: вершины CSG приводятся к локальной системе A (`v = S⁻¹Rᵀ·(v_world − posA)`), полный TRS A сохраняется в `resultTransform` (`render = posA + R·S·v = v_world`). Worker не тронут. (`store/document-store.ts`, `csg/worker-matrix.ts`)
+- **rebuildBuildTree startT (пропуск 8.5.9):** начальная трансформация CSG-результата в Build Tree не включала `resultRotation`/`resultScale` (в отличие от `buildRebuildMeta`) — mirror/align потомков CSG после undo/redo теряли rot/scale операнда A. (`store/rebuild.ts`)
 
 ### Added
+- `SceneObject.mirrored` (`csg/types.ts`) — плоскость зеркала для примитивов (vertices авторитетны, params оригинальны). Сериализуется в .3dtc автоматически.
+- `csg-mirror-primitive-params.test.ts` — 9 тестов: CSG из mirror prism (sides=3/5) = зеркальная форма (bbox diff < 1e-4); CSG из mirror cone/pyramid; двойное зеркало = identity; `rebuildFromHistory` сохраняет зеркальный примитив и CSG из него; CSG→mirror→CSG не сломан; mirrored flag установлен.
 - `computeInverseRSMatrix`, `transposeRSMatrix` в `csg/worker-matrix.ts` — обратная RS-матрица (S⁻¹Rᵀ) и транспонированная RS (ун-бейк нормалей).
 - `GroupOperation.resultRotation`, `GroupOperation.resultScale` (`csg/types.ts`) — rot/scale CSG-результата в истории; `rebuild.ts` восстанавливает полный TRS при undo/redo (legacy-документы без полей → identity, baked-RS конвенция).
 - `csg-preserve-rs.test.ts` — 5 тестов: rot/scale = transformA; world = union операндов (render = data); undo/redo через форсированный rebuild; CSG от зеркальных примитивов; CSG от зеркального CSG (workerSyncMesh путь).
@@ -21,7 +25,7 @@
 - `phase-8-scenarios.test.ts` — helper `csgWorldVerts` переведён с pivot+translation (baked-RS) на полный TRS (CSG-PRESERVE-RS конвенция).
 
 ### Known issues
-- **CSG-MIRROR-PRIMITIVE-PARAMS (новый, задокументирован):** зеркальный *примитив* (shapeType='prism'/'cube'… с зеркальными vertices) при CSG пересобирается из `params` через `workerSyncObjects` — зеркальная форма теряется. Касается только mirror-примитивов как операндов CSG; mirror-CSG-результатов не касается (workerSyncMesh путь точен). Вне объёма 8.5.9.
+- ~~**CSG-MIRROR-PRIMITIVE-PARAMS**~~ — исправлено в Этапе 8.5.10 (см. Fixed выше).
 
 ---
 
