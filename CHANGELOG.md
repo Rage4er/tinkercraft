@@ -9,26 +9,29 @@
 
 ## [Unreleased]
 
+---
+
+## [1.2.3] — 2026-11-01
+
+**Patch: multi-level mirror + CSG mirror double RS (Этапы 8.5.9–8.5.12).**
+
 ### Fixed
-- **Multi-level mirror + CSG mirror double RS (Этап 8.5.12):** Два бага. Баг 1: `mirrored` хранил одну плоскость — multi-level mirror (YZ→XZ) терял первое зеркало при undo/redo (вершины пересобирались из params без YZ). Баг 2: mirrorObject для CSG через tree-rebuild запечатывал TRS детей (включая rot/scale операнда A) в vertices, а transform нёс полный зеркальный TRS → double RS (объём зеркала = 0.5× оригинала). Фикс (a): `mirrored: MirrorPlane[]` — массив плоскостей с push+cancel (соседние одинаковые отменяются); `rebuildFromHistory` mirrorVerticesInPlace для каждой плоскости + swapWinding. Фикс (b): `ClipEntry.mirrored` + `mirrorVertices` — copy/paste сохраняет зеркало. Фикс (c): `moveObject` — `!obj.mirrored` при регистрации в дереве (baked). Фикс (d): mirrorObject CSG — прямое зеркало `vertices` (`M·v_src`) вместо tree-rebuild; `PIVOT-TRANSFORMA srcCom-shift` убран. `MirrorPlane` тип + compat: `.3dtc` string→array. (`csg/types.ts`, `store/mirror-store.ts`, `store/document-store.ts`, `store/rebuild.ts`, `store/helpers.ts`, `io/3dtc-io.ts`)
-- **CSG-MIRROR-PRIMITIVE-PARAMS (Этап 8.5.10):** зеркальный *примитив* терял зеркальную форму при CSG. `mirrorObject` запечатывает зеркало в `vertices` (8.5.7), но `shapeType`/`params` остаются оригинальными; `syncObjectsForOperation` маршрутизировал такие объекты в `workerSyncObjects` (`buildPrimitive(params)`) → CSG получал unmirrored геометрию (визуально «отвернулась на 180°»). Фикс: новое поле `SceneObject.mirrored` (`'XY'|'XZ'|'YZ'`) — флаг маршрутизирует зеркальный примитив через `workerSyncMesh` (vertices), регистрирует baked-ноду в Build Tree, до-зеркалит вершины при `rebuildFromHistory` (undo/redo). Двойное зеркало той же плоскости снимает флаг (parametric identity). Resize зеркального примитива идёт через transform-scale (как CSG), не пересобирая из params. (`store/mirror-store.ts`, `store/document-store.ts`, `store/rebuild.ts`, `csg/types.ts`)
-- **CSG-PRESERVE-RS (Этап 8.5.9):** `csgBoolean` терял rotation/scale операнда A — CSG-результат получал `transform = pos(transformA) rot(0,0,0) scl(1,1,1)`, хотя вершины были в мировых координатах (RS запечён). Несогласованность с конвенцией примитивов/mirror ломала gizmo, PropertiesPanel, resize и render для CSG от повёрнутых/масштабированных операндов. Фикс: вершины CSG приводятся к локальной системе A (`v = S⁻¹Rᵀ·(v_world − posA)`), полный TRS A сохраняется в `resultTransform` (`render = posA + R·S·v = v_world`). Worker не тронут. (`store/document-store.ts`, `csg/worker-matrix.ts`)
-- **rebuildBuildTree startT (пропуск 8.5.9):** начальная трансформация CSG-результата в Build Tree не включала `resultRotation`/`resultScale` (в отличие от `buildRebuildMeta`) — mirror/align потомков CSG после undo/redo теряли rot/scale операнда A. (`store/rebuild.ts`)
+- **CSG-MIRROR-PRIMITIVE-PARAMS (8.5.10):** CSG из mirror primitive терял зеркальную форму (diff = 7.5). Фикс: `SceneObject.mirrored` flag, маршрутизация в `workerSyncMesh`. (`types.ts`, `mirror-store.ts`, `document-store.ts`, `rebuild.ts`)
+- **Multi-level mirror (8.5.12):** `mirrored` хранил одну плоскость — undo/redo multi-level `YZ→XZ` давал одно зеркало (diff = 30.0). Фикс: `mirrored: MirrorPlane[]` (ordered, cancel same-plane), `rebuildFromHistory` — цикл. (`types.ts`, `mirror-store.ts`, `rebuild.ts`, `3dtc-io.ts`)
+- **Copy/paste mirror primitive (8.5.12):** `ClipEntry` без `mirrored` + vertices → зеркало терялось (diff = 2.86). Фикс: `ClipEntry.mirrored` + vertices. (`types.ts`, `document-store.ts`)
+- **moveObject mirror primitive (8.5.12):** регистрировался как primitive-нода (без `!obj.mirrored`) → baked неверно. Фикс: `!obj.mirrored` → baked. (`document-store.ts`)
+- **Double RS mirror CSG (8.5.12):** mirror CSG имел `vertices` с baked TRS + `transform` с полным TRS → RS дважды (vol ratio = 0.5, bbox diff = 1.93). Фикс: `mirrorObject` CSG — прямое зеркало vertices (`mirrorVerticesInPlace`), `transform = mirrorTransform`, `PIVOT-TRANSFORMA srcCom-shift` убран. Инвариант `world' = M·world`. (`mirror-store.ts`, `document-store.ts`)
+- **CSG-PRESERVE-RS (8.5.9):** `csgBoolean` терял rotation/scale операнда A. Фикс: вершины un-baked'ятся к локальной системе A, `resultTransform` = полный TRS A. (`document-store.ts`, `worker-matrix.ts`)
+- **rebuildBuildTree startT (8.5.9):** начальная трансформация CSG-результата не включала `resultRotation`/`resultScale`. (`rebuild.ts`)
 
 ### Added
-- `MirrorPlane` тип (`csg/types.ts`); `SceneObject.mirrored: MirrorPlane[]` (8.5.12) — упорядоченный список плоскостей зеркала для примитивов с cancel соседних одинаковых (YZ→YZ = identity). `composeMirroredList` (`store/helpers.ts`) — общая композиция для mirrorObject и buildRebuildMeta.
-- `ClipEntry.mirrored` + `mirrorVertices/mirrorIndices/mirrorNormals` (`store/helpers.ts`) — copy/paste зеркального примитива сохраняет зеркальную геометрию и флаг (8.5.12).
-- `mirror-multi-level.test.ts` — 5 тестов: multi-level mirror (YZ→XZ) + undo/redo (diff < 1e-6); copy/paste сохраняет mirrored + vertices; moveObject регистрирует baked-ноду; двойное зеркало = identity; композиция YZ→XZ→YZ (8.5.12).
-- `mirror-csg-volume.test.ts` — 4 тестов: mirror CSG volume ratio = 1.0 (было 0.5); world bbox(obj_5) = M·world(csg_3) (diff < 1e-6); CSG union(mirror, orig) bbox точен; volume при rot/scale ≠ 1 (8.5.12).
-- `computeInverseRSMatrix`, `transposeRSMatrix` в `csg/worker-matrix.ts` — обратная RS-матрица (S⁻¹Rᵀ) и транспонированная RS (ун-бейк нормалей).
-- `GroupOperation.resultRotation`, `GroupOperation.resultScale` (`csg/types.ts`) — rot/scale CSG-результата в истории; `rebuild.ts` восстанавливает полный TRS при undo/redo (legacy-документы без полей → identity, baked-RS конвенция).
-- `csg-preserve-rs.test.ts` — 5 тестов: rot/scale = transformA; world = union операндов (render = data); undo/redo через форсированный rebuild; CSG от зеркальных примитивов; CSG от зеркального CSG (workerSyncMesh путь).
+- `MirrorPlane = 'XY' | 'XZ' | 'YZ'` type
+- `SceneObject.mirrored: MirrorPlane[]` (ordered, cancel same-plane)
+- `ClipEntry.mirrored`, `ClipEntry.mirrorVertices/Indices/Normals`
+- Tests: `mirror-multi-level.test.ts` (5), `mirror-csg-volume.test.ts` (4), `csg-preserve-rs.test.ts` (5)
 
 ### Changed
-- `phase-8-scenarios.test.ts` — helper `csgWorldVerts` переведён с pivot+translation (baked-RS) на полный TRS (CSG-PRESERVE-RS конвенция).
-
-### Known issues
-- ~~**CSG-MIRROR-PRIMITIVE-PARAMS**~~ — исправлено в Этапе 8.5.10 (см. Fixed выше).
+- `SceneObject.mirrored: 'XY'|'XZ'|'YZ'` → `MirrorPlane[]` (backward-compat: string → `[string]` при load)
 
 ---
 

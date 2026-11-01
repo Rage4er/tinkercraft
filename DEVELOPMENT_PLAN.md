@@ -29,7 +29,7 @@
 | **Деплой на GitHub Pages / Vercel** | ✅ Завершена | P0 |
 | **Создать тег `v1.0.0` в GitHub** | ✅ Завершена | P0 |
 | **Фаза 8 — Единая модель трансформов** | ✅ Завершена 2026-10-15 (релиз v1.1.0) | P1 |
-| **Фаза 8.5 — Унификация отрисовки и данных** | ✅ Завершена (v1.2.1) | P1 |
+| **Фаза 8.5 — Унификация отрисовки и данных** | ✅ Завершена (v1.2.3) | P1 |
 | **Яндекс-версия (ветка `yandex-games`)** | 🔲 Не начата | P2 |
 | **Импорт SVG (2D → 3D экструзия)** | 🔲 Не начата | P3 |
 
@@ -53,7 +53,7 @@
 | Фаза 7.6 — Mirror Pipeline Performance | ✅ Завершена |
 | **🎉 РЕЛИЗ v1.0.0** | **✅ 2026-08-19** |
 | Фаза 8 — Единая модель трансформов | ✅ Завершена 2026-10-15 (v1.1.0) |
-| **Фаза 8.5 — Унификация отрисовки и данных** | **✅ Завершена (v1.2.1)** |
+| **Фаза 8.5 — Унификация отрисовки и данных** | **✅ Завершена (v1.2.3)** |
 | **Фаза 9 — Параметрическая история** | **🔲 Запланирована** |
 | **Фаза 10 — Яндекс.Игры** | **🔲 Запланирована** |
 | **Фаза 11 — Будущее** | **🔲 Запланирована** |
@@ -380,11 +380,11 @@ web-app/src/components/icons/
 
 ---
 
-### 🔮 Фаза 8.5 — Унификация отрисовки и данных (v1.2.1)
+### 🔮 Фаза 8.5 — Унификация отрисовки и данных (v1.2.3)
 
 > **Концепция:** `SceneObject.vertices` — всегда в origin (COM). `SceneObject.transform` — мировой pivot. Отрисовка = `mesh.position = transform`, `geometry = vertices`. Render = data.
 >
-> **Статус:** 🔄 В работе (Этап 8.5.0 — документация)
+> **Статус:** ✅ Завершена (v1.2.3, 2026-11-01)
 >
 > **См.** `web-app/ARCHITECTURE_RENDER.md`
 
@@ -403,6 +403,9 @@ web-app/src/components/icons/
 | 8.5.7 | Double-mirror primitive = identity | Высокий | Средняя | ✅ 2026-10-25 |
 | 8.5.8 | Ревизия + push + релиз v1.2.1 (CODE_REVIEW.md) | Средний | Низкая | ✅ 2026-10-26 |
 | 8.5.9 | CSG preserves rotation/scale of operand A (CSG-PRESERVE-RS) | Высокий | Средняя | ✅ 2026-10-28 |
+| 8.5.10 | CSG-MIRROR-PRIMITIVE-PARAMS (mirror flag routing) | Высокий | Средняя | ✅ 2026-10-31 |
+| 8.5.12 | Multi-level mirror + CSG mirror double RS | Высокий | Средняя | ✅ 2026-11-01 |
+| 8.5.13 | Ревизия + push + релиз v1.2.3 | Средний | Низкая | ✅ 2026-11-01 |
 
 ---
 
@@ -410,7 +413,7 @@ web-app/src/components/icons/
 
 > **Концепция:** Каждая операция в истории — это параметрический объект. Изменяя параметры на любом шаге, мы перестраиваем всё, что было после него.
 >
-> **Статус:** 🔲 Не начата (следующий этап после v1.2.1)
+> **Статус:** 🔲 Не начата (следующий этап после v1.2.3)
 
 ```
 История операций → Шаг 1: Куб 20x20x20 → Шаг 2: Скругление R=2 → Шаг 3: Union с цилиндром → Шаг 4: Зеркало YZ → Текущий результат
@@ -637,7 +640,9 @@ web-app/
 | | **CSG-PRESERVE-RS** — `csgBoolean` терял rotation/scale operand A (результат всегда имел identity RS). Фикс 2026-10-07 (копирование rot/scale) был заменён на baked-RS в 6ffe24b (regression). Финальный фикс (Этап 8.5.9): вершины un-baked'ятся к системе A (`v = S⁻¹Rᵀ·(v_world − posA)`), `resultTransform` = полный TRS A; `GroupOperation.resultRotation/resultScale` + `rebuild.ts`. Тесты: `csg-preserve-rs.test.ts` (5). | **HIGH** | ✅ **Исправлено** (Этап 8.5.9, 2026-10-28) |
 | | **RENDER-PRISM-BBOX-OFFSET** — `centerGeometry` (`viewport-hooks.ts`) вычитал `bboxCenter` (28,0,0) вместо spawn (25,0,0) → сдвиг **3.000 мм** на отрисовке. Ruler показывал `12.67 мм` вместо `10.74 мм`. Решение: удалить `centerGeometry` полностью — `vertices` всегда origin, `transform` = pivot, render = data. | **HIGH** | ✅ **Исправлено** (Этап 8.5.3, 2026-10-24) |
 | | **DOUBLE-MIRROR-PRIMITIVE** — двойное зеркало примитива (YZ→YZ) возвращало pivot = identity, но vertices = одинарное зеркало (для призмы sides=3 — поворот на 180°). Корень: ветка примитива в `mirrorObject` вызывала `rebuildNode` (пересборка из `params`), теряя предыдущее зеркало в `obj.vertices`. Решение: зеркалить `obj.vertices` напрямую, без rebuild. | **HIGH** | ✅ **Исправлено** (Этап 8.5.7, v1.2.1) |
-| | **CSG-MIRROR-PRIMITIVE-PARAMS** — Зеркальный *примитив* (shapeType='prism'/'cube'… с зеркальными vertices) при CSG пересобирается из `params` через `workerSyncObjects` (`syncObjectsForOperation` маршрутизирует примитивы туда) — зеркальная форма теряется, CSG использует un-mirrored геометрию. Mirror-CSG-результатов не касается (workerSyncMesh точен). Обнаружен Этапом 8.5.9 (тест 4, trace). Решение (запланировано): workerSyncMesh для mirror-примитивов. | **HIGH** | 🔴 **Обнаружено** (2026-10-28, Этап 8.5.9) |
+| | **CSG-MIRROR-PRIMITIVE-PARAMS** — ✅ **Исправлено** (Этап 8.5.10 + 8.5.12, v1.2.3) — Зеркальный примитив при CSG терял зеркальную форму (workerSyncObjects → rebuild из params). Фикс: `SceneObject.mirrored` flag → workerSyncMesh. Также: multi-level mirror (mirrored: MirrorPlane[], undo/redo), copy/paste (ClipEntry.mirrored + vertices), moveObject (!obj.mirrored → baked). | **HIGH** | ✅ **Исправлено** (Этап 8.5.10 + 8.5.12, v1.2.3) |
+| | **Multi-level mirror (undo/redo, copy/paste)** — `mirrored` хранил одну плоскость — undo/redo multi-level `YZ→XZ` давал одно зеркало (diff = 30.0); copy/paste терял зеркало (diff = 2.86). Фикс: `mirrored: MirrorPlane[]` (ordered, cancel same-plane), `rebuildFromHistory` — цикл, `ClipEntry.mirrored` + vertices. | **HIGH** | ✅ **Исправлено** (v1.2.3) |
+| | **Double RS mirror CSG** — mirror CSG имел `vertices` с baked TRS + `transform` с полным TRS → RS дважды (vol ratio = 0.5, bbox diff = 1.93). Фикс: `mirrorObject` CSG — прямое зеркало vertices (`mirrorVerticesInPlace`), `transform = mirrorTransform`, `PIVOT-TRANSFORMA srcCom-shift` убран. Инвариант `world' = M·world`. | **HIGH** | ✅ **Исправлено** (v1.2.3) |
 
 ---
 

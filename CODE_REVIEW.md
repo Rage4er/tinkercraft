@@ -257,6 +257,8 @@ world = pivot + vertex_local = (20-11, 20-10, 20-10) = (9, 10, 10) ❌
 | **Фаза 7 — Завершение** (2026-08-05) | Все проблемы Раундов 16–20 верифицированы и закрыты. Фаза 7 официально завершена. | ✅ **Завершена** |
 | **Фаза 7.5 — Параметрический скелет** (2026-08-05) | Инфраструктура: createBooleanNode ✅, rebuild boolean ✅, mirror-store ✅, syncObjectsForOperation ✅. Тестирование цепочек ✅, финальная полировка ✅. | ✅ **Завершена** |
 | **🎉 РЕЛИЗ v1.0.0** (2026-08-19) | Все ~291 проблем закрыты, 0 активных, готов к деплою | **✅ РЕЛИЗ** |
+| **CSG-PRESERVE-RS** (2026-10-28, Этап 8.5.9) | CSG-PRESERVE-RS (потеря rot/scale операнда A в CSG) | ✅ **Исправлено** |
+| **CSG-MIRROR-PRIMITIVE-PARAMS + Multi-level Mirror + Double RS** (2026-11-01, Этап 8.5.10 + 8.5.12, v1.2.3) | 3 бага: mirror→CSG (diff=7.5), multi-level mirror undo/redo (diff=30), CSG mirror double RS (vol=0.5) | ✅ **Исправлено** |
 
 ---
 
@@ -428,25 +430,50 @@ for (const n of msg.nodes) {  // ← TypeError: msg.nodes is not iterable
 
 ---
 
-### CSG-MIRROR-PRIMITIVE-PARAMS — Зеркальный примитив теряет хиральность в CSG
+### ✅ ИСПРАВЛЕНО — CSG-MIRROR-PRIMITIVE-PARAMS (8.5.10) + multi-level mirror (8.5.12) (v1.2.3)
 
-**Статус:** 🔴 **ОБНАРУЖЕНО** (2026-10-28, Этап 8.5.9, вне объёма)
-**Обнаружена:** 2026-10-28
+**Проблема:**
+1. **8.5.10:** CSG из mirror primitive → зеркальная форма терялась (diff = 7.5). Фикс — `SceneObject.mirrored` + маршрутизация `workerSyncMesh`.
+2. **8.5.12 (multi-level):** `mirrored` хранил **одну** плоскость. Multi-level mirror (`YZ→XZ`) при undo/redo → **одно** зеркало (diff = 30.0). Фикс — `mirrored: MirrorPlane[]` (ordered, cancel same-plane).
+
+**Также:** copy/paste терял `mirrored` + vertices (diff = 2.86) — `ClipEntry.mirrored` + vertices. `moveObject` регистрировал mirror primitive как primitive (line 732) — `!obj.mirrored`.
+
+**Корень:** `mirrored` — одна плоскость; `ClipEntry` — без `mirrored`; `moveObject` — без `!obj.mirrored`.
+
+**Фикс:** `mirrored: MirrorPlane[]`; `mirrorObject` push+cancel; `rebuildFromHistory` — цикл; `ClipEntry.mirrored` + vertices; `moveObject` — `!obj.mirrored` → baked.
+
+**Тесты:** `mirror-multi-level.test.ts` (5: multi-level undo/redo, copy/paste, moveObject baked), `csg-mirror-primitive-params.test.ts` (9).
+
+**Файлы:** `types.ts`, `mirror-store.ts`, `document-store.ts`, `rebuild.ts`, `3dtc-io.ts`.
+
+---
+
+### ✅ ИСПРАВЛЕНО — double RS mirror CSG (8.5.12, v1.2.3)
+
+**Проблема:** mirror CSG (`obj_5 = mirror(csg_3)`) + CSG union (`csg_7 = union(obj_5, csg_3)`). `obj_5.vertices` — **baked TRS** (tree-rebuild), `obj_5.transform` — **полный TRS** → **RS дважды**. **Объём** `obj_5` = **0.5 × csg_3** (ровно `det(scale A)`). **bbox diff** = 1.93.
+
+**Корень:** `mirrorObject` (CSG-ветка) собирал vertices через **tree-rebuild** (TRS детей **запечён**), затем `transform` = mirror(TRS) → RS **дважды**. **До 8.5.9** `transform` был pos-only → double не возникал.
+
+**Фикс:** `mirrorObject` CSG — **прямое зеркало** vertices (`mirrorVerticesInPlace` + swap winding + mirror normal), `transform = mirrorTransform`. **`PIVOT-TRANSFORMA srcCom-shift`** — убран. **Инвариант:** `world' = pos' + R'S'·v' = M·world` (RS один раз).
+
+**Замеры:** vol ratio — **0.5 → 1.0**, bbox diff — **1.93 → 0.000000**.
+
+**Тесты:** `mirror-csg-volume.test.ts` (4: volume ratio, bbox = M·world).
+
+**Файлы:** `mirror-store.ts`, `document-store.ts` (`csgBoolean` srcCom-shift).
+
+---
+
+### ✅ ИСПРАВЛЕНО — CSG-MIRROR-PRIMITIVE-PARAMS — Зеркальный примитив теряет хиральность в CSG (8.5.10 + 8.5.12, v1.2.3)
+
+**Статус:** ✅ **ИСПРАВЛЕНО** (2026-11-01, Этап 8.5.10 + 8.5.12, v1.2.3)
 **Компонент:** `store/document-store.ts` → `syncObjectsForOperation`, `csg/worker-handlers.ts` → `handleSyncObjects`
 **Приоритет:** Высокий
+**Файлы:** `types.ts`, `mirror-store.ts`, `document-store.ts`, `rebuild.ts`, `3dtc-io.ts`, `helpers.ts`
 
-#### Симптом
-Призма → mirror YZ → CSG union с другим объектом: геометрия CSG использует **un-mirrored** форму призмы (из `params`), зеркальная хиральность теряется. Численно: mirror-призма world bbox `x:[-25.27,-15.55]`, CSG world bbox `x:[-24.45,+5.00]` (сфера) — union ожидаемо `[-25.27,...]`, фактически `-24.45`.
-
-#### Корневая причина
-`syncObjectsForOperation` маршрутизирует **примитивы** (shapeType ≠ 'csg') в `workerSyncObjects`, который пересобирает манifold из `buildPrimitive(shapeType, params)` — зеркальная форма примитива (stored в `obj.vertices` через mirrorVerticesInPlace) игнорируется. Для CSG-результатов/import — `workerSyncMesh(obj.vertices)` точен.
-
-#### Решение (запланировано)
-Для mirror-примитивов (флаг `mirrored` в SceneObject или детект по `vertices` ≠ origin-форме params) использовать `workerSyncMesh` вместо `workerSyncObjects`. Либо хранить mirror как отдельный path.
-
-#### Затронуто
-- `store/document-store.ts` → `syncObjectsForOperation`
-- `csg/worker-handlers.ts` → `handleSyncObjects`
+#### Исправление
+- **8.5.10:** новое поле `SceneObject.mirrored` (`'XY'|'XZ'|'YZ'`) — флаг маршрутизирует mirror-примитив через `workerSyncMesh` (vertices) вместо `workerSyncObjects` (params). `rebuildFromHistory` до-зеркалит вершины.
+- **8.5.12:** `mirrored: MirrorPlane[]` (ordered, cancel same-plane). `rebuildFromHistory` — цикл по плоскостям. `ClipEntry.mirrored` + vertices для copy/paste. `moveObject` — `!obj.mirrored` → baked.
 
 ---
 
