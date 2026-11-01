@@ -109,7 +109,7 @@ function maxBBoxDiff(a: { min: number[], max: number[] }, b: { min: number[], ma
 
 function findMirroredObj(plane: 'XY' | 'XZ' | 'YZ'): SceneObject {
   for (const obj of Object.values(st().objects)) {
-    if (obj.mirrored === plane) return obj
+    if (obj.mirrored && obj.mirrored.includes(plane)) return obj
   }
   throw new Error(`no mirrored obj for plane ${plane}`)
 }
@@ -294,7 +294,7 @@ describe('Mirror primitive → CSG', () => {
     const rebuilt = await rebuildFromHistory(ops)
     const rb2 = rebuilt[id2]
     expect(rb2).toBeDefined()
-    expect(rb2!.mirrored).toBe(liveMirrored)
+    expect(rb2!.mirrored).toEqual(liveMirrored)
 
     for (let i = 0; i < liveVertices.length; i++) {
       expect(rb2!.vertices[i]).toBeCloseTo(liveVertices[i], 6)
@@ -379,7 +379,7 @@ describe('Mirror primitive → CSG', () => {
     await st().mirrorSelected('YZ')
     const mirror = findMirroredObj('YZ')
 
-    expect(mirror.mirrored).toBe('YZ')
+    expect(mirror.mirrored).toEqual(['YZ'])
     expect(mirror.shapeType).toBe('prism')
     expect(mirror.vertices.length).toBeGreaterThan(0)
   })

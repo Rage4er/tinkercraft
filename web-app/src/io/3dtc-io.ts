@@ -224,6 +224,10 @@ function restoreSceneObjects(objects: Record<string, unknown>): Record<string, S
         o.normals = new Float32Array(Array.isArray(n) ? n : [])
       }
     }
+    // FIX (8.5.12): normalize mirrored from string (8.5.10) → MirrorPlane[] array.
+    if (typeof o.mirrored === 'string') {
+      o.mirrored = [o.mirrored as 'XY' | 'XZ' | 'YZ']
+    }
   }
   return objects as unknown as Record<string, SceneObject>
 }

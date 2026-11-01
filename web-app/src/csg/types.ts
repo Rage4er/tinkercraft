@@ -73,6 +73,9 @@ export interface MirrorOperation {
   plane: 'XY' | 'XZ' | 'YZ'
 }
 
+/** Плоскость зеркала. FIX (8.5.12): выделен в тип — SceneObject.mirrored теперь список. */
+export type MirrorPlane = 'XY' | 'XZ' | 'YZ'
+
 export interface AlignOperation {
   type: 'align'
   ids: string[]
@@ -176,16 +179,16 @@ export interface SceneObject {
   /** IDs of source objects — only for shapeType='csg' */
   children?: string[]
   /**
-   * FIX (CSG-MIRROR-PRIMITIVE-PARAMS, Stage 8.5.10): плоскость последнего
-   * зеркала для ПРИМИТИВОВ. Зеркало примитива запечено в `vertices`
-   * (mirrorVerticesInPlace, 8.5.7), но `shapeType`/`params` остаются
-   * оригинальными — геометрия больше НЕ равна buildPrimitive(params).
-   * Флаг маршрутизирует worker-синхронизацию через workerSyncMesh
-   * (vertices), а не workerSyncObjects (params), и регистрацию в дереве
-   * как baked-ноду. Зеркало CSG-результатов/импортов флаг не требует —
-   * они и так идут через vertices.
+   * FIX (CSG-MIRROR-PRIMITIVE-PARAMS, Stage 8.5.10 + 8.5.12): плоскости
+   * последнего зеркала для ПРИМИТИВОВ. Зеркало примитива запечено в
+   * `vertices` (mirrorVerticesInPlace, 8.5.7), но `shapeType`/`params`
+   * остаются оригинальными — геометрия больше НЕ равна buildPrimitive(params).
+   *
+   * FIX (8.5.12): массив упорядоченных плоскостей; соседние одинаковые
+   * отменяются (YZ→YZ = identity). Сериализуется в .3dtc; legacy
+   * документ с одним зеркалом ('XZ') нормализуется при загрузке.
    */
-  mirrored?: 'XY' | 'XZ' | 'YZ'
+  mirrored?: MirrorPlane[]
 }
 
 export type CsgBooleanOp = 'union' | 'subtract' | 'intersect'

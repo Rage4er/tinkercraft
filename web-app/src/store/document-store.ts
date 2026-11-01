@@ -340,7 +340,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const clips: ClipEntry[] = selectedIds.flatMap(id => {
       const obj = objects[id]
       if (!obj) return []
-      const entry: ClipEntry = { shapeType: obj.shapeType, params: obj.params, color: obj.color, transform: obj.transform }
+      const entry: ClipEntry = { shapeType: obj.shapeType, params: obj.params, color: obj.color, transform: obj.transform, mirrored: obj.mirrored }
       if (obj.shapeType === 'import_mesh') {
         // PERF-R8-1: Храним TypedArray вместо number[] для экономии памяти (8×)
         entry.importVertices = new Float32Array(obj.vertices)
@@ -352,6 +352,12 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         entry.csgNormals = obj.normals ? new Float32Array(obj.normals) : undefined
         entry.csgAABB = obj.aabb ? { min: { ...obj.aabb.min }, max: { ...obj.aabb.max } } : undefined
         entry.csgOriginalBboxSize = obj.originalBboxSize ? { ...obj.originalBboxSize } : undefined
+      } else if (obj.mirrored) {
+        // FIX (8.5.12): mirror primitive — copy vertices (mirror baked) + mirrored flag.
+        // Paste will register as baked node with vertices from clip.
+        entry.mirrorVertices = new Float32Array(obj.vertices)
+        entry.mirrorIndices = new Uint32Array(obj.indices)
+        entry.mirrorNormals = obj.normals ? new Float32Array(obj.normals) : undefined
       }
       return [entry]
     })
@@ -402,6 +408,20 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
           newOps.push(histOp)
           // Register baked node for CSG paste
           createBakedNode(id, clip.csgVertices, clip.csgIndices, clip.csgNormals ?? null, transform)
+        } else if (clip.mirrored && clip.mirrorVertices && clip.mirrorIndices) {
+          // FIX (8.5.12): Paste mirror primitive — use baked vertices (mirror baked),
+          // preserve mirrored flag (multi-level mirror composition).
+          const obj: SceneObject = makeObject({
+            id, shapeType: clip.shapeType, params: clip.params, color: clip.color,
+            transform, visible: true, locked: false,
+            vertices: clip.mirrorVertices, indices: clip.mirrorIndices,
+            normals: clip.mirrorNormals, mirrored: clip.mirrored,
+          })
+          const op: AddShapeOperation = { type: 'add_shape', id, shapeType: clip.shapeType, params: clip.params, color: clip.color, transform }
+          newObjects = { ...newObjects, [id]: obj }
+          newOps.push(op)
+          // Register baked node in build tree for CSG/mirror/align support
+          createBakedNode(id, clip.mirrorVertices, clip.mirrorIndices, clip.mirrorNormals ?? null, transform)
         } else {
           const mesh = await workerBuildShape(id, clip.shapeType, clip.params, transform)
           const obj: SceneObject = makeObject({ id, shapeType: clip.shapeType, params: clip.params, color: clip.color, transform, visible: true, locked: false, vertices: mesh.vertices, indices: mesh.indices, normals: mesh.normals })
@@ -729,7 +749,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     if (!treeExists) {
       // FIX (MIRROR-CSG-KEEPTYPE): CSG-результаты (shapeType='csg') и import_mesh
       // регистрируются как baked-ноды (готовый меш), а не как primitive.
-      const isPrimitive = obj.shapeType !== 'csg' && obj.shapeType !== 'import_mesh'
+      // FIX (8.5.12): зеркальный примитив (mirrored) тоже baked — vertices с зеркалом.
+      const isPrimitive = obj.shapeType !== 'csg' && obj.shapeType !== 'import_mesh' && !obj.mirrored
       if (isPrimitive && obj.shapeType && obj.params) {
         createPrimitiveNode(id, obj.shapeType, obj.params, obj.transform)
       } else {

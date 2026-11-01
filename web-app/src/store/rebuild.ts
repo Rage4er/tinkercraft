@@ -5,10 +5,10 @@
 
 import type {
   TinkerCraftOperation, SceneObject, ShapeType, ShapeParams,
-  TransformNR, Vec3, AlignOperation,
+  TransformNR, Vec3, AlignOperation, MirrorPlane,
 } from '../csg/types'
 import { workerRebuildScene } from '../csg/worker-client'
-import { centerMassAtOrigin, makeObject } from './helpers'
+import { centerMassAtOrigin, makeObject, composeMirroredList } from './helpers'
 import {
   applyMoveDelta,
   applyMirrorToTransform,
@@ -41,12 +41,13 @@ export interface RebuildMeta {
   resultNormals?: Float32Array | number[]
   originalBboxSize?: { x: number; y: number; z: number }
   /**
-   * FIX (CSG-MIRROR-PRIMITIVE-PARAMS, Stage 8.5.10): плоскость зеркала для
-   * ПРИМИТИВОВ. Worker пересобирает mirror-потомка примитива из params
-   * (buildPrimitive) — зеркальная форма теряется. Main thread до-зеркалит
-   * вершины + swap winding (тот же mirrorVerticesInPlace, что и mirrorObject).
+   * FIX (CSG-MIRROR-PRIMITIVE-PARAMS, Stage 8.5.10 + 8.5.12): упорядоченный
+   * список плоскостей зеркал для ПРИМИТИВОВ. Worker пересобирает
+   * mirror-потомка примитива из params — зеркальная форма теряется. Main
+   * thread до-зеркалит вершины + swap winding для каждой плоскости.
+   * Соседние одинаковые отменяются (YZ→YZ = identity).
    */
-  mirrored?: 'XY' | 'XZ' | 'YZ'
+  mirrored?: MirrorPlane[]
 }
 
 /**
@@ -99,15 +100,12 @@ export function buildRebuildMeta(ops: TinkerCraftOperation[]): {
         if (t && meta[origId]) {
           const nt = applyMirrorToTransform(t as unknown as RebuildTransform, op.plane) as TransformNR
           transforms[newId] = nt
-          // FIX (CSG-MIRROR-PRIMITIVE-PARAMS, Stage 8.5.10): mirror-потомок
-          // ПРИМИТИВА — worker пересобирает его из params (без зеркала).
-          // Флаг mirrored говорит main-thread до-зеркалить вершины.
-          // Двойное зеркало той же плоскости = identity (флаг снимается) —
-          // та же логика, что в mirrorObject.
+          // FIX (8.5.12): compose mirrored plane list (push + cancel adjacent).
+          // D000: 8.5.10 single plane → MirrorPlane[].
           const om = meta[origId]
           const isPrim = om.shapeType !== 'csg' && om.shapeType !== 'import_mesh'
           const mirroredOut = isPrim
-            ? (om.mirrored === op.plane ? undefined : op.plane)
+            ? composeMirroredList(om.mirrored, op.plane)
             : om.mirrored
           meta[newId] = { ...om, transform: nt, mirrored: mirroredOut }
         }
@@ -274,18 +272,19 @@ export async function rebuildFromHistory(
   const objects: Record<string, SceneObject> = {}
   for (const m of result.results) {
     const info = meta[m.objId]
-    // FIX (CSG-MIRROR-PRIMITIVE-PARAMS, Stage 8.5.10): worker пересобирает
-    // mirror-потомка примитива из params (buildPrimitive) — зеркальная форма
-    // отсутствует. До-зеркалим COM-центрированные вершины + swap winding —
-    // в точности mirrorVerticesInPlace из mirrorObject (8.5.7). Вершины уже
-    // COM-центрированы (mirror проходит через COM — как в live mirrorObject),
-    // pivot (transform) worker уже отдаёт зеркальным (applyMirrorToTransform).
-    if (info?.mirrored) {
-      mirrorVerticesInPlace(m.vertices, m.normals, info.mirrored)
-      for (let i = 0; i < m.indices.length; i += 3) {
-        const tmp = m.indices[i + 1]
-        m.indices[i + 1] = m.indices[i + 2]
-        m.indices[i + 2] = tmp
+    // FIX (8.5.12): iterate each plane in the mirrored list — worker rebuilds
+    // the primitive from params (unmirrored). Apply each mirror plane in order
+    // + swap winding per reflection (mirrorVerticesInPlace, 8.5.7).
+    // Vertices are already COM-centered (mirror passes through COM — same as
+    // live mirrorObject), pivot (transform) worker already returns mirrored.
+    if (info?.mirrored && info.mirrored.length > 0) {
+      for (const plane of info.mirrored) {
+        mirrorVerticesInPlace(m.vertices, m.normals, plane)
+        for (let i = 0; i < m.indices.length; i += 3) {
+          const tmp = m.indices[i + 1]
+          m.indices[i + 1] = m.indices[i + 2]
+          m.indices[i + 2] = tmp
+        }
       }
     }
     // For CSG results, use originalBboxSize if available
@@ -392,8 +391,10 @@ export function rebuildBuildTree(
             const mirroredObj = objects?.[newId]
             if (mirroredObj?.mirrored && mirroredObj.vertices.length > 0) {
               createBakedNode(newId, mirroredObj.vertices, mirroredObj.indices, mirroredObj.normals ?? null, nt)
+              // Set TreeNode.mirroredPlane to last plane for bakeMirroredSubtree compat.
+              // SceneObject.mirrored is the authoritative MirrorPlane[] list (8.5.12).
               const node = getNode(newId)
-              if (node) node.mirroredPlane = mirroredObj.mirrored
+              if (node && mirroredObj.mirrored && mirroredObj.mirrored.length > 0) node.mirroredPlane = mirroredObj.mirrored[mirroredObj.mirrored.length - 1]
             } else {
               const origNode = getNode(origId)
               if (origNode && origNode.type === 'primitive') {

@@ -26,7 +26,7 @@
 // ============================================================
 
 import type { TransformNR, SceneObject, ShapeType, ShapeParams } from '../csg/types'
-import { nextId } from './helpers'
+import { nextId, composeMirroredList } from './helpers'
 import { notify } from './notifications'
 import i18n from '../i18n'
 import {
@@ -174,74 +174,47 @@ export async function mirrorObject(
     } else {
         // ── CSG-результат или import ───────────────────────────────────────────
         //
-        // Для CSG-результатов используем tree-rebuild: клонируем поддерево,
-        // зеркалим позиции дочерних примитивов, пересобираем CSG через manifold.
-        // Это сохраняет параметричность дерева.
+        // FIX (8.5.12): direct mirror of SceneObject.vertices — NO tree-rebuild.
+        // Tree-rebuild baked the TRS of children (including operand A's rot/scale)
+        // into vertices, then SceneObject.transform carried the full mirrored TRS
+        // → double RS (Bug 2, 8.5.12). Direct mirror: vertices = M·v_src,
+        // transform = M·TRS(A) — RS applied exactly once.
         //
-        // Дочерние примитивы в дереве всегда синхронизированы с текущим положением
-        // CSG-объекта в сцене: moveObject транслирует их при каждом перемещении
-        // (см. FIX MIRROR-SYNC-TREE в document-store.ts). Поэтому tree-rebuild
-        // даёт геометрию, точно соответствующую визуальному положению объекта.
+        // Tree-booking (clone/mirror/bake) kept for parametric children support.
+        // PIVOT-TRANSFORMA srcCom-shift removed: no longer needed (no tree-rebuild).
         //
-        // Для import_mesh (нет дерева) — baked-путь через ensureInTree/cloneSubtree
-        // создаёт baked-ноду, mirrorNodeRecursive зеркалит вершины и transform.
+        // For import_mesh (no tree): same direct mirror path.
 
-        // 1. Регистрируем оригинал в дереве (если ещё не зарегистрирован)
+        // 1. Registre оригинал в дереве (для параметричности детей)
         ensureInTree(id, obj)
         syncNodeTransform(id, obj.transform)
-        logMirrorTreeSnapshot(id, 'source-before-clone')
 
-        // 2. Клонируем поддерево
-        const idMap = new Map<string, string>()
-        cloneSubtree(id, newId, idMap)
-        logMirrorTreeSnapshot(newId, `clone-before-mirror source=${id}`)
+        // 2. Direct mirror: vertices + normals + winding
+        vertices = new Float32Array(obj.vertices)
+        indices = new Uint32Array(obj.indices)
+        normals = obj.normals ? new Float32Array(obj.normals) : null
 
-        // 3. Зеркалим всё поддерево (примитивы + inner boolean localTransforms)
-        mirrorTreeNode(newId, plane)
-        logMirrorTreeSnapshot(newId, `clone-after-mirror plane=${plane} source=${id}`)
-
-        // 3.5. FIX (MIRROR-CHIRALITY, Variant B): bakeMirroredSubtree converts primitive
-        // children to baked with mirrored vertices (reflects geometry, not just transforms).
-        // Without this, asymmetric primitives (prism sides=3, pyramid, cone) retain their
-        // original chirality — a left-handed prism stays left-handed after mirror.
-        // Math: M·T(p)·R(e)·S·v = T(M·p)·R(mirrorEuler(e))·S·(M·v), so baking M·v
-        // with the already-mirrored TRS gives exact mirror when worker applies localTransform.
-        // shapeType + params are preserved for future child-edit flow.
-        await bakeMirroredSubtree(newId, plane)
-        logMirrorTreeSnapshot(newId, `clone-after-bake plane=${plane} source=${id}`)
-
-        // 4. Сбрасываем root в identity → rebuildNode вернёт центрированную геометрию
-        //    (translation-only shape, без rotation/scale — они применяются через
-        //    Viewport3D pivot). Inner boolean localTransforms применяются воркером.
-        syncNodeTransform(newId, {
-            x: 0, y: 0, z: 0,
-            rotX: 0, rotY: 0, rotZ: 0,
-            scaleX: 1, scaleY: 1, scaleZ: 1,
-        })
-        logMirrorTreeSnapshot(newId, `clone-before-rebuild plane=${plane} source=${id}`)
-
-        const rebuiltMesh = await rebuildNode(newId)
-
-        // FIX (PIVOT-TRANSFORMA): воркер центрирует пересобранный boolean-результат
-        // по COM, но новый pivot = M(transformA). Сдвиг вершин:
-        //   r = M(w) − M(COM_w)  →  v = r + M(COM_w − transformA) = r + M(srcCom),
-        // где srcCom = COM исходных вершин (world = pivot + vertex ⇒ COM_w = tA + srcCom).
-        // Для legacy-объектов (вершины COM-центрированы, pivot = COM) srcCom ≈ 0 →
-        // сдвиг ≈ 0 — поведение не меняется.
-        if (isCSGResult) {
-            const srcCom = centerMassAtOrigin(
-                new Float32Array(obj.vertices),
-                new Uint32Array(obj.indices),
-            )
-            const shX = plane === 'YZ' ? -srcCom.cx : srcCom.cx
-            const shY = plane === 'XZ' ? -srcCom.cy : srcCom.cy
-            const shZ = plane === 'XY' ? -srcCom.cz : srcCom.cz
-            for (let i = 0; i < rebuiltMesh.vertices.length; i += 3) {
-                rebuiltMesh.vertices[i] += shX
-                rebuiltMesh.vertices[i + 1] += shY
-                rebuiltMesh.vertices[i + 2] += shZ
-            }
+        mirrorVerticesInPlace(vertices, normals, plane)
+        for (let i = 0; i < indices.length; i += 3) {
+            const tmp = indices[i + 1]
+            indices[i + 1] = indices[i + 2]
+            indices[i + 2] = tmp
         }
+
+        // 3. Tree-booking: clone + mirror + bake children (parametric edit support)
+        //    NOTE: tree nodes store ORIGINAL vertices (not mirrored) — they are
+        //    rebuilt from params. The SceneObject carries the correct mirrored
+        //    geometry. This is fine because tree rebuild is only used for future
+        //    CSG/mirror ops, and syncObjectsForOperation routes CSG to workerSyncMesh.
+        if (isCSGResult) {
+            const idMap = new Map<string, string>()
+            cloneSubtree(id, newId, idMap)
+            mirrorTreeNode(newId, plane)
+            await bakeMirroredSubtree(newId, plane)
+        }
+
+        // PIVOT-TRANSFORMA srcCom-shift REMOVED (8.5.12): no tree-rebuild,
+        // vertices are direct M·v_src — no COM centering needed.
 
         // FIX (MIRROR-TREE-PRESERVE): Do NOT delete the cloned subtree.
         //
@@ -261,10 +234,6 @@ export async function mirrorObject(
         // By keeping the cloned subtree, the tree accurately reflects the scene state.
         // Future mirror/CSG operations will find the correct node type and work properly.
         // The SceneObject already has the correct mesh and transform.
-
-        vertices = rebuiltMesh.vertices
-        indices = rebuiltMesh.indices
-        normals = rebuiltMesh.normals ?? null
     }
 
     // Вычисляем отражённую позицию и поворот для SceneObject.transform.
@@ -293,13 +262,11 @@ export async function mirrorObject(
         // примитив → примитив, только import → import_mesh.
         shapeType: (isPrimitive ? obj.shapeType : isCSGResult ? 'csg' : 'import_mesh') as ShapeType,
         params: (isPrimitive ? { ...obj.params } : {}) as ShapeParams,
-        // FIX (CSG-MIRROR-PRIMITIVE-PARAMS, Stage 8.5.10): зеркальный
-        // примитив — vertices авторитетны (запечатано зеркало), params
-        // оригинальны. Флаг маршрутизирует worker-синхронизацию через
-        // workerSyncMesh. Двойное зеркало той же плоскости = identity —
-        // флаг снимается, параметричность возвращается (vertices точно
-        // равны buildPrimitive(params): negate+swap дважды = оригинал).
-        mirrored: isPrimitive ? (obj.mirrored === plane ? undefined : plane) : undefined,
+        // FIX (8.5.12): push+cancel adjacent same-plane — mirror YZ→YZ = identity.
+        // Same composeMirroredList as buildRebuildMeta. Vertices are authoritative
+        // (mirror baked), params original (unmirrored). Double-mirror same plane
+        // → flag removed, parametric restored (vertices exactly = buildPrimitive).
+        mirrored: isPrimitive ? composeMirroredList(obj.mirrored, plane) : undefined,
         transform: {
             x: Math.round(mirroredPos.x * 1e6) / 1e6,
             y: Math.round(mirroredPos.y * 1e6) / 1e6,

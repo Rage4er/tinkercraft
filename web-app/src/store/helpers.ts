@@ -3,9 +3,29 @@
 // ============================================================
 
 import type {
-  SceneObject, ShapeType, ShapeParams, TransformNR, Vec3,
+  SceneObject, ShapeType, ShapeParams, TransformNR, Vec3, MirrorPlane,
 } from '../csg/types'
 import { OBJECT_COLORS } from '../constants'
+
+// ---- Mirror list composition (FIX 8.5.12) ----
+
+/**
+ * FIX (8.5.12): compose a mirror-plane list with adjacent-plane cancellation.
+ * Same adjacent plane twice = identity (pop); otherwise push. Returns
+ * undefined when the list empties (double mirror = original geometry).
+ */
+export function composeMirroredList(
+  current: MirrorPlane[] | undefined,
+  plane: MirrorPlane,
+): MirrorPlane[] | undefined {
+  const list = current ? [...current] : []
+  if (list.length > 0 && list[list.length - 1] === plane) {
+    list.pop()
+  } else {
+    list.push(plane)
+  }
+  return list.length > 0 ? list : undefined
+}
 
 // ---- AABB ----
 export function computeAABB(vertices: Float32Array): { min: Vec3; max: Vec3 } {
@@ -172,6 +192,8 @@ export interface ClipEntry {
   params: ShapeParams
   color: string
   transform: TransformNR
+  /** FIX (8.5.12): mirror planes for mirror primitives — paste preserves mirror. */
+  mirrored?: import('../csg/types').MirrorPlane[]
   // For import_mesh:
   importVertices?: Float32Array
   importIndices?: Uint32Array
@@ -181,4 +203,8 @@ export interface ClipEntry {
   csgNormals?: Float32Array
   csgAABB?: { min: Vec3; max: Vec3 }
   csgOriginalBboxSize?: { x: number; y: number; z: number }
+  // For mirror primitive (paste from clipboard):
+  mirrorVertices?: Float32Array
+  mirrorIndices?: Uint32Array
+  mirrorNormals?: Float32Array
 }
