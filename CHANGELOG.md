@@ -9,6 +9,9 @@
 
 ## [Unreleased]
 
+### Added
+- Отображение версии приложения в StatusBar (справа): `{app.name} v{APP_VERSION}` (`StatusBar.tsx`, `constants.ts`)
+
 ---
 
 ## [1.2.3] — 2026-11-01

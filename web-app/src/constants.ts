@@ -7,6 +7,9 @@
 
 import type { ShapeType } from "./csg/types";
 
+// ---- App version ----
+export const APP_VERSION = '1.2.4';
+
 // ---- Shapes (data only, NO JSX) ----
 // Иконки — это строковые ключи, не React-компоненты.
 // UI-слой подставляет реальные иконки из constants.tsx.
