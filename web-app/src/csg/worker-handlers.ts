@@ -5,11 +5,14 @@
 // ============================================================
 
 import { buildSRTMatrixAroundCenter, buildTransformMatrix } from './worker-matrix'
+// Фаза 8, Этап 6.5: единая формула центрирования (объёмный центроид) —
+// та же функция, что использует frontend (store/helpers реэкспортирует её).
+import { centerMassAtOrigin } from './geometry-utils'
 import { FILLET_EPSILON, FILLET_MIN_RADIUS } from '../constants.ts'
 import type { RebuildTransform } from './rebuildOps'
 import { applyMoveDelta, applyMirrorToTransform, applyAlignToTransform } from './rebuildOps'
 import type { MirrorOperation } from './types'
-import { devLog } from '../utils/debug'
+import { devLog, devLogCsg } from '../utils/debug'
 
 // --- Type definitions (moved from worker.ts to avoid circular deps) ---
 
@@ -27,6 +30,7 @@ export interface ManifoldObject {
   getMesh(): ManifoldMesh
   refine(recursions: number): ManifoldObject
   warp(fn: (v: number[]) => void): ManifoldObject
+  translate(x: number, y?: number, z?: number): ManifoldObject
   /** Frees the WASM memory — must be called when the object is no longer needed. */
   delete(): void
 }
@@ -188,9 +192,29 @@ export function safePostMessage(msg: unknown, transferList?: ArrayBuffer[]): voi
 // --- Build primitives ---
 
 /** Build a manifold primitive from shape type and params. */
+/**
+ * Center a manifold at its center of mass (COM). Universal — works for any shape,
+ * including truncated cones/pyramids where the h/4 formula does not apply.
+ * Returns a new object (the original is deleted); if COM is already at the
+ * origin, returns the original untouched.
+ */
+export function centerManifoldToCOM(m: ManifoldObject): ManifoldObject {
+  const mesh = extractMesh(m)
+  const verts = new Float32Array(mesh.vertices)
+  const tris = new Uint32Array(mesh.indices)
+  const { cx, cy, cz } = centerMassAtOrigin(verts, tris)
+  if (Math.abs(cx) < 1e-6 && Math.abs(cy) < 1e-6 && Math.abs(cz) < 1e-6) return m
+  const centered = m.translate(-cx, -cy, -cz)
+  m.delete()
+  return centered
+}
+
 export function buildPrimitive(shapeType: string, params: Record<string, number>): ManifoldObject {
   const wasm = getWasm()
   const { Manifold } = wasm
+
+  let m: ManifoldObject
+
   switch (shapeType) {
     case 'cube': {
       let width = params.width
@@ -199,29 +223,32 @@ export function buildPrimitive(shapeType: string, params: Record<string, number>
       if (width === undefined || width <= 0) width = 20
       if (height === undefined || height <= 0) height = 20
       if (depth === undefined || depth <= 0) depth = 20
-      return Manifold.cube([width, height, depth], true)
+      m = Manifold.cube([width, height, depth], true)
+      break
     }
     case 'sphere': {
       const r = params.radius ?? 12
       const seg = params.segments ?? 48
       if (r <= 0) return Manifold.cube([20, 20, 20], true)
-      return Manifold.sphere(r, seg)
+      m = Manifold.sphere(r, seg)
+      break
     }
     case 'cylinder': {
       const h = params.height ?? 30
       const r = params.radius ?? 10
       const seg = params.segments ?? 48
       if (h <= 0 || r <= 0) return Manifold.cube([20, 20, 20], true)
-      return Manifold.cylinder(h, r, r, seg, true)
+      m = Manifold.cylinder(h, r, r, seg, true)
+      break
     }
-    case 'cone':
-      return Manifold.cylinder(
-        params.height ?? 30,
-        params.radius ?? 10,
-        0,
-        params.segments ?? 48,
-        true,
-      )
+    case 'cone': {
+      m = Manifold.cylinder(params.height ?? 30, params.radius ?? 10, 0, params.segments ?? 48, true)
+      // COM центрируем универсально (centerMassAtOrigin): Manifold.cylinder(center=true)
+      // центрирует BBox, не COM. Формула h/4 верна только для radiusTop=0 —
+      // centerManifoldToCOM корректна и для усечённых конусов.
+      m = centerManifoldToCOM(m)
+      break
+    }
     case 'torus': {
       const torusRadius = params.torusRadius ?? 15
       const tubeRadius = params.tubeRadius ?? 4
@@ -234,31 +261,38 @@ export function buildPrimitive(shapeType: string, params: Record<string, number>
       // Dispose intermediate CrossSection WASM objects
       translated.delete()
       circle.delete()
-      return result
+      m = result
+      break
     }
     case 'prism': {
       const sides = Math.max(3, Math.round(params.sides ?? 6))
-      return Manifold.cylinder(
+      // center=true: от -h/2 до h/2, центр масс в origin (FIX CSG-PRISM-OFFSET)
+      m = Manifold.cylinder(
         params.height ?? 20,
         params.radius ?? 12,
         params.radius ?? 12,
         sides,
         true,
       )
+      break
     }
     case 'pyramid': {
-      const sides = Math.max(3, Math.round(params.sides ?? 4))
-      return Manifold.cylinder(
-        params.height ?? 20,
-        params.radius ?? 12,
-        0,
-        sides,
-        true,
-      )
+      m = Manifold.cylinder(params.height ?? 20, params.radius ?? 12, 0, Math.max(3, Math.round(params.sides ?? 4)), true)
+      // COM центрируем универсально (centerMassAtOrigin): см. cone
+      m = centerManifoldToCOM(m)
+      break
     }
     default:
-      return Manifold.cube([20, 20, 20], true)
+      m = Manifold.cube([20, 20, 20], true)
   }
+
+  // Все примитивы центрированы в origin через API manifold-3d:
+  // cube: center=true, sphere: origin, cylinder: center=true,
+  // cone: center=true, torus: revolve around origin,
+  // prism: center=true (FIX CSG-PRISM-OFFSET), pyramid: center=true (FIX)
+  // Дополнительное центрирование не требуется.
+
+  return m
 }
 
 /** Build a rounded box via warp + refine (only for cube). */
@@ -509,14 +543,10 @@ export async function handleBuildShape(msg: BuildShapeMessage): Promise<void> {
   const safeP = sanitizeParams(msg.params)
 
   // Rebuild primitive using buildPrimitive (DRY: WARN-R8-3)
+  // ⚠️ НЕ применяем transform к вершинам — vertices остаются в origin (COM).
+  // Transform применяется в store (addShape) как spawn-позиция SceneObject.transform.
+  // FIX (Phase 8.5, Stage 8.5.1): vertices в origin, render = data.
   let m = buildPrimitive(shapeType, safeP)
-
-  // Apply translation
-  const t = msg.transform
-  const transformMatrix = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, t.x, t.y, t.z, 1]
-  const transformed = m.transform(transformMatrix)
-  m.delete()
-  m = transformed
 
   setCached(msg.objId, m)
 
@@ -544,14 +574,8 @@ export async function handleApplyFillet(msg: ApplyFilletMessage): Promise<void> 
   const radius = clamp(msg.radius, 0, 1e4)
 
   // DRY: use buildPrimitiveWithFillet instead of duplicated switch (WARN-R8-3)
+  // ⚠️ НЕ применяем transform к вершинам — vertices остаются в origin (COM).
   let m = buildPrimitiveWithFillet(shapeType, safeP, radius)
-
-  // Apply translation
-  const t = msg.transform
-  const transformMatrix = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, t.x, t.y, t.z, 1]
-  const transformed = m.transform(transformMatrix)
-  m.delete()
-  m = transformed
 
   setCached(msg.objId, m)
 
@@ -577,14 +601,14 @@ export async function handleBuildImportedMesh(msg: BuildImportedMeshMessage): Pr
   const t0 = performance.now()
   const verts = new Float32Array(msg.vertices)
   const tris = new Uint32Array(msg.indices)
-  if (import.meta.env.DEV) console.log(`[DIAG:handleBuildImportedMesh] objId=${msg.objId} verts=${verts.length} tris=${tris.length}`)
+  devLogCsg('BUILD_IMPORTED_MESH', { objId: msg.objId, verts: verts.length / 3, tris: tris.length / 3 })
   try {
     const m = new wasm.Manifold({
       numProp: 3,
       vertProperties: verts,
       triVerts: tris,
     })
-    if (import.meta.env.DEV) console.log(`[DIAG:handleBuildImportedMesh] Manifold created successfully for ${msg.objId}`)
+    devLogCsg('BUILD_IMPORTED_MESH', { objId: msg.objId, status: 'Manifold created' })
     setCached(msg.objId, m)
     const mesh = extractMesh(m)
     safePostMessage(
@@ -754,17 +778,17 @@ export async function handleRebuildTreeNode(msg: RebuildTreeNodeMessage): Promis
         // to each other and to sibling primitives (sphere). Root centering preserves
         // these relative positions while removing the absolute offset.
         if (id === rootId) {
-          // Center root boolean — frontend pivot applies mirrored TRS
+          // Stage 6.5: Center root boolean by CENTER OF MASS (centerMassAtOrigin,
+          // объёмный центроид) — единая формула со frontend (store/helpers) и
+          // rebuildNode. Раньше был vertex centroid (среднее по вершинам) — для
+          // несимметричных CSG (куб+призма) он расходится с центром масс на
+          // единицы (численный тест: diff = 3.89), что возвращало
+          // CSG-PRISM-OFFSET. Frontend pivot применяет mirrored TRS.
           const mesh = m.getMesh()
-          const verts = mesh.vertProperties
-          const numVerts = verts.length / mesh.numProp
-          let cx = 0, cy = 0, cz = 0
-          for (let i = 0; i < numVerts; i++) {
-            cx += verts[i * mesh.numProp]
-            cy += verts[i * mesh.numProp + 1]
-            cz += verts[i * mesh.numProp + 2]
-          }
-          cx /= numVerts; cy /= numVerts; cz /= numVerts
+          const { cx, cy, cz } = centerMassAtOrigin(
+            new Float32Array(mesh.vertProperties),
+            new Uint32Array(mesh.triVerts),
+          )
 
           const centerMatrix = buildTransformMatrix(
             { x: -cx, y: -cy, z: -cz },
@@ -831,6 +855,12 @@ export async function handleRebuildScene(msg: RebuildSceneMessage): Promise<void
     const wasm = getWasm()
     const shapeInfos: Map<string, { shapeType: string; params: Record<string, number>; filletRadius: number }> = new Map()
     const currentTransforms: Map<string, RebuildTransform> = new Map()
+    // FIX (8.5.2.5): CSG-результаты group-операций исключаются из центрирования
+    // в results-петле — rebuild.ts использует сохранённые pivot-центрированные
+    // resultVertices (или сам COM-центрит legacy-фолбэк). Для всех остальных
+    // объектов (примитивы, import_mesh) results-петля снимает запечённую
+    // трансляцию и центрирует вершины по COM.
+    const booleanResultIds = new Set<string>()
     const ops = msg.operations as Record<string, unknown>[]
 
     for (const op of ops) {
@@ -857,10 +887,10 @@ export async function handleRebuildScene(msg: RebuildSceneMessage): Promise<void
           ? { x: raw.x, y: raw.y, z: raw.z, rotX: raw.rotX, rotY: raw.rotY, rotZ: raw.rotZ, scaleX: raw.scaleX ?? 1, scaleY: raw.scaleY ?? 1, scaleZ: raw.scaleZ ?? 1 }
           : { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
         currentTransforms.set(op.id as string, t)
-        // FIX (UB-0): восстанавливаем baked-геометрию (импорт STL / 3D-текст)
-        // из op.vertices/op.indices. Раньше здесь запоминался только transform —
+        // FIX (UB-0): восстанавливаем baked-геометрию (импорт STL) из
+        // op.vertices/op.indices. Раньше здесь запоминался только transform —
         // вершины не попадали в cache, объект отсутствовал в results, и после
-        // загрузки проекта/.doodle импортированная геометрия ИСЧЕЗАЛА.
+        // загрузки проекта/.3dtc импортированная геометрия ИСЧЕЗАЛА.
         // Конвенция как у примитивов: в cache запекается ТОЛЬКО translation
         // (rotation/scale применяются на рендере через pivot и в CSG через
         // applySRAroundCenter). shapeInfos НЕ заполняем: ветки move/mirror/fillet
@@ -892,7 +922,7 @@ export async function handleRebuildScene(msg: RebuildSceneMessage): Promise<void
         const id = op.id as string
         const info = shapeInfos.get(id)
         const t = currentTransforms.get(id)
-        if (info && t && info.shapeType !== 'import_mesh') {
+        if (info && t && info.shapeType !== 'import_mesh' && info.shapeType !== 'text3d') {
           const r = op.radius as number
           info.filletRadius = r
           const m = applyTransform(buildPrimitiveWithFillet(info.shapeType, info.params, r), t)
@@ -919,7 +949,7 @@ export async function handleRebuildScene(msg: RebuildSceneMessage): Promise<void
               const tm = applyTransform(fresh, { x: nt.x, y: nt.y, z: nt.z })
               setCached(id, tm)
             } else {
-              // FIX (UB-0): baked-геометрия (import_mesh/text3d/CSG-результат) не
+              // FIX (UB-0): baked-геометрия (import_mesh/CSG-результат) не
               // может быть перестроена из shapeType/params — сдвигаем кэшированный
               // меш на дельту (translation запечён, RS применяется позже).
               // Раньше здесь был no-op → move терялся при загрузке проекта, а для
@@ -967,6 +997,10 @@ export async function handleRebuildScene(msg: RebuildSceneMessage): Promise<void
                 const mirrored = origManifold.transform(flip)
                 setCached(newId, mirrored)
                 currentTransforms.set(newId, nt)
+                // FIX (8.5.2.5): зеркальный потомок CSG-результата сохраняет
+                // pivot-центрированную конвенцию §5.4 — не центрируется в
+                // results-петле (store сам задаёт pivot из mirror-транспорта).
+                if (booleanResultIds.has(origId)) booleanResultIds.add(newId)
               }
             }
           }
@@ -1015,6 +1049,10 @@ export async function handleRebuildScene(msg: RebuildSceneMessage): Promise<void
       } else if (op.type === 'group') {
         const ids = op.ids as string[]
         const resultId = op.resultId as string | undefined
+        // FIX (8.5.2.5): CSG-результат не центрируется в results-петле
+        // (pivot-центрированная конвенция §5.4, rebuild.ts использует
+        // resultVertices либо сам COM-центрит legacy-фолбэк).
+        if (resultId) booleanResultIds.add(resultId)
         // FIX (CRIT-CSG-2): If resultVertices/resultIndices are stored in the
         // operation, use them directly instead of rebuilding from operands.
         // This preserves exact CSG geometry through undo/redo.
@@ -1103,13 +1141,38 @@ export async function handleRebuildScene(msg: RebuildSceneMessage): Promise<void
       indices: Uint32Array
       normals: Float32Array | null
       tris: number
+      centerOffset?: { x: number; y: number; z: number }
     }> = []
     const transfers: ArrayBuffer[] = []
     for (const [objId, m] of cache) {
       if (!m) continue
       try {
         const { vertices, indices, normals, tris } = extractMesh(m)
-        results.push({ objId, vertices, indices, normals, tris })
+        // FIX (8.5.2.5): конвенция единого источника (Фаза 8.5) — вершины
+        // SceneObject ВСЕГДА в origin (центрированы по COM), transform — pivot.
+        // Кэш воркера держит spawn-трансляцию, запечённую В вершины
+        // (add_shape/import_mesh/move/align/resize). Снимаем её (−t.xyz),
+        // затем центрируем по COM (centerMassAtOrigin — та же формула, что у
+        // handleBuildShape после 8.5.1) и отдаём offset: main thread прибавит
+        // его к pivot, поэтому world-позиция НЕ меняется:
+        //   render = (pivot + COM) + (v − COM) = pivot + v = world.
+        // CSG-результаты не трогаем: они уже в pivot-центрированной конвенции
+        // §5.4, store использует resultVertices из операции (или сам
+        // COM-центрит legacy-фолбэк в rebuild.ts).
+        let centerOffset: { x: number; y: number; z: number } | undefined
+        if (!booleanResultIds.has(objId)) {
+          const t = currentTransforms.get(objId)
+          if (t) {
+            for (let i = 0; i < vertices.length; i += 3) {
+              vertices[i] -= t.x
+              vertices[i + 1] -= t.y
+              vertices[i + 2] -= t.z
+            }
+          }
+          const com = centerMassAtOrigin(vertices, indices)
+          centerOffset = { x: com.cx, y: com.cy, z: com.cz }
+        }
+        results.push({ objId, vertices, indices, normals, tris, centerOffset })
         transfers.push(vertices.buffer as ArrayBuffer, indices.buffer as ArrayBuffer)
         if (normals) transfers.push(normals.buffer as ArrayBuffer)
       } catch (extractErr) {
@@ -1135,13 +1198,53 @@ export async function handleRebuildScene(msg: RebuildSceneMessage): Promise<void
 /** Handle csgBoolean message. */
 export async function handleCsgBoolean(msg: CsgBooleanMessage): Promise<void> {
   const t0 = performance.now()
-  let a = cache.get(msg.idA)
-  let b = cache.get(msg.idB)
-  if (!a || !b) throw new Error(`Objects not found: ${msg.idA}, ${msg.idB}`)
+  const aOrig = cache.get(msg.idA)
+  const bOrig = cache.get(msg.idB)
+  if (!aOrig || !bOrig) throw new Error(`Objects not found: ${msg.idA}, ${msg.idB}`)
 
-  // Note: caller (document-store.csgBoolean) must call workerSyncObjects() first
-  // to ensure worker cache has geometry with correct position/rotation/scale.
-  // The transformA/transformB parameters are legacy and kept for backward compat.
+  // Stage 6.5 (regression fix): cache holds ORIGIN-CENTERED meshes (handleSyncMesh
+  // stopped baking TRS in Stage 6). Apply transformA/transformB ONE TIME here,
+  // exactly like handleCsgBooleanSync does. Identity when a transform is omitted.
+  const IDT = { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
+  const tA = msg.transformA ?? IDT
+  const tB = msg.transformB ?? IDT
+  const a = aOrig.transform(buildTransformMatrix(
+    { x: tA.x, y: tA.y, z: tA.z },
+    { rotX: tA.rotX, rotY: tA.rotY, rotZ: tA.rotZ },
+    { scaleX: tA.scaleX, scaleY: tA.scaleY, scaleZ: tA.scaleZ },
+  ))
+  const b = bOrig.transform(buildTransformMatrix(
+    { x: tB.x, y: tB.y, z: tB.z },
+    { rotX: tB.rotX, rotY: tB.rotY, rotZ: tB.rotZ },
+    { scaleX: tB.scaleX, scaleY: tB.scaleY, scaleZ: tB.scaleZ },
+  ))
+  disposeCached(msg.idA)
+  disposeCached(msg.idB)
+
+  // DIAG: operand BBox before CSG
+  const aMesh = a.getMesh()
+  const aVerts = aMesh.vertProperties
+  const aNumVerts = aVerts.length / aMesh.numProp
+  let aMin = { x: Infinity, y: Infinity, z: Infinity }, aMax = { x: -Infinity, y: -Infinity, z: -Infinity }
+  for (let i = 0; i < aNumVerts; i++) {
+    const vx = aVerts[i * aMesh.numProp], vy = aVerts[i * aMesh.numProp + 1], vz = aVerts[i * aMesh.numProp + 2]
+    if (vx < aMin.x) aMin.x = vx; if (vx > aMax.x) aMax.x = vx
+    if (vy < aMin.y) aMin.y = vy; if (vy > aMax.y) aMax.y = vy
+    if (vz < aMin.z) aMin.z = vz; if (vz > aMax.z) aMax.z = vz
+  }
+  devLogCsg('operandA', { id: msg.idA, bbox: { min: aMin, max: aMax } })
+
+  const bMesh = b.getMesh()
+  const bVerts = bMesh.vertProperties
+  const bNumVerts = bVerts.length / bMesh.numProp
+  let bMin = { x: Infinity, y: Infinity, z: Infinity }, bMax = { x: -Infinity, y: -Infinity, z: -Infinity }
+  for (let i = 0; i < bNumVerts; i++) {
+    const vx = bVerts[i * bMesh.numProp], vy = bVerts[i * bMesh.numProp + 1], vz = bVerts[i * bMesh.numProp + 2]
+    if (vx < bMin.x) bMin.x = vx; if (vx > bMax.x) bMax.x = vx
+    if (vy < bMin.y) bMin.y = vy; if (vy > bMax.y) bMax.y = vy
+    if (vz < bMin.z) bMin.z = vz; if (vz > bMax.z) bMax.z = vz
+  }
+  devLogCsg('operandB', { id: msg.idB, bbox: { min: bMin, max: bMax } })
 
   let result: ManifoldObject
   switch (msg.op) {
@@ -1155,11 +1258,51 @@ export async function handleCsgBoolean(msg: CsgBooleanMessage): Promise<void> {
       result = a.intersect(b)
   }
 
-  disposeCached(msg.idA)
-  disposeCached(msg.idB)
-  setCached(msg.resultId, result)
+  a.delete()
+  b.delete()
+
+  // Stage 6.5: cache holds a COM-centered copy (§6.1 «cache in origin»), the
+  // RESPONSE carries the WORLD mesh — frontend computes the pivot itself with
+  // the same centerMassAtOrigin (document-store csgBoolean flow).
+  const resultMeshData = result.getMesh()
+  const { cx: comX, cy: comY, cz: comZ } = centerMassAtOrigin(
+    new Float32Array(resultMeshData.vertProperties),
+    new Uint32Array(resultMeshData.triVerts),
+  )
+  const centered = result.transform([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -comX, -comY, -comZ, 1])
+  setCached(msg.resultId, centered)
 
   const mesh = extractMesh(result)
+  result.delete()
+
+  // DIAG: result BBox
+  const rMin = { x: Infinity, y: Infinity, z: Infinity }, rMax = { x: -Infinity, y: -Infinity, z: -Infinity }
+  for (let i = 0; i < mesh.vertices.length; i += 3) {
+    const vx = mesh.vertices[i], vy = mesh.vertices[i + 1], vz = mesh.vertices[i + 2]
+    if (vx < rMin.x) rMin.x = vx; if (vx > rMax.x) rMax.x = vx
+    if (vy < rMin.y) rMin.y = vy; if (vy > rMax.y) rMax.y = vy
+    if (vz < rMin.z) rMin.z = vz; if (vz > rMax.z) rMax.z = vz
+  }
+  const rCx = (rMin.x + rMax.x) / 2, rCy = (rMin.y + rMax.y) / 2, rCz = (rMin.z + rMax.z) / 2
+  devLogCsg('result:bbox', {
+    id: msg.resultId, op: msg.op,
+    bbox: { min: rMin, max: rMax, center: { x: rCx, y: rCy, z: rCz }, size: { x: rMax.x - rMin.x, y: rMax.y - rMin.y, z: rMax.z - rMin.z } },
+    verts: mesh.vertices.length / 3, tris: mesh.tris, ms: performance.now() - t0,
+  })
+  devLogCsg('verts', { id: msg.resultId, firstVertex: { x: mesh.vertices[0], y: mesh.vertices[1], z: mesh.vertices[2] }, transformA: msg.transformA })
+
+  // DIAG: CSG result — full picture for debugging position shifts
+  devLogCsg('result', {
+    id: msg.resultId,
+    op: msg.op,
+    firstVertex: { x: mesh.vertices[0], y: mesh.vertices[1], z: mesh.vertices[2] },
+    bbox: { min: rMin, max: rMax, center: { x: rCx, y: rCy, z: rCz } },
+    size: { x: rMax.x - rMin.x, y: rMax.y - rMin.y, z: rMax.z - rMin.z },
+    verts: mesh.vertices.length / 3,
+    tris: mesh.tris,
+    ms: performance.now() - t0,
+  })
+
   safePostMessage(
     {
       reqId: msg.reqId,
@@ -1208,6 +1351,7 @@ export async function handleSyncObjects(msg: SyncObjectsMessage): Promise<void> 
       )
       const tm = m.transform(fullMatrix)
       setCached(e.objId, tm)
+      devLogCsg('SYNC_MESH', { objId: e.objId, shapeType: e.shapeType, transform: e.transform, hasRotationOrScale: e.transform.rotX !== 0 || e.transform.rotY !== 0 || e.transform.rotZ !== 0 || e.transform.scaleX !== 1 || e.transform.scaleY !== 1 || e.transform.scaleZ !== 1 })
       success = true
     } finally {
       // FIX (LOW-18-15): Dispose on error to prevent WASM memory leak
@@ -1249,21 +1393,13 @@ export interface CsgBooleanSyncMessage {
 export async function handleCsgBooleanSync(msg: CsgBooleanSyncMessage): Promise<void> {
   const t0 = performance.now()
 
-  // Sync operand A — build primitive at origin, apply TRS
-  // FIX (CRIT-CSG-3): Always rebuild from shapeType/params when available,
-  // regardless of cache state. This ensures the operand has the correct
-  // position/rotation/scale for the boolean operation.
+  // Sync operand A — build primitive at origin, cache in origin (no transform baked).
+  // Stage 6.5 lifetime fix: cache OWNS the object — do NOT delete it after setCached.
   if (msg.shapeA) {
     const params = sanitizeParams(msg.shapeA.params)
     const m = buildPrimitive(msg.shapeA.shapeType, params)
-    const fullMatrix = buildTransformMatrix(
-      { x: msg.transformA.x, y: msg.transformA.y, z: msg.transformA.z },
-      { rotX: msg.transformA.rotX, rotY: msg.transformA.rotY, rotZ: msg.transformA.rotZ },
-      { scaleX: msg.transformA.scaleX, scaleY: msg.transformA.scaleY, scaleZ: msg.transformA.scaleZ },
-    )
-    setCached(msg.idA, m.transform(fullMatrix))
-    // FIX (HIGH-18-11): Dispose operand primitive after applying transform to prevent WASM memory leak
-    m.delete()
+    // Stage 6: cache in origin — transform applied ONE TIME before boolean
+    setCached(msg.idA, m)
   }
   // If shapeA is undefined (CSG result or imported mesh), skip rebuild —
   // rely on previous syncObjectsForOperation that called workerSyncMesh.
@@ -1272,20 +1408,32 @@ export async function handleCsgBooleanSync(msg: CsgBooleanSyncMessage): Promise<
   if (msg.shapeB) {
     const params = sanitizeParams(msg.shapeB.params)
     const m = buildPrimitive(msg.shapeB.shapeType, params)
-    const fullMatrix = buildTransformMatrix(
-      { x: msg.transformB.x, y: msg.transformB.y, z: msg.transformB.z },
-      { rotX: msg.transformB.rotX, rotY: msg.transformB.rotY, rotZ: msg.transformB.rotZ },
-      { scaleX: msg.transformB.scaleX, scaleY: msg.transformB.scaleY, scaleZ: msg.transformB.scaleZ },
-    )
-    setCached(msg.idB, m.transform(fullMatrix))
-    // FIX (HIGH-18-11): Dispose operand primitive after applying transform to prevent WASM memory leak
-    m.delete()
+    // Stage 6: cache in origin — transform applied ONE TIME before boolean
+    setCached(msg.idB, m)
   }
 
-  // Perform boolean
-  const a = cache.get(msg.idA)
-  const b = cache.get(msg.idB)
-  if (!a || !b) throw new Error(`Objects not found: ${msg.idA}, ${msg.idB}`)
+  // Perform boolean: apply transform ONE TIME to each origin-centered operand
+  const aOrig = cache.get(msg.idA)
+  const bOrig = cache.get(msg.idB)
+  if (!aOrig || !bOrig) throw new Error(`Objects not found: ${msg.idA}, ${msg.idB}`)
+
+  // Apply transform A
+  const matrixA = buildTransformMatrix(
+    { x: msg.transformA.x, y: msg.transformA.y, z: msg.transformA.z },
+    { rotX: msg.transformA.rotX, rotY: msg.transformA.rotY, rotZ: msg.transformA.rotZ },
+    { scaleX: msg.transformA.scaleX, scaleY: msg.transformA.scaleY, scaleZ: msg.transformA.scaleZ },
+  )
+  const a = aOrig.transform(matrixA)
+  disposeCached(msg.idA)
+
+  // Apply transform B
+  const matrixB = buildTransformMatrix(
+    { x: msg.transformB.x, y: msg.transformB.y, z: msg.transformB.z },
+    { rotX: msg.transformB.rotX, rotY: msg.transformB.rotY, rotZ: msg.transformB.rotZ },
+    { scaleX: msg.transformB.scaleX, scaleY: msg.transformB.scaleY, scaleZ: msg.transformB.scaleZ },
+  )
+  const b = bOrig.transform(matrixB)
+  disposeCached(msg.idB)
 
   let result: ManifoldObject
   switch (msg.op) {
@@ -1294,11 +1442,24 @@ export async function handleCsgBooleanSync(msg: CsgBooleanSyncMessage): Promise<
     default: result = a.intersect(b)
   }
 
-  disposeCached(msg.idA)
-  disposeCached(msg.idB)
-  setCached(msg.resultId, result)
+  a.delete()
+  b.delete()
+
+  // Stage 6.5: cache holds a COM-centered copy (§6.1 «cache in origin»), the
+  // RESPONSE carries the WORLD mesh — the frontend computes the pivot itself
+  // with the same centerMassAtOrigin (document-store csgBoolean flow), so
+  // worker and frontend agree by construction (same function, same mesh).
+  const resultMeshData = result.getMesh()
+  const { cx, cy, cz } = centerMassAtOrigin(
+    new Float32Array(resultMeshData.vertProperties),
+    new Uint32Array(resultMeshData.triVerts),
+  )
+  const centered = result.transform([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -cx, -cy, -cz, 1])
+  setCached(msg.resultId, centered)
 
   const mesh = extractMesh(result)
+  result.delete()
+
   safePostMessage(
     {
       reqId: msg.reqId,
@@ -1454,9 +1615,8 @@ export interface SyncMeshMessage {
  * Sync a mesh into worker cache from raw vertices/indices.
  * Used for CSG results and imported meshes that cannot be rebuilt from shapeType+params.
  *
- * FIX (CRIT-CSG-5 / MIRROR-CSG-RS): CSG result meshes are centered at origin.
- * The transform carries the full TRS (position + rotation + scale). Rotation/scale
- * are applied at render time via the Three.js pivot (Viewport3D), so the stored
+ * Stage 6 (Phase 8): Mesh is cached in ORIGIN (without transform). The transform
+ * is applied at render time via the Three.js pivot (Viewport3D), so the stored
  * vertices do NOT have rotation/scale baked in.
  *
  * For booleans to work, the worker cache manifold must be at the object's true
@@ -1473,32 +1633,15 @@ export async function handleSyncMesh(msg: SyncMeshMessage): Promise<void> {
   const wasm = getWasm()
   const verts = new Float32Array(msg.vertices)
   const tris = new Uint32Array(msg.indices)
-  const hasRotationOrScale = hasSR(msg.transform)
-  if (import.meta.env.DEV) console.log(`[DIAG:handleSyncMesh] objId=${msg.objId} verts=${verts.length} tris=${tris.length} transform=(${msg.transform.x}, ${msg.transform.y}, ${msg.transform.z}) hasSR=${hasRotationOrScale}`)
   try {
     let m = new wasm.Manifold({
       numProp: 3,
       vertProperties: verts,
       triVerts: tris,
     })
-    if (import.meta.env.DEV) console.log(`[DIAG:handleSyncMesh] Manifold created successfully for ${msg.objId}`)
-    // Geometry is centered at origin. Apply the object's world transform so the
-    // cached manifold is at the correct world position with rotation/scale.
-    let matrix: number[]
-    if (hasRotationOrScale) {
-      // Full TRS: v' = RS·v + pos (geometry centered at origin).
-      matrix = buildTransformMatrix(
-        { x: msg.transform.x, y: msg.transform.y, z: msg.transform.z },
-        { rotX: msg.transform.rotX, rotY: msg.transform.rotY, rotZ: msg.transform.rotZ },
-        { scaleX: msg.transform.scaleX, scaleY: msg.transform.scaleY, scaleZ: msg.transform.scaleZ },
-      )
-    } else {
-      // Fast path: translation only (normal CSG results have translation-only transform).
-      matrix = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, msg.transform.x, msg.transform.y, msg.transform.z, 1]
-    }
-    m = m.transform(matrix)
+    // Stage 6: Cache mesh in ORIGIN — do NOT apply transform here.
+    // Transform is applied at render time via the Three.js pivot.
     setCached(msg.objId, m)
-    if (import.meta.env.DEV) console.log(`[DIAG:handleSyncMesh] Cached ${msg.objId} as ManifoldObject`)
     safePostMessage({ reqId: msg.reqId, type: 'ok' })
   } catch (me) {
     // Non-manifold — cache as null (CSG not supported for this object)

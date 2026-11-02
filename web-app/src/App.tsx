@@ -12,22 +12,15 @@ import TextModal from "./components/TextModal";
 import ExportModal from "./components/ExportModal";
 import ImportModal from "./components/ImportModal";
 import EconomyOnboarding from "./components/EconomyOnboarding";
-// FIX (UB-4): EconomyBanner удалён — кнопки скрытия баннера дублировали
-// строку «Отключение баннера» в разделе «Аренда» правой панели.
 import RentalModal from "./components/RentalModal";
 import StatusBar from "./components/StatusBar";
 import LeftPanel from "./components/LeftPanel";
 import PropertiesPanel from "./components/PropertiesPanel";
-// EconomyHUD, QuestPanel, EconomyShop удалены — интегрированы в PropertiesPanel (§6.2 ECONOMY.md)
-// U3: отдельной левой вкладки «магазин» нет; точки продаж — только правая панель
-// (PropertiesPanel → EconomyPanel). Переходы «купить» = clearSelection() — экономика
-// показывается в правой панели при пустом выделении.
 import { useDocumentStore } from "./store/document-store";
 import { useUiStore } from "./store/ui-store";
 import { useEconomyStore } from "./store/economy-store";
 import { useShallow } from "zustand/shallow";
 import { isWorkerReady } from "./csg/worker-client";
-import { notify } from "./store/notifications";
 import { SNAP_VALUES, AUTOSAVE_DELAY_MS } from "./constants";
 import { getPlatform, initPlatform, isEconomyAvailable } from "./platform";
 import { getInitDonePromise } from "./platform/sdk";
@@ -128,6 +121,8 @@ export default function App() {
       redo: s.redo,
       jumpToHistory: s.jumpToHistory,
       clearScene: s.clearScene,
+      openProject: s.openProject,
+      saveProject: s.saveProject,
       openDoodle: s.openDoodle,
       saveDoodle: s.saveDoodle,
       moveObject: s.moveObject,
@@ -174,6 +169,8 @@ export default function App() {
     redo,
     jumpToHistory,
     clearScene,
+    openProject,
+    saveProject,
     openDoodle,
     saveDoodle,
     moveObject,
@@ -201,7 +198,7 @@ export default function App() {
   }, [theme]);
 
   // ── Инициализация платформы + экономика (объединено) ──
-  // ⚠️ ВАЖНО: loadEconomy() вызывается ПОСЛЕ platform.init(),
+  // ⚠️ ВАЖНО: loadFromCloud() вызывается ПОСЛЕ platform.init(),
   // потому что loadFromCloud() → platform.loadData() → ysdk.player.getData()
   // вызывает postMessage, который ломается в iframe Yandex (error #185).
   // RAF в platform.init() завершается только ПОСЛЕ стабилизации React-дерева.
@@ -240,15 +237,11 @@ export default function App() {
           await applyDebugTokensGrant()
           void installEconomyDebugHelper()
           // EC1: показать баннер-оффер если нет подписки и аренда не активна
-          // B1: единый RO-геттер shouldShowBannerRO() — bannerVisible по умолчанию
-          // true (инициализация/merge в economy-store), здесь только страховка от
-          // устаревших персист-данных и пере-проверка подписки/аренды.
           const econ = useEconomyStore.getState()
           econ.setBannerVisible(econ.shouldShowBannerRO())
           // UB4-1: platform.init() показывает sticky-баннер безусловно, а оплата
           // «отключить баннер» обязана убирать и его. syncPlatformBanner() сверяет
-          // SDK с экономикой в обе стороны: оплачено → hide, нет/истекло → show
-          // (аккаунт с истёкшей арендой, загруженный из облака).
+          // SDK с экономикой в обе стороны.
           void econ.syncPlatformBanner()
         } catch (e) {
           console.error('[App] Economy init failed:', e)
@@ -261,10 +254,7 @@ export default function App() {
         }, 30000)
 
         // ── P1-1: сброс дневных лимитов при смене суток, даже если страница
-        // открыта больше суток. Триггеры:
-        //  • visibilitychange (вкладка стала видимой) и focus — проверяем сразу;
-        //  • setInterval ~60с — страховка, если фокус-события не сработали
-        //    (например, вкладка оставалась видимой через полноэкранный режим).
+        // открыта больше суток. Триггеры: visibilitychange/focus + setInterval ~60с.
         const checkDayRollover = () => {
           void useEconomyStore.getState().refreshDayRollover()
         }
@@ -274,7 +264,6 @@ export default function App() {
         const rolloverInterval = setInterval(checkDayRollover, 60_000)
         document.addEventListener('visibilitychange', onVisibility)
         window.addEventListener('focus', checkDayRollover)
-        // Очистка обработчиков — храним в замыкании для cleanup ниже
         cleanupRolloverRef.current = () => {
           clearInterval(rolloverInterval)
           document.removeEventListener('visibilitychange', onVisibility)
@@ -284,7 +273,6 @@ export default function App() {
     }
     bootstrap()
     // Cleanup: интервал синхронизации обязан очищаться при unmount
-    // (раньше cleanup возвращался из async bootstrap() и терялся — утечка)
     return () => {
       disposed = true
       if (syncInterval) clearInterval(syncInterval)
@@ -352,7 +340,6 @@ export default function App() {
   }, [workerOk]);
 
 
-
   useEffect(() => {
     if (operations.length === 0) return;
     if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
@@ -368,12 +355,12 @@ export default function App() {
   // ref обновляется каждый рендер, но сам listener не переподключается.
   const kbRef = useRef({
     objects, deleteSelected, undo, redo, selectObjects,
-    saveDoodle, openDoodle, clearSelection, copySelected, pasteClipboard,
+    saveProject, openProject, clearSelection, copySelected, pasteClipboard,
     showTextModal, showPM,
   });
   kbRef.current = {
     objects, deleteSelected, undo, redo, selectObjects,
-    saveDoodle, openDoodle, clearSelection, copySelected, pasteClipboard,
+    saveProject, openProject, clearSelection, copySelected, pasteClipboard,
     showTextModal, showPM,
   };
 
@@ -403,61 +390,66 @@ export default function App() {
       const ctrl = e.ctrlKey || e.metaKey;
       if ((e.target as HTMLElement).tagName === "INPUT") return;
       const kb = kbRef.current;
-      if (e.key === "Delete" || e.key === "Backspace") {
+
+      // e.code — physical key position, works regardless of keyboard layout
+      // e.key — character value, depends on layout (use only for non-letter keys)
+      const code = e.code
+
+      if (code === "Backspace" || code === "Delete") {
         e.preventDefault();
         kb.deleteSelected();
       }
-      if (ctrl && e.key === "z" && !e.shiftKey) {
+      if (ctrl && code === "KeyZ" && !e.shiftKey) {
         e.preventDefault();
         kb.undo();
       }
-      if (ctrl && (e.key === "y" || (e.key === "z" && e.shiftKey))) {
+      if (ctrl && (code === "KeyY" || (code === "KeyZ" && e.shiftKey))) {
         e.preventDefault();
         kb.redo();
       }
-      if (ctrl && e.key === "a") {
+      if (ctrl && code === "KeyA") {
         e.preventDefault();
         kb.selectObjects(Object.keys(kb.objects), false);
       }
-      if (ctrl && e.key === "s") {
+      if (ctrl && code === "KeyS") {
         e.preventDefault()
         // FIX (HIGH-18-18): Allow Ctrl+S to save even when gizmo is active
         // The gizmo handles `s` key for toggle (without ctrl), but Ctrl+S should always save
-        kb.saveDoodle()
+        kb.saveProject()
       }
-      if (ctrl && e.key === "o") {
+      if (ctrl && code === "KeyO") {
         e.preventDefault();
-        kb.openDoodle();
+        kb.openProject();
       }
-      if (ctrl && e.key === "c") {
+      if (ctrl && code === "KeyC") {
         e.preventDefault();
         kb.copySelected();
       }
-      if (ctrl && e.key === "v") {
+      if (ctrl && code === "KeyV") {
         e.preventDefault();
         kb.pasteClipboard();
       }
-      if (!ctrl && e.key === "f") {
+      if (!ctrl && code === "KeyF") {
         e.preventDefault();
         fitViewRef.current?.();
       }
-      if (!ctrl && e.key === "h") {
+      if (!ctrl && code === "KeyH") {
         e.preventDefault();
         resetViewRef.current?.();
       }
-      if (!ctrl && e.key === "g") {
+      if (!ctrl && code === "KeyG") {
         e.preventDefault();
         setGizmoMode((m) => (m === "translate" ? "none" : "translate"));
       }
-      if (!ctrl && e.key === "r") {
+      if (!ctrl && code === "KeyR") {
         e.preventDefault();
         setGizmoMode((m) => (m === "rotate" ? "none" : "rotate"));
       }
-      if (!ctrl && e.key === "s") {
+      if (!ctrl && code === "KeyS") {
         e.preventDefault();
         setGizmoMode((m) => (m === "scale" ? "none" : "scale"));
       }
-      if (e.key === "Escape") {
+      if (code === "Escape") {
         // FIX (MED-18-39): Don't clear selection / gizmo if a modal is open
         if (showTextModal || showPM) return
         setGizmoMode("none");
@@ -496,8 +488,6 @@ export default function App() {
   const handleAddText = useCallback(async () => {
     // EC13: проверка доступа к 3D-тексту
     // P1-5: единый RO-хелпер (подписка ИЛИ аренда text3d по серверному времени)
-    // B2: «купить» открывает экономику ВНУТРИ правой панели (store-флаг
-    // economyPanelOpen) — НЕ снимая выделение (панель свойств не «закрывается»).
     if (!useEconomyStore.getState().canUseText3dRO()) {
       // FIX (UB-1): доступ мог истечь, пока модалка текста открыта, —
       // закрываем её и открываем модалку аренды text3d.
@@ -535,7 +525,7 @@ export default function App() {
     } catch (err) {
       console.error("Ошибка генерации текста:", err);
     }
-  }, [textInput, textSize, textDepth, addRawMesh, setEconomyPanelOpen]);
+  }, [textInput, textSize, textDepth, addTextMesh]);
 
   const objectList = useMemo(() => Object.values(objects), [objects]);
   const selSet = useMemo(() => new Set(selectedIds), [selectedIds]);
@@ -622,13 +612,11 @@ export default function App() {
     <div className="app">
       <ToastContainer />
 
+      {/* (ruler display перенесён в блок экономики ниже — иконка RulerIcon + i18n) */}
+
       {/* ── ЭКОНОМИКА: онбординг (§6.7) ── */}
       {/* P0-6: только при реальном Yandex SDK (не clean-фолбэк) */}
       {isEconomyAvailable() && <EconomyOnboarding />}
-
-      {/* FIX (UB-4): баннер-оффер скрытия (§6.3 ECONOMY.md) над панелью
-          инструментов УДАЛЁН — его кнопки дублировали строку
-          «Отключение баннера» в разделе «Аренда» правой панели. */}
 
       {/* ── Ruler distance display ── */}
       {rulerDist !== null && (
@@ -643,18 +631,19 @@ export default function App() {
       <RentalModal />
 
       {/* ── Text Modal ── */}
-      {showTextModal && (<TextModal
-        textInput={textInput}
-        textSize={textSize}
-        textDepth={textDepth}
-        busy={busy}
-        workerOk={workerOk}
-        onTextChange={setTextInput}
-        onSizeChange={setTextSize}
-        onDepthChange={setTextDepth}
-        onAdd={handleAddText}
-        onClose={() => setShowTextModal(false)}
-      />
+      {showTextModal && (
+        <TextModal
+          textInput={textInput}
+          textSize={textSize}
+          textDepth={textDepth}
+          busy={busy}
+          workerOk={workerOk}
+          onTextChange={setTextInput}
+          onSizeChange={setTextSize}
+          onDepthChange={setTextDepth}
+          onAdd={handleAddText}
+          onClose={() => setShowTextModal(false)}
+        />
       )}
 
       {/* ── Export Modal ── */}
@@ -878,8 +867,6 @@ export default function App() {
             onShowProjects={() => setShowPM(true)}
             onSaveToProject={saveToProject}
           />
-
-          {/* Economy: HUD, квесты, аренда, подписки — интегрированы в PropertiesPanel (§6.2) */}
         </div>
       </div>
 

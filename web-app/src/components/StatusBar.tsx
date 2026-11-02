@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import { APP_VERSION } from "../constants";
 
 export default function StatusBar({
   workerOk,
@@ -77,8 +78,7 @@ export default function StatusBar({
         {t("statusbar.fps")} <strong>{fps}</strong>
       </span>
       <span className="status-item text-muted-xs">
-        {/* FIX (LOW-18-42): Remove debug phase info from production status bar */}
-        {t("app.webLabel")}
+        {t("app.name")} v{APP_VERSION}
       </span>
     </div>
   );

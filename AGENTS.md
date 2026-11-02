@@ -14,7 +14,7 @@
 - **manifold-3d** (WASM) — CSG операции в Web Worker
 - **Zustand 5** — стейт-менеджмент
 - **Vite 6** — сборка
-- **Vitest 4** — тесты
+- **Vitest 4** — тесты (~387 тестов, 34 файла)
 - **pnpm** — пакетный менеджер
 
 ## Команды
@@ -31,6 +31,27 @@ pnpm verify       # полная проверка: typecheck + test + build + bu
 
 > **После любой правки** (экономика, сохранения, i18n, platform, действия) запускайте `pnpm verify` и проверяйте чек-лист в `docs/PRE_COMMIT_CHECKLIST.md`.
 
+## Текущий статус
+
+| Фаза | Описание | Статус |
+|------|----------|--------|
+| 0–7.6 | Ядро CAD, CSG, UI, Mirror, Timeline | ✅ Завершены |
+| **8** | **Единая модель трансформов** | ✅ Завершена (v1.1.0) |
+| **8.5** | **Унификация отрисовки и данных** | ✅ Завершена (v1.2.3) |
+| 9 | Параметрическая история (Timeline edit, редактор детей CSG) | 🔲 Запланирована |
+| 10 | Яндекс.Игры — монетизация | 🔲 Запланирована |
+| 11 | Будущее (SVG, 3MF, STEP, Rapier) | 🔲 Запланирована |
+
+**Фаза 8 в деталях:** `web-app/ARCHITECTURE_TRANSFORMS.md`
+**Фаза 8.5 в деталях:** `web-app/ARCHITECTURE_RENDER.md`
+
+## Ветки
+
+| Ветка | Назначение |
+|-------|------------|
+| `main` | Чистый CAD (Open Source, GPL-3.0) |
+| `yandex-games` | Версия для Яндекс.Игр (экономика, реклама, токены) |
+
 ## Архитектура (data flow)
 
 ```
@@ -38,6 +59,9 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
                 ↓                    ↓                                               ↓
            Viewport3D.tsx      history[] (undo/redo)                          manifold-3d
            (Three.js render)   IndexedDB autosave
+                                     ↓
+                            history-tree.ts (Build Tree)
+                            (primitive / boolean / baked)
 ```
 
 ### Ключевые файлы
@@ -46,6 +70,7 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 |---|---|
 | `src/App.tsx` | Layout, keyboard shortcuts, text modal form state, economy init |
 | `src/constants.ts` | Общие константы (ALL_SHAPES, SNAP_VALUES, OP_FILTER_LABELS, spacing, epsilon, OBJECT_COLORS, WADS_OPTIMUM_16) |
+| **Store** | |
 | `src/store/document-store.ts` | Zustand store — действия (create), 500 строк |
 | `src/store/ui-store.ts` | Zustand store — UI state (gizmo, theme, camera, modals, etc.) |
 | `src/store/economy-store.ts` | Экономика: токены, подписки, аренда 24ч, квесты, кэшбэк |
@@ -56,9 +81,18 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 | `src/store/rebuild.ts` | rebuildFromHistory — восстановление объектов из истории операций |
 | `src/store/snapshots.ts` | Snapshot cache для мгновенного undo/redo (PERF-1) |
 | `src/store/notifications.ts` | Toast-уведомления (замена alert) |
+| `src/store/mirror-store.ts` | Store для зеркальных операций |
+| **CSG / Build Tree** | |
+| `src/csg/history-tree.ts` | **Build Tree** — параметрическое дерево (primitive/boolean/baked), `rebuildNode`, `mirrorNodeRecursive`, `cloneSubtree` |
+| `src/csg/tree-store.ts` | Zustand-стор для Build Tree |
+| `src/csg/rebuildOps.ts` | `applyMoveDelta`, `applyMirrorToTransform`, `applyAlignToTransform` |
 | `src/csg/worker.ts` | WASM worker — manifold-3d операции, типобезопасные интерфейсы |
 | `src/csg/worker-client.ts` | Promise-обёртка над воркером |
-| `src/csg/types.ts` | Типы операций, сцены, параметров |
+| `src/csg/worker-handlers.ts` | Индивидуальные handlers для каждой операции |
+| `src/csg/worker-matrix.ts` | Чистая матричная математика (SRT, RS, transform) |
+| `src/csg/types.ts` | Типы операций, сцены, параметров, `TreeNode` |
+| `src/csg/BUILD_TREE_SPEC.md` | Спецификация Build Tree (1410 строк) |
+| **Components** | |
 | `src/components/Viewport3D.tsx` | Three.js вьюпорт, гизмо, raycaster, ruler, snap-to-geometry |
 | `src/components/snap-utils.ts` | Привязка (snap) к геометрии: vertex, edge, face, circle |
 | `src/components/Toolbar.tsx` | Тулбар (файл, undo, view, gizmo, CSG, тема) |
@@ -72,10 +106,14 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 | `src/components/NumInput.tsx` | Numeric input с draft-редактированием |
 | `src/components/Section.tsx` | Collapsible section |
 | `src/components/Timeline.tsx` | История операций + opIcon/opLabel |
+| **IO** | |
 | `src/io/stl-import.ts` | Импорт STL (бинарный + ASCII) |
 | `src/io/stl-export.ts` | Экспорт в бинарный STL |
-| `src/io/doodle-io.ts` | Формат .doodle (ZIP + JSON) |
+| `src/io/doodle-io.ts` | **УСТАРЕЛО**: формат .doodle (legacy, не поддерживается) |
+| `src/io/3dtc-io.ts` | Формат .3dtc (ZIP + JSON) — основной формат проекта (v1.2.0+) |
 | `src/io/autosave.ts` | Автосохранение в IndexedDB |
+| **Platform (yandex-games ветка)** | |
+| `src/platform/index.ts` | Абстракция платформы (clean / yandex) |
 
 ## Конвенции кода
 
@@ -98,12 +136,28 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 ### CSG Worker
 - Воркер кэширует manifold-объекты по `id` (Map)
 - `buildPrimitiveWithFillet` — только cube поддерживает fillet
-- `extractAndCenter()` в store центрирует CSG-результаты (не воркер!)
 - `sanitizeParams()` валидирует пользовательский ввод перед отправкой в воркер
+
+### Build Tree (Фаза 8)
+- **`relativeToParent`** — единственный источник истины для трансформов
+- **`localTransform`** — вычисляемый (для UI)
+- **`vertices`** — всегда в origin (центрированы по центру масс)
+- Transform применяется **один раз** (в `rebuildNode` или worker)
+- См. `web-app/ARCHITECTURE_TRANSFORMS.md`
+
+### Единый источник (Фаза 8.5 + 8.5.9)
+- **`vertices`** — всегда в origin (центр масс). Для CSG: вершины un-baked'ятся от RS операнда A (`v = S⁻¹Rᵀ·(v_world − posA)`)
+- **`transform`** — мировой pivot (spawn + user). Для CSG: полный TRS операнда A (`resultTransform = transformA`)
+- **Отрисовка** = `mesh.position = transform`, `geometry = vertices`
+- **`centerGeometry` — НЕТ** (удалён)
+- **`isPivotCenteredGeometry` — НЕТ** (удалён)
+- **Render = data** — CI-тест `render-data-invariant.test.ts`
+- **`GroupOperation.resultRotation`/`resultScale`** — история CSG с rot/scale, `rebuild.ts` восстанавливает полный TRS
+- См. `web-app/ARCHITECTURE_RENDER.md`
 
 ### Тесты
 - Type-level тесты: `src/csg/types.test.ts`
-- Unit-тесты: `src/csg/*.test.ts`, `src/io/*.test.ts`, `src/store/*.test.ts`, `src/platform/*.test.ts`, `src/components/*.test.ts(x)` — всего 27 файлов, 420 тестов
+- Unit-тесты: `src/csg/*.test.ts`, `src/io/*.test.ts`, `src/store/*.test.ts`, `src/components/*.test.ts`
 - Мок IndexedDB: `src/__mocks__/indexeddb.ts` (in-memory IDB для jsdom)
 - Среда: jsdom (через vite.config.ts)
 - Имена: `describe('FunctionName')` → `it('описание')`
@@ -136,6 +190,12 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 - Обновите статус задачи (🔲 → 🔄 → ✅)
 - Обновите таблицу «Известные проблемы и технический долг»
 
+### ARCHITECTURE_TRANSFORMS.md
+При изменении модели трансформов (Фаза 8):
+- Обновите схему `TreeNode` / `SceneObject`
+- Обновите таблицу «Решаемые проблемы»
+- Обновите статус этапов Фазы 8
+
 ### Прочая документация
 - `ARCHITECTURE.md` — при изменении потоков данных, слоёв, ключевых решений
 - `AGENTS.md` — при изменении конвенций, паттернов, ключевых файлов
@@ -145,13 +205,18 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 1. [ ] `CHANGELOG.md` обновлён
 2. [ ] `CODE_REVIEW.md` обновлён (если затронуты проблемы из ревью)
 3. [ ] `DEVELOPMENT_PLAN.md` обновлён (если затронуты фазы/проблемы)
-4. [ ] `pnpm typecheck` — 0 ошибок
-5. [ ] `pnpm test` — все тесты проходят
+4. [ ] `ARCHITECTURE_TRANSFORMS.md` обновлён (если затронута Фаза 8)
+5. [ ] `pnpm typecheck` — 0 ошибок
+6. [ ] `pnpm test` — все тесты проходят
 
 ## Важные паттерны
 
 ### Центрирование геометрии
-Worker НЕ центрирует геометрию. Центрирование CSG-результатов выполняет store через `extractAndCenter()`. Viewport3D `centerGeometry()` центрирует обычные фигуры. Для CSG-результатов это безвредный no-op. `cachedRawVertices` предотвращает повторное центрирование при обновлениях.
+- **Все примитивы** центрируются в origin через `Manifold.cube(..., true)`, `Manifold.cylinder(..., true)` и т.д.
+- **CSG-результаты** центрируются по **центру масс** (не BBox!) в origin
+- **Worker кэширует в origin** — transform применяется **один раз** при использовании
+- **`vertices` в `SceneObject` всегда в origin** — transform живёт в `SceneObject.transform`
+- **`relativeToParent` в `TreeNode`** — источник истины для rebuild (Фаза 8)
 
 ### Toast вместо alert
 Используйте `notify(message, type)` из `store/notifications.ts` для показа ошибок/предупреждений. Не используйте `alert()`.
@@ -200,6 +265,8 @@ Worker НЕ центрирует геометрию. Центрирование 
 
 ## Документация
 
+- `ARCHITECTURE_TRANSFORMS.md` — единая модель трансформов (Фаза 8)
+- `ARCHITECTURE_RENDER.md` — единый источник данных и отрисовки (Фаза 8.5)
 - `CODE_REVIEW.md` — результаты код-ревью с приоритетами
 - `docs/USER_FEEDBACK_ECONOMY.md` — отзыв пользователя по экономике/UI (реестр открытых проблем)
 - `docs/USER_FEEDBACK_UB2.md` — продолжение отзыва (UB2-1…UB2-5, закрыто 2026-09-23)
@@ -210,5 +277,8 @@ Worker НЕ центрирует геометрию. Центрирование 
 - `DEVELOPMENT_PLAN.md` — план разработки (Фазы 0–7)
 - `ARCHITECTURE.md` — описание архитектуры
 - `CHANGELOG.md` — история изменений
+- `web-app/BUILD_TREE_SPEC.md` — спецификация Build Tree
 - `web-app/NODEJS_SETUP.md` — настройка Node.js, pnpm, проверка typecheck и тестов
 - `docs/PRE_COMMIT_CHECKLIST.md` — чек-лист пост-рефакторинга (обязателен перед коммитом)
+- `ECONOMY.md` — экономика Яндекс.Игр (ветка `yandex-games`)
+- `PLAN_YANDEX.md` — план интеграции Яндекс.Игр

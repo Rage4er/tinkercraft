@@ -142,7 +142,7 @@ export function getCachedTreeSnapshot(
   return treeCache.get(index)
 }
 
-/** Clear all cached snapshots (used on clearScene, openDoodle, loadFromProject). */
+/** Clear all cached snapshots (used on clearScene, openProject, loadFromProject). */
 export function clearSnapshots(): void {
   cache.clear()
   treeCache.clear()

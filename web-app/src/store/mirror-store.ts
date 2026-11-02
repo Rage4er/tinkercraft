@@ -26,7 +26,7 @@
 // ============================================================
 
 import type { TransformNR, SceneObject, ShapeType, ShapeParams } from '../csg/types'
-import { nextId } from './helpers'
+import { nextId, composeMirroredList } from './helpers'
 import { notify } from './notifications'
 import i18n from '../i18n'
 import {
@@ -43,8 +43,10 @@ import {
     mirrorPoint,
     mirrorEuler,
     logMirrorTreeSnapshot,
+    bakeMirroredSubtree,
 } from '../csg/history-tree'
 import { workerSyncObjects, workerSyncMesh } from '../csg/worker-client'
+import { centerMassAtOrigin } from '../csg/geometry-utils'
 import { devLog, devWarn } from '../utils/debug'
 
 // ── Типы ──
@@ -69,7 +71,10 @@ async function syncObjectsForOperation(
 
         const isImport = obj.shapeType === 'import_mesh'
         const isCSG = obj.shapeType === 'csg'
-        if (isCSG || isImport) {
+        // FIX (CSG-MIRROR-PRIMITIVE-PARAMS, Stage 8.5.10): зеркальный
+        // примитив — геометрия в vertices (params без зеркала) → mesh-путь.
+        const isMirroredPrimitive = !!obj.mirrored
+        if (isCSG || isImport || isMirroredPrimitive) {
             meshSyncs.push(
                 workerSyncMesh(id, obj.vertices, obj.indices, obj.transform)
                     .catch(e => console.warn('[Mirror] workerSyncMesh failed:', e)),
@@ -97,9 +102,13 @@ async function syncObjectsForOperation(
 function ensureInTree(id: string, obj: SceneObject): void {
     if (getNode(id) !== undefined) return
 
-    // FIX (MIRROR-CSG-KEEPTYPE): CSG results (shapeType='csg') and import_mesh/text3d
-    // have baked geometry. Don't rebuild them from shapeType/params.
-    const isPrimitive = obj.shapeType !== 'csg' && obj.shapeType !== 'import_mesh' && obj.shapeType !== 'text3d'
+    // CSG results (shapeType='csg') and import_mesh are registered as BAKED nodes
+    // (they have a ready mesh). Primitives are registered with shapeType + params.
+    // FIX (CSG-MIRROR-PRIMITIVE-PARAMS, Stage 8.5.10): зеркальный примитив —
+    // baked-нода (vertices с зеркалом; params без зеркала).
+    // FIX (MIRROR-CSG-KEEPTYPE, yandex-games): CSG results (shapeType='csg') and
+    // import_mesh/text3d have baked geometry. Don't rebuild them from shapeType/params.
+    const isPrimitive = obj.shapeType !== 'csg' && obj.shapeType !== 'import_mesh' && obj.shapeType !== 'text3d' && !obj.mirrored
 
     if (isPrimitive && obj.shapeType && obj.params) {
         createPrimitiveNode(id, obj.shapeType, obj.params, obj.transform)
@@ -124,8 +133,8 @@ export async function mirrorObject(
     const newId = nextId()
 
     // Primitives have real params and can be rebuilt from shapeType + params.
-    // FIX (MIRROR-CSG-KEEPTYPE): CSG results (shapeType='csg') and import_mesh/text3d
-    // have baked geometry. Don't rebuild them from shapeType/params.
+    // FIX (MIRROR-CSG-KEEPTYPE, yandex-games): CSG results (shapeType='csg') and
+    // import_mesh/text3d have baked geometry. Don't rebuild them from shapeType/params.
     const isPrimitive = obj.shapeType !== 'csg' && obj.shapeType !== 'import_mesh' && obj.shapeType !== 'text3d'
     const isCSGResult = obj.shapeType === 'csg'
 
@@ -135,24 +144,26 @@ export async function mirrorObject(
 
     if (isPrimitive) {
         // ── Primitive ──────────────────────────────────────────────────────────
-        // ensureInTree создаёт primitive-ноду (не boolean), resetSubtreeTransform
-        // сбрасывает только эту одну ноду к identity, rebuildNode строит геометрию
-        // в origin, mirrorVerticesInPlace отражает вершины.
-
-        // 1. Регистрируем оригинал в дереве
+        // Зеркалим ТЕКУЩИЕ вершины объекта напрямую.
+        //
+        // FIX (MIRROR-DOUBLE): до этого вызывался rebuildNode, который пересобирает
+        // геометрию из params — теряется предыдущее зеркало, запечённое в
+        // obj.vertices. Для двойного зеркала: rebuild params → одинарное зеркало
+        // вместо identity. С 8.5.1/8.5.3 vertices примитива всегда в origin (COM),
+        // поэтому зеркалим obj.vertices напрямую.
+        //
+        // Убедимся, что оригинал зарегистрирован в дереве (для будущего CSG).
         ensureInTree(id, obj)
         syncNodeTransform(id, obj.transform)
 
-        // 2. Клонируем и обнуляем transform у клона (геометрия строится вокруг origin)
-        cloneSubtree(id, newId)
-        resetSubtreeTransform(newId)
-        const rebuiltMesh = await rebuildNode(newId)
+        // Берём текущие вершины (уже origin-центрированы после 8.5.1/8.5.3).
+        // После первого зеркала obj_2.shapeType='prism', но obj_2.vertices
+        // уже зеркальны. Зеркалим их ещё раз — получаем identity.
+        vertices = new Float32Array(obj.vertices)
+        indices = new Uint32Array(obj.indices)
+        normals = obj.normals ? new Float32Array(obj.normals) : null
 
-        vertices = rebuiltMesh.vertices
-        indices = rebuiltMesh.indices
-        normals = rebuiltMesh.normals ?? null
-
-        // 3. Отражаем вершины (negate перпендикулярной оси) и исправляем winding order.
+        // Отражаем вершины (negate перпендикулярной оси) и исправляем winding order.
         //
         // FIX (MIRROR-WINDING): инвертирование одной оси позиций переворачивает CCW→CW.
         // Manifold-3d определяет «снаружи/внутри» по winding order — вывернутый меш
@@ -163,48 +174,50 @@ export async function mirrorObject(
             indices[i + 1] = indices[i + 2]
             indices[i + 2] = tmp
         }
-
-        deleteNode(newId, true)
     } else {
         // ── CSG-результат или import ───────────────────────────────────────────
         //
-        // Для CSG-результатов используем tree-rebuild: клонируем поддерево,
-        // зеркалим позиции дочерних примитивов, пересобираем CSG через manifold.
-        // Это сохраняет параметричность дерева.
+        // FIX (8.5.12): direct mirror of SceneObject.vertices — NO tree-rebuild.
+        // Tree-rebuild baked the TRS of children (including operand A's rot/scale)
+        // into vertices, then SceneObject.transform carried the full mirrored TRS
+        // → double RS (Bug 2, 8.5.12). Direct mirror: vertices = M·v_src,
+        // transform = M·TRS(A) — RS applied exactly once.
         //
-        // Дочерние примитивы в дереве всегда синхронизированы с текущим положением
-        // CSG-объекта в сцене: moveObject транслирует их при каждом перемещении
-        // (см. FIX MIRROR-SYNC-TREE в document-store.ts). Поэтому tree-rebuild
-        // даёт геометрию, точно соответствующую визуальному положению объекта.
+        // Tree-booking (clone/mirror/bake) kept for parametric children support.
+        // PIVOT-TRANSFORMA srcCom-shift removed: no longer needed (no tree-rebuild).
         //
-        // Для import_mesh (нет дерева) — baked-путь через ensureInTree/cloneSubtree
-        // создаёт baked-ноду, mirrorNodeRecursive зеркалит вершины и transform.
+        // For import_mesh (no tree): same direct mirror path.
 
-        // 1. Регистрируем оригинал в дереве (если ещё не зарегистрирован)
+        // 1. Registre оригинал в дереве (для параметричности детей)
         ensureInTree(id, obj)
         syncNodeTransform(id, obj.transform)
-        logMirrorTreeSnapshot(id, 'source-before-clone')
 
-        // 2. Клонируем поддерево
-        const idMap = new Map<string, string>()
-        cloneSubtree(id, newId, idMap)
-        logMirrorTreeSnapshot(newId, `clone-before-mirror source=${id}`)
+        // 2. Direct mirror: vertices + normals + winding
+        vertices = new Float32Array(obj.vertices)
+        indices = new Uint32Array(obj.indices)
+        normals = obj.normals ? new Float32Array(obj.normals) : null
 
-        // 3. Зеркалим всё поддерево (примитивы + inner boolean localTransforms)
-        mirrorTreeNode(newId, plane)
-        logMirrorTreeSnapshot(newId, `clone-after-mirror plane=${plane} source=${id}`)
+        mirrorVerticesInPlace(vertices, normals, plane)
+        for (let i = 0; i < indices.length; i += 3) {
+            const tmp = indices[i + 1]
+            indices[i + 1] = indices[i + 2]
+            indices[i + 2] = tmp
+        }
 
-        // 4. Сбрасываем root в identity → rebuildNode вернёт центрированную геометрию
-        //    (translation-only shape, без rotation/scale — они применяются через
-        //    Viewport3D pivot). Inner boolean localTransforms применяются воркером.
-        syncNodeTransform(newId, {
-            x: 0, y: 0, z: 0,
-            rotX: 0, rotY: 0, rotZ: 0,
-            scaleX: 1, scaleY: 1, scaleZ: 1,
-        })
-        logMirrorTreeSnapshot(newId, `clone-before-rebuild plane=${plane} source=${id}`)
+        // 3. Tree-booking: clone + mirror + bake children (parametric edit support)
+        //    NOTE: tree nodes store ORIGINAL vertices (not mirrored) — they are
+        //    rebuilt from params. The SceneObject carries the correct mirrored
+        //    geometry. This is fine because tree rebuild is only used for future
+        //    CSG/mirror ops, and syncObjectsForOperation routes CSG to workerSyncMesh.
+        if (isCSGResult) {
+            const idMap = new Map<string, string>()
+            cloneSubtree(id, newId, idMap)
+            mirrorTreeNode(newId, plane)
+            await bakeMirroredSubtree(newId, plane)
+        }
 
-        const rebuiltMesh = await rebuildNode(newId)
+        // PIVOT-TRANSFORMA srcCom-shift REMOVED (8.5.12): no tree-rebuild,
+        // vertices are direct M·v_src — no COM centering needed.
 
         // FIX (MIRROR-TREE-PRESERVE): Do NOT delete the cloned subtree.
         //
@@ -224,10 +237,6 @@ export async function mirrorObject(
         // By keeping the cloned subtree, the tree accurately reflects the scene state.
         // Future mirror/CSG operations will find the correct node type and work properly.
         // The SceneObject already has the correct mesh and transform.
-
-        vertices = rebuiltMesh.vertices
-        indices = rebuiltMesh.indices
-        normals = rebuiltMesh.normals ?? null
     }
 
     // Вычисляем отражённую позицию и поворот для SceneObject.transform.
@@ -256,6 +265,11 @@ export async function mirrorObject(
         // примитив → примитив, только import → import_mesh.
         shapeType: (isPrimitive ? obj.shapeType : isCSGResult ? 'csg' : 'import_mesh') as ShapeType,
         params: (isPrimitive ? { ...obj.params } : {}) as ShapeParams,
+        // FIX (8.5.12): push+cancel adjacent same-plane — mirror YZ→YZ = identity.
+        // Same composeMirroredList as buildRebuildMeta. Vertices are authoritative
+        // (mirror baked), params original (unmirrored). Double-mirror same plane
+        // → flag removed, parametric restored (vertices exactly = buildPrimitive).
+        mirrored: isPrimitive ? composeMirroredList(obj.mirrored, plane) : undefined,
         transform: {
             x: Math.round(mirroredPos.x * 1e6) / 1e6,
             y: Math.round(mirroredPos.y * 1e6) / 1e6,

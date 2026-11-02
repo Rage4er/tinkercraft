@@ -14,6 +14,7 @@ import type {
   ShapeType,
   ShapeParams,
   TransformNR,
+  RelativeTransform,
 } from './types'
 import {
   getWasm,
@@ -23,7 +24,14 @@ import {
   type ManifoldObject,
   isWasmReady,
 } from './worker-handlers'
-import { buildTransformMatrix } from './worker-matrix'
+import { buildTransformMatrix, subtractTransform, composeTransforms } from './worker-matrix'
+
+/** Identity transform — used when a node has no explicit transform. */
+const IDENTITY_TRANSFORM: TransformNR = {
+  x: 0, y: 0, z: 0,
+  rotX: 0, rotY: 0, rotZ: 0,
+  scaleX: 1, scaleY: 1, scaleZ: 1,
+}
 import { workerRebuildNode } from './worker-client'
 import { treeStore } from './tree-store'
 import { devLog, devWarn } from '../utils/debug'
@@ -82,9 +90,12 @@ export function createPrimitiveNode(
     type: 'primitive',
     shapeType,
     params: { ...params },
+    // Корневая нода при создании: relativeToParent = null (Фаза 8)
+    relativeToParent: null,
     localTransform: { ...transform },
   }
   treeStore.setNode(id, node)
+  devLog('TREE', { action: 'createPrimitive', id, shapeType, params, transform })
   return node
 }
 
@@ -117,16 +128,29 @@ export function createBooleanNode(
     type: 'boolean',
     operation,
     children: [childA, childB],
+    // Корневая нода при создании: relativeToParent = null (Фаза 8)
+    relativeToParent: null,
     localTransform: transform ? { ...transform } : undefined,
   }
   treeStore.setNode(id, node)
 
-  // Set parentId on children for O(depth) cascade invalidation
+  // Фаза 8 (Этап 3): Set parentId on children for O(depth) cascade invalidation
+  // + вычисляем relativeToParent для каждого ребёнка (ARCHITECTURE_TRANSFORMS.md §3.1):
+  // parentWorld — мировой transform нового boolean-узла (IDENTITY, если transform не передан),
+  // childWorld — мировой transform ребёнка (до Этапа 5 хранится в localTransform),
+  // relativeToParent = childWorld − parentWorld.
+  // localTransform ребёнка НЕ трогаем — обратная совместимость до Этапа 8.
+  const parentWorld: TransformNR = transform ?? IDENTITY_TRANSFORM
   const childANode = treeStore.getNode(childA)
   const childBNode = treeStore.getNode(childB)
-  if (childANode) childANode.parentId = id
-  if (childBNode) childBNode.parentId = id
+  for (const childNode of [childANode, childBNode]) {
+    if (!childNode) continue
+    childNode.parentId = id
+    const childWorld: TransformNR = childNode.localTransform ?? IDENTITY_TRANSFORM
+    childNode.relativeToParent = subtractTransform(childWorld, parentWorld)
+  }
 
+  devLog('TREE', { action: 'createBoolean', id, operation, children: [childA, childB], transform })
   return node
 }
 
@@ -144,10 +168,22 @@ export function createBakedNode(
     vertices,
     indices,
     normals,
+    // Корневая нода при создании: relativeToParent = null (Фаза 8)
+    relativeToParent: null,
     localTransform: { ...transform },
   }
   treeStore.setNode(id, node)
+  devLog('TREE', { action: 'createBaked', id, vertexCount: vertices.length / 3, indexCount: indices.length, transform })
   return node
+}
+
+/** Register an imported mesh node (alias for createBakedNode with mesh object) */
+export function createImportedNode(
+  id: string,
+  mesh: { vertices: Float32Array; indices: Uint32Array; normals: Float32Array | null },
+  transform: TransformNR,
+): TreeNode {
+  return createBakedNode(id, mesh.vertices, mesh.indices, mesh.normals, transform)
 }
 
 // ---------------------------------------------------------------------------
@@ -365,9 +401,15 @@ function invalidateCache(nodeId: string, depth = 0): void {
  * Rebuild mesh for a node from the tree.
  * Uses cache — if hash matches, returns cached result.
  */
-export async function rebuildNode(nodeId: string): Promise<ExtractedMesh> {
+export async function rebuildNode(nodeId: string, parentWorld: TransformNR = IDENTITY_TRANSFORM): Promise<ExtractedMesh> {
   const node = treeStore.getNode(nodeId)
   if (!node) throw new Error(`Node ${nodeId} not found in tree`)
+
+  // Stage 5 (Phase 8): worldTransform = composeTransforms(parentWorld, relativeToParent)
+  // Fallback to localTransform for nodes created before Stage 3 (relativeToParent === null)
+  const worldTransform: TransformNR = node.relativeToParent
+    ? composeTransforms(parentWorld, node.relativeToParent)
+    : (node.localTransform ?? parentWorld)
 
   const hash = computeNodeHash(node)
   if (node.cachedMesh && node.cacheHash === hash) {
@@ -380,11 +422,11 @@ export async function rebuildNode(nodeId: string): Promise<ExtractedMesh> {
   if (isWasmReady()) {
     // Local rebuild with WASM
     if (node.type === 'primitive') {
-      result = rebuildPrimitive(node)
+      result = rebuildPrimitive(node, worldTransform)
     } else if (node.type === 'baked') {
-      result = transformBakedMesh(node)
+      result = transformBakedMesh(node, worldTransform)
     } else if (node.type === 'boolean' && node.children) {
-      result = await applyCSGMeshes(node)
+      result = await applyCSGMeshes(node, worldTransform)
     } else {
       throw new Error(`Unknown node type: ${node.type}`)
     }
@@ -477,7 +519,7 @@ function collectSubtreeForWorker(rootId: string): WorkerNode[] {
  * and apply boolean node's localTransform. Children have their transforms applied (world coords),
  * so boolean result is also in world coordinates. We must center it and apply localTransform.
  */
-async function applyCSGMeshes(node: TreeNode): Promise<ExtractedMesh> {
+async function applyCSGMeshes(node: TreeNode, parentWorld: TransformNR): Promise<ExtractedMesh> {
   if (!node.children || node.children.length !== 2) {
     throw new Error(`Boolean node needs exactly 2 children`)
   }
@@ -523,9 +565,9 @@ async function applyCSGMeshes(node: TreeNode): Promise<ExtractedMesh> {
   const indices = new Uint32Array(result.indices);
   const normals = result.normals ? new Float32Array(result.normals) : null;
 
-  // Apply localTransform if it exists
-  if (node.localTransform) {
-    const t = node.localTransform;
+  // Apply worldTransform (computed from relativeToParent or localTransform)
+  if (parentWorld) {
+    const t = parentWorld;
     const matrix = buildTransformMatrix(
       { x: t.x, y: t.y, z: t.z },
       { rotX: t.rotX, rotY: t.rotY, rotZ: t.rotZ },
@@ -561,22 +603,21 @@ async function applyCSGMeshes(node: TreeNode): Promise<ExtractedMesh> {
 }
 
 /** Rebuild a primitive node */
-function rebuildPrimitive(node: TreeNode): ExtractedMesh {
+function rebuildPrimitive(node: TreeNode, worldTransform: TransformNR): ExtractedMesh {
   // FIX (MED-18-21): Use safe access instead of non-null assertions
   const shapeType = node.shapeType
   const params = node.params
-  const lt = node.localTransform
-  if (!shapeType || !params || !lt) {
-    throw new Error(`Primitive node ${node.id} missing required fields: shapeType=${!!shapeType}, params=${!!params}, localTransform=${!!lt}`)
+  if (!shapeType || !params) {
+    throw new Error(`Primitive node ${node.id} missing required fields: shapeType=${!!shapeType}, params=${!!params}`)
   }
 
   const wasm = getWasm()
   const m = buildPrimitive(shapeType, sanitizeParams(params as Record<string, unknown>))
   try {
     const matrix = buildTransformMatrix(
-      { x: lt.x, y: lt.y, z: lt.z },
-      { rotX: lt.rotX, rotY: lt.rotY, rotZ: lt.rotZ },
-      { scaleX: lt.scaleX, scaleY: lt.scaleY, scaleZ: lt.scaleZ },
+      { x: worldTransform.x, y: worldTransform.y, z: worldTransform.z },
+      { rotX: worldTransform.rotX, rotY: worldTransform.rotY, rotZ: worldTransform.rotZ },
+      { scaleX: worldTransform.scaleX, scaleY: worldTransform.scaleY, scaleZ: worldTransform.scaleZ },
     )
     const transformed = m.transform(matrix)
     m.delete()
@@ -591,12 +632,11 @@ function rebuildPrimitive(node: TreeNode): ExtractedMesh {
 }
 
 /** Transform a baked mesh (STL, non-manifold) with its localTransform */
-function transformBakedMesh(node: TreeNode): ExtractedMesh {
+function transformBakedMesh(node: TreeNode, worldTransform: TransformNR): ExtractedMesh {
   if (!node.vertices || !node.indices) {
     throw new Error(`Baked node ${node.id} has no geometry`)
   }
 
-  const t = node.localTransform!
   const wasm = getWasm()
   const { Manifold } = wasm
 
@@ -608,20 +648,14 @@ function transformBakedMesh(node: TreeNode): ExtractedMesh {
     })
 
     // Baked geometry is centered at origin. Apply the node's world transform.
-    // FIX (CRIT-CSG-7 / MIRROR-CSG-RS): Translation-only path applies when the
-    // transform has no rotation/scale. Rotation/scale are NOT baked into the
-    // geometry of mirrored CSG results / CSG results moved with rotation/scale
-    // — they live in the transform (applied by the render pivot). When such a
-    // node is rebuilt as a nested operand of a boolean tree, the full TRS must
-    // be applied here, otherwise booleans lose rotation/scale.
-    const hasRS = Math.abs(t.rotX) > 1e-6 || Math.abs(t.rotY) > 1e-6 || Math.abs(t.rotZ) > 1e-6 ||
-      Math.abs(t.scaleX - 1) > 1e-6 || Math.abs(t.scaleY - 1) > 1e-6 || Math.abs(t.scaleZ - 1) > 1e-6
+    const hasRS = Math.abs(worldTransform.rotX) > 1e-6 || Math.abs(worldTransform.rotY) > 1e-6 || Math.abs(worldTransform.rotZ) > 1e-6 ||
+      Math.abs(worldTransform.scaleX - 1) > 1e-6 || Math.abs(worldTransform.scaleY - 1) > 1e-6 || Math.abs(worldTransform.scaleZ - 1) > 1e-6
     let matrix: number[]
     if (hasRS) {
       matrix = buildTransformMatrix(
-        { x: t.x, y: t.y, z: t.z },
-        { rotX: t.rotX, rotY: t.rotY, rotZ: t.rotZ },
-        { scaleX: t.scaleX, scaleY: t.scaleY, scaleZ: t.scaleZ },
+        { x: worldTransform.x, y: worldTransform.y, z: worldTransform.z },
+        { rotX: worldTransform.rotX, rotY: worldTransform.rotY, rotZ: worldTransform.rotZ },
+        { scaleX: worldTransform.scaleX, scaleY: worldTransform.scaleY, scaleZ: worldTransform.scaleZ },
       )
     } else {
       // Fast path: translation only (geometry centered at origin).
@@ -629,7 +663,7 @@ function transformBakedMesh(node: TreeNode): ExtractedMesh {
         1, 0, 0, 0,
         0, 1, 0, 0,
         0, 0, 1, 0,
-        t.x, t.y, t.z, 1,
+        worldTransform.x, worldTransform.y, worldTransform.z, 1,
       ]
     }
     const transformed = m.transform(matrix)
@@ -843,166 +877,208 @@ export function mirrorVerticesInPlace(
   }
 }
 
+/**
+ * Mirror a node and its entire subtree across a plane.
+ *
+ * Stage 4 (Phase 8): relativeToParent is now mirrored via
+ * subtractTransform(mirroredWorld, mirroredParentWorld), and localTransform
+ * is re-derived via composeTransforms(mirroredParentWorld, mirroredRelative).
+ * Previously only localTransform (absolute) was mirrored while relativeToParent
+ * was left stale — mirrored CSG children lost their rotation/scale relationship
+ * with the parent (MIRROR-CSG-CHILD-RS-LOSS).
+ *
+ * World-space behaviour is preserved: each node's world transform is still
+ * mirrored via mirrorPoint / mirrorEuler / abs(scale) (simple Euler sign flip;
+ * quaternion mirror does not represent reflection — see mirrorEuler docs).
+ *
+ * @param node         — node to mirror
+ * @param plane        — mirror plane (XY, XZ, YZ)
+ * @param center       — mirror plane center (default origin)
+ * @param parentWorld  — the PARENT's already-mirrored world transform
+ *                       (IDENTITY_TRANSFORM for root nodes)
+ */
 function mirrorNodeRecursive(
   node: TreeNode,
   plane: 'XY' | 'XZ' | 'YZ',
   center: Point3D = { x: 0, y: 0, z: 0 },
+  parentWorld: TransformNR = IDENTITY_TRANSFORM,
 ): void {
-  // FIX (MIRROR-19-7): Если у primitive нет localTransform, используем identity
-  // вместо молчаливого пропуска. Это предотвращает потерю нод при mirror.
-  if (node.type === 'primitive') {
-    const t = node.localTransform ?? {
-      x: 0, y: 0, z: 0,
-      rotX: 0, rotY: 0, rotZ: 0,
-      scaleX: 1, scaleY: 1, scaleZ: 1,
-    }
-    if (!node.localTransform) {
-      devWarn('mirrorNodeRecursive', `nodeId=${node.id} type=primitive: localTransform отсутствует, используется identity`)
-    }
-
+  // 1. Compute the mirrored WORLD transform of this node.
+  //    Same math as before (mirrorPoint + mirrorEuler + abs(scale)).
+  let newWorld: TransformNR
+  if (node.localTransform) {
+    const t = node.localTransform
     const mirroredPos = mirrorPoint({ x: t.x, y: t.y, z: t.z }, plane, center)
-
-    // FIX (MIRROR-9): Euler rotation mirroring via SIMPLE SIGN FLIP.
-    //
-    // quaternion-based mirror DOES NOT WORK! Quaternion represents rotations
-    // (SO(3), det = +1), but mirror is reflection (O(3), det = -1).
-    // Trying to mirror via quaternion gives APPROXIMATE results, NOT correct.
-    //
-    // The CORRECT way to mirror Euler angles is simple sign flip:
-    // - Axes IN the mirror plane change sign
-    // - Perpendicular axis stays unchanged
-    //
-    // This works for ANY Euler angles. Used by Fusion 360, SolidWorks, etc.
-    const mirroredRot = mirrorEuler(
-      { x: t.rotX, y: t.rotY, z: t.rotZ },
-      plane,
-    )
-
-    // FIX (MIRROR-SCALE): Scale is always positive (abs). Mirror geometry
-    // is done via matrix transform, NOT via negative scale.
-    const newScaleX = Math.abs(t.scaleX)
-    const newScaleY = Math.abs(t.scaleY)
-    const newScaleZ = Math.abs(t.scaleZ)
-
-    node.localTransform = {
-      ...t,
+    const mirroredRot = mirrorEuler({ x: t.rotX, y: t.rotY, z: t.rotZ }, plane)
+    newWorld = {
       x: mirroredPos.x,
       y: mirroredPos.y,
       z: mirroredPos.z,
       rotX: mirroredRot.x,
       rotY: mirroredRot.y,
       rotZ: mirroredRot.z,
-      scaleX: newScaleX,
-      scaleY: newScaleY,
-      scaleZ: newScaleZ,
+      // Scale is always positive (MIRROR-SCALE): geometry mirror is done
+      // via the mirror matrix, NOT via negative scale.
+      scaleX: Math.abs(t.scaleX),
+      scaleY: Math.abs(t.scaleY),
+      scaleZ: Math.abs(t.scaleZ),
     }
-    // FIX (MED-18-23): Use setNode for immutable update so React can detect changes
-    setNode(node.id, { ...node, localTransform: node.localTransform })
-    devLog('mirrorNodeRecursive', { nodeId: node.id, type: 'primitive', plane, center, localTransform: node.localTransform })
-    return
+  } else {
+    // No localTransform — identity (preserves prior behaviour for undefined).
+    newWorld = { ...IDENTITY_TRANSFORM }
   }
 
-  // FIX (MIRROR-19-7): Если у baked нет localTransform, используем identity
-  if (node.type === 'baked') {
-    const t = node.localTransform ?? {
-      x: 0, y: 0, z: 0,
-      rotX: 0, rotY: 0, rotZ: 0,
-      scaleX: 1, scaleY: 1, scaleZ: 1,
-    }
-    if (!node.localTransform) {
-      devWarn('mirrorNodeRecursive', `nodeId=${node.id} type=baked: localTransform отсутствует, используется identity`)
-    }
-    // FIX (MIRROR-BAKED-2): For baked nodes (CSG results, imports), rotation/scale
-    // are applied by Viewport3D at render time (Three.js pivot transform), NOT by
-    // transformBakedMesh (which applies only translation).
-    //
-    // To mirror a baked node correctly:
-    // 1. Mirror vertex positions across the plane (negate perpendicular axis)
-    // 2. Mirror rotation via mirrorEuler (same as primitive)
-    // 3. Mirror position via mirrorPoint (same as primitive)
-    // 4. Apply abs() to scale (same as primitive)
-    //
-    // Viewport3D will apply the mirrored rotation/scale at render time.
-    // transformBakedMesh applies only translation — which is correct because
-    // the geometry is centered at origin and rotation/scale are render-time.
-
-    // Step 1: Mirror vertex positions across the plane + исправляем winding order.
-    // FIX (MIRROR-WINDING): инвертирование одной оси переворачивает CCW→CW.
-    // После зеркала меняем v1↔v2 в каждом треугольнике, иначе булевы операции не работают.
-    if (node.vertices) {
-      mirrorVerticesInPlace(node.vertices, node.normals, plane)
-      if (node.indices) {
-        for (let i = 0; i < node.indices.length; i += 3) {
-          const tmp = node.indices[i + 1]
-          node.indices[i + 1] = node.indices[i + 2]
-          node.indices[i + 2] = tmp
-        }
-      }
-    }
-
-    // Step 2: Mirror rotation (same as primitive)
-    const mirroredRot = mirrorEuler(
-      { x: t.rotX, y: t.rotY, z: t.rotZ },
-      plane,
-    )
-
-    // Step 3: Mirror position (same as primitive)
-    const mirroredPos = mirrorPoint({ x: t.x, y: t.y, z: t.z }, plane, center)
-
-    // Step 4: Abs scale (same as primitive)
-    const newScaleX = Math.abs(t.scaleX)
-    const newScaleY = Math.abs(t.scaleY)
-    const newScaleZ = Math.abs(t.scaleZ)
-
-    node.localTransform = {
-      ...t,
-      x: mirroredPos.x,
-      y: mirroredPos.y,
-      z: mirroredPos.z,
-      rotX: mirroredRot.x,
-      rotY: mirroredRot.y,
-      rotZ: mirroredRot.z,
-      scaleX: newScaleX,
-      scaleY: newScaleY,
-      scaleZ: newScaleZ,
-    }
-    // FIX (MED-18-23): Use setNode for immutable update so React can detect changes
-    setNode(node.id, { ...node, localTransform: node.localTransform })
-    devLog('mirrorNodeRecursive', { nodeId: node.id, type: 'baked', plane, center, localTransform: node.localTransform })
-    return
+  // 2. relativeToParent: recompute against mirrored parentWorld (Stage 4).
+  //    Root nodes (relativeToParent === null) keep null.
+  let newRelative: RelativeTransform | null = null
+  if (node.relativeToParent !== null) {
+    newRelative = subtractTransform(newWorld, parentWorld)
   }
 
-  // FIX (MIRROR-19-8): boolean без children — логируем предупреждение
-  if (node.type === 'boolean') {
-    if (!node.children || node.children.length === 0) {
-      devWarn('mirrorNodeRecursive', `nodeId=${node.id} type=boolean: children отсутствуют или пусты, нода пропущена`)
-      return
-    }
+  // 3. localTransform: the exact mirrored world transform.
+  //    Mathematically composeTransforms(parentWorld, newRelative) === newWorld
+  //    (subtract/compose are exact inverses), and the round-trip is verified
+  //    to ±1e-6 in tests. We store newWorld directly because Euler-angle
+  //    extraction inside subtract/compose introduces ~1e-14 FP noise
+  //    (e.g. -30 → -29.999999999999993) that breaks exact equality checks.
+  const newLocal: TransformNR = newWorld
 
-    // FIX (MIRROR-CSG-BOOLEAN-TRANSFORM): Зеркалим собственный localTransform булевой ноды.
-    // Для вложенных CSG (CSG из CSG-результатов) inner-boolean нода несёт в localTransform
-    // позицию центроида результата. Воркер применяет этот transform после центрирования
-    // внутреннего CSG-результата, чтобы вернуть его в мировые координаты.
-    // Для root-ноды transform применяется в applyCSGMeshes (history-tree.ts).
-    if (node.localTransform) {
-      const t = node.localTransform
-      const mp = mirrorPoint({ x: t.x, y: t.y, z: t.z }, plane, center)
-      const mr = mirrorEuler({ x: t.rotX, y: t.rotY, z: t.rotZ }, plane)
-      node.localTransform = {
-        ...t,
-        x: mp.x, y: mp.y, z: mp.z,
-        rotX: mr.x, rotY: mr.y, rotZ: mr.z,
-        scaleX: Math.abs(t.scaleX),
-        scaleY: Math.abs(t.scaleY),
-        scaleZ: Math.abs(t.scaleZ),
-      }
-      setNode(node.id, { ...node })
-    }
+  setNode(node.id, {
+    ...node,
+    relativeToParent: newRelative,
+    localTransform: newLocal,
+  })
 
-    node.children.forEach(childId => {
+  devLog('mirrorNodeRecursive', {
+    nodeId: node.id,
+    type: node.type,
+    plane,
+    scale: { scaleX: newLocal.scaleX, scaleY: newLocal.scaleY, scaleZ: newLocal.scaleZ },
+    localTransform: newLocal,
+  })
+
+  // Recursively mirror children — pass this node's NEW world as their parentWorld.
+  if (node.type === 'boolean' && node.children) {
+    for (const childId of node.children) {
       const child = treeStore.getNode(childId)
-      if (child) mirrorNodeRecursive(child, plane, center)
+      if (child) {
+        mirrorNodeRecursive(child, plane, center, newLocal)
+      }
+    }
+  }
+}
+
+/**
+ * Bake primitive children as mirrored (Variant B fix for MIRROR-CHIRALITY).
+ *
+ * Root cause: mirrorNodeRecursive mirrors child transforms (position + Euler + scale)
+ * but does NOT mirror primitive geometry. For symmetric primitives (cube, sphere) the
+ * visual result is correct. For asymmetric primitives (prism, pyramid, cone) the geometry
+ * retains its original chirality — a left-handed object stays left-handed after mirror.
+ *
+ * Fix: convert mirrored primitives to baked, with vertices reflected across the same
+ * plane. Math: M·T(p)·R(e)·S·v = T(M·p)·(M·R·M)·S·(M·v), where M·R·M = mirrorEuler(e)
+ * (exact conjugation, verified: for YZ flip rotY/rotZ, rotX unchanged).
+ * The child's baked geometry = M·v (origin-centered primitive reflected),
+ * localTransform = T(M·p)·R(mirrorEuler)·S (already set by mirrorNodeRecursive).
+ * Worker applies localTransform to baked vertices → exact mirror. ✓
+ *
+ * For existing baked nodes (repeated mirror or import child inside CSG):
+ *   mirror vertices in-place + swap winding.
+ * Double-mirror (same plane twice) restores original geometry (v → -v → v, winding twice).
+ *
+ * @param nodeId   — root node of the subtree to bake
+ * @param plane    — mirror plane
+ * @returns number of nodes that were baked/mirrored
+ */
+export async function bakeMirroredSubtree(
+  nodeId: string,
+  plane: 'XY' | 'XZ' | 'YZ',
+): Promise<number> {
+  const node = treeStore.getNode(nodeId)
+  if (!node) return 0
+
+  let bakedCount = 0
+
+  if (node.type === 'primitive' && node.shapeType && node.params) {
+    // 1. Build origin-centered geometry (COM at origin, no transform).
+    const mesh = await buildOriginMeshForPrimitive(node)
+
+    // 2. Mirror vertices and normals across the plane.
+    mirrorVerticesInPlace(mesh.vertices, mesh.normals, plane)
+
+    // 3. Swap winding to restore CCW orientation (flip + rewind = exact mirror).
+    swapWindingInPlace(mesh.indices)
+
+    // 4. Convert to baked — retain shapeType + params for future child editing.
+    treeStore.setNode(node.id, {
+      ...node,
+      type: 'baked',
+      vertices: mesh.vertices,
+      indices: mesh.indices,
+      normals: mesh.normals ?? null,
+      mirroredPlane: plane,
+      cachedMesh: undefined,
+      cachedBBox: undefined,
+      cacheHash: undefined,
     })
+    bakedCount++
+  } else if (node.type === 'baked' && node.vertices && node.indices) {
+    // Already-baked child: mirror vertices in-place + swap winding.
+    mirrorVerticesInPlace(node.vertices, node.normals, plane)
+    swapWindingInPlace(node.indices)
+
+    // Track mirror plane for double-mirror detection.
+    // Same plane → double mirror cancels (geometry returns to original).
+    // Different plane → leave as-is (edit flow composes them — separate task).
+    if (!node.mirroredPlane) {
+      node.mirroredPlane = plane
+    } else if (node.mirroredPlane === plane) {
+      delete node.mirroredPlane
+    } else {
+      devWarn('mirror', `bakeMirroredSubtree: node ${nodeId} already mirrored on plane ${node.mirroredPlane}, new plane ${plane} — edit flow must compose (separate task)`)
+    }
+
+    invalidateCache(node.id)
+    bakedCount++
+  } else if (node.type === 'boolean' && node.children) {
+    // Recurse into children (boolean node transform is mirrored by mirrorNodeRecursive).
+    for (const childId of node.children) {
+      bakedCount += await bakeMirroredSubtree(childId, plane)
+    }
+  }
+
+  return bakedCount
+}
+
+/** Build origin-centered mesh for a primitive node (WASM or worker fallback). */
+async function buildOriginMeshForPrimitive(node: TreeNode): Promise<ExtractedMesh> {
+  if (isWasmReady()) {
+    return rebuildPrimitive(node, IDENTITY_TRANSFORM)
+  }
+  // Fallback: ask worker to build primitive with identity transform (no centering for primitives).
+  const mesh = await workerRebuildNode(node.id, [{
+    id: node.id,
+    type: 'primitive',
+    shapeType: node.shapeType,
+    params: node.params as Record<string, number>,
+    localTransform: IDENTITY_TRANSFORM,
+  }])
+  return {
+    vertices: new Float32Array(mesh.vertices),
+    indices: new Uint32Array(mesh.indices),
+    normals: mesh.normals ? new Float32Array(mesh.normals) : null,
+    tris: mesh.tris,
+    ms: mesh.ms,
+  }
+}
+
+/** Swap winding in-place: [i0, i1, i2] → [i0, i2, i1] (flip triangle orientation). */
+function swapWindingInPlace(indices: Uint32Array): void {
+  for (let i = 0; i < indices.length; i += 3) {
+    const tmp = indices[i + 1]
+    indices[i + 1] = indices[i + 2]
+    indices[i + 2] = tmp
   }
 }
 
@@ -1247,6 +1323,15 @@ function cloneRecursive(
   const clone: TreeNode = {
     id: newId,
     type: source.type,
+    // Фаза 8: копируем relativeToParent (источник истины) структурой,
+    // чтобы клон и оригинал не разделяли один объект дельты
+    relativeToParent: source.relativeToParent
+      ? {
+        positionDelta: { ...source.relativeToParent.positionDelta },
+        rotationDelta: { ...source.relativeToParent.rotationDelta },
+        scaleRatio: { ...source.relativeToParent.scaleRatio },
+      }
+      : null,
   }
 
   if (source.type === 'primitive') {
@@ -1261,6 +1346,7 @@ function cloneRecursive(
     clone.indices = new Uint32Array(source.indices!)
     clone.normals = source.normals ? new Float32Array(source.normals) : null
     clone.localTransform = { ...source.localTransform! }
+    clone.mirroredPlane = source.mirroredPlane
   }
 
   if (source.type === 'boolean' && source.children) {

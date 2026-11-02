@@ -5,10 +5,10 @@
 
 import type {
   TinkerCraftOperation, SceneObject, ShapeType, ShapeParams,
-  TransformNR, Vec3, AlignOperation,
+  TransformNR, Vec3, AlignOperation, MirrorPlane,
 } from '../csg/types'
 import { workerRebuildScene } from '../csg/worker-client'
-import { extractAndCenterInPlace, makeObject } from './helpers'
+import { centerMassAtOrigin, makeObject, composeMirroredList } from './helpers'
 import {
   applyMoveDelta,
   applyMirrorToTransform,
@@ -21,6 +21,7 @@ import {
   createBooleanNode,
   createBakedNode,
   getNode,
+  mirrorVerticesInPlace,
 } from '../csg/history-tree'
 import { notify } from './notifications'
 import i18n from '../i18n'
@@ -39,6 +40,14 @@ export interface RebuildMeta {
   resultIndices?: Uint32Array | number[]
   resultNormals?: Float32Array | number[]
   originalBboxSize?: { x: number; y: number; z: number }
+  /**
+   * FIX (CSG-MIRROR-PRIMITIVE-PARAMS, Stage 8.5.10 + 8.5.12): упорядоченный
+   * список плоскостей зеркал для ПРИМИТИВОВ. Worker пересобирает
+   * mirror-потомка примитива из params — зеркальная форма теряется. Main
+   * thread до-зеркалит вершины + swap winding для каждой плоскости.
+   * Соседние одинаковые отменяются (YZ→YZ = identity).
+   */
+  mirrored?: MirrorPlane[]
 }
 
 /**
@@ -96,7 +105,14 @@ export function buildRebuildMeta(ops: TinkerCraftOperation[]): {
         if (t && meta[origId]) {
           const nt = applyMirrorToTransform(t as unknown as RebuildTransform, op.plane) as TransformNR
           transforms[newId] = nt
-          meta[newId] = { ...meta[origId], transform: nt }
+          // FIX (8.5.12): compose mirrored plane list (push + cancel adjacent).
+          // D000: 8.5.10 single plane → MirrorPlane[].
+          const om = meta[origId]
+          const isPrim = om.shapeType !== 'csg' && om.shapeType !== 'import_mesh'
+          const mirroredOut = isPrim
+            ? composeMirroredList(om.mirrored, op.plane)
+            : om.mirrored
+          meta[newId] = { ...om, transform: nt, mirrored: mirroredOut }
         }
       }
 
@@ -145,8 +161,19 @@ export function buildRebuildMeta(ops: TinkerCraftOperation[]): {
         // initial transform for CSG results. Without this, the transform would
         // default to {0,0,0} and the CSG geometry would appear at the origin
         // instead of at its actual position after undo/redo.
+        // FIX (CSG-PRESERVE-RS, Stage 8.5.9): restore resultRotation/resultScale
+        // too — vertices are stored WITHOUT RS (un-baked to operand A's local
+        // frame), so the rebuild transform must carry the full TRS. Legacy
+        // documents without these fields keep the baked-RS convention
+        // (identity rot/scale), which matched their vertices.
+        const rot = op.resultRotation
+        const scl = op.resultScale
         const startT: TransformNR = op.resultCenter
-          ? { x: op.resultCenter.x, y: op.resultCenter.y, z: op.resultCenter.z, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
+          ? {
+            x: op.resultCenter.x, y: op.resultCenter.y, z: op.resultCenter.z,
+            rotX: rot?.x ?? 0, rotY: rot?.y ?? 0, rotZ: rot?.z ?? 0,
+            scaleX: scl?.x ?? 1, scaleY: scl?.y ?? 1, scaleZ: scl?.z ?? 1,
+          }
           : makeDefaultTransform() as TransformNR
         meta[op.resultId] = { color: srcColor, shapeType: op.shapeType ?? 'csg', params: {}, transform: startT, visible: true }
         transforms[op.resultId] = startT
@@ -180,27 +207,32 @@ export async function rebuildFromHistory(
   // exact CSG result from the original operation.
   const meshByObjId = new Map(result.results.map(m => [m.objId, m]))
 
-  // FIX (UB-0): фолбэк для import_mesh/text3d, которых НЕТ в ответе воркера
+  // FIX (UB-0): фолбэк для import_mesh, которых НЕТ в ответе воркера
   // (non-manifold STL → cache=null; слишком большие меши — skip). Без фолбэка
-  // импортированная геометрия исчезала при загрузке проекта/.doodle.
-  // Восстанавливаем «живую» конвенцию: сырые вершины из операции + transform
-  // из meta (применяется на рендере через pivot).
+  // импортированная геометрия исчезала при загрузке проекта/.3dtc.
+  // FIX (8.5.2.5): конвенция единого источника — вершины центрируются по COM,
+  // смещение отдаётся как centerOffset (main loop прибавит его к pivot).
+  // Раньше «живая» конвенция была: сырые вершины + transform на pivot.
   const returnedIds = new Set(result.results.map(m => m.objId))
   for (const op of ops) {
     if (op.type !== 'import_mesh' && op.type !== 'text3d') continue
     if (returnedIds.has(op.id) || !meta[op.id]) continue
-    const verts = (op as { vertices?: Float32Array | number[] }).vertices
-    const idxs = (op as { indices?: Uint32Array | number[] }).indices
+    const verts = op.vertices
+    const idxs = op.indices
     const vertCount = verts ? verts.length : 0
     const idxCount = idxs ? idxs.length : 0
     if (vertCount < 9 || vertCount > 10_000_000 || idxCount < 3 || idxCount > 30_000_000) continue
+    const vertsCopy = new Float32Array(verts)
+    const idxCopy = new Uint32Array(idxs)
+    const com = centerMassAtOrigin(vertsCopy, idxCopy)
     result.results.push({
       objId: op.id,
-      vertices: new Float32Array(verts as ArrayLike<number>),
-      indices: new Uint32Array(idxs as ArrayLike<number>),
+      vertices: vertsCopy,
+      indices: idxCopy,
       normals: null,
       tris: idxCount / 3,
       ms: 0,
+      centerOffset: { x: com.cx, y: com.cy, z: com.cz },
     })
   }
 
@@ -225,9 +257,19 @@ export async function rebuildFromHistory(
         }
         continue
       }
-      // FIX (LOW-18-9): extractAndCenterInPlace mutates in-place, so vertices are already centered.
-      // Only update meta with the center offset.
-      const { cx, cy, cz } = extractAndCenterInPlace(new Float32Array(m.vertices))
+      // Stage 6.5 (CSG-CENTER-MASS): CSG-результаты центрируются по ЦЕНТРУ
+      // МАСС (centerMassAtOrigin) — та же функция, что у worker и document-store.
+      // FIX (PIVOT-TRANSFORMA): resultCenter хранит pivot = transformA (позиция
+      // первого операнда), а не COM. Но если resultVertices отсутствуют (legacy
+      // fallback), pivot восстанавливается из COM — это задокументированная
+      // CENTERING-RESIDUAL конвенция для старых .3dtc файлов.
+      // FIX (быв. LOW-18-9): раньше extractAndCenterInPlace мутировал ВРЕМЕННУЮ
+      // копию, которая выбрасывалась — m.vertices оставался в мировых координатах,
+      // а transform получал центр (двойное смещение для legacy-документов без
+      // baked resultVertices). Теперь центрированная копия записывается обратно.
+      const vertsC = new Float32Array(m.vertices)
+      const { cx, cy, cz } = centerMassAtOrigin(vertsC, new Uint32Array(m.indices))
+      m.vertices = vertsC
       meta[id] = { ...meta[id], transform: { ...meta[id].transform, x: cx, y: cy, z: cz } }
     }
   }
@@ -235,22 +277,48 @@ export async function rebuildFromHistory(
   const objects: Record<string, SceneObject> = {}
   for (const m of result.results) {
     const info = meta[m.objId]
+    // FIX (8.5.12): iterate each plane in the mirrored list — worker rebuilds
+    // the primitive from params (unmirrored). Apply each mirror plane in order
+    // + swap winding per reflection (mirrorVerticesInPlace, 8.5.7).
+    // Vertices are already COM-centered (mirror passes through COM — same as
+    // live mirrorObject), pivot (transform) worker already returns mirrored.
+    if (info?.mirrored && info.mirrored.length > 0) {
+      for (const plane of info.mirrored) {
+        mirrorVerticesInPlace(m.vertices, m.normals, plane)
+        for (let i = 0; i < m.indices.length; i += 3) {
+          const tmp = m.indices[i + 1]
+          m.indices[i + 1] = m.indices[i + 2]
+          m.indices[i + 2] = tmp
+        }
+      }
+    }
     // For CSG results, use originalBboxSize if available
     const metaWithMesh = meta[m.objId] as RebuildMeta & { resultVertices?: Float32Array | number[]; resultIndices?: Uint32Array | number[]; resultNormals?: Float32Array | number[]; originalBboxSize?: { x: number; y: number; z: number } }
     const originalBboxSize = metaWithMesh.originalBboxSize
+    // FIX (8.5.2.5): воркер вернул COM-центрированные вершины (примитивы,
+    // import_mesh) и смещение COM — прибавляем его к pivot, чтобы
+    // render = pivot + vertex = та же world-позиция, что и до фикса.
+    const baseT = (info?.transform ?? (makeDefaultTransform() as TransformNR)) as TransformNR
+    const off = m.centerOffset
+    const finalT: TransformNR = off && (off.x !== 0 || off.y !== 0 || off.z !== 0)
+      ? { ...baseT, x: baseT.x + off.x, y: baseT.y + off.y, z: baseT.z + off.z }
+      : baseT
     objects[m.objId] = makeObject({
       id: m.objId,
       name: info?.name,
       shapeType: info?.shapeType ?? 'cube',
       params: info?.params ?? {},
       color: info?.color ?? '#89b4fa',
-      transform: info?.transform ?? makeDefaultTransform() as TransformNR,
+      transform: finalT,
       visible: info?.visible ?? true,
       locked: false,
       vertices: m.vertices,
       indices: m.indices,
       normals: m.normals,
       originalBboxSize,
+      // FIX (CSG-MIRROR-PRIMITIVE-PARAMS): флаг сохраняется в SceneObject —
+      // дальнейший CSG маршрутизируется через workerSyncMesh.
+      mirrored: info?.mirrored,
     })
   }
   return objects
@@ -326,14 +394,27 @@ export function rebuildBuildTree(
             }
           } else {
             // No pre-existing node — create appropriate node type
-            const origNode = getNode(origId)
-            if (origNode && origNode.type === 'primitive') {
-              createPrimitiveNode(newId, origNode.shapeType!, { ...origNode.params! }, nt)
-            } else if (origNode && origNode.type === 'baked') {
-              createBakedNode(newId, origNode.vertices!, origNode.indices!, origNode.normals ?? null, nt)
+            // FIX (CSG-MIRROR-PRIMITIVE-PARAMS, Stage 8.5.10): mirror-потомок
+            // ПРИМИТИВА регистрируется как BAKED нода из SceneObject.vertices
+            // (в них зеркало). createPrimitiveNode из params дал бы unmirrored
+            // геометрию при любом последующем rebuildNode/tree-путь CSG.
+            const mirroredObj = objects?.[newId]
+            if (mirroredObj?.mirrored && mirroredObj.vertices.length > 0) {
+              createBakedNode(newId, mirroredObj.vertices, mirroredObj.indices, mirroredObj.normals ?? null, nt)
+              // Set TreeNode.mirroredPlane to last plane for bakeMirroredSubtree compat.
+              // SceneObject.mirrored is the authoritative MirrorPlane[] list (8.5.12).
+              const node = getNode(newId)
+              if (node && mirroredObj.mirrored && mirroredObj.mirrored.length > 0) node.mirroredPlane = mirroredObj.mirrored[mirroredObj.mirrored.length - 1]
             } else {
-              // Fallback: create a placeholder primitive node
-              createPrimitiveNode(newId, 'cube', {}, nt)
+              const origNode = getNode(origId)
+              if (origNode && origNode.type === 'primitive') {
+                createPrimitiveNode(newId, origNode.shapeType!, { ...origNode.params! }, nt)
+              } else if (origNode && origNode.type === 'baked') {
+                createBakedNode(newId, origNode.vertices!, origNode.indices!, origNode.normals ?? null, nt)
+              } else {
+                // Fallback: create a placeholder primitive node
+                createPrimitiveNode(newId, 'cube', {}, nt)
+              }
             }
           }
         }
@@ -342,8 +423,20 @@ export function rebuildBuildTree(
     } else if (op.type === 'group') {
       for (const id of op.ids) { delete transforms[id] }
       if (op.resultId) {
+        // FIX (CSG-PRESERVE-RS, Stage 8.5.9): начальная трансформация результата
+        // включает rot/scale операнда A (resultRotation/resultScale) — как в
+        // startT в buildRebuildMeta. Без них mirror/align потомков CSG в дереве
+        // теряли вращение/масштаб (double-transform не согласовывался).
         const startT: TransformNR = op.resultCenter
-          ? { x: op.resultCenter.x, y: op.resultCenter.y, z: op.resultCenter.z, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
+          ? {
+            x: op.resultCenter.x, y: op.resultCenter.y, z: op.resultCenter.z,
+            rotX: op.resultRotation?.x ?? 0,
+            rotY: op.resultRotation?.y ?? 0,
+            rotZ: op.resultRotation?.z ?? 0,
+            scaleX: op.resultScale?.x ?? 1,
+            scaleY: op.resultScale?.y ?? 1,
+            scaleZ: op.resultScale?.z ?? 1,
+          }
           : makeDefaultTransform() as TransformNR
         transforms[op.resultId] = startT
         const treeOp = op.treeOperation ?? 'union'

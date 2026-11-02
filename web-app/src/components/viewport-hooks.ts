@@ -23,6 +23,8 @@ import {
     removeSnapIndicators,
     type SnapType,
 } from "./snap-utils";
+import { devLogStore, devLogSnap, devLogEvent, devLogTransform, devLogPointer } from "../utils/debug";
+import { fmtPoint, fmtTransform } from "../utils/debug-format";
 
 // ============================================================
 // Константы (перенесены из Viewport3D.tsx)
@@ -400,23 +402,36 @@ function computeVertsHash(vertices: Float32Array): number {
     return (hash ^ len) | 0;
 }
 
-/**
- * Centers mesh geometry and returns a container (pivot).
- */
-function centerGeometry(mesh: THREE.Mesh, objectId: string): THREE.Object3D {
-    const geo = mesh.geometry as THREE.BufferGeometry;
-    const pos = geo.attributes.position;
-    if (pos) {
-        const vertices = pos.array as Float32Array;
-        const { min, max } = computeAABB(vertices);
-        const cx = (min.x + max.x) / 2, cy = (min.y + max.y) / 2, cz = (min.z + max.z) / 2;
-        geo.translate(-cx, -cy, -cz);
-    }
+function createPivot(mesh: THREE.Mesh, objectId: string): THREE.Object3D {
+    const pivot = new THREE.Object3D();
+    pivot.userData.objectId = objectId;
+    pivot.add(mesh);
+    return pivot;
+}
 
-    const container = new THREE.Object3D();
-    container.userData.objectId = objectId;
-    container.add(mesh);
-    return container;
+/**
+ * FIX (8.5.3): единственная точка, где SceneObject.transform превращается
+ * в мировую матрицу рендера. Экспортируется, чтобы CI-тест
+ * `render-data-invariant.test.ts` сверял render с данными ПРОДАКШН-кодом,
+ * а не реимплементацией формулы.
+ *
+ * Конвенция единого источника (ARCHITECTURE_RENDER.md §1):
+ *   geometry = SceneObject.vertices (всегда в origin, COM)
+ *   pivot    = SceneObject.transform (мировой pivot)
+ *   world    = T(pos) · R(XYZ) · S · v   — никаких вычитаний центра.
+ *
+ * Порядок Euler 'XYZ' (по умолчанию у Object3D) = Rx·Ry·Rz — совпадает с
+ * computeRSMatrix в worker-matrix.ts (ROT-XYZ-STL), поэтому render == data ==
+ * worker для многоосевых поворотов.
+ */
+export function applyTransformToPivot(pivot: THREE.Object3D, t: TransformNR): void {
+    pivot.position.set(t.x, t.y, t.z);
+    pivot.rotation.set(
+        THREE.MathUtils.degToRad(t.rotX),
+        THREE.MathUtils.degToRad(t.rotY),
+        THREE.MathUtils.degToRad(t.rotZ),
+    );
+    pivot.scale.set(t.scaleX, t.scaleY, t.scaleZ);
 }
 
 // ============================================================
@@ -507,9 +522,13 @@ export function useMeshSync(
         const currentIds = new Set(objects.map((o) => o.id));
         const map = meshMapRef.current;
 
+        // DIAG: mesh sync overview
+        devLogStore('meshSync', { objectCount: objects.length, meshMapSize: map.size, objectIds: objects.map(o => o.id) });
+
         // Remove meshes that no longer exist
         for (const [id, entry] of map) {
             if (!currentIds.has(id)) {
+                devLogStore('meshRemove', { id });
                 scene.remove(entry.pivot);
                 if (entry.helper) {
                     scene.remove(entry.helper);
@@ -557,13 +576,8 @@ export function useMeshSync(
                     existing.mesh.geometry.computeBoundingBox();
                     existing.mesh.geometry.computeBoundingSphere();
 
-                    // Re-center geometry
-                    const box = existing.mesh.geometry.boundingBox!;
-                    const center = new THREE.Vector3();
-                    box.getCenter(center);
-                    existing.mesh.geometry.translate(-center.x, -center.y, -center.z);
-                    existing.mesh.geometry.computeBoundingBox();
-                    existing.mesh.geometry.computeBoundingSphere();
+                    // FIX (8.5.3): geometry = vertices как есть — centerGeometry удалён.
+                    // SceneObject.vertices всегда в origin (COM), pivot несёт позицию.
 
                     // UB2-4: геометрия изменилась — пересобираем рёбра
                     detachShapeEdges(existing.mesh);
@@ -571,35 +585,27 @@ export function useMeshSync(
                 }
 
                 // Sync transform from store to pivot
+                // FIX (8.5.3): единая точка применения трансформа (applyTransformToPivot)
+                // — eps-проверка сохранена как оптимизация (не пересобирать матрицу
+                // при подмаштабных изменениях), но формула одна для create/update/preview.
                 const t = obj.transform;
                 const pivotPos = existing.pivot.position;
                 const eps = TRANSFORM_EPS;
-                if (
+                const pivotRot = existing.pivot.rotation;
+                const pivotScl = existing.pivot.scale;
+                const transformChanged =
                     Math.abs(pivotPos.x - t.x) > eps ||
                     Math.abs(pivotPos.y - t.y) > eps ||
-                    Math.abs(pivotPos.z - t.z) > eps
-                ) {
-                    existing.pivot.position.set(t.x, t.y, t.z);
-                }
-                const pivotRot = existing.pivot.rotation;
-                if (
+                    Math.abs(pivotPos.z - t.z) > eps ||
                     Math.abs(THREE.MathUtils.radToDeg(pivotRot.x) - t.rotX) > eps ||
                     Math.abs(THREE.MathUtils.radToDeg(pivotRot.y) - t.rotY) > eps ||
-                    Math.abs(THREE.MathUtils.radToDeg(pivotRot.z) - t.rotZ) > eps
-                ) {
-                    existing.pivot.rotation.set(
-                        THREE.MathUtils.degToRad(t.rotX),
-                        THREE.MathUtils.degToRad(t.rotY),
-                        THREE.MathUtils.degToRad(t.rotZ),
-                    );
-                }
-                const pivotScl = existing.pivot.scale;
-                if (
+                    Math.abs(THREE.MathUtils.radToDeg(pivotRot.z) - t.rotZ) > eps ||
                     Math.abs(pivotScl.x - t.scaleX) > SCALE_EPS ||
                     Math.abs(pivotScl.y - t.scaleY) > SCALE_EPS ||
-                    Math.abs(pivotScl.z - t.scaleZ) > SCALE_EPS
-                ) {
-                    existing.pivot.scale.set(t.scaleX, t.scaleY, t.scaleZ);
+                    Math.abs(pivotScl.z - t.scaleZ) > SCALE_EPS;
+                if (transformChanged) {
+                    applyTransformToPivot(existing.pivot, t);
+                    devLogTransform('meshSync', obj.id, t);
                 }
 
                 // Update visibility
@@ -618,6 +624,13 @@ export function useMeshSync(
                 }
             } else {
                 // Create new mesh
+                devLogStore('meshCreate', {
+                    id: obj.id,
+                    shapeType: obj.shapeType,
+                    vertexCount: obj.vertices.length / 3,
+                    indexCount: obj.indices.length,
+                    transform: fmtTransform(obj.transform),
+                });
                 const geometry = new THREE.BufferGeometry();
                 geometry.setAttribute(
                     "position",
@@ -713,17 +726,36 @@ export function useMeshSync(
                 rawMesh.castShadow = true;
                 rawMesh.receiveShadow = true;
                 rawMesh.userData.objectId = obj.id;
-                const pivot = centerGeometry(rawMesh, obj.id);
+                const pivot = createPivot(rawMesh, obj.id);
                 // UB2-4: рёбра по выраженным граням, «на пару тонов» темнее
                 // (ребёнок меша — наследует visibility/трансформы родителя)
                 attachShapeEdges(rawMesh, obj.color);
-                pivot.position.set(obj.transform.x, obj.transform.y, obj.transform.z);
-                pivot.rotation.set(
-                    THREE.MathUtils.degToRad(obj.transform.rotX),
-                    THREE.MathUtils.degToRad(obj.transform.rotY),
-                    THREE.MathUtils.degToRad(obj.transform.rotZ),
-                );
-                pivot.scale.set(obj.transform.scaleX, obj.transform.scaleY, obj.transform.scaleZ);
+                applyTransformToPivot(pivot, obj.transform);
+
+                // DIAG: RENDER:csg — verify world position of CSG vertices
+                if (obj.shapeType === 'csg') {
+                    const geo = rawMesh.geometry as THREE.BufferGeometry;
+                    const pos = geo.attributes.position;
+                    if (pos) {
+                        const verts = pos.array as Float32Array;
+                        const firstV = { x: verts[0], y: verts[1], z: verts[2] };
+                        const { min, max } = computeAABB(verts);
+                        const cx = (min.x + max.x) / 2, cy = (min.y + max.y) / 2, cz = (min.z + max.z) / 2;
+                        devLogStore('RENDER:csg', {
+                            id: obj.id,
+                            local: firstV,
+                            mesh: { position: { x: rawMesh.position.x, y: rawMesh.position.y, z: rawMesh.position.z } },
+                            pivot: { position: { x: pivot.position.x, y: pivot.position.y, z: pivot.position.z } },
+                            world: {
+                                x: pivot.position.x + firstV.x,
+                                y: pivot.position.y + firstV.y,
+                                z: pivot.position.z + firstV.z,
+                            },
+                            bbox: { min, max, center: { x: cx, y: cy, z: cz } },
+                        });
+                    }
+                }
+
                 scene.add(pivot);
                 map.set(obj.id, { mesh: rawMesh, pivot });
             }
@@ -862,6 +894,7 @@ export function useRulerMode(
             const snapResult = findNearestSnap(raycaster, meshMapRef, camera, screenPos, shapeTypeMapRef.current);
             let point: THREE.Vector3;
             if (snapResult) {
+                devLogSnap('ruler', { type: snapResult.type ?? 'none', point: { x: snapResult.point.x, y: snapResult.point.y, z: snapResult.point.z }, distance: snapResult.snapDistance });
                 point = snapResult.point;
             } else {
                 // Fallback: project onto work plane (Z=0)
@@ -876,13 +909,16 @@ export function useRulerMode(
 
             if (rulerPointsRef.current.length === 0) {
                 // First click: save start point
+                devLogEvent('ruler', 'click', { pointIndex: 0, point: fmtPoint(point) });
                 rulerPointsRef.current = [point];
                 updateRulerVisuals(rulerPointsRef.current);
             } else {
                 // Second click: complete measurement
                 rulerPointsRef.current.push(point);
                 updateRulerVisuals(rulerPointsRef.current);
-                onRulerMeasure?.(rulerPointsRef.current[0].distanceTo(point));
+                const dist = rulerPointsRef.current[0].distanceTo(point);
+                devLogEvent('ruler', 'measure', { distance: dist.toFixed(2), from: fmtPoint(rulerPointsRef.current[0]), to: fmtPoint(point) });
+                onRulerMeasure?.(dist);
                 // Reset for next measurement
                 rulerPointsRef.current = [];
             }
@@ -907,12 +943,15 @@ export function useRulerMode(
             if (!Number.isFinite(distance) || distance < 0) return;
 
             const worldPoint = camera.position.clone().add(dir.clone().multiplyScalar(distance));
+            devLogPointer('rulerMove', { worldX: worldPoint.x, worldY: worldPoint.y, worldZ: worldPoint.z });
+
             const screenPos = new THREE.Vector2(x, y);
             const raycaster = new THREE.Raycaster();
             raycaster.setFromCamera(screenPos, camera);
 
             const result = findNearestSnap(raycaster, meshMapRef, camera, screenPos, shapeTypeMapRef.current);
             if (result) {
+                devLogSnap('preview', { type: result.type ?? 'none', point: { x: result.point.x, y: result.point.y, z: result.point.z }, distance: result.snapDistance });
                 setSnapPreviewPoint(result.point);
                 setSnapPreviewType(result.type);
             } else {
@@ -977,18 +1016,10 @@ export function useMirrorPreview(
         geometry.setIndex(new THREE.BufferAttribute(previewObject.indices, 1));
         geometry.computeVertexNormals();
 
-        // Центрируем геометрию (как в useMeshSync для обычных объектов).
-        // FIX (MIRROR-PREVIEW-CENTER): computeBoundingBox() нужно вызвать явно —
-        // geometry.boundingBox равен null по умолчанию и заполняется только после вызова этого метода.
+        // FIX (8.5.3): центрирование убрано — previewObject.vertices уже в origin
+        // (та же конвенция, что у обычных объектов), pivot несёт позицию.
         geometry.computeBoundingBox();
-        const box = geometry.boundingBox;
-        if (box) {
-            const center = new THREE.Vector3();
-            box.getCenter(center);
-            geometry.translate(-center.x, -center.y, -center.z);
-            geometry.computeBoundingBox();
-            geometry.computeBoundingSphere();
-        }
+        geometry.computeBoundingSphere();
 
         const material = new THREE.MeshStandardMaterial({
             color: 0x4488ff,
@@ -1011,13 +1042,7 @@ export function useMirrorPreview(
         const pivot = new THREE.Object3D();
         pivot.userData.objectId = '__mirror_preview__';
         const t = previewObject.transform;
-        pivot.position.set(t.x, t.y, t.z);
-        pivot.rotation.set(
-            THREE.MathUtils.degToRad(t.rotX),
-            THREE.MathUtils.degToRad(t.rotY),
-            THREE.MathUtils.degToRad(t.rotZ),
-        );
-        pivot.scale.set(t.scaleX, t.scaleY, t.scaleZ);
+        applyTransformToPivot(pivot, t);
         pivot.add(mesh);
         scene.add(pivot);
         mirrorPreviewRef.current = { mesh, pivot };

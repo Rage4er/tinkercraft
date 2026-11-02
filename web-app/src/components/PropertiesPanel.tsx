@@ -639,7 +639,7 @@ export default function PropertiesPanel({
             </div>
           ) : fileName ? (
             <div className="text-sm text-muted" style={{ padding: "4px 12px 8px" }}>
-              {t("properties.unsavedProject")}
+              📄 <strong>{fileName}</strong>
               {modified && <span className="text-warning"> •</span>}
             </div>
           ) : (

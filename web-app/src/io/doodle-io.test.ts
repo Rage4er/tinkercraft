@@ -205,9 +205,6 @@ describe('.doodle import_mesh round-trip (UB-0)', () => {
     expect(json).not.toContain('"vertices":{"0"')
   })
 
-  // Явный timeout: фикстура ~100k треугольников (сериализация + DEFLATE) —
-  // на медленных прогонах тест выходил за дефолтные 5000 мс и падал
-  // «Test timed out» при корректной логике (flaky-наблюдение 2026-09-28).
   it('открывает model.json больше прежнего лимита 5 МБ', async () => {
     // ~100k треугольников: model.json заведомо > 5 МБ (старый лимит) и < 64 МБ
     const ops: TinkerCraftOperation[] = [makeImport('imp_big', 100_000)]
@@ -223,5 +220,7 @@ describe('.doodle import_mesh round-trip (UB-0)', () => {
     const im = doc.operations[0] as ImportMeshOperation
     expect(im.vertices).toHaveLength(100_000 * 3 * 3)
     expect(im.indices).toHaveLength(100_000 * 3)
+    // Тяжёлый тест (~100k треугольников, serializeDoodle + ZIP + parseDoodle):
+    // на медленном CI-runner не успевает за дефолтные 5s → индивидуальный 30s. FIX CI.
   }, 30_000)
 })

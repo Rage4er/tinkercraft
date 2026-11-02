@@ -8,10 +8,10 @@ import type { TinkerCraftFile, TinkerCraftOperation } from '../csg/types'
 
 const FORMAT_VERSION = '1.0.0'
 /** Максимальный размер model.json (64 МБ) для защиты от DoS.
- * FIX (UB-0): поднят с 5 МБ — операции import_mesh/text3d/group хранят
- * вершины в JSON, и импортированная геометрия легко превышала 5 МБ
- * (файл сохранялся, но не открывался с ошибкой лимита). Верхняя защита
- * от ZIP-бомбы остаётся на MAX_DOODLE_SIZE (50 МБ архива). */
+ * FIX (UB-0): поднят с 5 МБ — операции import_mesh/group хранят вершины в
+ * JSON, и импортированная геометрия легко превышала 5 МБ (файл сохранялся,
+ * но не открывался с ошибкой лимита). Верхняя защита от ZIP-бомбы остаётся
+ * на MAX_DOODLE_SIZE (50 МБ архива). */
 const MAX_MODEL_JSON_SIZE = 64 * 1024 * 1024
 /** SEC-R8-1: Максимальный размер .doodle файла (50 МБ) для защиты от ZIP bomb */
 const MAX_DOODLE_SIZE = 50 * 1024 * 1024
@@ -211,7 +211,7 @@ export async function parseDoodle(buffer: ArrayBuffer): Promise<TinkerCraftFile>
 
 /**
  * FIX (UB-0): TypedArray → обычный массив при JSON-сериализации.
- * JSON.stringify(Float32Array) даёт объект {"0":1.5,"1":2.3,...} — в ~1.5–2×
+ * JSON.stringify(Float32Array) даёт объект {"0":1.5,"1":2.3,...} — в ~1.4×
  * больше байт и без length. Массив компактнее и проходит JSON round-trip
  * без restoreMeshArray-нормализации (restoreMeshArray принимает оба формата).
  */

@@ -1409,6 +1409,13 @@ body {
   color: var(--text-muted);
 }
 
+.statusbar .version-tag {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  font-family: monospace;
+  margin-left: 6px;
+}
+
 .text-warning {
   color: var(--accent-yellow);
 }

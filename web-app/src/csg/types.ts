@@ -1,5 +1,5 @@
 // ============================================================
-// .doodle format types — full compatibility with Java TinkerCraftFile
+// .3dtc format types — ZIP + JSON, vertices in origin (COM), transform = pivot
 // ============================================================
 
 export interface TinkerCraftFile {
@@ -74,6 +74,9 @@ export interface MirrorOperation {
   plane: 'XY' | 'XZ' | 'YZ'
 }
 
+/** Плоскость зеркала. FIX (8.5.12): выделен в тип — SceneObject.mirrored теперь список. */
+export type MirrorPlane = 'XY' | 'XZ' | 'YZ'
+
 export interface AlignOperation {
   type: 'align'
   ids: string[]
@@ -95,6 +98,14 @@ export interface GroupOperation {
   resultNormals?: Float32Array | number[]
   /** Center position of the CSG result — used to restore transform on rebuild (FIX CRIT-CSG-2) */
   resultCenter?: { x: number; y: number; z: number }
+  /**
+   * FIX (CSG-PRESERVE-RS, Stage 8.5.9): Rotation of the CSG result (= rotation
+   * of operand A). Vertices are stored WITHOUT RS; the full TRS is restored on
+   * rebuild. Absent in legacy documents → identity (baked-RS convention).
+   */
+  resultRotation?: { x: number; y: number; z: number }
+  /** FIX (CSG-PRESERVE-RS): Scale of the CSG result (= scale of operand A). */
+  resultScale?: { x: number; y: number; z: number }
   /** Original bbox size of the CSG result — used to compute scale relative to original dimensions */
   originalBboxSize?: { x: number; y: number; z: number }
   /** Shape type of CSG result — 'csg' for boolean operations */
@@ -155,9 +166,11 @@ export interface SceneObject {
   shapeType: ShapeType
   params: ShapeParams
   color: string
+  /** Мировой pivot — применяется один раз при рендере/экспорте (Фаза 8) */
   transform: TransformNR
   visible: boolean
   locked: boolean
+  /** Вершины ВСЕГДА в origin (центрированы по центру масс) — transform в них не запечён (Фаза 8) */
   vertices: Float32Array
   indices: Uint32Array
   normals?: Float32Array | null
@@ -167,6 +180,17 @@ export interface SceneObject {
   operation?: CsgBooleanOp
   /** IDs of source objects — only for shapeType='csg' */
   children?: string[]
+  /**
+   * FIX (CSG-MIRROR-PRIMITIVE-PARAMS, Stage 8.5.10 + 8.5.12): плоскости
+   * последнего зеркала для ПРИМИТИВОВ. Зеркало примитива запечено в
+   * `vertices` (mirrorVerticesInPlace, 8.5.7), но `shapeType`/`params`
+   * остаются оригинальными — геометрия больше НЕ равна buildPrimitive(params).
+   *
+   * FIX (8.5.12): массив упорядоченных плоскостей; соседние одинаковые
+   * отменяются (YZ→YZ = identity). Сериализуется в .3dtc; legacy
+   * документ с одним зеркалом ('XZ') нормализуется при загрузке.
+   */
+  mirrored?: MirrorPlane[]
 }
 
 export type CsgBooleanOp = 'union' | 'subtract' | 'intersect'
@@ -175,6 +199,26 @@ export type CsgBooleanOp = 'union' | 'subtract' | 'intersect'
 
 /** Type of a build tree node */
 export type TreeNodeType = 'primitive' | 'boolean' | 'baked'
+
+/**
+ * Относительный transform узла относительно родителя (Фаза 8).
+ * Единственный источник истины для трансформов в Build Tree.
+ * `null` — для корневых нод (TransformNR хранится как мировой pivot).
+ *
+ * Семантика компонентов:
+ * - positionDelta — смещение позиции относительно позиции родителя
+ * - rotationDelta — дельта углов (deg) относительно ротации родителя
+ * - scaleRatio    — множитель масштаба относительно масштаба родителя
+ *
+ * Мировой transform: world = composeTransforms(parentWorld, relativeToParent)
+ * Обратная операция:  relativeToParent = subtractTransform(world, parentWorld)
+ * См. csg/worker-matrix.ts, web-app/ARCHITECTURE_TRANSFORMS.md §2.1
+ */
+export interface RelativeTransform {
+  positionDelta: Vec3
+  rotationDelta: Vec3
+  scaleRatio: Vec3
+}
 
 /** 3D point */
 export interface Point3D {
@@ -215,7 +259,19 @@ export interface TreeNode {
   shapeType?: ShapeType
   /** Primitive parameters (width, height, depth, radius, ...) */
   params?: ShapeParams
-  /** Local transform — used by both primitive and baked nodes */
+
+  // ── Transform model (Фаза 8) ──
+  /**
+   * ✅ ИСТОЧНИК ИСТИНЫ: transform узла относительно родителя.
+   * `null` — для корневых нод. Любое изменение трансформа = изменение этого поля.
+   * На Этапе 1 поле только добавлено — логика rebuild/mirror ещё читает localTransform.
+   */
+  relativeToParent: RelativeTransform | null
+  /**
+   * ⚠️ ВЫЧИСЛЯЕМЫЙ (для UI / Properties Panel / контракт с worker).
+   * Не использовать как источник истины в rebuildNode (см. ARCHITECTURE_TRANSFORMS.md §1).
+   * Используется primitive- и baked-нодами.
+   */
   localTransform?: TransformNR
 
   // ── Baked nodes (imported STL, non-manifold) ──
@@ -225,6 +281,18 @@ export interface TreeNode {
   indices?: Uint32Array
   /** Normal data for baked geometry (null = no normals) */
   normals?: Float32Array | null
+
+  /**
+   * Mirror plane used when baking this node (Variant B fix for MIRROR-CHIRALITY).
+   * Set when a primitive is converted to baked during mirror: the node's
+   * vertices were reflected across this plane. Kept so that future child-edit
+   * flows can rebuild geometry from params and re-apply the same mirror.
+   * `undefined` — not a mirrored node (original primitive or non-mirrored baked).
+   *
+   * Double-mirror (same plane twice) clears this field (geometry returns to original).
+   * Different planes: leave unchanged (the edit flow composes them — separate task).
+   */
+  mirroredPlane?: 'XY' | 'XZ' | 'YZ'
 
   // ── Boolean operations (internal nodes) ──
   /** Boolean operation type */

@@ -48,6 +48,8 @@ export interface DocumentStore {
   redo: () => Promise<void>
   jumpToHistory: (index: number) => Promise<void>
   clearScene: () => Promise<void>
+  openProject: () => Promise<void>
+  saveProject: () => Promise<void>
   openDoodle: () => Promise<void>
   saveDoodle: () => Promise<void>
   exportStl: (method?: 'tokens' | 'ad') => void

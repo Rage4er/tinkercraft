@@ -1,34 +1,41 @@
 # TinkerCraft Web — План разработки
 
-**Дата создания:** 2025-07-15
-**Текущая версия:** v1.0.0
+**Дата:** 2025-07-15
+**Версия:** 1.0.0
 
 ---
 
-## 🎉 РЕЛИЗ v1.0.0
+## 🎉 РЕЛИЗ v1.0.0 — 2026-08-19
 
-**Дата релиза:** 2026-08-19
-**Платформа:** CAD-версия (чистый 3D-редактор, без интеграций игровых платформ)
-**Статус:** ✅ Готов к деплою
+> **Первый стабильный релиз TinkerCraft Web — Open Source 3D CAD-редактор.**
+> **Платформа:** CAD-версия (чистый 3D-редактор, без интеграций игровых платформ)
+> **Статус:** ✅ Готов к деплою
 
-### Что достигнуто
+### Что достигнуто к релизу
 
 - Все 8 фаз разработки завершены (0–7.6)
 - ~291 проблем код-ревью закрыты (0 активных)
-- 420 тестов проходят (27 файлов)
+- ~236 тестов проходят
 - Полная i18n локализация (EN + RU)
 - 40+ SVG-иконок
 - Параметрическое Build Tree для CSG
 - Optimized mirror pipeline с кэшированием
-- Чистый Open Source код (CAD-версия без SDK)
+- Чистый Open Source код (без SDK сторонних платформ)
 
-### История изменений
+### Дальнейшие планы
 
-Все детальные записи изменений см. в [`CHANGELOG.md`](CHANGELOG.md).
+| Задача | Статус | Приоритет |
+|--------|--------|-----------|
+| **Деплой на GitHub Pages / Vercel** | ✅ Завершена | P0 |
+| **Создать тег `v1.0.0` в GitHub** | ✅ Завершена | P0 |
+| **Фаза 8 — Единая модель трансформов** | ✅ Завершена 2026-10-15 (релиз v1.1.0) | P1 |
+| **Фаза 8.5 — Унификация отрисовки и данных** | ✅ Завершена (v1.2.3) | P1 |
+| **Яндекс-версия (ветка `yandex-games`)** | 🔲 Не начата | P2 |
+| **Импорт SVG (2D → 3D экструзия)** | 🔲 Не начата | P3 |
 
 ---
 
-## 🗺️ Дорожная карта
+## 🗺️ Дорожная карта (yandex-games ветка)
 
 ### ✅ Этап 1 — CAD v1.0.0
 
@@ -93,40 +100,496 @@
 | Физическая симуляция (Rapier WASM) | Низкий | 🔲 |
 | Коллаборативное редактирование (CRDT / WebSocket) | Низкий | 🔲 |
 
+
 ---
 
-## Архитектура
+## Краткая сводка
+
+| Фаза | Статус |
+|------|--------|
+| Фаза 0 — Подготовка и прототип | ✅ Завершена |
+| Фаза 1 — Базовый 3D вьюпорт | ✅ Завершена |
+| Фаза 2 — Примитивные фигуры (CSG Worker) | ✅ Завершена |
+| Фаза 3 — Управление сценой и выделение | ✅ Завершена |
+| Фаза 4 — Булевы операции CSG | ✅ Завершена |
+| Фаза 5 — Продвинутые операции | ✅ Завершена |
+| Фаза 6 — Полировка UI и финальные штрихи | ✅ Завершена |
+| Фаза 7 — Исправления и улучшения | ✅ Завершена |
+| Фаза 7.5 — Доводка инструментов (параметрический скелет) | ✅ Завершена |
+| | Блок A: Архитектура | ✅ 7.5.1, 7.5.2, 7.5.3, 7.5.4, 7.5.5 завершены |
+| | Блок B: Интерфейс | ✅ Все задачи завершены |
+| Фаза 7.6 — Mirror Pipeline Performance | ✅ Завершена |
+| **🎉 РЕЛИЗ v1.0.0** | **✅ 2026-08-19** |
+| Фаза 8 — Единая модель трансформов | ✅ Завершена 2026-10-15 (v1.1.0) |
+| **Фаза 8.5 — Унификация отрисовки и данных** | **✅ Завершена (v1.2.3)** |
+| **Фаза 9 — Параметрическая история** | **🔲 Запланирована** |
+| **Фаза 10 — Яндекс.Игры** | **🔲 Запланирована** |
+| **Фаза 11 — Будущее** | **🔲 Запланирована** |
+
+---
+
+## Чеклист фаз
+
+### ✅ Фаза 0 — Подготовка и прототип
+
+- [x] Инициализация Vite + React + TypeScript
+- [x] Настройка Three.js (WebGL2 рендерер, OrbitControls, сцена)
+- [x] Интеграция manifold-3d (WASM сборка, Web Worker)
+- [x] Базовая архитектура: Zustand store + worker-client
+- [x] Конфигурация Vite: COOP/COEP заголовки для SharedArrayBuffer
+- [x] PWA manifest.json + иконки
+
+---
+
+### ✅ Фаза 1 — Базовый 3D вьюпорт
+
+- [x] Рендеринг сцены (PerspectiveCamera, WebGLRenderer, OrbitControls)
+- [x] Поддержка ортографической камеры (переключение)
+- [x] ViewCube (навигационный куб)
+- [x] Адаптивный ресайз (ResizeObserver)
+- [x] WebGL fallback (проверка WebGL2 при монтировании)
+- [x] Индикатор загрузки WASM
+
+---
+
+### ✅ Фаза 2 — Примитивные фигуры (CSG Worker)
+
+- [x] Cube, Sphere, Cylinder, Cone, Torus через manifold-3d
+- [x] Параметры фигур (width/height/depth, radius, segments и т.д.)
+- [x] Web Worker для CSG операций (не блокирует UI)
+- [x] Типобезопасный интерфейс worker-client (Promise-based)
+- [x] Валидация параметров (sanitizeParams, clamp)
+- [x] 3D Текст (TextGeometry через Three.js → manifold mesh)
+
+---
+
+### ✅ Фаза 3 — Управление сценой и выделение
+
+- [x] Клик для выделения (Raycaster)
+- [x] Drag-select (прямоугольное выделение)
+- [x] Множественное выделение (Shift+клик)
+- [x] TransformControls (перемещение, вращение, масштаб)
+- [x] Подсветка выделенного (эмиссивный цвет)
+- [x] GizmoMode: translate / rotate / scale
+- [x] Snap to grid (1/5/10/50)
+
+---
+
+### ✅ Фаза 4 — Булевы операции CSG
+
+- [x] Union / Subtract / Intersect через manifold-3d
+- [x] Цепочка CSG операций (результат → новая операция)
+- [x] Группировка (Group → CSG результат)
+- [x] Разгруппировка (Ungroup)
+- [x] Кнопки CSG в тулбаре и панели свойств
+
+---
+
+### ✅ Фаза 5 — Продвинутые операции
+
+- [x] Зеркалирование (Mirror: XY/XZ/YZ плоскости)
+- [x] Выравнивание (Align: 9 позиций)
+- [x] Инструмент скругления (Fillet)
+- [x] Инструмент экструзии (Extrude)
+- [x] Экспорт STL (бинарный, все видимые объекты объединены)
+- [x] Сохранение/загрузка `.doodle` (сериализация JSON через JSZip)
+- [x] Автосохранение в IndexedDB (восстановление сессии при перезагрузке)
+
+---
+
+### ✅ Фаза 6 — Полировка UI и финальные штрихи
+
+- [x] Дерево компонентов (переименование по двойному клику, переключение видимости, удаление)
+- [x] Вкладки списка объектов: плоский список ↔ Дерево компонентов
+- [x] Модальное окно менеджера проектов (IndexedDB: создание/открытие/удаление)
+- [x] Линейка (измерение расстояния по двум кликам, Three.js линия, автоочистка через 4 с)
+- [x] Горячие клавиши: Ctrl+Z/Y, Del, F, H, G, R, S, Ctrl+A, Ctrl+C/V/S/O, Esc
+- [x] Переключение тёмной / светлой темы
+- [x] PWA манифест manifest.json + meta-тег theme-color
+- [x] Строка состояния: статус CSG, количество объектов, количество треугольников, история, FPS, режим линейки, статус проекта
+
+---
+
+### ✅ Фаза 7 — Исправления и улучшения
+
+Все проблемы из раундов код-ревью (Раунды 16–20, ~175 исправлений) закрыты.
+Полная история: [`CODE_REVIEW.md`](CODE_REVIEW.md)
+
+#### Завершённые проблемы (все закрыты)
+
+| Раунд | Проблем | Статус |
+|-------|---------|--------|
+| Раунд 16 | CRIT, WARN, PERF, CODE, SEC, TEST | ✅ Все исправлены |
+| Раунд 17 + SourceCraft | CRIT-1..12, Store/CSG/UI/IO, LOW | ✅ Все исправлены |
+| Mirror boolean/non-manifold | MIRROR-BOOLEAN, MIRROR-NONMANIFOLD | ✅ Исправлено |
+| Раунд 18 | CRIT-18 (5), HIGH-18 (27), MED-18 (56), LOW-18 (50) | ✅ Все закрыты |
+| Раунд 19 | MIRROR-19-1..12 (глубокий аудит mirror) | ✅ Все закрыты |
+| Раунд 20 | CSG-PARAM-1/2/3 | ✅ Все исправлены |
+
+**Итого за Фазу 7:** ~175 проблем исправлено, ~115 признаны архитектурными решениями.
+
+---
+
+### 🔮 Фаза 7.5 — Доводка инструментов (Параметрический скелет)
+
+> **Цель:** Сделать так, чтобы **все основные инструменты** (CSG, зеркало) работали **параметрически** для **всех типов объектов**.
+>
+> **Статус инфраструктуры:**
+> - ✅ Build Tree — реализован
+> - ✅ История операций — реализована
+> - ✅ `createBooleanNode` — реализован
+> - ✅ `rebuildFromHistory` — поддерживает boolean-ноды
+> - ✅ Mirror-store — работает для всех типов объектов
+> - ✅ Интеграция завершена (7.5.1, 7.5.2)
+> - ❌ Нужно: тестирование цепочек, финальная полировка (7.5.3, 7.5.4)
+
+#### 🏗️ Архитектура (скелет)
+
+**Принцип:** Любая операция — это функция над историей.
+
+```
+Пользователь → UI → Action (addShape, move, mirror, csgBoolean...) → History[]
+    → rebuildFromHistory → Build Tree (primitive/boolean/baked)
+    → Web Worker (manifold-3d WASM) → Геометрия → Store → Viewport3D
+```
+
+| Компонент | Ответственность | Файл |
+|---|---|---|
+| **UI** | Вызов actions, отображение состояния | `App.tsx`, `Toolbar.tsx` |
+| **Actions** | Мутация истории, вызов rebuild | `document-store.ts` |
+| **History** | Массив операций, undo/redo | `document-store.ts` |
+| **Build Tree** | Параметрическое дерево объектов | `history-tree.ts` |
+| **Worker** | Вычисление геометрии (WASM) | `worker.ts`, `worker-handlers.ts` |
+| **Store** | Текущие объекты сцены | `document-store.ts` |
+| **Viewport** | Рендеринг Three.js | `Viewport3D.tsx` |
+
+#### ✅ Что уже реализовано
+
+| Компонент | Статус | Примечание |
+|---|---|---|
+| `createBooleanNode` | ✅ | `history-tree.ts:98-130` — с проверкой циклов |
+| `rebuildFromHistory` для boolean | ✅ | `rebuild.ts:313-331` — создаёт boolean-ноды |
+| `mirrorObject` для всех типов | ✅ | `mirror-store.ts` — primitive/CSG/import |
+| `syncObjectsForOperation` | ✅ | `mirror-store.ts:51-88` — маршрутизация |
+| Snapshot cache | ✅ | `snapshots.ts` — быстрый undo/redo |
+
+#### 🎯 Задачи Фазы 7.5
+
+| # | Приоритет | Задача | Статус |
+|---|---|---|--------|
+| 7.5.1 | P0 | Верификация CSG-архитектуры | ✅ Завершена |
+| | | `csgBoolean` создаёт boolean-ноду | ✅ Реализовано |
+| | | CSG-результат остаётся в `objects` | ✅ Реализовано |
+| | | `syncObjectsForOperation` маршрутизирует boolean-ноды | ✅ Реализовано |
+| 7.5.2 | P0 | Верификация зеркала для всех типов | ✅ Завершена |
+| | | Примитивы → примитивы (параметрические) | ✅ Реализовано |
+| | | CSG → import_mesh (baked) | ✅ Реализовано |
+| | | Import → import_mesh (baked) | ✅ Реализовано |
+| **7.5.3** | **P1** | **SVG иконки для UI — Полная реализация** | **✅ ЗАВЕРШЕНО** |
+| | | Создана структура `src/components/icons/` | ✅ Завершено |
+| | | 40+ SVG-иконок по категориям | ✅ Завершено |
+| | | Интеграция во все компоненты | ✅ Завершено |
+| | **7.5.4** | **Тестирование цепочек операций** | **✅ ЗАВЕРШЕНО** |
+| | | CSG-цепочки (union/subtract/intersect) | ✅ 15 тестов |
+| | | Mirror + CSG | ✅ |
+| | | Undo/Redo через CSG | ✅ |
+| | | Jump to history | ✅ |
+| | **7.5.5** | **Финальная полировка (логи, перф, доки)** | **✅ ЗАВЕРШЕНО** |
+| | | ✅ Условные логи (devLog/devWarn) | ✅ Завершено |
+| | | ✅ IconButton компонент + тултипы | ✅ Завершено |
+| | | ✅ Двухуровневые тултипы | ✅ Завершено |
+| | | ✅ Layout тулбара (CAD-style) | ✅ Завершено |
+| | | ✅ Алгоритм распределения кнопок по строкам | ✅ Завершено |
+| | | ✅ Диагностические логи [DIAG:*] переключены на dev mode | ✅ Завершено |
+| | | ✅ Подробные тултипы для всех кнопок Align | ✅ Завершено |
+| | | ✅ Иконки Timeline для всех типов операций | ✅ Завершено |
+| | | ✅ Имя проекта в PropertiesPanel (вместо Toolbar) | ✅ Завершено |
+
+#### 📊 Что меняется после Фазы 7.5
+
+| Аспект | До 7.5 | После 7.5 |
+|--------|--------|-----------|
+| **CSG-результат** | `baked`-нода (vertices) | `boolean`-нода (operation + children) |
+| **Параметричность CSG** | ❌ Потеряна | ✅ Сохранена (boolean-нода в дереве) |
+| **CSG-цепочки** | ❌ Ломаются | ✅ Работают (через rebuildFromHistory) |
+| **Зеркало CSG** | ❌ Превращает в `import_mesh` | ✅ Сохраняет параметричность primitive; CSG → `import_mesh` (baked) |
+| **Зеркало Primitive** | ❌ Превращает в `import_mesh` | ✅ Сохраняет shapeType/params |
+| **Редактирование** | ❌ Невозможно | ✅ Возможно (Фаза 8) |
+
+#### 🛠️ План действий
+
+##### Шаг 1: Верификация CSG-архитектуры ✅ Завершено
+
+```typescript
+// document-store.ts - csgBoolean (строка 496)
+// ✅ РЕАЛИЗОВАНО:
+createBooleanNode(resultId, op as 'union' | 'subtract' | 'intersect', idA, idB, resultTransform)
+
+// Проверено:
+// 1. CSG-результат остаётся в objects ✅
+// 2. children (idA, idB) остаются в objects ✅
+// 3. syncObjectsForOperation маршрутизирует boolean-ноды ✅
+// 4. rebuildNode кэширует mesh в history-tree ✅
+```
+
+##### Шаг 2: Верификация зеркала ✅ Завершено
+
+```typescript
+// mirror-store.ts - mirrorObject
+// ✅ РЕАЛИЗОВАНО:
+// - Примитивы → сохраняют shapeType/params (остаются редактируемыми)
+// - CSG → shapeType: 'import_mesh' (baked) — геометрия уже вычислена
+// - Import → shapeType: 'import_mesh' (baked)
+// - ensureInTree + syncNodeTransform
+// - mirrorVerticesInPlace для отражения вершин
+// - mirrorEuler для отражения поворота
+// - Исправление winding order (CCW→CW)
+```
+
+##### Шаг 3: Тестирование цепочек 🔲 Не выполнено
+
+- [x] ✅ Создать куб → Union с цилиндром → Зеркало
+- [x] ✅ Создать куб → Union с цилиндром → Union со сферой
+- [ ] Изменить размер куба → Всё перестраивается
+- [ ] Undo/redo через CSG-цепочки
+
+##### Шаг 4: Финальная полировка ✅ Выполнено
+
+- [x] ✅ **Диагностические логи `[DIAG:*]` → dev mode**: Все логи переключены на `import.meta.env?.DEV`. Логи работают только в dev (`pnpm dev`), в production отсутствуют. Не удалены — пригодятся для отладки.
+- [ ] 🔲 Проверить производительность на больших сценах
+- [ ] 🔲 Обновить BUILD_TREE_SPEC.md
+
+#### Блок B: Интерфейс и визуальная полировка
+
+> **Статус:** ✅ ЧАСТИЧНО ЗАВЕРШЕНО (SVG-иконки созданы и интегрированы)
+
+##### B.1 — Иконки кнопок (SVG)
+
+**Завершено:** Создана модульная структура `src/components/icons/` с 40+ SVG-иконками:
+
+| Группа | Количество | Статус | Описание |
+|--------|------------|--------|----------|
+| **Палитра фигур** | 8 | ✅ | Куб, Сфера, Цилиндр, Конус, Тор, Призма, Пирамида, Текст |
+| **Инструменты** | 4 | ✅ | Выделение, Перемещение, Вращение, Масштаб |
+| **CSG** | 3 | ✅ | Объединение, Вычитание, Пересечение |
+| **Зеркало** | 3 | ✅ | YZ, XZ, XY плоскости |
+| **Действия** | 5 | ✅ | Undo, Redo, Копировать, Вставить, Удалить |
+| **Файл** | 5 | ✅ | Открыть, Сохранить, Импорт, Экспорт, Папка |
+| **Навигация** | 3 | ✅ | Дом, Fit View, Линейка |
+| **Дополнительно** | 7 | ✅ | Fillet, Align, Color, Plus, Monitor, ChevronUp, ChevronDown |
+| **UI** | 5 | ✅ | Close, Info, Warning, Eye, EyeOff |
+
+**Всего иконок:** 43 SVG-компонента в модульной структуре
+
+##### Структура иконок
+
+```
+web-app/src/components/icons/
+├── index.ts              # Главный экспорт всех иконок (62 экспорта)
+├── IconBase.tsx          # Базовый SVG-компонент
+├── legacy-icons.tsx      # Старый монолитный (удалён)
+├── shapes/               # 8 примитивов
+│   ├── CubeIcon.tsx
+│   ├── SphereIcon.tsx
+│   ├── CylinderIcon.tsx
+│   ├── ConeIcon.tsx
+│   ├── TorusIcon.tsx
+│   ├── PrismIcon.tsx
+│   ├── PyramidIcon.tsx
+│   └── TextIcon.tsx
+├── tools/                # 4 инструмента
+├── csg/                  # 3 CSG операции
+├── mirror/               # 3 плоскости зеркала
+├── actions/              # 5 действий
+├── file/                 # 5 файловых операций
+├── navigation/           # 3 навигационные
+├── extra/                # 7 дополнительных
+└── ui/                   # 5 UI элементов
+```
+
+##### Интеграция
+
+Все компоненты обновлены для использования новой структуры иконок:
+- ✅ `Toolbar.tsx` — использует 20+ иконок
+- ✅ `LeftPanel.tsx` — использует ALL_SHAPES_ICONS из constants-react
+- ✅ `Timeline.tsx` — 15+ операций с иконками
+- ✅ `ComponentTree.tsx` — 11 фигур + UI
+- ✅ `PropertiesPanel.tsx` — Visibility, Fillet
+- ✅ `ToastContainer.tsx` — уведомления
+- ✅ `Section.tsx` — сворачиваемые секции
+- ✅ `TextModal.tsx` — модалка текста
+- ✅ `ProjectManagerModal.tsx` — менеджер проектов
+- ✅ `CsgButtons.tsx` — CSG операции
+- ✅ `MirrorButtons.tsx` — зеркало
+- ✅ `AlignButtons.tsx` — выравнивание
+- ✅ `ErrorBoundary.tsx` — экран ошибки
+- ✅ `WebGLFallback.tsx` — WebGL fallback
+
+##### ✅ Остаточные задачи
+
+| Задача | Статус |
+|--------|--------|
+| **Компонент IconButton (универсальный)** | **✅ ЗАВЕРШЕНО** — создан `IconButton.tsx` с поддержкой compact/full вариантов, стилевых вариантов (default/primary/danger/active), тултипов, ARIA-label |
+| **Замена текстовых кнопок в тулбаре на IconButton** | **✅ ЗАВЕРШЕНО** — все кнопки заменены в Toolbar.tsx, CsgButtons.tsx, MirrorButtons.tsx, AlignButtons.tsx |
+| **Добавить тултипы для всех кнопок** | **✅ ЗАВЕРШЕНО** — двухуровневые тултипы через `Tooltip.tsx` (мгновенный label + расширенное описание через 1.5 сек) |
+| **Адаптация под тему (светлая/тёмная)** | **✅ ЗАВЕРШЕНО** — CSS-переменные в `App.css`, все компоненты поддерживают обе темы |
+
+---
+
+---
+
+### 🔮 Фаза 8 — Единая модель трансформов
+
+> **Концепция:** `relativeToParent` — единственный источник истины для трансформов. CSG-центрирование унифицировано на `centerMassAtOrigin`.
+>
+> **Статус:** ✅ Завершена (v1.1.0, 2026-10-15)
+>
+> **См.** `web-app/ARCHITECTURE_TRANSFORMS.md`
+
+---
+
+### 🔮 Фаза 8.5 — Унификация отрисовки и данных (v1.2.3)
+
+> **Концепция:** `SceneObject.vertices` — всегда в origin (COM). `SceneObject.transform` — мировой pivot. Отрисовка = `mesh.position = transform`, `geometry = vertices`. Render = data.
+>
+> **Статус:** ✅ Завершена (v1.2.3, 2026-11-01)
+>
+> **См.** `web-app/ARCHITECTURE_RENDER.md`
+
+#### Подзадачи
+
+| # | Задача | Приоритет | Сложность | Статус |
+|---|--------|-----------|-----------|--------|
+| 8.5.0 | Подготовка + ARCHITECTURE_RENDER.md | Высокий | Низкая | ✅ Завершена |
+| 8.5.1 | Worker возвращает origin для всех primitive | Высокий | Средняя | ✅ 2026-10-21 |
+| 8.5.2 | Store применяет spawn к transform, не к vertices | Высокий | Средняя | ✅ 2026-10-21 |
+| 8.5.2.5 | `handleRebuildScene` возвращает origin-вершины (undo/redo/load) | Высокий | Средняя | ✅ 2026-10-23 |
+| 8.5.3 | Удалить `centerGeometry` и `isPivotCenteredGeometry` | Высокий | Средняя | ✅ 2026-10-24 |
+| 8.5.4 | Миграция `.doodle` → `.3dtc` | Средний | Средняя | ✅ 2026-10-24 |
+| 8.5.5 | CI-тест `render-data-invariant.test.ts` (import_mesh, CSG, mirror, fillet, resize) | Высокий | Низкая | ✅ 2026-10-24 |
+| 8.5.6 | Релиз v1.2.0 (CSG-инварианты, версия, CHANGELOG) | Средний | Низкая | ✅ 2026-10-25 |
+| 8.5.7 | Double-mirror primitive = identity | Высокий | Средняя | ✅ 2026-10-25 |
+| 8.5.8 | Ревизия + push + релиз v1.2.1 (CODE_REVIEW.md) | Средний | Низкая | ✅ 2026-10-26 |
+| 8.5.9 | CSG preserves rotation/scale of operand A (CSG-PRESERVE-RS) | Высокий | Средняя | ✅ 2026-10-28 |
+| 8.5.10 | CSG-MIRROR-PRIMITIVE-PARAMS (mirror flag routing) | Высокий | Средняя | ✅ 2026-10-31 |
+| 8.5.12 | Multi-level mirror + CSG mirror double RS | Высокий | Средняя | ✅ 2026-11-01 |
+| 8.5.13 | Ревизия + push + релиз v1.2.3 | Средний | Низкая | ✅ 2026-11-01 |
+
+---
+
+### 🔮 Фаза 9 — Параметрическая история операций (Parametric History)
+
+> **Концепция:** Каждая операция в истории — это параметрический объект. Изменяя параметры на любом шаге, мы перестраиваем всё, что было после него.
+>
+> **Статус:** 🔲 Не начата (следующий этап после v1.2.3)
+
+```
+История операций → Шаг 1: Куб 20x20x20 → Шаг 2: Скругление R=2 → Шаг 3: Union с цилиндром → Шаг 4: Зеркало YZ → Текущий результат
+                                                                  ↓
+                                                               Редактируем R=2 → R=5
+                                                                  ↓
+                                                               Перестраиваем шаги 3-4
+                                                                  ↓
+                                                               Новый результат
+```
+
+#### Подзадачи
+
+| # | Задача | Приоритет | Сложность | Статус |
+|---|--------|-----------|-----------|--------|
+| 9.1 | **Timeline edit** — UI для редактирования параметров операции в Timeline | Высокий | Средняя | 🔲 |
+| | | Добавлена кнопка «✏️» в TimelineItem для операций с редактируемыми параметрами | | |
+| | | При клике — модалка с формой параметров (размеры куба, радиус скругления и т.д.) | | |
+| | | Для CSG — модалка с выбором типа операции и списка operand-ов | | |
+| 9.2 | **Edit modal для примитивов** — форма редактирования параметров примитива | Высокий | Низкая | 🔲 |
+| | | Cube: width/height/depth | | |
+| | | Sphere: radius, segmentsX, segmentsY | | |
+| | | Cylinder: radiusTop, radiusBottom, height, segments | | |
+| | | Cone, Torus, Prism, Pyramid — аналогично | | |
+| 9.3 | **Edit modal для CSG** — раскрытие и редактирование boolean операций | Высокий | Средняя | 🔲 |
+| | | Выбор типа операции: union / subtract / intersect | | |
+| | | Список operand-ов с возможностью добавить/удалить | | |
+| | | Визуальная индикация CSG-результата в Timeline | | |
+| 9.4 | **Rebuild on edit** — перестроение цепочки после изменения параметра | Высокий | Средняя | 🔲 |
+| | | `editOperation(index, newParams)` — обновление операции в истории | | |
+| | | Вызов `rebuildFromHistory(ops.slice(0, index + 1))` | | |
+| | | Обновление объектов и build tree | | |
+| | | Toast-уведомление об успехе/ошибке | | |
+| 9.5 | **Edit modal для fillet/extrude/mirror** — редактирование продвинутых операций | Средний | Средняя | 🔲 |
+| | | Fillet: radius | | |
+| | | Extrude: depth, direction | | |
+| | | Mirror: plane (XY/XZ/YZ) | | |
+| 9.6 | **Undo для edit** — запись изменений в историю undo/redo | Средний | Низкая | 🔲 |
+| | | При редактировании операции — запись предыдущего состояния в историю | | |
+| | | Ctrl+Z откатывает к состоянию ДО редактирования | | |
+| 9.7 | **Visual feedback** — визуальная индикация редактируемого шага | Низкий | Низкая | 🔲 |
+| | | Подсветка текущего редактируемого элемента в Timeline | | |
+| | | Индикатор «rebuilding...» при перестроении цепочки | | |
+| 9.8 | **CSG-CSG-POSITION-DRIFT** — ✅ **ИСПРАВЛЕНО** (2026-10-14, Этап 8) | Высокий | Высокая | ✅ ИСПРАВЛЕНО (2026-10-14) |
+| 9.9 | **MIRROR-CSG-CHILD-RS-LOSS** — ✅ **ИСПРАВЛЕНО** (2026-10-14, Этап 8) | Высокий | Высокая | ✅ ИСПРАВЛЕНО (2026-10-14) |
+| 9.10 | **CSG-PRESERVE-RS** — `csgBoolean` терял rotation/scale operand A (результат всегда имел identity RS). Исправлено: `resultTransform` копирует rot/scale от operand A | Высокий | Высокая | 🔲 |
+
+#### 🚀 Будущие возможности (после релиза)
+
+> Это запланированные функции для будущих фаз после релиза (не входят в Фазы 8.5/9).
+
+#### Фаза 10 — Яндекс.Игры (монетизация) — реализована в ветке `yandex-games`
+
+| Этап | Статус |
+|------|--------|
+| **Y.1 Фундамент SDK** (2026-08-21) — IPlatform, Yandex/Clean, SDK init, Gameplay API, `dev:yandex`/`build:yandex` | ✅ |
+| **Y.2 Экономика V2** (2026-08-28) — конфиг, store, квесты, триггеры, UI-панели, i18n, кэшбэк V2; ревью EC1–EC18 закрыты (2026-09-07); глубокое ревью 22 проблемы закрыто (2026-09-11), `docs/ECONOMY_CODE_REVIEW.md` | ✅ |
+| **Y.3 Релиз в Яндекс.Игры** — ассеты, ZIP → песочница → модерация, мониторинг метрик | 🔲 |
+
+#### Фаза 11 — Будущее
+
+| Задача | Приоритет | Сложность | Статус |
+|--------|-----------|-----------|--------|
+| Импорт SVG (2D → 3D экструзия) | Средний | Средняя | 🔲 |
+| Импорт 3MF | Средний | Средняя | 🔲 |
+| Экспорт STEP / IGES (OpenCascade.js) | Низкий | Высокая | 🔲 |
+| Размеры / аннотации поверх 3D | Средний | Средняя | 🔲 |
+| Физическая симуляция (Rapier WASM) | Низкий | Высокая | 🔲 |
+| Коллаборативное редактирование (CRDT / WebSocket) | Низкий | Очень высокая | 🔲 |
+| Robot Lab (конструктор роботов) | Отложено | Высокая | 🔲 |
+
+#### Цели
+
+- Редактирование параметров примитивов прямо в Timeline (размеры, радиусы, сегменты)
+- Раскрытие и редактирование CSG-операций (union/subtract/intersect) — изменение состава и типа
+- Редактирование параметров mirror, fillet, extrude в истории
+- Перестроение цепочки при изменении любого шага (rebuildFromHistory с нужного индекса)
+- Drag & drop для изменения порядка операций (будущее)
+
+#### Зависимости
+
+- ✅ История операций — уже есть (`document-store.ts`)
+- ✅ Build Tree — уже есть (`history-tree.ts`)
+- ✅ Rebuild из истории — уже есть (`rebuild.ts`)
+- ❌ UI для редактирования — нужно добавить (Фаза 8)
+- ❌ Модалки редактирования — нужно добавить (Фаза 8)
+
+#### Сравнение с профессиональными CAD
+
+| Возможность | TinkerCraft (сейчас) | TinkerCraft (после Фазы 8) | Fusion 360 |
+|-------------|---------------------|---------------------------|------------|
+| История операций | ✅ Есть | ✅ Есть | ✅ Есть |
+| Раскрытие CSG | ❌ Нет | ✅ Да | ✅ Да |
+| Редактирование параметров | ✅ Для примитивов | ✅ Для всех | ✅ Для всех |
+| Перестроение цепочки | ❌ Только undo/redo | ✅ Да | ✅ Да |
+| Изменение порядка | ❌ Нет | ❌ (будущее) | ✅ Да |
+
+---
+
+## Архитектурные заметки
 
 | Уровень | Технология |
 |---|---|
 | UI / Состояние | React 18 + Zustand 5 |
 | 3D Рендеринг | Three.js r170 |
-| CSG | manifold-3d 3.0.1+ (WASM, выделенный Worker) |
-| Персистентность | IndexedDB (автосохранение + несколько проектов), JSZip (.doodle) |
+| CSG | manifold-3d 3.0.1+ (WASM, выделенный Worker, типобезопасный интерфейс) |
+| Персистентность | IndexedDB (автосохранение + несколько проектов), JSZip (.3dtc) |
 | PWA | Vite + manifest.json + COOP/COEP заголовки |
-| Платформы | Yandex Games SDK / Clean (fallback) |
-
----
-
-## Быстрый старт
-
-```bash
-# Клонировать репозиторий
-git clone https://github.com/your-org/tinkercraft.git
-cd tinkercraft/web-app
-
-# Установить зависимости
-pnpm install
-
-# Запустить dev-сервер
-pnpm dev
-
-# Проверка типов
-pnpm typecheck
-
-# Запуск тестов
-pnpm test
-```
 
 ---
 
@@ -139,16 +602,50 @@ web-app/
 │   ├── App.css              # Глобальные стили, темы
 │   ├── constants.ts         # Константы (ALL_SHAPES, SNAP_VALUES, и т.д.)
 │   ├── main.tsx             # Точка входа
-│   ├── components/          # React-компоненты
-│   ├── store/               # Zustand stores
-│   ├── csg/                 # CSG worker, tree, rebuild
-│   ├── io/                  # Импорт/экспорт (STL, Doodle)
-│   ├── platform/            # Yandex SDK / Clean stub
-│   └── i18n/                # Локализация (EN, RU)
-├── public/                  # Статика (favicon, manifest)
-├── vite.config.ts           # Конфигурация Vite
-├── package.json             # Зависимости, скрипты
-└── tsconfig.json            # TypeScript
+│   ├── components/
+│   │   ├── Viewport3D.tsx   # Three.js вьюпорт (936 строк)
+│   │   ├── Toolbar.tsx      # Панель инструментов
+│   │   ├── LeftPanel.tsx    # Палитра фигур + список объектов
+│   │   ├── PropertiesPanel.tsx # Панель свойств
+│   │   ├── MirrorButtons.tsx   # Кнопки зеркала
+│   │   ├── AlignButtons.tsx    # Кнопки выравнивания
+│   │   ├── CsgButtons.tsx      # Кнопки CSG
+│   │   ├── TextModal.tsx       # Модалка 3D текста
+│   │   ├── ProjectManagerModal.tsx # Менеджер проектов
+│   │   ├── Timeline.tsx        # История операций
+│   │   ├── StatusBar.tsx       # Строка состояния
+│   │   ├── NumInput.tsx        # Numeric input
+│   │   ├── Section.tsx         # Collapsible section
+│   │   ├── ViewCube.tsx        # Навигационный куб
+│   │   ├── ComponentTree.tsx   # Дерево компонентов
+│   │   ├── snap-utils.ts       # Snap-to-geometry
+│   │   ├── ErrorBoundary.tsx   # Error boundary
+│   │   ├── WebGLFallback.tsx   # WebGL fallback
+│   │   └── ToastContainer.tsx  # Toast-уведомления
+│   ├── store/
+│   │   ├── document-store.ts   # Zustand store (документ/сцена)
+│   │   ├── ui-store.ts         # Zustand store (UI state)
+│   │   ├── types.ts            # DocumentStore interface
+│   │   ├── helpers.ts          # Утилиты (extractAndCenter, computeAABB, и т.д.)
+│   │   ├── rebuild.ts          # rebuildFromHistory
+│   │   ├── snapshots.ts        # Snapshot cache
+│   │   └── notifications.ts    # Toast-уведомления
+│   ├── csg/
+│   │   ├── worker.ts           # WASM worker (manifold-3d операции)
+│   │   ├── worker-client.ts    # Promise-обёртка над воркером
+│   │   ├── worker-handlers.ts  # Обработчики сообщений воркера
+│   │   ├── worker-matrix.ts    # Матричная математика
+│   │   ├── types.ts            # Типы операций
+│   │   ├── history-tree.ts     # Build Tree (параметрическое дерево)
+│   │   ├── rebuildOps.ts       # Операции над деревом (mirror, move, rotate)
+│   │   └── BUILD_TREE_SPEC.md  # Спецификация Build Tree
+│   └── io/
+│       ├── stl-import.ts       # Импорт STL
+│       ├── stl-export.ts       # Экспорт STL
+│       ├── 3dtc-io.ts          # Формат .3dtc (основной)
+│       ├── doodle-io.ts        # Формат .doodle (legacy, не поддерживается)
+│       ├── autosave.ts         # Автосохранение
+│       └── project-manager.ts  # Менеджер проектов
 ```
 
 ---
@@ -168,12 +665,58 @@ web-app/
 
 ---
 
-## Известные проблемы
+## Известные проблемы и технический долг
 
 | # | Проблема | Приоритет | Статус |
 |---|----------|-----------|--------|
-| **CSG-CSG-POSITION-DRIFT** | Булевые операции между двумя CSG-результатами приводят к смещению операндов | **HIGH** | 🔄 Фаза 8 |
-| **MIRROR-CSG-CHILD-RS-LOSS** | Зеркалирование CSG сбрасывает масштаб/поворот дочерних примитивов | **HIGH** | 🔄 Фаза 8 |
+| | **CENTERING-INCONSISTENCY** — три разных центра масс в проекте: worker (vertex centroid), frontend (`extractCenteredAt(transformA)`), helpers (`centerMassAtOrigin`). Для несимметричных CSG-результатов diff = 3.89 (численный тест union куб+призма). Риск CSG-PRISM-OFFSET на Этапе 8. Унифицировано: единая `centerMassAtOrigin` (`csg/geometry-utils.ts`) в worker + frontend + rebuild. | **CRITICAL** | ✅ **ИСПРАВЛЕНО** (2026-10-14, Этап 6.5) |
+| | **CENTERING-RESIDUAL** — остаточный долг 6.5: (1) `handleRebuildScene` внутренне использует world-кэш (самосогласован, но вне origin-конвенции); (2) pivot legacy-документов (центрирование по transformA) не мигрирован — tree-rebuild старых CSG может дать смещение (baked resultVertices путь не затронут); (3) extrude/CSG филлет-примитивов rebuild'ится через `buildPrimitive` без fillet. | **MEDIUM** | 🔲 Этап 7/8 |
+| | **PIVOT-CSG** — pivot CSG-результата = COM (из-за Stage 6.5 `centerMassAtOrigin` + pivot = COM в `csgBoolean`). Gizmo CSG «съезжает» на `(COM − transformA)` (измерено **0.0192** ед. для куб@(20,20,20) + призма@(20,20,20) rot(20,20,20) scale(1,1,0.5)). Исправлено: pivot = transformA, vertices сдвинуты на `(COM − transformA)` в обратную сторону — инвариант `world = pivot + vertex` сохранён. | **CRITICAL** | ✅ **ИСПРАВЛЕНО** (2026-10-17) |
+| | **VIEWPORT-DOUBLE-CENTERING** — `useMeshSync` вычитал `bboxCenter` из вершин всех объектов, но CSG-вершины уже COM-центрированы (§5.4): для асимметричной геометрии (COM ≠ bboxCenter) CSG рендерился со сдвигом **4.2491** ед. Устранено предикатом `isPivotCenteredGeometry` в 3 местах вьюпорта + синхронно в STL-экспорте; diff render-vs-data = 0.00000000. | **CRITICAL** | ✅ **ИСПРАВЛЕНО** (2026-10-16) |
+| | **MIRROR-CHIRALITY** — зеркало CSG с асимметричными примитивами (prism sides=3) было приближённым: `mirrorNodeRecursive` зеркалит трансформы детей, но не геометрию примитива (призма на origin: `mirrorPoint(0) = 0`). Измерено: bbox расходился с эталоном на **2.5** ед. ✅ ИСПРАВЛЕНО (Variant B, baked children): `bakeMirroredSubtree` конвертирует primitive-детей в baked с отражёнными вершинами (params сохранены). После фикса: max diff = 0.00000000. Тесты: `csg-mirror-chirality.test.ts` (10 тестов). | **HIGH** | ✅ Исправлено |
+| | **CYCLE-CSG** — `Cannot create cycle in tree` при `jumpToHistory`/`loadFromProject` (дети CSG отсутствуют в дереве при rebuildBuildTree) | **CRITICAL** | ✅ **ИСПРАВЛЕНО** (2026-08-08) |
+| | **MIRROR-CSG-RS** — Потеря rotation/scale при булевых операциях над зеркальными CSG-результатами | **CRITICAL** | ✅ **ИСПРАВЛЕНО** (2026-08-07) |
+| | **MIRROR-DOUBLE-TRANSLATE** — Зеркало CSG давало ломанные, непредсказуемые копии (двойной translation: `moveTreeNode` сдвигал детей в дереве + root localTransform содержит translation) | **CRITICAL** | ✅ **ИСПРАВЛЕНО** (2026-08-18) |
+| | **MIRROR-TREE-PRESERVE** — Повторное зеркалирование CSG-результата создавало примитив `cube` вместо boolean-ноды (mirrorObject удалял клонированное поддерево через deleteNode, rebuildBuildTree падалбэкал в createPrimitiveNode('cube')) | **CRITICAL** | ✅ **ИСПРАВЛЕНО** (2026-08-18) |
+| | **CSG-RESIZE-NO-BAKE** — Ресайз CSG-результата запекал scale в вершины через `rebuildNode` (двойное scale при boolean/Viewport3D) | **HIGH** | ✅ **ИСПРАВЛЕНО** (2026-08-18; фактически scale-ветка была недостижима для CSG — `params: {}` truthy, CSG попадали в примитивную ветку; реально исправлено на Этапе 7, 2026-10-14) |
+| | **RESIZE-TRS-DOUBLE** — `resizeObject` пересобирал mesh через `rebuildNode` (mesh с запечённым worldTransform = localTransform) и писал в `vertices` при неизменном `transform` → двойное применение TRS на pivot (Viewport3D). Этап 7: примитивы пересобираются `workerBuildShape` с нулевым transform (vertices в origin), CSG — только scale в transform, vertices не трогаются | **HIGH** | ✅ **ИСПРАВЛЕНО** (2026-10-14, Фаза 8 Этап 7) |
+| | **CSG-TRANSFORM-IS-CENTROID** — `extractAndCenterGetAABB` центрировал вершины по `bboxCenter` CSG-результата, pivot стоял в `transformA`. Для асимметричной геометрии `bboxCenter ≠ transformA` → сдвиг. Исправлено: `extractCenteredAt(vertices, transformA)` центрирует вершины относительно `transformA`, pivot и вершины согласованы. | **CRITICAL** | ✅ **ИСПРАВЛЕНО** (2026-10-07) |
+| | **OPT (MIRROR-CACHE)** — Дублированная работа previewMirror и mirrorSelected | **PERFORMANCE** | ✅ **ИСПРАВЛЕНО** (2026-08-07) |
+| | ~~MIRROR-19-11: as unknown as в rebuild.ts~~ | **MEDIUM** | ✅ НЕ БАГ |
+| | CRIT-R16-3: `any` в worker | WARN | ✅ Исправлено |
+| | TEST-R16-3: snap-utils тесты | WARN | ✅ Исправлено |
+| | CODE-R16-1: дублирование матриц | COSM | ✅ Исправлено |
+| | CODE-R16-2: магические числа | COSM | ✅ Исправлено |
+| | CODE-R16-3: смешение языков | COSM | ✅ Исправлено |
+| | PERF-R16-4: коллизии хеша | PERF | ✅ Исправлено |
+| | **Фаза 7 — завершена** | — | **✅ 2026-08-05** |
+| | Фаза 7.5.1 — Верификация CSG-архитектуры | P0 | **✅ Завершена** |
+| | Фаза 7.5.2 — Верификация зеркала для всех типов | P0 | **✅ Завершена** |
+| | **7.5.3 — SVG иконки (40+)** | **P1** | **✅ ЗАВЕРШЕНО (2026-08-07)** |
+| | **7.5.4 — Тесты цепочек операций (15 тестов)** | **P1** | **✅ ЗАВЕРШЕНО (2026-08-08)** |
+| | **7.5.5 — Финальная полировка** | **P1** | **✅ ЗАВЕРШЕНО** |
+| | — Условные логи (devLog/devWarn) | — | ✅ |
+| | — IconButton + тултипы | — | ✅ |
+| | — Layout тулбара (CAD-style) | — | ✅ |
+| | — Диагностические логи [DIAG:*] → dev mode | — | ✅ |
+| | — Иконки Timeline для всех операций | — | ✅ |
+| | — Имя проекта в PropertiesPanel | — | ✅ |
+| | — Подробные тултипы Align (9 кнопок) | — | ✅ |
+| | — Vite dev-server (ERR_HTTP_HEADERS_SENT) | P0 | ✅ ИСПРАВЛЕНО (2026-08-14) |
+| | — Shadow acne (полосатые грани) | P0 | ✅ ИСПРАВЛЕНО (2026-08-14) |
+| | **CSG-CSG-POSITION-DRIFT** — ✅ **ИСПРАВЛЕНО** (2026-10-14, Этап 8) — Булевые операции между двумя CSG-результатами: сценарий 4 §10.2 (CSG+CSG Union, bbox diff=9.54e-7, pivot-vs-COM diff=9.78e-7) подтверждает позиционирование на месте. | **HIGH** | ✅ **ИСПРАВЛЕНО** (2026-10-14, Этап 8) |
+| | **MIRROR-CSG-CHILD-RS-LOSS** — Зеркалирование CSG, полученного объединением двух отзеркаленных копий (`csg_16 = union(mirror_A, mirror_B)` → `mirror(csg_16)`), сбрасывает масштаб и поворот у дочерних примитивов простой геометрии в зеркальной копии. `mirrorNodeRecursive` применяется к `localTransform` примитивов, но RS живёт в root-ноде CSG-поддерева, а у примитивов `localTransform` = identity по rot/scale → после клонирования/зеркала `relativeToParent` теряет `rotationDelta`/`scaleRatio` для вложенных boolean-нод. Смотреть `clone-before-rebuild` фазы в `[TREE]` логах для `obj_17`/`obj_18`/`obj_19`/`obj_20` (источник `csg_16`). | **HIGH** | ✅ **ИСПРАВЛЕНО** (2026-10-07) — `mirrorNodeRecursive` теперь применяет отрицательный scale для primitive-нод по перпендикулярной оси плоскости зеркала |
+| | **CSG-PRESERVE-RS** — `csgBoolean` терял rotation/scale operand A (результат всегда имел identity RS). Фикс 2026-10-07 (копирование rot/scale) был заменён на baked-RS в 6ffe24b (regression). Финальный фикс (Этап 8.5.9): вершины un-baked'ятся к системе A (`v = S⁻¹Rᵀ·(v_world − posA)`), `resultTransform` = полный TRS A; `GroupOperation.resultRotation/resultScale` + `rebuild.ts`. Тесты: `csg-preserve-rs.test.ts` (5). | **HIGH** | ✅ **Исправлено** (Этап 8.5.9, 2026-10-28) |
+| | **RENDER-PRISM-BBOX-OFFSET** — `centerGeometry` (`viewport-hooks.ts`) вычитал `bboxCenter` (28,0,0) вместо spawn (25,0,0) → сдвиг **3.000 мм** на отрисовке. Ruler показывал `12.67 мм` вместо `10.74 мм`. Решение: удалить `centerGeometry` полностью — `vertices` всегда origin, `transform` = pivot, render = data. | **HIGH** | ✅ **Исправлено** (Этап 8.5.3, 2026-10-24) |
+| | **DOUBLE-MIRROR-PRIMITIVE** — двойное зеркало примитива (YZ→YZ) возвращало pivot = identity, но vertices = одинарное зеркало (для призмы sides=3 — поворот на 180°). Корень: ветка примитива в `mirrorObject` вызывала `rebuildNode` (пересборка из `params`), теряя предыдущее зеркало в `obj.vertices`. Решение: зеркалить `obj.vertices` напрямую, без rebuild. | **HIGH** | ✅ **Исправлено** (Этап 8.5.7, v1.2.1) |
+| | **CSG-MIRROR-PRIMITIVE-PARAMS** — ✅ **Исправлено** (Этап 8.5.10 + 8.5.12, v1.2.3) — Зеркальный примитив при CSG терял зеркальную форму (workerSyncObjects → rebuild из params). Фикс: `SceneObject.mirrored` flag → workerSyncMesh. Также: multi-level mirror (mirrored: MirrorPlane[], undo/redo), copy/paste (ClipEntry.mirrored + vertices), moveObject (!obj.mirrored → baked). | **HIGH** | ✅ **Исправлено** (Этап 8.5.10 + 8.5.12, v1.2.3) |
+| | **Multi-level mirror (undo/redo, copy/paste)** — `mirrored` хранил одну плоскость — undo/redo multi-level `YZ→XZ` давал одно зеркало (diff = 30.0); copy/paste терял зеркало (diff = 2.86). Фикс: `mirrored: MirrorPlane[]` (ordered, cancel same-plane), `rebuildFromHistory` — цикл, `ClipEntry.mirrored` + vertices. | **HIGH** | ✅ **Исправлено** (v1.2.3) |
+| | **Double RS mirror CSG** — mirror CSG имел `vertices` с baked TRS + `transform` с полным TRS → RS дважды (vol ratio = 0.5, bbox diff = 1.93). Фикс: `mirrorObject` CSG — прямое зеркало vertices (`mirrorVerticesInPlace`), `transform = mirrorTransform`, `PIVOT-TRANSFORMA srcCom-shift` убран. Инвариант `world' = M·world`. | **HIGH** | ✅ **Исправлено** (v1.2.3) |
+
+### Экономика и Яндекс.Игры (ветка `yandex-games`)
+
+| # | Проблема | Приоритет | Статус |
+|---|----------|-----------|--------|
 | **P0-1** | Анти-фарм кэшбэка не работает: хэш модели не проверяется, повторный экспорт той же модели даёт повторный кэшбэк (`economy-store.ts:1052`, `document-store.ts:1047`) | **CRITICAL** | ✅ ИСПРАВЛЕНО (2026-09-11) — `calculateAndClaimCashback(scan, hash?)` + `todayExportHashes[]`; отчёт: `docs/ECONOMY_CODE_REVIEW.md` |
 | **P0-2** | Expiry аренд/подписок и кулдауны по локальному `Date.now()` — перевод часов продлевает доступ (§5) (`economy-store.ts:478,488,518,529,537`) | **CRITICAL** | ✅ ИСПРАВЛЕНО (2026-09-11) — `serverTimeNow()`; отчёт: `docs/ECONOMY_CODE_REVIEW.md` |
 | **P0-3** | `syncToCloud` теряет обновления при `pendingSync=true` — потерянные начисления (`economy-store.ts:789`) | **CRITICAL** | ✅ ИСПРАВЛЕНО (2026-09-11) — `syncTailPending`; отчёт: `docs/ECONOMY_CODE_REVIEW.md` |
@@ -232,3 +775,54 @@ web-app/
 > **Реестр UB5 ЗАКРЫТ 2026-09-29** (`docs/USER_FEEDBACK_UB5.md`): 3 пункта прогона на Яндекс Играх — покупка аренды (3D-текст/палитра/баннер) была доступны и списывала токены при активной Pro-подписке, которая эти фичи уже даёт (UB5-1, P1 → гейт в `buyRental` + статус «Входит в Pro» + i18n + 6 тестов); правая панель расширена ×1,2 200 → 240px (UB5-2); у вкладки «Список» появился внутренний скролл как у «Дерево» (UB5-3). Статусы — в таблице выше.
 >
 > Все ранее исправленные проблемы см. в [`CHANGELOG.md`](CHANGELOG.md).
+
+---
+
+## Быстрый старт
+
+```bash
+# Клонировать репозиторий
+git clone https://github.com/your-org/tinkercraft.git
+cd tinkercraft/web-app
+
+# Установить зависимости
+pnpm install
+
+# Запустить dev-сервер
+pnpm dev
+
+# Проверка типов
+pnpm typecheck
+
+# Запуск тестов
+pnpm test
+```
+
+---
+
+## Фаза 7.6 — Mirror Pipeline Performance ✅ ЗАВЕРШЕНО
+
+**Дата завершения:** 2026-08-07
+**Цель:** Устранить дублирование вычислений и sync-вызовов в pipeline зеркала.
+
+### 7.6.1 — Кэш previewMirror → mirrorSelected ✅
+- `previewMirror` сохраняет результаты `mirrorObject` в `mirrorCache`
+- `mirrorSelected` проверяет кэш по ключу `plane + ids + transformHash`
+- При совпадении — skip full tree rebuild, использовать закэшированные результаты
+- **Результат:** Confirm не пересчитывает геометрию, мгновенный отклик
+
+### 7.6.2 — Epsilon-фильтр moveObject + Cache sync skip ✅
+- `moveObject` пропускает вызовы с delta < 1e-6 по всем 9 параметрам (position + rotation + scale)
+- `previewMirror` проверяет кэш перед `syncObjectsForOperation` — skip sync при hover без изменений
+- `invalidateMirrorCache()` вызывается в 14 мутирующих методах
+- **Результат:** 0 дублирующих history-записей, 0 лишних sync-при hover
+
+---
+
+## Команды
+
+```bash
+pnpm dev          # Dev-сервер (порт 5000)
+pnpm build        # Production-сборка
+pnpm test         # Запуск тестов (~236 тестов)
+pnpm typecheck    # tsc --noEmit

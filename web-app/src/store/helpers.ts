@@ -3,9 +3,29 @@
 // ============================================================
 
 import type {
-  SceneObject, ShapeType, ShapeParams, TransformNR, Vec3,
+  SceneObject, ShapeType, ShapeParams, TransformNR, Vec3, MirrorPlane,
 } from '../csg/types'
 import { OBJECT_COLORS } from '../constants'
+
+// ---- Mirror list composition (FIX 8.5.12) ----
+
+/**
+ * FIX (8.5.12): compose a mirror-plane list with adjacent-plane cancellation.
+ * Same adjacent plane twice = identity (pop); otherwise push. Returns
+ * undefined when the list empties (double mirror = original geometry).
+ */
+export function composeMirroredList(
+  current: MirrorPlane[] | undefined,
+  plane: MirrorPlane,
+): MirrorPlane[] | undefined {
+  const list = current ? [...current] : []
+  if (list.length > 0 && list[list.length - 1] === plane) {
+    list.pop()
+  } else {
+    list.push(plane)
+  }
+  return list.length > 0 ? list : undefined
+}
 
 // ---- AABB ----
 export function computeAABB(vertices: Float32Array): { min: Vec3; max: Vec3 } {
@@ -114,6 +134,42 @@ export function extractAndCenterGetAABB(vertices: Float32Array): {
   return { cx, cy, cz, aabb: { min: { x: cMinX, y: cMinY, z: cMinZ }, max: { x: cMaxX, y: cMaxY, z: cMaxZ } } }
 }
 
+/** Extract AABB and center vertices relative to a GIVEN point (not bbox center).
+ *
+ * FIX (CSG-TRANSFORM-IS-CENTROID): For CSG results, vertices must be centered
+ * relative to transformA (first operand position), NOT the CSG bbox center.
+ * The bbox center differs from transformA for asymmetric geometry (e.g., cube+prism),
+ * causing the CSG result to render at a shifted position.
+ *
+ * This function centers vertices at `center` and returns the AABB of the
+ * CENTERED geometry. Single-pass: O(n).
+ */
+export function extractCenteredAt(vertices: Float32Array, center: { x: number; y: number; z: number }): {
+  aabb: { min: Vec3; max: Vec3 }
+} {
+  if (vertices.length === 0) return { aabb: { min: { x: 0, y: 0, z: 0 }, max: { x: 0, y: 0, z: 0 } } }
+
+  // Shift vertices relative to `center` + compute centered AABB in one pass
+  let cMinX = Infinity, cMaxX = -Infinity
+  let cMinY = Infinity, cMaxY = -Infinity
+  let cMinZ = Infinity, cMaxZ = -Infinity
+  for (let i = 0; i < vertices.length; i += 3) {
+    vertices[i] -= center.x; if (vertices[i] < cMinX) cMinX = vertices[i]; if (vertices[i] > cMaxX) cMaxX = vertices[i]
+    vertices[i + 1] -= center.y; if (vertices[i + 1] < cMinY) cMinY = vertices[i + 1]; if (vertices[i + 1] > cMaxY) cMaxY = vertices[i + 1]
+    vertices[i + 2] -= center.z; if (vertices[i + 2] < cMinZ) cMinZ = vertices[i + 2]; if (vertices[i + 2] > cMaxZ) cMaxZ = vertices[i + 2]
+  }
+
+  return { aabb: { min: { x: cMinX, y: cMinY, z: cMinZ }, max: { x: cMaxX, y: cMaxY, z: cMaxZ } } }
+}
+
+// ============================================================
+// centerMassAtOrigin / isClosedMesh перенесены в csg/geometry-utils
+// (Фаза 8, Этап 6.5 — унификация центрирования). Worker не может
+// импортировать store-слой, поэтому функция живёт в csg-слое.
+// Реэкспорт сохраняет обратную совместимость (helpers.test.ts, rebuild.ts).
+// ============================================================
+export { centerMassAtOrigin, isClosedMesh } from '../csg/geometry-utils'
+
 /** Creates a SceneObject with cached AABB. Use everywhere a new object is created. */
 // FIX (LOW-18-6): Accept optional pre-computed AABB to avoid redundant computeAABB calls.
 export function makeObject(partial: Omit<SceneObject, 'aabb'> & { aabb?: SceneObject['aabb'] }): SceneObject {
@@ -136,6 +192,8 @@ export interface ClipEntry {
   params: ShapeParams
   color: string
   transform: TransformNR
+  /** FIX (8.5.12): mirror planes for mirror primitives — paste preserves mirror. */
+  mirrored?: import('../csg/types').MirrorPlane[]
   // For import_mesh:
   importVertices?: Float32Array
   importIndices?: Uint32Array
@@ -145,4 +203,8 @@ export interface ClipEntry {
   csgNormals?: Float32Array
   csgAABB?: { min: Vec3; max: Vec3 }
   csgOriginalBboxSize?: { x: number; y: number; z: number }
+  // For mirror primitive (paste from clipboard):
+  mirrorVertices?: Float32Array
+  mirrorIndices?: Uint32Array
+  mirrorNormals?: Float32Array
 }

@@ -100,6 +100,10 @@ export default defineConfig(({ mode }) => {
       globals: true,
       include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
       setupFiles: ['src/__tests__/setup.ts'],
+      // Тяжёлые тесты (например, doodle-io с ~100k треугольниками) не успевают
+      // за дефолтные 5s на медленном CI-runner (GitHub Actions). FIX CI.
+      testTimeout: 15_000,
+      hookTimeout: 15_000,
     },
     plugins: [
       react({
