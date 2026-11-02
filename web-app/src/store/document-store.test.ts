@@ -89,6 +89,7 @@ import { makeObject } from './helpers'
 import { useEconomyStore } from './economy-store'
 import { calculateCashbackV2, scanForCashback } from './economy-config'
 import { workerBuildShape } from '../csg/worker-client'
+import type { ShapeParams } from '../csg/types'
 import { createPrimitiveNode, createBooleanNode, getNode, clearTree } from '../csg/history-tree'
 import type { SceneObject, TransformNR } from '../csg/types'
 
@@ -527,7 +528,13 @@ describe('resizeObject (Этап 7, RESIZE-TRS-DOUBLE)', () => {
   beforeEach(() => {
     clearTree()
     useDocumentStore.setState({ objects: {}, operations: [], historyIndex: 0, selectedIds: [], busy: false })
-    vi.mocked(workerBuildShape).mockClear()
+    // Интеграция merge (economy-блок выше делает mockReset + implementation с
+    // пустыми params): восстанавливаем params-aware origin-меш, а не только
+    // очищаем вызовы (mockClear implementation НЕ сбрасывает).
+    vi.mocked(workerBuildShape).mockReset()
+    vi.mocked(workerBuildShape).mockImplementation(
+      async (id: string, _st, p: ShapeParams) => wc.originBoxMesh(id, p as Record<string, number>),
+    )
   })
 
   it('vertices не удваиваются: mesh пересобирается в ORIGIN, transform не меняется', async () => {

@@ -108,6 +108,9 @@ describe('rebuildFromHistory — baked import_mesh (UB-0)', () => {
   // 3D-текст — тот же baked-механизм, что и импорт
   // (FIX UB-0, yandex-games: фолбэк покрывает import_mesh и text3d).
   // FIX (8.5.2.5): фолбэк центрирует вершины по COM, смещение уходит в pivot.
+  // Интеграция merge: центроид считается по centerMassAtOrigin (main, массовый
+  // центроид) — для параллелограмма из 2 равных треугольников cy = 3 (не 14/6
+  // из прежней yandex-семантики vertex-mean).
   it('восстанавливает geometry 3D-текста так же, как импорт', async () => {
     mockedRebuild.mockResolvedValue({ results: [], ms: 0 })
     const textOp: TinkerCraftOperation = {
@@ -126,7 +129,8 @@ describe('rebuildFromHistory — baked import_mesh (UB-0)', () => {
     expect(objects['txt_1'].vertices).toHaveLength(12)
     expect(objects['txt_1'].indices).toHaveLength(6)
     expect(objects['txt_1'].shapeType).toBe('text3d')
-    // Позиция = transform операции (10) + центроид меша — world-позиция сохранена
-    expect(objects['txt_1'].transform.y).toBeCloseTo(10 + 14 / 6, 5)
+    // Позиция = transform операции (10) + массовый центроид меша (cy = 3) —
+    // world-позиция сохранена
+    expect(objects['txt_1'].transform.y).toBeCloseTo(10 + 3, 5)
   })
 })
