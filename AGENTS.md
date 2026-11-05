@@ -14,7 +14,7 @@
 - **manifold-3d** (WASM) — CSG операции в Web Worker
 - **Zustand 5** — стейт-менеджмент
 - **Vite 6** — сборка
-- **Vitest 4** — тесты (~387 тестов, 34 файла)
+- **Vitest 4** — тесты (647 тестов, 47 файлов)
 - **pnpm** — пакетный менеджер
 
 ## Команды
@@ -24,7 +24,7 @@ cd web-app
 pnpm dev          # dev-сервер (порт 5000)
 pnpm build        # production-сборка
 pnpm build:itch   # чистая версия для itch.io: base './' + dist-itch + удаление sdk.js (см. NODEJS_SETUP.md)
-pnpm test         # запуск тестов (420 тестов в 27 файлах)
+pnpm test         # запуск тестов (647 тестов в 47 файлах)
 pnpm typecheck    # tsc --noEmit
 pnpm verify       # полная проверка: typecheck + test + build + build:yandex
 ```
@@ -285,5 +285,6 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 - `web-app/BUILD_TREE_SPEC.md` — спецификация Build Tree
 - `web-app/NODEJS_SETUP.md` — настройка Node.js, pnpm, проверка typecheck и тестов
 - `docs/PRE_COMMIT_CHECKLIST.md` — чек-лист пост-рефакторинга (обязателен перед коммитом)
+- `docs/REFACTORING_YANDEX.md` — рефакторинг `yandex-games` Y.1–Y.5 (карта переноса, инварианты, как мержить `main`)
 - `ECONOMY.md` — экономика Яндекс.Игр (ветка `yandex-games`)
 - `PLAN_YANDEX.md` — план интеграции Яндекс.Игр

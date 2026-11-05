@@ -83,7 +83,7 @@ cd /home/small-room/GitHub/tinkercraft/web-app
 pnpm test         # vitest run
 ```
 
-**Результат:** 420/420 тестов прошли (27 файлов).
+**Результат:** 647/647 тестов прошли (47 файлов).
 
 ### 3. Dev-сервер
 
