@@ -79,6 +79,18 @@ pnpm test         # vitest run
 
 **Результат:** 205/205 тестов прошли (14 файлов).
 
+### 2.1. E2E в браузере (Playwright)
+
+```bash
+pnpm exec playwright install chromium   # один раз (~120 МБ в ~/.cache/ms-playwright)
+pnpm dev                                # терминал 1 (порт 5000)
+pnpm e2e:smoke                          # терминал 2: «e2e smoke OK»
+```
+
+⚠️ В headless-Chromium на Linux WebGL работает только с флагами
+`--use-angle=gl-egl --use-gl=angle --ignore-gpu-blocklist` (уже заданы в
+`e2e/helpers.mjs`); без них приложение показывает `WebGLFallback`.
+
 ### 3. Dev-сервер
 
 ```bash

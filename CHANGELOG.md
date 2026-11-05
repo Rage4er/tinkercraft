@@ -10,6 +10,7 @@
 ## [Unreleased]
 
 ### Added
+- **E2E-проверка в браузере (Playwright, Фаза 9):** devDependency `playwright`, `web-app/e2e/helpers.mjs` (`openApp()` — запуск Chromium, ожидание canvas и CSG-воркера, сбор ошибок консоли) и `web-app/e2e/smoke.mjs` (`pnpm e2e:smoke`: приложение стартует, WebGL и воркер живы, фигуры добавляются). Для WebGL в headless-Chromium на Linux обязательны флаги `--use-angle=gl-egl --use-gl=angle --ignore-gpu-blocklist` (иначе приложение показывает WebGLFallback) (`web-app/e2e/*`, `web-app/package.json`)
 - Отображение версии приложения в StatusBar (справа): `{app.name} v{APP_VERSION}` (`StatusBar.tsx`, `constants.ts`)
 
 ---

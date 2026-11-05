@@ -25,6 +25,7 @@ pnpm dev          # dev-сервер (порт 5000)
 pnpm build        # production-сборка
 pnpm test         # запуск тестов (~272 тестов, 18 файлов)
 pnpm typecheck    # tsc --noEmit
+pnpm e2e:smoke    # дымовой тест в браузере (Playwright; нужен запущенный pnpm dev; см. web-app/e2e/helpers.mjs)
 ```
 
 ## Текущий статус
