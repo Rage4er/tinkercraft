@@ -15,6 +15,8 @@ import type {
   ShapeParams,
   TransformNR,
   RelativeTransform,
+  SceneObject,
+  MirrorPlane,
 } from './types'
 import {
   getWasm,
@@ -84,12 +86,15 @@ export function createPrimitiveNode(
   shapeType: ShapeType,
   params: ShapeParams,
   transform: TransformNR,
+  mirrored?: MirrorPlane[],
 ): TreeNode {
   const node: TreeNode = {
     id,
     type: 'primitive',
     shapeType,
     params: { ...params },
+    // Фаза 9.8: зеркальный примитив — params оригинальные, зеркало отдельным списком
+    ...(mirrored && mirrored.length > 0 ? { mirrored: [...mirrored] } : {}),
     // Корневая нода при создании: relativeToParent = null (Фаза 8)
     relativeToParent: null,
     localTransform: { ...transform },
@@ -184,6 +189,26 @@ export function createImportedNode(
   transform: TransformNR,
 ): TreeNode {
   return createBakedNode(id, mesh.vertices, mesh.indices, mesh.normals, transform)
+}
+
+/**
+ * Зарегистрировать объект сцены в дереве как операнд будущего CSG/mirror.
+ * - import_mesh / csg → baked (готовый меш);
+ * - примитив → primitive (params); зеркальный примитив (Фаза 9.8) → primitive +
+ *   `mirrored` (params остаются редактируемыми, зеркало воспроизводит воркер).
+ */
+export function registerObjectInTree(id: string, obj: SceneObject): TreeNode {
+  const isPrimitive = obj.shapeType !== 'csg' && obj.shapeType !== 'import_mesh'
+  if (isPrimitive && obj.shapeType && obj.params) {
+    return createPrimitiveNode(id, obj.shapeType, obj.params, obj.transform, obj.mirrored)
+  }
+  return createBakedNode(
+    id,
+    obj.vertices || new Float32Array(),
+    obj.indices || new Uint32Array(),
+    obj.normals || null,
+    obj.transform,
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -329,7 +354,8 @@ function computeNodeHash(node: TreeNode): string {
     const pStr = p
       ? Object.keys(p as Record<string, unknown>).sort().map(k => `${k}:${(p as Record<string, unknown>)[k]}`).join(',')
       : 'none'
-    return `p:${node.shapeType ?? '?'}|${pStr}|${tStr}`
+    const mStr = node.mirrored && node.mirrored.length > 0 ? `|m:${node.mirrored.join('')}` : ''
+    return `p:${node.shapeType ?? '?'}|${pStr}|${tStr}${mStr}`
   }
   if (node.type === 'baked' && node.vertices && node.indices && node.localTransform) {
     const t = node.localTransform
@@ -483,6 +509,7 @@ interface WorkerNode {
   normals?: number[]
   operation?: 'union' | 'subtract' | 'intersect'
   children?: string[]
+  mirrored?: MirrorPlane[]
 }
 
 /**
@@ -515,6 +542,7 @@ function collectSubtreeForWorker(rootId: string): WorkerNode[] {
     if (node.normals !== undefined) workerNode.normals = Array.from(node.normals || [])
     if (node.operation !== undefined) workerNode.operation = node.operation
     if (node.children !== undefined) workerNode.children = node.children
+    if (node.mirrored !== undefined) workerNode.mirrored = node.mirrored
 
     nodes.push(workerNode)
 
@@ -572,6 +600,7 @@ async function applyCSGMeshes(node: TreeNode, parentWorld: TransformNR): Promise
       normals: n.normals ? Array.from(n.normals) : undefined,
       operation: n.operation,
       children: n.children,
+      mirrored: n.mirrored,
     })
   }
 
@@ -621,6 +650,12 @@ async function applyCSGMeshes(node: TreeNode, parentWorld: TransformNR): Promise
   }
 }
 
+const MIRROR_NORMALS_LOCAL: Record<MirrorPlane, [number, number, number]> = {
+  YZ: [1, 0, 0],
+  XZ: [0, 1, 0],
+  XY: [0, 0, 1],
+}
+
 /** Rebuild a primitive node */
 function rebuildPrimitive(node: TreeNode, worldTransform: TransformNR): ExtractedMesh {
   // FIX (MED-18-21): Use safe access instead of non-null assertions
@@ -631,8 +666,14 @@ function rebuildPrimitive(node: TreeNode, worldTransform: TransformNR): Extracte
   }
 
   const wasm = getWasm()
-  const m = buildPrimitive(shapeType, sanitizeParams(params as Record<string, unknown>))
+  let m = buildPrimitive(shapeType, sanitizeParams(params as Record<string, unknown>))
   try {
+    // Фаза 9.8: зеркальный примитив — отражение в origin до TRS
+    for (const plane of node.mirrored ?? []) {
+      const reflected = m.mirror(MIRROR_NORMALS_LOCAL[plane])
+      m.delete()
+      m = reflected
+    }
     const matrix = buildTransformMatrix(
       { x: worldTransform.x, y: worldTransform.y, z: worldTransform.z },
       { rotX: worldTransform.rotX, rotY: worldTransform.rotY, rotZ: worldTransform.rotZ },
@@ -1037,6 +1078,8 @@ export async function bakeMirroredSubtree(
       indices: mesh.indices,
       normals: mesh.normals ?? null,
       mirroredPlane: plane,
+      // Фаза 9.8: прежнее зеркало уже запечено в вершины (buildOriginMeshForPrimitive)
+      mirrored: undefined,
       cachedMesh: undefined,
       cachedBBox: undefined,
       cacheHash: undefined,
@@ -1082,6 +1125,7 @@ async function buildOriginMeshForPrimitive(node: TreeNode): Promise<ExtractedMes
     shapeType: node.shapeType,
     params: node.params as Record<string, number>,
     localTransform: IDENTITY_TRANSFORM,
+    mirrored: node.mirrored,
   }])
   return {
     vertices: new Float32Array(mesh.vertices),
@@ -1356,6 +1400,7 @@ function cloneRecursive(
   if (source.type === 'primitive') {
     clone.shapeType = source.shapeType
     clone.params = { ...source.params }
+    if (source.mirrored) clone.mirrored = [...source.mirrored]
     clone.localTransform = { ...source.localTransform! }
   }
 

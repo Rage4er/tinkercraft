@@ -81,7 +81,8 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 | **CSG / Build Tree** | |
 | `src/csg/history-tree.ts` | **Build Tree** — параметрическое дерево (primitive/boolean/baked), `rebuildNode`, `mirrorNodeRecursive`, `cloneSubtree` |
 | `src/csg/tree-store.ts` | Zustand-стор для Build Tree |
-| `src/csg/tree-view.ts` | Read-модель Build Tree для UI (`getTreeView`, `findViewNode`, `formatParams`) — Фаза 9.1 |
+| `src/csg/tree-view.ts` | Read-модель Build Tree для UI (`getTreeView`, `findViewNode`, `formatParams`) и единая проверка редактируемости `isChildEditable` — Фаза 9.1/9.9 |
+| `src/hooks/useRootConsistency.ts` | Согласованность дерева CSG-корня с мешем (замки в дереве) — Фаза 9.9 |
 | `src/csg/child-params.ts` | Поля параметров примитива для формы правки ребёнка CSG (`getParamFields`, `clampFieldValue`) — Фаза 9.2 |
 | `src/store/edit-child.ts` | Пересчёт CSG после смены params ребёнка: калибровка дерева ↔ меш, un-bake в локальную систему корня (`computeEditedChild`, `unbakeToLocal`, `findCreationTransform`) — Фаза 9.3 |
 | `src/components/ChildPropertiesPanel.tsx` | Панель свойств выбранного ребёнка CSG (вместо `PropertiesPanel`, пока `ui-store.selectedChild` задан) — Фаза 9.2 |

@@ -129,7 +129,9 @@ export default function ComponentTree({ objects, selectedIds, onSelect, onRename
       return node.mirrored ? `${shape} (${t('componentTree.mirroredShort')})` : shape
     }
     const summary = formatParams(node.params)
-    return summary ? `${shape} · ${summary}` : shape
+    const base = summary ? `${shape} · ${summary}` : shape
+    // Фаза 9.8: зеркальный примитив редактируем — помечаем только как «зеркало»
+    return node.mirrored ? `${base} (${t('componentTree.mirroredShort')})` : base
   }
 
   function renderChildren(node: TreeViewNode, rootId: string, depth: number): React.ReactNode {

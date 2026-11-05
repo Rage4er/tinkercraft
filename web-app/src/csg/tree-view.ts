@@ -49,7 +49,7 @@ export interface TreeViewNode {
   shapeType?: ShapeType
   params?: ShapeParams
   operation?: TreeNode['operation']
-  /** Зеркальный примитив (запечён с отражёнными вершинами) — params не применимы. */
+  /** Зеркальная копия: запечённая (params нет) либо зеркальный примитив (params редактируются, 9.8). */
   mirrored: boolean
   /** Статически можно ли править params (9.2): живой примитив с params. Согласованность корня — отдельно. */
   editable: boolean
@@ -66,7 +66,9 @@ function buildView(id: string, depth: number, seen: Set<string>): TreeViewNode |
   if (!node) return null
   seen.add(id)
 
-  const mirrored = node.type === 'baked' && node.mirroredPlane !== undefined
+  // зеркальная копия: запечённая (baked + mirroredPlane) или зеркальный примитив (9.8: primitive + mirrored[])
+  const mirrored = (node.type === 'baked' && node.mirroredPlane !== undefined) ||
+    (node.type === 'primitive' && (node.mirrored?.length ?? 0) > 0)
   const { editable, reason: notEditableReason } = nodeEditability(node)
 
   const children: TreeViewNode[] = []

@@ -55,6 +55,7 @@ import {
   deleteNode,
   clearTree,
   resetSubtreeTransform,
+  registerObjectInTree,
 } from '../csg/history-tree'
 import { getAllNodes } from '../csg/history-tree'
 import { previewMirror as mirrorPreviewFn, mirrorSelected as mirrorConfirmFn, invalidateMirrorCache } from './mirror-store'
@@ -421,8 +422,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
           const op: AddShapeOperation = { type: 'add_shape', id, shapeType: clip.shapeType, params: clip.params, color: clip.color, transform }
           newObjects = { ...newObjects, [id]: obj }
           newOps.push(op)
-          // Register baked node in build tree for CSG/mirror/align support
-          createBakedNode(id, clip.mirrorVertices, clip.mirrorIndices, clip.mirrorNormals ?? null, transform)
+          // Фаза 9.8: зеркальный примитив — primitive + mirrored (params редактируемы)
+          registerObjectInTree(id, obj)
         } else {
           const mesh = await workerBuildShape(id, clip.shapeType, clip.params, transform)
           const obj: SceneObject = makeObject({ id, shapeType: clip.shapeType, params: clip.params, color: clip.color, transform, visible: true, locked: false, vertices: mesh.vertices, indices: mesh.indices, normals: mesh.normals })
@@ -664,14 +665,9 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         if (!getNode(id)) {
           const obj = objects[id]
           if (obj) {
-            // FIX (CSG-MIRROR-PRIMITIVE-PARAMS, Stage 8.5.10): зеркальный
-            // примитив регистрируется как baked-нода (vertices с зеркалом).
-            const isPrimitive = obj.shapeType !== 'csg' && obj.shapeType !== 'import_mesh' && !obj.mirrored
-            if (isPrimitive && obj.shapeType && obj.params) {
-              createPrimitiveNode(id, obj.shapeType, obj.params, obj.transform)
-            } else {
-              createBakedNode(id, obj.vertices || new Float32Array(), obj.indices || new Uint32Array(), obj.normals || null, obj.transform)
-            }
+            // Фаза 9.8: зеркальный примитив — primitive + mirrored (params редактируемы);
+            // CSG/import → baked.
+            registerObjectInTree(id, obj)
           }
         }
       }
@@ -751,12 +747,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       // FIX (MIRROR-CSG-KEEPTYPE): CSG-результаты (shapeType='csg') и import_mesh
       // регистрируются как baked-ноды (готовый меш), а не как primitive.
       // FIX (8.5.12): зеркальный примитив (mirrored) тоже baked — vertices с зеркалом.
-      const isPrimitive = obj.shapeType !== 'csg' && obj.shapeType !== 'import_mesh' && !obj.mirrored
-      if (isPrimitive && obj.shapeType && obj.params) {
-        createPrimitiveNode(id, obj.shapeType, obj.params, obj.transform)
-      } else {
-        createBakedNode(id, obj.vertices || new Float32Array(), obj.indices || new Uint32Array(), obj.normals || null, obj.transform)
-      }
+      registerObjectInTree(id, obj)
     }
 
     // FIX (MIRROR-DOUBLE-TRANSLATE): Do NOT call moveTreeNode here.
@@ -1152,13 +1143,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       // import_mesh уже отфильтрован ранним return выше.
       // FIX (CSG-MIRROR-PRIMITIVE-PARAMS, Stage 8.5.10): зеркальный примитив →
       // baked (vertices с зеркалом; params без зеркала).
-      const isPrimitive = obj.shapeType !== 'csg' && !obj.mirrored
-      if (isPrimitive && obj.shapeType && obj.params) {
-        createPrimitiveNode(id, obj.shapeType, obj.params, obj.transform)
-      } else {
-        // Для CSG/baked/import создаём baked ноду (готовый меш)
-        createBakedNode(id, obj.vertices || new Float32Array(), obj.indices || new Uint32Array(), obj.normals || null, obj.transform)
-      }
+      registerObjectInTree(id, obj)
     }
 
     // Для примитивов: обновляем params в дереве и пересобираем меш В ORIGIN.

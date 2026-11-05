@@ -31,6 +31,8 @@ export interface ManifoldObject {
   refine(recursions: number): ManifoldObject
   warp(fn: (v: number[]) => void): ManifoldObject
   translate(x: number, y?: number, z?: number): ManifoldObject
+  /** Отражение относительно плоскости через origin с нормалью `normal` (winding сохраняется корректным). */
+  mirror(normal: [number, number, number]): ManifoldObject
   /** Frees the WASM memory — must be called when the object is no longer needed. */
   delete(): void
 }
@@ -647,6 +649,13 @@ export async function handleBuildImportedMesh(msg: BuildImportedMeshMessage): Pr
 
 // --- BuildTree: rebuild a node from its tree definition ---
 
+/** Нормали плоскостей зеркала (YZ отражает X и т.д.) */
+const MIRROR_NORMALS: Record<'XY' | 'XZ' | 'YZ', [number, number, number]> = {
+  YZ: [1, 0, 0],
+  XZ: [0, 1, 0],
+  XY: [0, 0, 1],
+}
+
 export interface RebuildTreeNodeMessage {
   reqId: string
   type: 'rebuildTreeNode'
@@ -662,6 +671,8 @@ export interface RebuildTreeNodeMessage {
     normals?: number[]
     operation?: 'union' | 'subtract' | 'intersect'
     children?: string[]
+    /** Фаза 9.8: плоскости зеркала примитива (применяются в origin до TRS) */
+    mirrored?: Array<'XY' | 'XZ' | 'YZ'>
   }>
   nodeIdPath: string[]
   /**
@@ -705,7 +716,14 @@ export async function handleRebuildTreeNode(msg: RebuildTreeNodeMessage): Promis
       // Build primitive
       const shapeType = nd.shapeType || 'cube'
       const params = nd.params || {}
-      m = buildPrimitive(shapeType, params as Record<string, number>)
+      let prim: ManifoldObject = buildPrimitive(shapeType, params as Record<string, number>)
+      // Фаза 9.8: зеркальный примитив — отражение в origin ДО TRS (как SceneObject.mirrored)
+      for (const plane of nd.mirrored ?? []) {
+        const reflected: ManifoldObject = prim.mirror(MIRROR_NORMALS[plane])
+        prim.delete()
+        prim = reflected
+      }
+      m = prim
       // Apply transform
       const t = nd.localTransform || { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
       const matrix = buildTransformMatrix(

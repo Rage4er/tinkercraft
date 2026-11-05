@@ -321,6 +321,7 @@ export async function workerRebuildNode(
     normals?: number[]
     operation?: 'union' | 'subtract' | 'intersect'
     children?: string[]
+    mirrored?: Array<'XY' | 'XZ' | 'YZ'>
   }>,
   options?: { worldSpace?: boolean },
 ): Promise<MeshResult> {

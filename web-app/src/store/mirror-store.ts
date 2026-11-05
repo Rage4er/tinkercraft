@@ -32,7 +32,7 @@ import i18n from '../i18n'
 import {
     getNode,
     createPrimitiveNode,
-    createBakedNode,
+    registerObjectInTree,
     syncNodeTransform,
     cloneSubtree,
     rebuildNode,
@@ -101,24 +101,8 @@ async function syncObjectsForOperation(
 
 function ensureInTree(id: string, obj: SceneObject): void {
     if (getNode(id) !== undefined) return
-
-    // CSG results (shapeType='csg') and import_mesh are registered as BAKED nodes
-    // (they have a ready mesh). Primitives are registered with shapeType + params.
-    // FIX (CSG-MIRROR-PRIMITIVE-PARAMS, Stage 8.5.10): зеркальный примитив —
-    // baked-нода (vertices с зеркалом; params без зеркала).
-    const isPrimitive = obj.shapeType !== 'csg' && obj.shapeType !== 'import_mesh' && !obj.mirrored
-
-    if (isPrimitive && obj.shapeType && obj.params) {
-        createPrimitiveNode(id, obj.shapeType, obj.params, obj.transform)
-    } else {
-        createBakedNode(
-            id,
-            obj.vertices || new Float32Array(),
-            obj.indices || new Uint32Array(),
-            obj.normals || null,
-            obj.transform,
-        )
-    }
+    // CSG/import → baked; примитив → primitive; зеркальный примитив → primitive + mirrored (9.8)
+    registerObjectInTree(id, obj)
 }
 
 // ── Единый метод для preview и confirm ──

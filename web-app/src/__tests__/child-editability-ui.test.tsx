@@ -44,7 +44,7 @@ const st = () => useDocumentStore.getState()
 const ID: TransformNR = { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
 const at = (x: number, z = 0): TransformNR => ({ ...ID, x, z })
 
-async function shape(type: 'cube' | 'sphere' | 'cylinder', params: Record<string, number>, t: TransformNR): Promise<string> {
+async function shape(type: 'cube' | 'sphere' | 'cylinder' | 'prism', params: Record<string, number>, t: TransformNR): Promise<string> {
   await st().addShape(type, params)
   const ids = Object.keys(st().objects)
   const id = ids[ids.length - 1]
@@ -162,6 +162,42 @@ describe('ComponentTree — замок у нередактируемых дет�
     const lock = bakedRow.querySelector<HTMLElement>('[data-testid=ct-lock]')
     expect(lock?.dataset.reason).toBe('baked')
     expect(lock?.title).toContain(i18n.t('tree.reason.baked'))
+  })
+})
+
+async function mirroredCsg(): Promise<{ rootId: string; mirrored: string }> {
+  await st().addShape('prism', { radius: 10, height: 20, sides: 5 })
+  const prism = Object.keys(st().objects)[0]
+  await st().moveObject(prism, at(30))
+  useDocumentStore.setState({ selectedIds: [prism] })
+  await st().mirrorSelected('YZ')
+  const mirrored = Object.keys(st().objects).find((k) => k !== prism)!
+  const s = await shape('sphere', { radius: 9, segments: 32 }, at(-24))
+  return { rootId: await csg(mirrored, s), mirrored }
+}
+
+describe('9.8 — зеркальный примитив редактируем: ни замка, ни сообщения', () => {
+  it('дерево: зеркальный ребёнок без замка, помечен «зеркало»', async () => {
+    const { rootId, mirrored } = await mirroredCsg()
+    useUiStore.setState({ expandedTreeIds: { [rootId]: true } })
+    renderTree()
+    await until(() => host.querySelectorAll('.ct-child').length === 2)
+    await act(async () => { await new Promise((r) => setTimeout(r, 300)) })
+    expect(locks()).toHaveLength(0)
+    const row = host.querySelector(`[data-node-id=${mirrored}]`) as HTMLElement
+    expect(row.textContent).toContain(i18n.t('componentTree.mirroredShort'))
+    expect(row.classList.contains('ct-readonly')).toBe(false)
+  })
+
+  it('панель: форма параметров (R/H/грани), сообщения нет', async () => {
+    const { rootId, mirrored } = await mirroredCsg()
+    useDocumentStore.setState({ selectedIds: [rootId] })
+    useUiStore.setState({ selectedChild: { rootId, nodeId: mirrored } })
+    act(() => { root.render(<ChildPropertiesPanel />) })
+    await until(() => host.querySelector('[data-testid=child-check]') === null)
+    expect(host.querySelector('[data-testid=child-not-editable]')).toBeNull()
+    expect(host.querySelector('[data-testid=child-form]')).not.toBeNull()
+    expect(host.querySelectorAll('input.props-input')).toHaveLength(3)
   })
 })
 

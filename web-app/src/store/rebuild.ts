@@ -22,6 +22,7 @@ import {
   createBakedNode,
   getNode,
   setNode,
+  registerObjectInTree,
   mirrorVerticesInPlace,
 } from '../csg/history-tree'
 import { notify } from './notifications'
@@ -418,29 +419,37 @@ export function rebuildBuildTree(
             if (existingNode.localTransform) {
               existingNode.localTransform = { ...nt }
             }
+            // Фаза 9.8: зеркальный примитив — params/зеркало воспроизводятся по префиксу истории
+            // (иначе после undo правки ребёнка узел сохранил бы params из «будущего»).
+            const srcNode = getNode(origId)
+            if (existingNode.type === 'primitive' && srcNode?.type === 'primitive' && srcNode.params) {
+              setNode(newId, {
+                ...existingNode,
+                params: { ...srcNode.params },
+                mirrored: composeMirroredList(srcNode.mirrored, op.plane),
+              })
+            }
           } else {
-            // No pre-existing node — create appropriate node type
-            // FIX (CSG-MIRROR-PRIMITIVE-PARAMS, Stage 8.5.10): mirror-потомок
-            // ПРИМИТИВА регистрируется как BAKED нода из SceneObject.vertices
-            // (в них зеркало). createPrimitiveNode из params дал бы unmirrored
-            // геометрию при любом последующем rebuildNode/tree-путь CSG.
+            // No pre-existing node — create appropriate node type.
+            // Фаза 9.8: mirror-потомок ПРИМИТИВА = primitive с ТЕМИ ЖЕ params и списком
+            // плоскостей (composeMirroredList: соседние одинаковые отменяются) — воспроизводится
+            // синхронно и остаётся редактируемым (раньше — baked из SceneObject.vertices, а когда
+            // операнд уже поглощён CSG и в `objects` его нет — НЕзеркальная копия оригинала,
+            // из-за чего после загрузки/перемотки зеркальный операнд терял зеркало).
+            const origNode = getNode(origId)
             const mirroredObj = objects?.[newId]
-            if (mirroredObj?.mirrored && mirroredObj.vertices.length > 0) {
-              createBakedNode(newId, mirroredObj.vertices, mirroredObj.indices, mirroredObj.normals ?? null, nt)
-              // Set TreeNode.mirroredPlane to last plane for bakeMirroredSubtree compat.
-              // SceneObject.mirrored is the authoritative MirrorPlane[] list (8.5.12).
-              const node = getNode(newId)
-              if (node && mirroredObj.mirrored && mirroredObj.mirrored.length > 0) node.mirroredPlane = mirroredObj.mirrored[mirroredObj.mirrored.length - 1]
+            if (origNode && origNode.type === 'primitive' && origNode.shapeType && origNode.params) {
+              createPrimitiveNode(
+                newId, origNode.shapeType, { ...origNode.params }, nt,
+                composeMirroredList(origNode.mirrored, op.plane),
+              )
+            } else if (mirroredObj?.mirrored && mirroredObj.vertices.length > 0) {
+              registerObjectInTree(newId, { ...mirroredObj, transform: nt })
+            } else if (origNode && origNode.type === 'baked') {
+              createBakedNode(newId, origNode.vertices!, origNode.indices!, origNode.normals ?? null, nt)
             } else {
-              const origNode = getNode(origId)
-              if (origNode && origNode.type === 'primitive') {
-                createPrimitiveNode(newId, origNode.shapeType!, { ...origNode.params! }, nt)
-              } else if (origNode && origNode.type === 'baked') {
-                createBakedNode(newId, origNode.vertices!, origNode.indices!, origNode.normals ?? null, nt)
-              } else {
-                // Fallback: create a placeholder primitive node
-                createPrimitiveNode(newId, 'cube', {}, nt)
-              }
+              // Fallback: create a placeholder primitive node
+              createPrimitiveNode(newId, 'cube', {}, nt)
             }
           }
         }

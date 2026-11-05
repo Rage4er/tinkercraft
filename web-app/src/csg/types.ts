@@ -303,6 +303,15 @@ export interface TreeNode {
   normals?: Float32Array | null
 
   /**
+   * Фаза 9.8: упорядоченный список плоскостей зеркала для ЗЕРКАЛЬНОГО ПРИМИТИВА
+   * (`type: 'primitive'`, params — оригинальные). Геометрия = buildPrimitive(params),
+   * отражённая по каждой плоскости в origin (до применения TRS) — как
+   * `SceneObject.mirrored`. В отличие от baked-узла (вершины с зеркалом), params
+   * остаются редактируемыми, а воспроизведение по истории — синхронным.
+   */
+  mirrored?: MirrorPlane[]
+
+  /**
    * Mirror plane used when baking this node (Variant B fix for MIRROR-CHIRALITY).
    * Set when a primitive is converted to baked during mirror: the node's
    * vertices were reflected across this plane. Kept so that future child-edit

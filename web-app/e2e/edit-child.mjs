@@ -68,6 +68,56 @@ try {
     null, { timeout: 15000 },
   )
 
+  // ── 9.8: правка зеркального ребёнка ──
+  // чистая сцена: перезагрузка страницы (autosave может восстановить сессию — очищаем хранилища)
+  await page.evaluate(async () => {
+    localStorage.clear(); sessionStorage.clear()
+    for (const db of (await indexedDB.databases?.()) ?? []) if (db.name) indexedDB.deleteDatabase(db.name)
+  })
+  await page.reload({ waitUntil: 'load' })
+  await page.waitForSelector('canvas', { timeout: 20000 })
+  await page.waitForFunction(() => !document.body.innerText.includes('Загрузка CSG'), null, { timeout: 30000 })
+  await page.locator('button.tab-btn', { hasText: 'Дерево' }).click()
+
+  await page.getByText('Призма', { exact: true }).first().click()
+  await page.waitForTimeout(800)
+  await page.getByText('Сфера', { exact: true }).first().click()
+  await page.waitForTimeout(800)
+  const objRows = page.locator('.ct-item[data-object-id]')
+  if ((await objRows.count()) !== 2) fail('ожидалось 2 объекта (призма, сфера), получено ' + (await objRows.count()))
+
+  // зеркало призмы по YZ (кнопки тулбара без подписей: 17-я — зеркало YZ)
+  await objRows.nth(0).click()
+  await page.locator('button.btn-compact').nth(17).click()
+  await page.waitForFunction(() => document.querySelectorAll('.ct-item[data-object-id]').length === 3, null, { timeout: 15000 })
+
+  // объединить зеркальную копию (3-я строка) со сферой (2-я)
+  await objRows.nth(2).click()
+  await objRows.nth(1).click({ modifiers: ['Shift'] })
+  await page.locator('.panel-right .csg-group', { hasText: 'CSG операции' }).locator('button').first().click()
+  await page.waitForFunction(() => document.querySelectorAll('.ct-item[data-object-id]').length === 2, null, { timeout: 15000 })
+
+  // раскрыть CSG-результат и выбрать зеркальную призму: замка нет, форма есть
+  await page.locator('.ct-item[data-object-id] .ct-chevron').click()
+  const mirrorRow = page.locator('.ct-child', { hasText: 'зеркало' })
+  if ((await mirrorRow.count()) !== 1) fail('зеркальный ребёнок не помечен «зеркало»: ' + (await page.locator('.ct-child').allInnerTexts()).join(' | '))
+  await mirrorRow.click()
+  await page.locator('[data-testid=child-props]').waitFor({ timeout: 5000 })
+  await page.waitForFunction(() => document.querySelector('[data-testid=child-check]') === null, null, { timeout: 15000 })
+  if ((await page.locator('[data-testid=ct-lock]').count()) !== 0) fail('у зеркального примитива не должно быть замка')
+  if ((await page.locator('[data-testid=child-not-editable]').count()) !== 0) fail('зеркальный примитив должен быть редактируемым')
+  const mInputs = page.locator('[data-testid=child-form] input.props-input')
+  if ((await mInputs.count()) !== 3) fail('у призмы 3 поля (R, H, грани), получено ' + (await mInputs.count()))
+
+  // правка радиуса → результат пересобран, строка показывает R20, зеркало сохранено
+  await mInputs.nth(0).fill('20')
+  await mInputs.nth(0).blur()
+  await page.waitForFunction(
+    () => Array.from(document.querySelectorAll('.ct-child')).some((e) => /R20/.test(e.textContent ?? '') && /зеркало/.test(e.textContent ?? '')),
+    null, { timeout: 15000 },
+  )
+  if (shot) await page.screenshot({ path: shot.replace(/\.png$/, '-mirrored.png') })
+
   if (errors.length) fail('ошибки в консоли:\n' + errors.join('\n'))
   console.log('e2e edit-child OK')
 } finally {
