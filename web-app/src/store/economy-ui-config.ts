@@ -36,7 +36,7 @@ export const CATEGORY_ICON = {
 } satisfies Record<QuestCategory, string>
 
 /**
- * Единый реестр иконок для рендера в PropertiesPanel / EconomyMiniHUD
+ * Единый реестр иконок для рендера в EconomyPanel / EconomyMiniHUD
  * Ключ — из DIFFICULTY_ICON / CATEGORY_ICON
  */
 import type { ComponentType, SVGProps } from 'react'

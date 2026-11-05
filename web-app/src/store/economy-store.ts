@@ -1264,7 +1264,7 @@ export const useEconomyStore = create<EconomyState>()(
             tokens: st.tokens - config,
             rentals: { ...st.rentals, [key]: serverTime + ONE_DAY_MS },
             // P0-1/U5: при покупке disableBanner баннер скрывается атомарно в store.
-            // Повторная покупка в другом компоненте (PropertiesPanel/EconomyBanner)
+            // Повторная покупка в другом компоненте (EconomyPanel/EconomyBanner)
             // невозможна — hasRentalRO('disableBanner') уже true.
             bannerVisible: key === 'disableBanner' ? false : st.bannerVisible,
           }
