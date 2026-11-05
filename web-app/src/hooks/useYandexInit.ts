@@ -12,13 +12,35 @@ import { getPlatform, initPlatform } from '../platform'
 import { getInitDonePromise } from '../platform/sdk'
 import { applyDebugTokensGrant, installEconomyDebugHelper } from '../platform/debug-mode'
 
-export interface YandexInitOptions {
-  /** Открыто ли любое модальное окно (текст / проекты / экспорт) — для Gameplay API. */
-  anyModalOpen: boolean
+/** Подмножество ui-store, определяющее «открыта ли модалка». */
+export interface ModalFlags {
+  showTextModal: boolean
+  showPM: boolean
+  showExportModal: boolean
+  showImportModal: boolean
+  /** Модалка аренды 24ч (3D-текст / расширенная палитра): открыта, пока ключ не null. */
+  rentalModalKey: string | null
+  /** Онбординг экономики на экране. */
+  onboardingOpen: boolean
 }
 
-export function useYandexInit({ anyModalOpen }: YandexInitOptions): void {
+/** Gameplay API: открыта ли ЛЮБАЯ модалка (геймплей на паузе). Единый список —
+ *  новая модалка добавляется сюда, а не в App.tsx. */
+export function isAnyModalOpen(s: ModalFlags): boolean {
+  return (
+    s.showTextModal ||
+    s.showPM ||
+    s.showExportModal ||
+    s.showImportModal ||
+    s.rentalModalKey !== null ||
+    s.onboardingOpen
+  )
+}
+
+export function useYandexInit(): void {
   const workerOk = useUiStore((s) => s.workerOk)
+  // Примитивный boolean: компонент перерисовывается только при смене результата.
+  const anyModalOpen = useUiStore(isAnyModalOpen)
 
   // ── Инициализация платформы + экономика (объединено) ──
   // ⚠️ ВАЖНО: loadFromCloud() вызывается ПОСЛЕ platform.init(),

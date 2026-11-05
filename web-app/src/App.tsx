@@ -47,7 +47,7 @@ export default function App() {
     activeTab, setActiveTab,
     cameraMode, setCameraMode,
     showTextModal, setShowTextModal,
-    showExportModal, setShowExportModal,
+    setShowExportModal,
     setShowImportModal,
     previewObject, setPreviewObject,
     mirrorPreviewPlane, setMirrorPreviewPlane,
@@ -69,7 +69,7 @@ export default function App() {
       activeTab: s.activeTab, setActiveTab: s.setActiveTab,
       cameraMode: s.cameraMode, setCameraMode: s.setCameraMode,
       showTextModal: s.showTextModal, setShowTextModal: s.setShowTextModal,
-      showExportModal: s.showExportModal, setShowExportModal: s.setShowExportModal,
+      setShowExportModal: s.setShowExportModal,
       setShowImportModal: s.setShowImportModal,
       previewObject: s.previewObject, setPreviewObject: s.setPreviewObject,
       mirrorPreviewPlane: s.mirrorPreviewPlane, setMirrorPreviewPlane: s.setMirrorPreviewPlane,
@@ -185,8 +185,8 @@ export default function App() {
   }, [theme]);
 
   // ── SDK-bootstrap, LoadingAPI.ready(), Gameplay API (Y.2: hooks/useYandexInit.ts) ──
-  // Gameplay API: showImportModal намеренно не учитывается (поведение 1:1 с до-рефакторингом).
-  useYandexInit({ anyModalOpen: showTextModal || showPM || showExportModal });
+  // Gameplay API ставится на паузу при любой открытой модалке (isAnyModalOpen в хуке).
+  useYandexInit();
 
   // ── Триггеры квестов V2 — оценка по состоянию проекта ──
   // evaluateQuests теперь только обновляет прогресс (без начисления токенов)

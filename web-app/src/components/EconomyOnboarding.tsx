@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useEconomyStore } from '../store/economy-store'
+import { useUiStore } from '../store/ui-store'
 import { initPlatform, isEconomyAvailable } from '../platform'
 import { TokenIcon, PackageIcon } from './icons'
 
@@ -98,7 +99,15 @@ export default function EconomyOnboarding() {
     completeOnboarding()
   }
 
-  if (!visible || dismissed) return null
+  // Gameplay API (useYandexInit): онбординг — модалка, геймплей на паузе, пока он на экране.
+  const isOpen = visible && !dismissed
+  const setOnboardingOpen = useUiStore((s) => s.setOnboardingOpen)
+  useEffect(() => {
+    setOnboardingOpen(isOpen)
+    return () => setOnboardingOpen(false)
+  }, [isOpen, setOnboardingOpen])
+
+  if (!isOpen) return null
 
   const currentStep = STEPS[step]
 

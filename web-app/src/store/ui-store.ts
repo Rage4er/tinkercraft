@@ -59,6 +59,10 @@ export interface UiStore {
   setShowExportModal: (v: boolean) => void
   showImportModal: boolean
   setShowImportModal: (v: boolean) => void
+  // Онбординг экономики показан на экране (публикует EconomyOnboarding) — нужен
+  // useYandexInit для Gameplay API: любая открытая модалка = геймплей на паузе.
+  onboardingOpen: boolean
+  setOnboardingOpen: (v: boolean) => void
 
   // Extrude
   extrudeAxis: 'X' | 'Y' | 'Z'
@@ -144,6 +148,8 @@ export const useUiStore = create<UiStore>((set) => ({
   setShowExportModal: (v) => set({ showExportModal: v }),
   showImportModal: false,
   setShowImportModal: (v) => set({ showImportModal: v }),
+  onboardingOpen: false,
+  setOnboardingOpen: (v) => set({ onboardingOpen: v }),
 
   extrudeAxis: 'Y',
   setExtrudeAxis: (v) => set({ extrudeAxis: v }),
