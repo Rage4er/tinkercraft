@@ -33,14 +33,9 @@ import { exportToStl, downloadStlBlob, StlTooLargeError } from '../io/stl-export
 import { openStlFilePicker, parseStlFile } from '../io/stl-import'
 import { autosaveSession, restoreSession } from '../io/autosave'
 import i18n from '../i18n'
-import { useEconomyStore, createExportHash, scanForCashback } from './economy-store'
 import type { ExportPaymentMethod } from './economy-types'
-import { countSceneObjects } from './economy-config'
-
-/** Обновить прогресс квестов V2 по состоянию сцены (после каждой мутации) */
-function evaluateQuestsAfterMutation(objects: Record<string, SceneObject>, operations: TinkerCraftOperation[]): void {
-  useEconomyStore.getState().evaluateQuests(objects, operations)
-}
+// Y.3: экономические врезки (квесты, токены за действия, кэшбэк экспорта) — economy-integration.ts
+import { evaluateQuestsAfterMutation, earnActionToken, completeImportQuest, commitQuests, settleExport } from './economy-integration'
 
 export { computeAABB, extractAndCenterInPlace, extractAndCenterGetAABB, computeWorldAABB, extractCenteredAt } from './helpers'
 import { computeAABB, extractAndCenterInPlace, extractAndCenterGetAABB, computeWorldAABB, centerMassAtOrigin, makeObject, nextId, colorForIndex } from './helpers'
@@ -100,31 +95,6 @@ async function jumpToHistoryInner(newIdx: number, actionName: string): Promise<v
 
 function isShapeType(v: string): v is ShapeType {
   return ['cube', 'sphere', 'cylinder', 'cone', 'torus', 'prism', 'pyramid', 'import_mesh', 'text3d'].includes(v)
-}
-
-/**
- * P1-3: облегчить операцию истории для хэша кэшбэка.
- * Убираем тяжёлые геометрические поля (vertices/indices/normals — мегабайты
- * на импортах/CSG), оставляя ВСЮ структуру операции: тип, ids, порядок
- * операндов, resultId, treeOperation, params, transform, цвет и т.д.
- * Геометрия детерминирована этими полями (либо их отсутствие меняет структуру
- * хэша незначительно — размер импорта proxy-ируется по числу вершин/индексов).
- */
-function stripHeavyFieldsForHash(op: TinkerCraftOperation): Record<string, unknown> {
-  const out: Record<string, unknown> = {}
-  for (const [key, value] of Object.entries(op)) {
-    if (key === 'vertices' || key === 'indices' || key === 'normals') {
-      // Число вершин/индексов — лёгкий proxy «формы» геометрии (детерминирован
-      // от данных, но не раздувает JSON на сотни КБ)
-      if (Array.isArray(value) || ArrayBuffer.isView(value)) {
-        out[key + 'Count'] = (value as { length?: number }).length ?? 0
-      }
-      continue
-    }
-    // Известные скалярные/структурные поля — включаем как есть
-    out[key] = value
-  }
-  return out
 }
 
 // ── Tree snapshot helpers ──
@@ -265,7 +235,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       cacheSnapshotWithTree(newOps.length, newObjects)
       invalidateMirrorCache()
       // Y3.1: начисление токена за действие (лимит 30/день, кулдаун 5с, серверное время)
-      void useEconomyStore.getState().earnActionToken()
+      earnActionToken()
       // UB2-1: квесты по состоянию проекта. addShape был ЕДИНСТВЕННОЙ мутацией
       // без evaluateQuestsAfterMutation — прогресс квестов (count_unique_shapes,
       // count_objects, count_cubes и др.) не обновлялся при создании примитивов,
@@ -304,7 +274,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       cacheSnapshotWithTree(newOps.length, newObjects)
       invalidateMirrorCache()
       // Y3.1: начисление токена за действие (серверное время)
-      void useEconomyStore.getState().earnActionToken()
+      earnActionToken()
       // Y3.14: квесты по состоянию проекта
       evaluateQuestsAfterMutation(newObjects, newOps)
     } catch (e) { set({ busy: false }); console.error('addRawMesh:', e); notify(i18n.t('errors.importMeshFailed'), 'error') }
@@ -332,7 +302,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       cacheSnapshotWithTree(newOps.length, newObjects)
       invalidateMirrorCache()
       // Y3.1: начисление токена за действие (серверное время)
-      void useEconomyStore.getState().earnActionToken()
+      earnActionToken()
       // Y3.14: квесты по состоянию проекта
       evaluateQuestsAfterMutation(newObjects, newOps)
     } catch (e) { set({ busy: false }); console.error('addTextMesh:', e); notify(i18n.t('errors.createShapeFailed'), 'error') }
@@ -379,9 +349,9 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       cacheSnapshotWithTree(newOps.length, newObjects)
       invalidateMirrorCache()
       // Y3.1: начисление токена за действие (серверное время)
-      void useEconomyStore.getState().earnActionToken()
+      earnActionToken()
       // Y3.4: событийный квест — импорт STL
-      useEconomyStore.getState().completeEventQuest('import_stl')
+      completeImportQuest()
       // Y3.14: квесты по состоянию проекта
       evaluateQuestsAfterMutation(newObjects, newOps)
     } catch (e) { set({ busy: false }); notify(i18n.t('errors.stlImportFailed') + ': ' + e, 'error') }
@@ -1218,7 +1188,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     downloadBlob(blob, (fileName ?? 'untitled') + (fileName?.endsWith('.3dtc') ? '' : '.3dtc'))
     set({ modified: false })
     // Квесты V2: коммит токенов при сохранении
-    await useEconomyStore.getState().commitQuests()
+    await commitQuests()
   },
 
   // ── Open .doodle (legacy, yandex-games) ──
@@ -1250,97 +1220,34 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     downloadBlob(blob, (fileName ?? 'untitled') + (fileName?.endsWith('.doodle') ? '' : '.doodle'))
     set({ modified: false })
     // Квесты V2: коммит токенов при сохранении
-    await useEconomyStore.getState().commitQuests()
+    await commitQuests()
   },
 
   // ── Export STL ──
-  // P1-1/U8: method указывает, чем оплачен экспорт:
-  //  - 'tokens' — кэшбэк УЖЕ учтён в цене модалки (netCost = 50 − кэшбэк),
-  //    поэтому в exportStl() кэшбэк НЕ начисляется повторно (защита от задвоения,
-  //    §2.1 ECONOMY.md «фактическая стоимость 31 💎»);
-  //  - 'ad' — бесплатный просмотр рекламы, кэшбэк начисляется (мотивация строить
-  //    сложные модели);
-  //  - undefined — прямой вызов (clean-режим/подписка): кэшбэк НЕ начисляем,
-  //    т.к. нет точки списания — поведение нейтрально для подписчиков.
+  // P1-1/U8: method — чем оплачен экспорт ('tokens' | 'ad' | undefined). Модель
+  // кэшбэка, порядок хэш/кэшбэк/квесты и анти-фарм — в settleExport()
+  // (economy-integration.ts, Y.3); здесь только ядро: сериализация и скачивание.
   exportStl: (method?: ExportPaymentMethod) => {
     const { objects, fileName, operations } = get()
-    const objectList = Object.values(objects)
-    const paidByTokens = method === 'tokens'
-    const paidByAd = method === 'ad'
-    // P1-2: единый подсчёт объектов — та же функция, что в scanForCashback/evaluateQuests.
-    // import_mesh и text3d тоже экспортируются в STL (downloadStlBlob(objectList)), поэтому
-    // считаются «объектами» для целей экспорта/квестов/кэшбэка (§2.1 ECONOMY.md).
-    const objectCount = countSceneObjects(objects)
-    const csgOps = operations.filter(op => op.type === 'group').length
-
-    // Y3.3: проверка хэша модели для кэшбэка.
-    // P1-3: хэш включает ВСЮ структуру сцены — объекты (shapeType/params/transform)
-    // и операции (историю CSG: группировка, порядок операндов, treeOperation,
-    // перестановки). Изменение CSG-структуры без изменения params теперь даёт
-    // другой хэш. Тяжёлые геометрии (vertices/indices) исключаются — они
-    // детерминированы params/transform либо огромны, а для импортов их размер
-    // учитывается как proxy. Хэш считается только здесь — при экспорте.
-    const hash = createExportHash({
-      objects: objectList.map(o => ({ shapeType: o.shapeType, params: o.params, transform: o.transform })),
-      operations: operations.map(stripHeavyFieldsForHash),
-    })
-    const lastHash = useEconomyStore.getState().lastExportHash
-    const hashChanged = lastHash === null || lastHash !== hash
 
     // P2-6: создаём Blob СТРАТЕГИЧЕСКИ ДО начисления кэшбэка. exportToStl()
     // синхронно сериализует всю сцену в бинарный STL — если на этом шаге
     // что-то падает (невалидная геометрия/worker), экспорт фактически не
-    // состоялся, и кэшбэк НЕ начисляется. Начисление перенесено в цепочку
-    // успеха, анти-фарм-проверка хэша сохранена (P0-1).
+    // состоялся, и кэшбэк НЕ начисляется.
     // FIX (E1b): сериализация отделяется от скачивания; сообщение
     // StlTooLargeError уже локализовано (счётчики треугольников).
-    let blob: Blob | null = null
+    let blob: Blob
     try {
-      blob = exportToStl(objectList)
+      blob = exportToStl(Object.values(objects))
     } catch (e) {
       console.error('[Document] STL export failed:', e)
       notify(e instanceof StlTooLargeError ? e.message : i18n.t('errors.stlExportFailed'), 'error')
       return
     }
 
-    // Y3.2/Y2.0: кэшбэк V2 за экспорт (только если модель изменилась).
-    // U8/P1-1: ЕДИНАЯ МОДЕЛЬ КЭШБЭКА — кэшбэк начисляется ТОЛЬКО при оплате
-    // рекламой ('ad'). При оплате токенами кэшбэк УЖЕ учтён в цене модалки
-    // (netCost = 50 − кэшбэк, §2.1 ECONOMY.md «фактическая стоимость»), поэтому
-    // повторное начисление здесь дало бы задвоение выгоды. Прямой вызов без
-    // method (подписка/clean) — начислений нет.
-    // P0-1: hash фиксируется ПРИ ЛЮБОМ успешном экспорте (анти-фарм — повторный
-    // экспорт той же модели без изменений не даёт кэшбэк ни токенами, ни рекламой).
-    // ВАЖНО: порядок — СНАЧАЛА calculateAndClaimCashback (проверяет анти-фарм по
-    // lastExportHash/todayExportHashes), ПОТОМ setExportHash (иначе хэш был бы уже
-    // зафиксирован и начисление никогда бы не сработало).
-    if (hashChanged) {
-      if (paidByAd) {
-        const scan = scanForCashback(objects, operations)
-        const cashback = useEconomyStore.getState().calculateAndClaimCashback(scan, hash)
-        if (cashback > 0) {
-          // EC12: тост о кэшбэке (рекламный путь — кэшбэк начислен после экспорта)
-          notify(i18n.t('export.cashbackEarned', { cashback }), 'info')
-        }
-      }
-      // Анти-фарм: фиксируем хэш модели в любом случае (E6: через action set —
-      // попадает в persist и облако; атомарно добавляет в todayExportHashes).
-      useEconomyStore.getState().setExportHash(hash)
-    }
-
-    downloadStlBlob(blob, (fileName?.replace(/\.3dtc$/, '') ?? i18n.t('app.name')) + '.stl')
-    // U8/P1-1: при оплате токенами кэшбэк уже заложен в цену модалки —
-    // информируем пользователя, что повторного начисления не будет.
-    if (paidByTokens) {
-      notify(i18n.t('export.cashbackIncluded'), 'info')
-    }
-    // EC4: событийные квесты ДО коммита — прогресс должен обновиться до начисления токенов
-    useEconomyStore.getState().completeEventQuest('export_stl', objectCount)
-    if (objectCount >= 10) {
-      useEconomyStore.getState().completeEventQuest('export_stl_large', objectCount)
-    }
-    // Квесты V2: коммит токенов при экспорте (после событийных триггеров)
-    void useEconomyStore.getState().commitQuests()
+    settleExport({ objects, operations, method }, () => {
+      downloadStlBlob(blob, (fileName?.replace(/\.3dtc$/, '') ?? i18n.t('app.name')) + '.stl')
+    })
   },
 
   // ── Resize dims ──
@@ -1628,7 +1535,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       // P0-2: квесты V2 — награды за задания начисляются при УСПЕШНОМ сохранении
       // в проект (§4 ECONOMY.md «зачёт в saveProject()/exportStl()»).
       // Только после успеха — иначе квесты не засчитываются.
-      await useEconomyStore.getState().commitQuests()
+      await commitQuests()
     } catch (e) {
       console.error('saveToProject:', e)
       notify(e instanceof Error ? e.message : i18n.t('errors.saveFailed'), 'error')

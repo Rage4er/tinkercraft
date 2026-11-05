@@ -662,3 +662,99 @@ describe('resizeObject (Этап 7, RESIZE-TRS-DOUBLE)', () => {
     expect(useDocumentStore.getState().objects.lt1.transform).toEqual(T)
   })
 })
+
+// ─── Y.3: экономические врезки (economy-integration) — порядок и покрытие ───
+
+describe('economy-integration: порядок settleExport (Y.3)', () => {
+  const cubeObj = (id: string): SceneObject => ({
+    id,
+    shapeType: 'cube',
+    params: { width: 10, depth: 10, height: 10 },
+    color: '#89b4fa',
+    transform: { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 },
+    visible: true,
+    locked: false,
+    vertices: new Float32Array(),
+    indices: new Uint32Array(),
+  })
+
+  beforeEach(() => {
+    h.exportToStl.mockReset()
+    h.downloadStlBlob.mockReset()
+  })
+
+  it('кэшбэк → хэш → скачивание → событие квеста → коммит (порядок не меняется)', () => {
+    const calls: string[] = []
+    h.exportToStl.mockImplementationOnce(() => { calls.push('blob'); return new Blob(['stl']) })
+    h.downloadStlBlob.mockImplementationOnce(() => { calls.push('download') })
+    useDocumentStore.setState({ objects: { a: cubeObj('a'), b: cubeObj('b') }, operations: [], historyIndex: 0, fileName: null })
+    useEconomyStore.setState({
+      tokens: 100, lastExportHash: null, todayExportHashes: [], todayCashbacks: 0,
+      calculateAndClaimCashback: (() => { calls.push('cashback'); return 0 }) as never,
+      setExportHash: (() => { calls.push('setHash') }) as never,
+      completeEventQuest: ((k: string) => { calls.push('event:' + k) }) as never,
+      commitQuests: (async () => { calls.push('commit') }) as never,
+    })
+
+    useDocumentStore.getState().exportStl('ad')
+
+    expect(calls).toEqual(['blob', 'cashback', 'setHash', 'download', 'event:export_stl', 'commit'])
+  })
+
+  it('при падении сериализации экономика не трогается (нет хэша/кэшбэка/квестов)', () => {
+    const spy = vi.fn()
+    h.exportToStl.mockImplementationOnce(() => { throw new Error('boom') })
+    useDocumentStore.setState({ objects: { a: cubeObj('a') }, operations: [], historyIndex: 0, fileName: null })
+    useEconomyStore.setState({
+      calculateAndClaimCashback: spy as never, setExportHash: spy as never,
+      completeEventQuest: spy as never, commitQuests: spy as never,
+    })
+
+    useDocumentStore.getState().exportStl('ad')
+
+    expect(spy).not.toHaveBeenCalled()
+    expect(h.downloadStlBlob).not.toHaveBeenCalled()
+  })
+})
+
+describe('economy-integration: врезки мутаций (Y.3)', () => {
+  const earn = vi.fn()
+  const evaluate = vi.fn()
+
+  beforeEach(() => {
+    earn.mockReset()
+    evaluate.mockReset()
+    wc.workerBuildImportedMesh.mockReset()
+    wc.workerBuildImportedMesh.mockResolvedValue({
+      objId: 'x', vertices: new Float32Array(9), indices: new Uint32Array(3), normals: null, tris: 1, ms: 0,
+    })
+    useDocumentStore.setState({
+      objects: {}, operations: [], historyIndex: 0, fileName: null,
+      selectedIds: [], busy: false, modified: false,
+    })
+    useEconomyStore.setState({ earnActionToken: earn as never, evaluateQuests: evaluate as never })
+  })
+
+  it('addTextMesh: токен за действие + оценка квестов', async () => {
+    await useDocumentStore.getState().addTextMesh('t', [0, 0, 0, 1, 0, 0, 0, 1, 0], [0, 1, 2])
+    expect(earn).toHaveBeenCalledTimes(1)
+    expect(evaluate).toHaveBeenCalledTimes(1)
+  })
+
+  it('addRawMesh: токен за действие + оценка квестов', async () => {
+    await useDocumentStore.getState().addRawMesh('m', [0, 0, 0, 1, 0, 0, 0, 1, 0], [0, 1, 2])
+    expect(earn).toHaveBeenCalledTimes(1)
+    expect(evaluate).toHaveBeenCalledTimes(1)
+  })
+
+  it('moveObject/renameObject/setColor НЕ оценивают квесты и не дают токен', async () => {
+    await useDocumentStore.getState().addTextMesh('t', [0, 0, 0, 1, 0, 0, 0, 1, 0], [0, 1, 2])
+    const id = Object.keys(useDocumentStore.getState().objects)[0]
+    earn.mockClear(); evaluate.mockClear()
+    useDocumentStore.getState().renameObject(id, 'new')
+    useDocumentStore.getState().setColor(id, '#ff0000')
+    useDocumentStore.getState().toggleVisible(id)
+    expect(earn).not.toHaveBeenCalled()
+    expect(evaluate).not.toHaveBeenCalled()
+  })
+})
