@@ -69,7 +69,7 @@ function sanitizeObjectKeys(obj: unknown): unknown {
 
 const VALID_OP_TYPES = new Set([
   'add_shape', 'import_mesh', 'move', 'resize_dims', 'fillet',
-  'mirror', 'align', 'group', 'delete', 'visibility', 'color', 'rename',
+  'mirror', 'align', 'group', 'edit_child_params', 'delete', 'visibility', 'color', 'rename',
 ])
 
 // ────────────────────────────────────────────────────────────
@@ -184,6 +184,14 @@ function restoreOperationMeshArrays(operations: TinkerCraftOperation[]): void {
       if (rv) g.resultVertices = rv
       if (ri) g.resultIndices = ri
       if (rn !== undefined) g.resultNormals = rn
+    } else if (op.type === 'edit_child_params') {
+      // Фаза 9.3: результат правки хранит меш как group
+      const rv = taToNumArray(op.resultVertices)
+      const ri = taToNumArray(op.resultIndices)
+      const rn = taToNumArray(op.resultNormals)
+      if (rv) op.resultVertices = rv
+      if (ri) op.resultIndices = ri
+      if (rn !== undefined) op.resultNormals = rn
     } else if (op.type === 'import_mesh') {
       const im = op as import('../csg/types').ImportMeshOperation
       const v = taToNumArray(im.vertices)

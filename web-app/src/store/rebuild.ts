@@ -21,6 +21,7 @@ import {
   createBooleanNode,
   createBakedNode,
   getNode,
+  setNode,
   mirrorVerticesInPlace,
 } from '../csg/history-tree'
 import { notify } from './notifications'
@@ -144,6 +145,19 @@ export function buildRebuildMeta(ops: TinkerCraftOperation[]): {
 
     } else if (op.type === 'delete') {
       for (const id of op.ids) { delete meta[id]; delete transforms[id] }
+
+    } else if (op.type === 'edit_child_params') {
+      // Фаза 9.3: правка ребёнка CSG подменяет меш результата (pivot не меняется).
+      const m = meta[op.rootId]
+      if (m) {
+        meta[op.rootId] = {
+          ...m,
+          resultVertices: op.resultVertices,
+          resultIndices: op.resultIndices,
+          resultNormals: op.resultNormals,
+          originalBboxSize: op.originalBboxSize ?? m.originalBboxSize,
+        }
+      }
 
     } else if (op.type === 'group') {
       // FIX (PASTE-CSG-COLOR): For pasted CSG (ids: []), use op.color directly.
@@ -336,8 +350,16 @@ export function rebuildBuildTree(
 
   for (const op of ops) {
     if (op.type === 'add_shape') {
-      if (!getNode(op.id)) {
+      const existing = getNode(op.id)
+      if (!existing) {
         createPrimitiveNode(op.id, op.shapeType, op.params, { ...op.transform })
+      } else if (existing.type === 'primitive') {
+        // Фаза 9.3: дерево не чистится между перемотками, поэтому узел мог сохранить
+        // params/transform из «будущего» (правка ребёнка CSG, resize_dims, move).
+        // Возвращаем начальное состояние — дальнейшие resize_dims / edit_child_params /
+        // move ниже воспроизведут нужный префикс истории. Иммутабельно: снимки
+        // дерева хранят ссылки на узлы.
+        setNode(op.id, { ...existing, params: { ...op.params }, localTransform: { ...op.transform } })
       }
       transforms[op.id] = { ...op.transform }
 
@@ -361,6 +383,20 @@ export function rebuildBuildTree(
             node.localTransform = { ...nt }
           }
         }
+      }
+
+    } else if (op.type === 'resize_dims') {
+      // Фаза 9.3: params примитива в дереве воспроизводятся по истории
+      // (раньше терялись при перемотке: дерево хранило «живое» состояние).
+      const n = getNode(op.id)
+      if (n && n.type === 'primitive') {
+        setNode(op.id, { ...n, params: { ...(n.params ?? {}), ...op.params } })
+      }
+
+    } else if (op.type === 'edit_child_params') {
+      const n = getNode(op.nodeId)
+      if (n && n.type === 'primitive') {
+        setNode(op.nodeId, { ...n, params: { ...op.params } })
       }
 
     } else if (op.type === 'mirror') {

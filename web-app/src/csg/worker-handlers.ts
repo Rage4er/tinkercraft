@@ -664,6 +664,11 @@ export interface RebuildTreeNodeMessage {
     children?: string[]
   }>
   nodeIdPath: string[]
+  /**
+   * Фаза 9.3: true — корневой boolean НЕ центрируется по COM, ответ в мировых
+   * координатах (система создания CSG). Нужен правке параметров детей.
+   */
+  worldSpace?: boolean
 }
 
 /** RebuildTreeNodeMessage node data type */
@@ -777,7 +782,7 @@ export async function handleRebuildTreeNode(msg: RebuildTreeNodeMessage): Promis
         // translation. Inner boolean results are in correct world coordinates relative
         // to each other and to sibling primitives (sphere). Root centering preserves
         // these relative positions while removing the absolute offset.
-        if (id === rootId) {
+        if (id === rootId && !msg.worldSpace) {
           // Stage 6.5: Center root boolean by CENTER OF MASS (centerMassAtOrigin,
           // объёмный центроид) — единая формула со frontend (store/helpers) и
           // rebuildNode. Раньше был vertex centroid (среднее по вершинам) — для

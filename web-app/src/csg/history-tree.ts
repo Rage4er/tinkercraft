@@ -376,7 +376,7 @@ export function isAncestor(nodeId: string, ancestorId: string): boolean {
  * corrupted tree (e.g., cycles from bugs). Max depth of 100 is far beyond
  * any realistic build tree depth (~5-10 levels).
  */
-function invalidateCache(nodeId: string, depth = 0): void {
+export function invalidateCache(nodeId: string, depth = 0): void {
   if (depth > 100) {
     console.warn(`[history-tree] Cache invalidation exceeded max depth (100) for node ${nodeId}`)
     return
@@ -447,6 +447,25 @@ export async function rebuildNode(nodeId: string, parentWorld: TransformNR = IDE
   node.cachedMesh = result
   node.cacheHash = hash
   return result
+}
+
+/**
+ * Фаза 9.3: пересчитать boolean-поддерево в МИРОВЫХ координатах системы создания
+ * CSG (корень не центрируется по COM, его localTransform не применяется).
+ * Это та же система, в которой csgBoolean считал вершины до un-bake'а (RS⁻¹).
+ * Кэш не используется и не заполняется (результат — не меш узла).
+ */
+export async function rebuildBooleanWorld(rootId: string): Promise<ExtractedMesh> {
+  const node = treeStore.getNode(rootId)
+  if (!node || node.type !== 'boolean') throw new Error(`Node ${rootId} is not a boolean node`)
+  const result = await workerRebuildNode(rootId, collectSubtreeForWorker(rootId), { worldSpace: true })
+  return {
+    vertices: result.vertices,
+    indices: result.indices,
+    normals: result.normals,
+    tris: result.tris,
+    ms: result.ms,
+  }
 }
 
 /**

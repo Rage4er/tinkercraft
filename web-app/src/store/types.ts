@@ -32,6 +32,8 @@ export interface DocumentStore {
   csgBoolean: (op: CsgBooleanOp) => Promise<void>
   moveObject: (id: string, transform: TransformNR) => Promise<void>
   resizeObject: (id: string, params: ShapeParams) => Promise<void>
+  /** Фаза 9.3: правка params ребёнка CSG (примитива в Build Tree) → пересчёт меша корня. */
+  editChildParams: (rootId: string, nodeId: string, params: ShapeParams) => Promise<void>
   extrudeSelected: (axis: 'X' | 'Y' | 'Z', depth: number) => Promise<void>
   renameObject: (id: string, name: string) => void
   setColor: (id: string, color: string, skipHistory?: boolean) => void

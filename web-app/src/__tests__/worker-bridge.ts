@@ -194,8 +194,9 @@ export async function workerRebuildNode(
     operation?: 'union' | 'subtract' | 'intersect'
     children?: string[]
   }>,
+  options?: { worldSpace?: boolean },
 ): Promise<MeshResult> {
-  return toMeshResult(await call('rebuildTreeNode', { nodeId, nodeCount: nodes.length, nodes }))
+  return toMeshResult(await call('rebuildTreeNode', { nodeId, nodeCount: nodes.length, nodes, worldSpace: options?.worldSpace === true }))
 }
 
 export function isWorkerReady(): boolean { return true }

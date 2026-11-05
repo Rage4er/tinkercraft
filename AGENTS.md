@@ -26,6 +26,8 @@ pnpm build        # production-сборка
 pnpm test         # запуск тестов (~272 тестов, 18 файлов)
 pnpm typecheck    # tsc --noEmit
 pnpm e2e:smoke    # дымовой тест в браузере (Playwright; нужен запущенный pnpm dev; см. web-app/e2e/helpers.mjs)
+pnpm e2e:tree     # Фаза 9.1: раскрытие CSG в дереве, выбор ребёнка
+pnpm e2e:edit-child  # Фаза 9.2/9.3: правка параметра ребёнка CSG, undo
 ```
 
 ## Текущий статус
@@ -80,6 +82,9 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 | `src/csg/history-tree.ts` | **Build Tree** — параметрическое дерево (primitive/boolean/baked), `rebuildNode`, `mirrorNodeRecursive`, `cloneSubtree` |
 | `src/csg/tree-store.ts` | Zustand-стор для Build Tree |
 | `src/csg/tree-view.ts` | Read-модель Build Tree для UI (`getTreeView`, `findViewNode`, `formatParams`) — Фаза 9.1 |
+| `src/csg/child-params.ts` | Поля параметров примитива для формы правки ребёнка CSG (`getParamFields`, `clampFieldValue`) — Фаза 9.2 |
+| `src/store/edit-child.ts` | Пересчёт CSG после смены params ребёнка: калибровка дерева ↔ меш, un-bake в локальную систему корня (`computeEditedChild`, `unbakeToLocal`, `findCreationTransform`) — Фаза 9.3 |
+| `src/components/ChildPropertiesPanel.tsx` | Панель свойств выбранного ребёнка CSG (вместо `PropertiesPanel`, пока `ui-store.selectedChild` задан) — Фаза 9.2 |
 | `src/csg/rebuildOps.ts` | `applyMoveDelta`, `applyMirrorToTransform`, `applyAlignToTransform` |
 | `src/csg/worker.ts` | WASM worker — manifold-3d операции, типобезопасные интерфейсы |
 | `src/csg/worker-client.ts` | Promise-обёртка над воркером |

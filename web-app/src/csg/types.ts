@@ -18,6 +18,7 @@ export type TinkerCraftOperation =
   | MirrorOperation
   | AlignOperation
   | GroupOperation
+  | EditChildParamsOperation
   | DeleteOperation
   | HideShowOperation
   | ColorOperation
@@ -114,6 +115,27 @@ export interface GroupOperation {
   // ── BuildTree: tree structure for this CSG operation ──
   /** Operation type for tree (union/subtract/intersect) */
   treeOperation?: 'union' | 'subtract' | 'intersect'
+}
+
+/**
+ * Фаза 9.3: правка параметров ребёнка CSG (примитива в Build Tree).
+ * Хранит новые params ребёнка И готовый меш результата (как `group`):
+ * воспроизведение детерминировано и не требует CSG при загрузке.
+ * Вершины — в локальной системе корня (v = S⁻¹Rᵀ·(v_world − posA)), pivot корня
+ * не меняется.
+ */
+export interface EditChildParamsOperation {
+  type: 'edit_child_params'
+  /** id CSG-объекта сцены (корень дерева) */
+  rootId: string
+  /** id узла-примитива в Build Tree */
+  nodeId: string
+  /** Полные новые params ребёнка */
+  params: ShapeParams
+  resultVertices: Float32Array | number[]
+  resultIndices: Uint32Array | number[]
+  resultNormals?: Float32Array | number[]
+  originalBboxSize?: { x: number; y: number; z: number }
 }
 
 export interface ResizeDimsOperation { type: 'resize_dims'; id: string; params: ShapeParams }

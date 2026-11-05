@@ -13,7 +13,7 @@ import type {
   TinkerCraftOperation, AddShapeOperation, ImportMeshOperation,
   FilletOperation, MirrorOperation, AlignOperation, ResizeDimsOperation,
   MoveOperation, ColorOperation, GroupOperation, RenameOperation, HideShowOperation,
-  DeleteOperation,
+  DeleteOperation, EditChildParamsOperation,
   SceneObject, ShapeParams, ShapeType, TransformNR, Vec3,
   TreeNode,
 } from '../csg/types'
@@ -38,6 +38,7 @@ import { computeInverseRSMatrix, transposeRSMatrix } from '../csg/worker-matrix'
 import type { ClipEntry } from './helpers'
 import type { DocumentStore } from './types'
 import { rebuildFromHistory, rebuildBuildTree } from './rebuild'
+import { computeEditedChild } from './edit-child'
 import { cacheSnapshot, getCachedSnapshot, clearSnapshots, cacheTreeSnapshot, getCachedTreeSnapshot } from './snapshots'
 import { OBJECT_SPACING, PASTE_OFFSET } from '../constants'
 import {
@@ -1270,6 +1271,55 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         invalidateMirrorCache()
       } catch (e) { set({ busy: false }); console.error('resizeObject (CSG):', e); notify(i18n.t('errors.resizeCsgFailed'), 'error') }
     }
+  },
+
+  // ── Правка параметров ребёнка CSG (Фаза 9.3) ──
+  editChildParams: async (rootId, nodeId, patch) => {
+    if (get().busy) return
+    const { objects, operations, historyIndex } = get()
+    const root = objects[rootId]
+    if (!root) return
+    // Значения не изменились — не пишем пустую правку в историю
+    const curParams = getNode(nodeId)?.params as Record<string, number | undefined> | undefined
+    if (curParams && Object.entries(patch).every(([k, v]) => curParams[k] === v)) return
+    set({ busy: true })
+    try {
+      const t0 = performance.now()
+      const res = await computeEditedChild({ rootId, nodeId, patch, objects, operations, historyIndex })
+      if (!res.ok) {
+        set({ busy: false })
+        const key = res.reason === 'not_found' ? 'notFound' : res.reason === 'not_editable' ? 'notEditable'
+          : res.reason === 'no_origin' ? 'noOrigin' : res.reason === 'tree_mismatch' ? 'treeMismatch'
+            : res.reason === 'empty' ? 'empty' : 'failed'
+        notify(i18n.t(`errors.editChild.${key}`), res.reason === 'failed' ? 'error' : 'warning')
+        return
+      }
+      const { mesh, params } = res
+      // pivot (transform) корня НЕ меняется — меняются только вершины (локальная система корня)
+      const newObj = makeObject({
+        ...root,
+        vertices: mesh.vertices,
+        indices: mesh.indices,
+        normals: mesh.normals,
+        aabb: mesh.aabb,
+        originalBboxSize: mesh.originalBboxSize,
+      })
+      const op: EditChildParamsOperation = {
+        type: 'edit_child_params', rootId, nodeId, params,
+        resultVertices: mesh.vertices, resultIndices: mesh.indices,
+        resultNormals: mesh.normals ?? undefined,
+        originalBboxSize: mesh.originalBboxSize,
+      }
+      const newOps = [...operations.slice(0, historyIndex), op]
+      const newObjects = { ...objects, [rootId]: newObj }
+      // Кэш воркера хранит старый меш корня — иначе следующий CSG возьмёт устаревшую геометрию
+      await workerSyncMesh(rootId, newObj.vertices, newObj.indices, newObj.transform)
+        .catch(e => console.warn('[editChildParams] workerSyncMesh failed:', e))
+      set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true, busy: false, lastCsgMs: performance.now() - t0 })
+      cacheSnapshotWithTree(newOps.length, newObjects)
+      invalidateMirrorCache()
+      devLog('editChildParams', { rootId, nodeId, params })
+    } catch (e) { set({ busy: false }); console.error('editChildParams:', e); notify(i18n.t('errors.editChild.failed'), 'error') }
   },
 
   // ── Extrude ──

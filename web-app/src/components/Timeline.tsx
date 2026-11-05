@@ -84,6 +84,8 @@ export function opIcon(op: TinkerCraftOperation): React.ReactNode {
         : (op as { subtractOp?: boolean }).subtractOp
           ? <SubtractIcon size={32} />
           : <UnionIcon size={32} />;
+    case "edit_child_params":
+      return <ScaleIcon size={32} />;
     case "delete":
       return <DeleteIcon size={32} />;
     case "visibility":
@@ -123,6 +125,8 @@ export function opLabel(op: TinkerCraftOperation, t: (key: string, opts?: Record
         : (op as { subtractOp?: boolean }).subtractOp
           ? t("timeline.groupSubtract")
           : t("timeline.groupUnion");
+    case "edit_child_params":
+      return t("timeline.editChildParams");
     case "delete":
       return t("timeline.delete");
     case "visibility":

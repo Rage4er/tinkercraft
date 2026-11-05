@@ -11,6 +11,7 @@ import TextModal from "./components/TextModal";
 import StatusBar from "./components/StatusBar";
 import LeftPanel from "./components/LeftPanel";
 import PropertiesPanel from "./components/PropertiesPanel";
+import ChildPropertiesPanel from "./components/ChildPropertiesPanel";
 import { useDocumentStore } from "./store/document-store";
 import { useUiStore } from "./store/ui-store";
 import { useShallow } from "zustand/shallow";
@@ -350,6 +351,7 @@ export default function App() {
 
   // Фаза 9.1: сброс выбора ребёнка CSG, если узел/выделение исчезли
   useSelectedChildGuard();
+  const hasSelectedChild = useUiStore((s) => s.selectedChild !== null);
 
   const objectList = useMemo(() => Object.values(objects), [objects]);
   const selSet = useMemo(() => new Set(selectedIds), [selectedIds]);
@@ -617,7 +619,7 @@ export default function App() {
         <div className="panel-right">
           <div className="props-header">{t("properties.header")}</div>
 
-          <PropertiesPanel
+          {hasSelectedChild ? <ChildPropertiesPanel /> : <PropertiesPanel
             firstSelected={firstSelected}
             busy={busy}
             selectedIds={selectedIds}
@@ -646,7 +648,7 @@ export default function App() {
             onToggleVisible={toggleVisible}
             onShowProjects={() => setShowPM(true)}
             onSaveToProject={saveToProject}
-          />
+          />}
         </div>
       </div>
 

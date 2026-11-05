@@ -167,7 +167,8 @@
     "rename": "Rename",
     "csgResult": "CSG result",
     "goToStep": "Go to step {{step}}",
-    "empty": "Empty"
+    "empty": "Empty",
+    "editChildParams": "Edit CSG child size"
   },
   "filters": {
     "add_shape": "Add",
@@ -181,7 +182,8 @@
     "delete": "Delete",
     "visibility": "Visibility",
     "color": "Color",
-    "rename": "Rename"
+    "rename": "Rename",
+    "edit_child_params": "CSG child edit"
   },
   "snap": {
     "label": "Snap:",
@@ -269,7 +271,15 @@
     "resizeCsgFailed": "Failed to resize CSG object",
     "extrudeFailed": "Extrusion failed",
     "operationFailed": "Operation failed: {{name}}",
-    "saveFailed": "Failed to save project"
+    "saveFailed": "Failed to save project",
+    "editChild": {
+      "notFound": "CSG object or its component was not found",
+      "notEditable": "This component cannot be edited (baked or mirrored)",
+      "noOrigin": "This CSG has no creation data — editing is unavailable",
+      "treeMismatch": "The component tree no longer matches the current geometry (the object changed after the merge) — editing is unavailable",
+      "empty": "The edit emptied the result (empty geometry) — change rejected",
+      "failed": "Failed to recompute CSG"
+    }
   },
   "toolbar": {
     "label": "Toolbar"
@@ -315,5 +325,17 @@
     "csgIntersect": "Keeps the common part of two objects (intersect)",
     "themeToggle": "Switches between dark and light theme",
     "clearScene": "Removes all objects from the scene"
+  },
+  "childProps": {
+    "title": "CSG component",
+    "type": "Type",
+    "notEditable": "Component cannot be edited",
+    "readonlyBaked": "Baked mesh — no parameters",
+    "readonlyMirrored": "Mirrored primitive: parameters unavailable",
+    "readonlyBoolean": "Nested operation: edit its components",
+    "rootHint": "Part of: {{root}}",
+    "back": "To object",
+    "sides": "Sides",
+    "apply": "Parameters apply immediately"
   }
 }
