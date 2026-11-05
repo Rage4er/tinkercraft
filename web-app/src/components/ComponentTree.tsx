@@ -10,7 +10,8 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { SceneObject, ShapeType } from '../csg/types'
-import { getTreeView, formatParams, type TreeViewNode } from '../csg/tree-view'
+import { getTreeView, formatParams, reasonFromRootFailure, type TreeViewNode, type NotEditableReason } from '../csg/tree-view'
+import { useRootConsistency } from '../hooks/useRootConsistency'
 import { useUiStore } from '../store/ui-store'
 import {
   CubeIcon,
@@ -90,6 +91,13 @@ export default function ComponentTree({ objects, selectedIds, onSelect, onRename
     return map
   }, [objects])
 
+  // Фаза 9.9: согласованность раскрытых CSG-корней (замок «вложенный CSG сдвинут до объединения»)
+  const openRootIds = useMemo(
+    () => [...views.keys()].filter((id) => !!expanded[id]),
+    [views, expanded],
+  )
+  const consistency = useRootConsistency(openRootIds)
+
   // Cleanup timer on unmount
   useEffect(() => {
     return () => {
@@ -129,17 +137,18 @@ export default function ComponentTree({ objects, selectedIds, onSelect, onRename
       const isSel = selectedChild?.nodeId === child.id
       const hasKids = child.children.length > 0
       const isOpen = !!expanded[child.id]
-      const reason =
-        child.notEditableReason === 'mirrored' ? t('componentTree.mirrored')
-        : child.notEditableReason === 'baked' ? t('componentTree.baked')
-        : undefined
+      // Эффективная причина: статическая (тип узла) либо свойство корня (дерево ≠ меш).
+      const reason: NotEditableReason = child.notEditableReason ?? reasonFromRootFailure(consistency[rootId])
+      // Вложенная операция — контейнер, не «заблокированный» параметр: замок не нужен.
+      const locked = reason !== null && reason !== 'boolean'
+      const lockTitle = locked ? `${t('tree.child_not_editable')}: ${t(`tree.reason.${reason}`)}` : undefined
       return (
         <div key={child.id}>
           <div
-            className={`ct-item ct-child${isSel ? ' ct-selected ct-child-selected' : ''}${child.editable ? '' : ' ct-readonly'}`}
+            className={`ct-item ct-child${isSel ? ' ct-selected ct-child-selected' : ''}${reason === null ? '' : ' ct-readonly'}`}
             style={{ paddingLeft: 6 + depth * 14 }}
             data-node-id={child.id}
-            title={reason}
+            title={lockTitle}
             onClick={() => {
               onSelect(rootId, false)
               setSelectedChild({ rootId, nodeId: child.id })
@@ -158,6 +167,9 @@ export default function ComponentTree({ objects, selectedIds, onSelect, onRename
             )}
             <span className="ct-icon"><Glyph shapeType={child.shapeType} operation={child.operation} /></span>
             <span className="ct-name">{childLabel(child)}</span>
+            {locked && (
+              <span className="ct-lock" data-testid="ct-lock" data-reason={reason} title={lockTitle} aria-label={lockTitle}>🔒</span>
+            )}
           </div>
           {hasKids && isOpen && renderChildren(child, rootId, depth + 1)}
         </div>

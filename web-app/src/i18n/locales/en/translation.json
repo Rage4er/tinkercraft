@@ -118,7 +118,9 @@
     "selectObject": "Select an object",
     "toViewProperties": "to view properties",
     "inScene": "In scene:",
-    "objects": "objects"
+    "objects": "objects",
+    "not_editable_title": "Editing unavailable",
+    "not_editable_body": "Editing this child's parameters is unavailable. Reason: {{reason}}"
   },
   "leftPanel": {
     "shapes": "Shapes",
@@ -143,8 +145,6 @@
     "import": "Import",
     "expand": "Expand",
     "collapse": "Collapse",
-    "baked": "Baked (not editable)",
-    "mirrored": "Mirrored (not editable)",
     "nestedCsg": "Nested CSG",
     "mirroredShort": "mirrored"
   },
@@ -331,15 +331,21 @@
   "childProps": {
     "title": "CSG component",
     "type": "Type",
-    "notEditable": "Component cannot be edited",
-    "readonlyBaked": "Baked mesh — no parameters",
-    "readonlyMirrored": "Mirrored primitive: parameters unavailable",
-    "readonlyBoolean": "Nested operation: edit its components",
     "rootHint": "Part of: {{root}}",
     "back": "To object",
     "sides": "Sides",
     "apply": "Parameters apply immediately",
     "checking": "Checking whether editing is possible…",
     "recomputing": "Recomputing CSG…"
+  },
+  "tree": {
+    "child_not_editable": "Edit unavailable",
+    "reason": {
+      "nested_moved": "Nested CSG moved before union",
+      "mirror": "Mirrored child",
+      "baked": "Baked mesh",
+      "boolean": "Nested operation — edit its components",
+      "no_origin": "No CSG creation data (pasted copy)"
+    }
   }
 }

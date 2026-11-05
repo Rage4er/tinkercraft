@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { clearTree, createPrimitiveNode, createBooleanNode, createBakedNode, getNode, setNode } from './history-tree'
-import { getTreeView, findViewNode, formatParams, locateNode } from './tree-view'
+import { getTreeView, findViewNode, formatParams, locateNode, isChildEditable, reasonFromRootFailure } from './tree-view'
 import type { TransformNR } from './types'
 
 const T = (x = 0): TransformNR => ({ x, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 })
@@ -66,7 +66,7 @@ describe('getTreeView', () => {
     const r1 = view.children[0]
     const mirrored = r1.children[1]
     expect(mirrored.mirrored).toBe(true)
-    expect(mirrored.notEditableReason).toBe('mirrored')
+    expect(mirrored.notEditableReason).toBe('mirror')
     const baked = view.children[1]
     expect(baked.mirrored).toBe(false)
     expect(baked.notEditableReason).toBe('baked')
@@ -116,5 +116,48 @@ describe('locateNode', () => {
     expect(locateNode(['r'], 'zzz')).toBeNull()
     expect(locateNode(['r'], 'r')).toBeNull()
     expect(locateNode(['a'], 'b')).toBeNull()
+  })
+})
+
+describe('isChildEditable — единая проверка (9.9)', () => {
+  beforeEach(() => clearTree())
+
+  it('обычный примитив → editable, причины нет', () => {
+    createPrimitiveNode('a', 'cube', { width: 20, height: 20, depth: 20 }, T())
+    expect(isChildEditable('a')).toEqual({ editable: true, reason: null })
+  })
+
+  it('boolean / baked / зеркальный baked / неизвестный узел → причины', () => {
+    createPrimitiveNode('a', 'cube', { width: 20, height: 20, depth: 20 }, T())
+    createPrimitiveNode('b', 'sphere', { radius: 5 }, T(3))
+    createBooleanNode('r', 'union', 'a', 'b', T())
+    createBakedNode('m', new Float32Array(9), new Uint32Array(3), null, T())
+    setNode('m', { ...getNode('m')!, mirroredPlane: 'YZ' })
+    createBakedNode('k', new Float32Array(9), new Uint32Array(3), null, T())
+    expect(isChildEditable('r')).toEqual({ editable: false, reason: 'boolean' })
+    expect(isChildEditable('m')).toEqual({ editable: false, reason: 'mirror' })
+    expect(isChildEditable('k')).toEqual({ editable: false, reason: 'baked' })
+    expect(isChildEditable('нет')).toEqual({ editable: false, reason: 'baked' })
+  })
+
+  it('getTreeView использует ту же проверку (поля совпадают)', () => {
+    createPrimitiveNode('a', 'cube', { width: 20, height: 20, depth: 20 }, T())
+    createBakedNode('k', new Float32Array(9), new Uint32Array(3), null, T())
+    createBooleanNode('r', 'union', 'a', 'k', T())
+    for (const c of getTreeView('r')!.children) {
+      const e = isChildEditable(c.id)
+      expect(c.editable).toBe(e.editable)
+      expect(c.notEditableReason).toBe(e.reason)
+    }
+  })
+})
+
+describe('reasonFromRootFailure', () => {
+  it('сопоставляет отказы проверки корня с причинами индикатора', () => {
+    expect(reasonFromRootFailure('tree_mismatch')).toBe('nested_moved')
+    expect(reasonFromRootFailure('no_origin')).toBe('no_origin')
+    expect(reasonFromRootFailure(null)).toBeNull()
+    expect(reasonFromRootFailure(undefined)).toBeNull()
+    expect(reasonFromRootFailure('failed')).toBeNull()
   })
 })

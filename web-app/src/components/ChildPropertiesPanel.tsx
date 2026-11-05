@@ -10,7 +10,7 @@ import { useTranslation } from 'react-i18next'
 import NumInput from './NumInput'
 import { useDocumentStore } from '../store/document-store'
 import { useUiStore } from '../store/ui-store'
-import { getTreeView, findViewNode, type TreeViewNode } from '../csg/tree-view'
+import { getTreeView, findViewNode, reasonFromRootFailure, type TreeViewNode, type NotEditableReason } from '../csg/tree-view'
 import { getParamFields, clampFieldValue, type ParamField } from '../csg/child-params'
 import { checkChildEditable, editFailureKey, type EditChildFailure } from '../store/edit-child'
 import type { ShapeParams } from '../csg/types'
@@ -51,7 +51,11 @@ export default function ChildPropertiesPanel() {
   const root = objects[selectedChild.rootId]
   const rootName = root?.name ?? t('csg.result')
 
-  const fields = node.editable ? getParamFields(node.shapeType) : []
+  // Причина недоступности: статическая (тип узла) либо свойство корня (проверка выше).
+  const reason: NotEditableReason = node.notEditableReason ?? reasonFromRootFailure(check)
+  // Прочие сбои проверки (корень исчез, ошибка воркера) — общее сообщение
+  const otherFailure = reason === null && node.editable && check ? check : null
+  const fields = reason === null && !otherFailure ? getParamFields(node.shapeType) : []
 
   const commit = (field: ParamField, v: number) => {
     const value = clampFieldValue(field, v)
@@ -59,12 +63,6 @@ export default function ChildPropertiesPanel() {
     if (Math.abs(value - current) < 1e-9) return // blur без изменения — не пишем в историю
     void editChildParams(selectedChild.rootId, selectedChild.nodeId, { [field.key]: value } as ShapeParams)
   }
-
-  const readonlyKey =
-    node.notEditableReason === 'boolean' ? 'childProps.readonlyBoolean'
-    : node.notEditableReason === 'mirrored' ? 'childProps.readonlyMirrored'
-    : node.notEditableReason === 'baked' ? 'childProps.readonlyBaked'
-    : null
 
   return (
     <div data-testid="child-props">
@@ -86,24 +84,30 @@ export default function ChildPropertiesPanel() {
         {t('childProps.rootHint', { root: rootName })}
       </div>
 
-      {readonlyKey && (
-        <div className="text-sm text-muted-xs" style={{ padding: '6px 12px' }}>{t(readonlyKey)}</div>
+      {/* 9.9: недоступная правка — сообщение с причиной вместо формы */}
+      {reason !== null && (
+        <div className="csg-group" data-testid="child-not-editable" data-reason={reason}>
+          <div className="csg-group-title">{t('properties.not_editable_title')}</div>
+          <div className="text-sm text-warning" style={{ padding: '4px 12px 8px' }}>
+            {t('properties.not_editable_body', { reason: t(`tree.reason.${reason}`) })}
+          </div>
+        </div>
+      )}
+      {otherFailure && (
+        <div className="text-sm text-warning" data-testid="child-unavailable" style={{ padding: '6px 12px' }}>
+          {t(`errors.editChild.${editFailureKey(otherFailure)}`)}
+        </div>
       )}
 
-      {node.editable && check === undefined && !busy && (
+      {reason === null && node.editable && check === undefined && !busy && (
         <div className="text-sm text-muted-xs" data-testid="child-check" style={{ padding: '6px 12px' }}>{t('childProps.checking')}</div>
-      )}
-      {node.editable && check && (
-        <div className="text-sm text-warning" data-testid="child-unavailable" style={{ padding: '6px 12px' }}>
-          {t(`errors.editChild.${editFailureKey(check)}`)}
-        </div>
       )}
       {busy && (
         <div className="text-sm text-muted-xs" data-testid="child-busy" style={{ padding: '6px 12px' }}>{t('childProps.recomputing')}</div>
       )}
 
       {fields.length > 0 && (
-        <div className="csg-group">
+        <div className="csg-group" data-testid="child-form">
           <div className="csg-group-title">{t('properties.dimensions')}</div>
           {fields.map((f) => (
             <NumInput

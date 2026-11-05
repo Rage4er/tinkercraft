@@ -26,6 +26,7 @@ import {
 import { computeInverseRSMatrix, transposeRSMatrix } from '../csg/worker-matrix'
 import { sanitizeParams } from '../csg/worker-handlers'
 import { computeAABB } from './helpers'
+import { isChildEditable } from '../csg/tree-view'
 
 export type EditChildFailure =
   | 'not_found'       // корень/узел не найден
@@ -184,6 +185,30 @@ async function treeMatchesMesh(rootId: string, root: SceneObject, tr0: Transform
 }
 
 /**
+ * Согласованность КОРНЯ: воспроизводит ли дерево со старыми params текущий меш (Фаза 9.9).
+ * Свойство корня, а не узла — один вызов воркера на корень; результат делится между детьми.
+ * null — согласован; иначе 'not_found' | 'no_origin' | 'tree_mismatch' | 'failed'.
+ */
+export async function checkRootConsistency(args: {
+  rootId: string
+  objects: Record<string, SceneObject>
+  operations: TinkerCraftOperation[]
+  historyIndex: number
+}): Promise<EditChildFailure | null> {
+  const { rootId, objects, operations, historyIndex } = args
+  const root = objects[rootId]
+  const rootNode = getNode(rootId)
+  if (!root || root.shapeType !== 'csg' || !rootNode || rootNode.type !== 'boolean') return 'not_found'
+  const tr0 = findCreationTransform(operations.slice(0, historyIndex), rootId)
+  if (!tr0) return 'no_origin'
+  try {
+    return (await treeMatchesMesh(rootId, root, tr0)) ? null : 'tree_mismatch'
+  } catch {
+    return 'failed'
+  }
+}
+
+/**
  * Можно ли править узел сейчас (Фаза 9.9): null — можно, иначе причина.
  * Те же проверки, что в computeEditedChild, но без правки (только калибровка).
  */
@@ -194,19 +219,11 @@ export async function checkChildEditable(args: {
   operations: TinkerCraftOperation[]
   historyIndex: number
 }): Promise<EditChildFailure | null> {
-  const { rootId, nodeId, objects, operations, historyIndex } = args
+  const { rootId, nodeId, objects } = args
   const root = objects[rootId]
-  const rootNode = getNode(rootId)
-  const node = getNode(nodeId)
-  if (!root || root.shapeType !== 'csg' || !rootNode || rootNode.type !== 'boolean' || !node) return 'not_found'
-  if (node.type !== 'primitive' || !node.params || !node.shapeType) return 'not_editable'
-  const tr0 = findCreationTransform(operations.slice(0, historyIndex), rootId)
-  if (!tr0) return 'no_origin'
-  try {
-    return (await treeMatchesMesh(rootId, root, tr0)) ? null : 'tree_mismatch'
-  } catch {
-    return 'failed'
-  }
+  if (!root || root.shapeType !== 'csg' || getNode(rootId)?.type !== 'boolean' || !getNode(nodeId)) return 'not_found'
+  if (!isChildEditable(nodeId).editable) return 'not_editable'
+  return checkRootConsistency(args)
 }
 
 /** Допустимые к правке params примитива (только известные числовые поля). */
@@ -242,7 +259,7 @@ export async function computeEditedChild(args: {
   if (!root || root.shapeType !== 'csg' || !rootNode || rootNode.type !== 'boolean' || !node) {
     return { ok: false, reason: 'not_found' }
   }
-  if (node.type !== 'primitive' || !node.params || !node.shapeType) {
+  if (!isChildEditable(nodeId).editable || !node.params) {
     return { ok: false, reason: 'not_editable' }
   }
 

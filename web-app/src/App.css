@@ -1130,7 +1130,14 @@ body {
   opacity: 0.8;
 }
 
-.ct-child.ct-child-selected {
+.ct-child.ct-lock {
+  flex-shrink: 0;
+  font-size: 11px;
+  opacity: 0.8;
+  padding-right: 4px;
+}
+
+.ct-child-selected {
   outline: 1px solid var(--accent);
   outline-offset: -1px;
 }

@@ -6,8 +6,42 @@
 import type { ShapeParams, ShapeType, TreeNode } from './types'
 import { getNode } from './history-tree'
 
-/** Почему узел нельзя редактировать (null — можно). */
-export type NotEditableReason = 'boolean' | 'baked' | 'mirrored' | null
+/**
+ * Почему узел нельзя редактировать (null — можно).
+ * Статические причины определяет `isChildEditable`; `nested_moved` и `no_origin` —
+ * свойства КОРНЯ, их даёт асинхронная проверка согласованности (`store/edit-child.ts`).
+ */
+export type NotEditableReason =
+  | 'boolean'       // вложенная операция — править её компоненты
+  | 'baked'         // запечённый меш (импорт, вставленный CSG)
+  | 'mirror'        // запечённая зеркальная копия без params (legacy)
+  | 'nested_moved'  // дерево не воспроизводит меш (вложенный CSG сдвинут до объединения и т.п.)
+  | 'no_origin'     // у корня нет данных о создании (вставленная копия, legacy)
+  | null
+
+/** Статическая (синхронная) проверка узла — ЕДИНЫЙ источник для дерева, панели и store. */
+export function isChildEditable(nodeId: string): { editable: boolean; reason: NotEditableReason } {
+  const node = getNode(nodeId)
+  if (!node) return { editable: false, reason: 'baked' }
+  return nodeEditability(node)
+}
+
+/** То же по готовому узлу (не лезет в treeStore повторно). */
+export function nodeEditability(node: TreeNode): { editable: boolean; reason: NotEditableReason } {
+  if (node.type === 'primitive' && node.params !== undefined && node.shapeType !== undefined) {
+    return { editable: true, reason: null }
+  }
+  if (node.type === 'boolean') return { editable: false, reason: 'boolean' }
+  if (node.type === 'baked' && node.mirroredPlane !== undefined) return { editable: false, reason: 'mirror' }
+  return { editable: false, reason: 'baked' }
+}
+
+/** Причина по результату проверки согласованности корня (`edit-child`). */
+export function reasonFromRootFailure(failure: string | null | undefined): NotEditableReason {
+  if (failure === 'tree_mismatch') return 'nested_moved'
+  if (failure === 'no_origin') return 'no_origin'
+  return null
+}
 
 export interface TreeViewNode {
   id: string
@@ -17,7 +51,7 @@ export interface TreeViewNode {
   operation?: TreeNode['operation']
   /** Зеркальный примитив (запечён с отражёнными вершинами) — params не применимы. */
   mirrored: boolean
-  /** Можно ли править params (9.2): только живой примитив с params. */
+  /** Статически можно ли править params (9.2): живой примитив с params. Согласованность корня — отдельно. */
   editable: boolean
   notEditableReason: NotEditableReason
   children: TreeViewNode[]
@@ -33,14 +67,7 @@ function buildView(id: string, depth: number, seen: Set<string>): TreeViewNode |
   seen.add(id)
 
   const mirrored = node.type === 'baked' && node.mirroredPlane !== undefined
-  const editable = node.type === 'primitive' && node.params !== undefined
-  const notEditableReason: NotEditableReason = editable
-    ? null
-    : node.type === 'boolean'
-      ? 'boolean'
-      : mirrored
-        ? 'mirrored'
-        : 'baked'
+  const { editable, reason: notEditableReason } = nodeEditability(node)
 
   const children: TreeViewNode[] = []
   if (node.type === 'boolean' && node.children) {

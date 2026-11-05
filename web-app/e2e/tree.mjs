@@ -55,6 +55,45 @@ try {
   await chevron.click()
   if ((await page.locator('.ct-child').count()) !== 0) fail('дети не свернулись')
 
+  // ── 9.9: индикатор «правка недоступна» ──
+  // здоровый CSG: замков нет (раскрываем заново — раньше свернули)
+  await chevron.click()
+  await page.waitForTimeout(600)
+  if ((await page.locator('[data-testid=ct-lock]').count()) !== 0) fail('у здорового CSG не должно быть замков')
+  await chevron.click()
+
+  // вложенный CSG, сдвинутый до объединения: двигаем результат по X и объединяем с цилиндром
+  await page.locator('.ct-item[data-object-id] .ct-name').click()
+  const posX = page.locator('.panel-right input.props-input').first()
+  await posX.fill('60')
+  await posX.blur()
+  await page.waitForTimeout(500)
+  await page.getByText('Цилиндр', { exact: true }).first().click()
+  await page.waitForTimeout(800)
+  const rows2 = page.locator('.ct-item[data-object-id]')
+  if ((await rows2.count()) !== 2) fail('ожидалось 2 объекта перед вторым CSG, получено ' + (await rows2.count()))
+  await rows2.nth(0).click()
+  await rows2.nth(1).click({ modifiers: ['Shift'] })
+  await page.locator('.panel-right .csg-group', { hasText: 'CSG операции' }).locator('button').first().click()
+  await page.waitForFunction(() => document.querySelectorAll('.ct-item[data-object-id]').length === 1, null, { timeout: 15000 })
+  await page.locator('.ct-item[data-object-id] .ct-chevron').click()
+
+  // у детей появляются замки с причиной; вложенная операция замка не получает
+  await page.waitForSelector('[data-testid=ct-lock]', { timeout: 15000 })
+  const reasons = await page.locator('[data-testid=ct-lock]').evaluateAll((els) => els.map((e) => e.getAttribute('data-reason')))
+  if (!reasons.every((r) => r === 'nested_moved')) fail('причины замков: ' + reasons.join(','))
+  const lockTitle = await page.locator('[data-testid=ct-lock]').first().getAttribute('title')
+  if (!lockTitle?.includes('Правка недоступна') || !lockTitle.includes('сдвинутый')) fail('подсказка замка: ' + lockTitle)
+
+  // выбор заблокированного ребёнка → сообщение с причиной, а не форма
+  await page.locator('.ct-child', { hasText: 'Цилиндр' }).click()
+  await page.locator('[data-testid=child-not-editable]').waitFor({ timeout: 5000 })
+  if ((await page.locator('[data-testid=child-form]').count()) !== 0) fail('форма не должна показываться')
+  if ((await page.locator('.panel-right input.props-input').count()) !== 0) fail('поля ввода не должны показываться')
+  const body = await page.locator('[data-testid=child-not-editable]').innerText()
+  if (!body.includes('сдвинутый')) fail('причина не показана: ' + body)
+  if (shot) await page.screenshot({ path: shot.replace(/\.png$/, '-locked.png') })
+
   if (errors.length) fail('ошибки в консоли:\n' + errors.join('\n'))
   console.log('e2e tree OK')
 } finally {
