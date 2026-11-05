@@ -85,6 +85,36 @@ export function findViewNode(root: TreeViewNode, nodeId: string): TreeViewNode |
   return null
 }
 
+/** Где живёт узел: корень-объект сцены и boolean-предки, которые надо раскрыть. */
+export interface NodeLocation {
+  rootId: string
+  /** id раскрываемых узлов от корня до непосредственного родителя цели (включая корень) */
+  ancestors: string[]
+}
+
+function findPath(view: TreeViewNode, nodeId: string, trail: string[]): string[] | null {
+  if (view.id === nodeId) return trail
+  for (const child of view.children) {
+    const found = findPath(child, nodeId, [...trail, view.id])
+    if (found) return found
+  }
+  return null
+}
+
+/**
+ * Найти CSG-корень, в чьём дереве лежит узел (Timeline → «править», Фаза 9.4).
+ * `csgRootIds` — id объектов сцены с shapeType 'csg'.
+ */
+export function locateNode(csgRootIds: string[], nodeId: string): NodeLocation | null {
+  for (const rootId of csgRootIds) {
+    const view = getTreeView(rootId)
+    if (!view || view.id === nodeId) continue
+    const ancestors = findPath(view, nodeId, [])
+    if (ancestors) return { rootId, ancestors }
+  }
+  return null
+}
+
 const PARAM_LABELS: Array<[keyof ShapeParams, string]> = [
   ['width', 'W'],
   ['height', 'H'],

@@ -32,7 +32,7 @@ import { clearSnapshots } from '../store/snapshots'
 import { clearTree, getNode } from '../csg/history-tree'
 import { getTreeView } from '../csg/tree-view'
 import { computeRSMatrix } from '../csg/worker-matrix'
-import { meshVolume } from '../store/edit-child'
+import { meshVolume, checkChildEditable } from '../store/edit-child'
 import { serialize3dtc, parse3dtc } from '../io/3dtc-io'
 import { rebuildFromHistory } from '../store/rebuild'
 import { useNotifications } from '../store/notifications'
@@ -353,5 +353,40 @@ describe('undo/redo и сериализация правки', () => {
     const rootObj = st().objects[merged]
     // правка расширила куб до 30 → bbox объединения шире, чем у исходного 20
     expect(rootObj.originalBboxSize!.x).toBeGreaterThan(30 + 14)
+  })
+})
+
+describe('checkChildEditable (Фаза 9.9)', () => {
+  const args = (root: string, node: string) => ({
+    rootId: root, nodeId: node, objects: st().objects, operations: st().operations, historyIndex: st().historyIndex,
+  })
+
+  it('null для здорового ребёнка; дерево не мутируется', async () => {
+    const c = await shape('cube', { width: 20, height: 20, depth: 20 }, at(0))
+    const s = await shape('sphere', { radius: 8, segments: 32 }, at(14))
+    const root = await csg(c, s, 'union')
+    const nodeBefore = getNode(c)
+    expect(await checkChildEditable(args(root, c))).toBeNull()
+    expect(getNode(c)).toBe(nodeBefore)
+  })
+
+  it('tree_mismatch — сдвинутый до объединения вложенный CSG', async () => {
+    const c = await shape('cube', { width: 20, height: 20, depth: 20 }, at(0))
+    const s = await shape('sphere', { radius: 8, segments: 32 }, at(14))
+    const inner = await csg(c, s, 'union')
+    await st().moveObject(inner, { ...st().objects[inner].transform, x: 60, z: 10 })
+    const cyl = await shape('cylinder', { radius: 6, height: 24 }, at(40))
+    const outer = await csg(inner, cyl, 'union')
+    expect(await checkChildEditable(args(outer, c))).toBe('tree_mismatch')
+  })
+
+  it('not_editable для вложенного boolean, not_found для неизвестного узла', async () => {
+    const c = await shape('cube', { width: 20, height: 20, depth: 20 }, at(0))
+    const s = await shape('sphere', { radius: 8, segments: 32 }, at(14))
+    const inner = await csg(c, s, 'union')
+    const cyl = await shape('cylinder', { radius: 6, height: 24 }, at(-14))
+    const outer = await csg(inner, cyl, 'union')
+    expect(await checkChildEditable(args(outer, inner))).toBe('not_editable')
+    expect(await checkChildEditable(args(outer, 'nope'))).toBe('not_found')
   })
 })

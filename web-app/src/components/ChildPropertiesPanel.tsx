@@ -5,13 +5,14 @@
 // ребёнок CSG (ui-store.selectedChild). Правка params примитива пересобирает
 // CSG-результат (document-store.editChildParams → операция edit_child_params).
 
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import NumInput from './NumInput'
 import { useDocumentStore } from '../store/document-store'
 import { useUiStore } from '../store/ui-store'
 import { getTreeView, findViewNode, type TreeViewNode } from '../csg/tree-view'
 import { getParamFields, clampFieldValue, type ParamField } from '../csg/child-params'
+import { checkChildEditable, editFailureKey, type EditChildFailure } from '../store/edit-child'
 import type { ShapeParams } from '../csg/types'
 
 export default function ChildPropertiesPanel() {
@@ -28,6 +29,23 @@ export default function ChildPropertiesPanel() {
     const view = getTreeView(selectedChild.rootId)
     return view ? findViewNode(view, selectedChild.nodeId) : null
   }, [selectedChild, objects])
+
+  // Фаза 9.9: заранее проверяем, что дерево воспроизводит меш (иначе правка будет отклонена).
+  // undefined — проверка идёт; null — править можно; иначе причина. Повторяется после
+  // каждой правки/перемотки (меняется objects/operations).
+  const operations = useDocumentStore((s) => s.operations)
+  const historyIndex = useDocumentStore((s) => s.historyIndex)
+  const [check, setCheck] = useState<EditChildFailure | null | undefined>(undefined)
+  const canCheck = !!selectedChild && !!node && node.editable
+  useEffect(() => {
+    if (!selectedChild || !canCheck) { setCheck(undefined); return }
+    let cancelled = false
+    setCheck(undefined)
+    void checkChildEditable({
+      rootId: selectedChild.rootId, nodeId: selectedChild.nodeId, objects, operations, historyIndex,
+    }).then((r) => { if (!cancelled) setCheck(r) })
+    return () => { cancelled = true }
+  }, [selectedChild, canCheck, objects, operations, historyIndex])
 
   if (!selectedChild || !node) return null
   const root = objects[selectedChild.rootId]
@@ -72,6 +90,18 @@ export default function ChildPropertiesPanel() {
         <div className="text-sm text-muted-xs" style={{ padding: '6px 12px' }}>{t(readonlyKey)}</div>
       )}
 
+      {node.editable && check === undefined && !busy && (
+        <div className="text-sm text-muted-xs" data-testid="child-check" style={{ padding: '6px 12px' }}>{t('childProps.checking')}</div>
+      )}
+      {node.editable && check && (
+        <div className="text-sm text-warning" data-testid="child-unavailable" style={{ padding: '6px 12px' }}>
+          {t(`errors.editChild.${editFailureKey(check)}`)}
+        </div>
+      )}
+      {busy && (
+        <div className="text-sm text-muted-xs" data-testid="child-busy" style={{ padding: '6px 12px' }}>{t('childProps.recomputing')}</div>
+      )}
+
       {fields.length > 0 && (
         <div className="csg-group">
           <div className="csg-group-title">{t('properties.dimensions')}</div>
@@ -82,7 +112,7 @@ export default function ChildPropertiesPanel() {
               unit={f.integer ? '' : undefined}
               min={f.min}
               value={node.params?.[f.key] ?? f.fallback}
-              disabled={busy}
+              disabled={busy || check !== null}
               onChange={(v) => commit(f, v)}
             />
           ))}

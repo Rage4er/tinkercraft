@@ -48,6 +48,16 @@ try {
   await page.waitForTimeout(300)
   if ((await histCount()) !== h1) fail('blur без изменений добавил операцию')
 
+  // Timeline: ✎ у шага «Добавить Куб» снова выбирает ребёнка (после сброса выбора кликом по корню)
+  await page.locator('.ct-item[data-object-id] .ct-name').click()
+  if ((await page.locator('[data-testid=child-props]').count()) !== 0) fail('панель ребёнка должна закрыться')
+  await page.locator('.tl-item', { hasText: 'Добавить Куб' }).locator('.tl-edit').click()
+  await page.locator('[data-testid=child-props]').waitFor({ timeout: 5000 })
+  if ((await page.locator('.ct-child-selected').count()) !== 1) fail('Timeline-правка не выбрала ребёнка')
+  // индикатор проверки (9.9) разрешает правку
+  await page.waitForFunction(() => document.querySelector('[data-testid=child-check]') === null, null, { timeout: 15000 })
+  if ((await page.locator('[data-testid=child-unavailable]').count()) !== 0) fail('правка должна быть доступна')
+
   // undo → ширина 20
   await page.locator('.props-header').click() // убрать фокус с поля ввода
   await page.keyboard.press('Control+z')

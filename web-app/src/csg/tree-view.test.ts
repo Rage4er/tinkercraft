@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { clearTree, createPrimitiveNode, createBooleanNode, createBakedNode, getNode, setNode } from './history-tree'
-import { getTreeView, findViewNode, formatParams } from './tree-view'
+import { getTreeView, findViewNode, formatParams, locateNode } from './tree-view'
 import type { TransformNR } from './types'
 
 const T = (x = 0): TransformNR => ({ x, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 })
@@ -92,5 +92,29 @@ describe('formatParams', () => {
     expect(formatParams({ torusRadius: 10, tubeRadius: 3 })).toBe('R10 r3')
     expect(formatParams(undefined)).toBe('')
     expect(formatParams({})).toBe('')
+  })
+})
+
+describe('locateNode', () => {
+  beforeEach(() => clearTree())
+
+  it('находит корень и раскрываемых предков вложенного узла', () => {
+    createPrimitiveNode('a', 'cube', { width: 20, height: 20, depth: 20 }, T())
+    createPrimitiveNode('b', 'sphere', { radius: 12 }, T(5))
+    createBooleanNode('inner', 'union', 'a', 'b', T())
+    createPrimitiveNode('c', 'cube', { width: 5, height: 5, depth: 5 }, T(9))
+    createBooleanNode('outer', 'union', 'inner', 'c', T())
+
+    expect(locateNode(['outer'], 'a')).toEqual({ rootId: 'outer', ancestors: ['outer', 'inner'] })
+    expect(locateNode(['outer'], 'c')).toEqual({ rootId: 'outer', ancestors: ['outer'] })
+  })
+
+  it('null: узла нет, цель — сам корень, корень не CSG', () => {
+    createPrimitiveNode('a', 'cube', { width: 20, height: 20, depth: 20 }, T())
+    createPrimitiveNode('b', 'sphere', { radius: 12 }, T(5))
+    createBooleanNode('r', 'union', 'a', 'b', T())
+    expect(locateNode(['r'], 'zzz')).toBeNull()
+    expect(locateNode(['r'], 'r')).toBeNull()
+    expect(locateNode(['a'], 'b')).toBeNull()
   })
 })

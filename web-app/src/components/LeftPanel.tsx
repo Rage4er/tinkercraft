@@ -36,6 +36,7 @@ export default function LeftPanel({
   tlFilters,
   onFilterChange,
   onJumpHistory,
+  onTimelineEdit,
 }: {
   shapeSearch: string;
   onShapeSearchChange: (v: string) => void;
@@ -56,6 +57,7 @@ export default function LeftPanel({
   tlFilters: Record<string, boolean>;
   onFilterChange: (key: string, checked: boolean) => void;
   onJumpHistory: (index: number) => void;
+  onTimelineEdit?: (op: import("../csg/types").TinkerCraftOperation) => void;
 }) {
   const { t } = useTranslation();
 
@@ -198,6 +200,7 @@ export default function LeftPanel({
           busy={busy}
           onJump={onJumpHistory}
           filters={tlFilters}
+          onEdit={onTimelineEdit}
         />
       </Section>
     </div>

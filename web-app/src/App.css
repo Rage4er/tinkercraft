@@ -635,6 +635,20 @@ body {
   padding-left: 8px;
 }
 
+.tl-edit {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0 4px;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.tl-edit:hover:not(:disabled) {
+  color: var(--accent, var(--text));
+}
+
 .tl-idx {
   font-size: 9px;
   color: var(--text-muted);

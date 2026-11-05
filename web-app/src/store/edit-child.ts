@@ -158,6 +158,57 @@ export function meshesMatch(
 // Пересчёт
 // ---------------------------------------------------------------------------
 
+/** Ключ i18n `errors.editChild.*` для причины отказа. */
+export function editFailureKey(reason: EditChildFailure): string {
+  switch (reason) {
+    case 'not_found': return 'notFound'
+    case 'not_editable': return 'notEditable'
+    case 'no_origin': return 'noOrigin'
+    case 'tree_mismatch': return 'treeMismatch'
+    case 'empty': return 'empty'
+    default: return 'failed'
+  }
+}
+
+/**
+ * Дерево со СТАРЫМИ params воспроизводит текущий меш корня? (без мутаций)
+ * Бросает исключение при ошибке воркера — вызывающий решает, как его трактовать.
+ */
+async function treeMatchesMesh(rootId: string, root: SceneObject, tr0: TransformNR): Promise<boolean> {
+  const world = await rebuildBooleanWorld(rootId)
+  const local = unbakeToLocal(world.vertices, null, tr0)
+  return meshesMatch(
+    { vertices: local.vertices, indices: world.indices },
+    { vertices: root.vertices, indices: root.indices },
+  )
+}
+
+/**
+ * Можно ли править узел сейчас (Фаза 9.9): null — можно, иначе причина.
+ * Те же проверки, что в computeEditedChild, но без правки (только калибровка).
+ */
+export async function checkChildEditable(args: {
+  rootId: string
+  nodeId: string
+  objects: Record<string, SceneObject>
+  operations: TinkerCraftOperation[]
+  historyIndex: number
+}): Promise<EditChildFailure | null> {
+  const { rootId, nodeId, objects, operations, historyIndex } = args
+  const root = objects[rootId]
+  const rootNode = getNode(rootId)
+  const node = getNode(nodeId)
+  if (!root || root.shapeType !== 'csg' || !rootNode || rootNode.type !== 'boolean' || !node) return 'not_found'
+  if (node.type !== 'primitive' || !node.params || !node.shapeType) return 'not_editable'
+  const tr0 = findCreationTransform(operations.slice(0, historyIndex), rootId)
+  if (!tr0) return 'no_origin'
+  try {
+    return (await treeMatchesMesh(rootId, root, tr0)) ? null : 'tree_mismatch'
+  } catch {
+    return 'failed'
+  }
+}
+
 /** Допустимые к правке params примитива (только известные числовые поля). */
 function mergeParams(base: ShapeParams, patch: ShapeParams): ShapeParams {
   const merged: ShapeParams = { ...base }
@@ -203,12 +254,7 @@ export async function computeEditedChild(args: {
 
   try {
     // 1. Калибровка: дерево со СТАРЫМИ params обязано воспроизвести текущий меш.
-    const oldWorld = await rebuildBooleanWorld(rootId)
-    const oldLocal = unbakeToLocal(oldWorld.vertices, null, tr0)
-    if (!meshesMatch(
-      { vertices: oldLocal.vertices, indices: oldWorld.indices },
-      { vertices: root.vertices, indices: root.indices },
-    )) {
+    if (!(await treeMatchesMesh(rootId, root, tr0))) {
       return { ok: false, reason: 'tree_mismatch' }
     }
 

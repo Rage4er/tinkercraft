@@ -38,7 +38,7 @@ import { computeInverseRSMatrix, transposeRSMatrix } from '../csg/worker-matrix'
 import type { ClipEntry } from './helpers'
 import type { DocumentStore } from './types'
 import { rebuildFromHistory, rebuildBuildTree } from './rebuild'
-import { computeEditedChild } from './edit-child'
+import { computeEditedChild, editFailureKey } from './edit-child'
 import { cacheSnapshot, getCachedSnapshot, clearSnapshots, cacheTreeSnapshot, getCachedTreeSnapshot } from './snapshots'
 import { OBJECT_SPACING, PASTE_OFFSET } from '../constants'
 import {
@@ -1288,10 +1288,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const res = await computeEditedChild({ rootId, nodeId, patch, objects, operations, historyIndex })
       if (!res.ok) {
         set({ busy: false })
-        const key = res.reason === 'not_found' ? 'notFound' : res.reason === 'not_editable' ? 'notEditable'
-          : res.reason === 'no_origin' ? 'noOrigin' : res.reason === 'tree_mismatch' ? 'treeMismatch'
-            : res.reason === 'empty' ? 'empty' : 'failed'
-        notify(i18n.t(`errors.editChild.${key}`), res.reason === 'failed' ? 'error' : 'warning')
+        notify(i18n.t(`errors.editChild.${editFailureKey(res.reason)}`), res.reason === 'failed' ? 'error' : 'warning')
         return
       }
       const { mesh, params } = res

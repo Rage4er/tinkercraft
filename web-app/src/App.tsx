@@ -18,6 +18,7 @@ import { useShallow } from "zustand/shallow";
 import { isWorkerReady } from "./csg/worker-client";
 import { SNAP_VALUES, AUTOSAVE_DELAY_MS } from "./constants";
 import { useSelectedChildGuard } from "./hooks/useSelectedChildGuard";
+import { useTimelineEdit } from "./hooks/useTimelineEdit";
 import type {
   TransformNR,
   ShapeParams,
@@ -351,6 +352,7 @@ export default function App() {
 
   // Фаза 9.1: сброс выбора ребёнка CSG, если узел/выделение исчезли
   useSelectedChildGuard();
+  const handleTimelineEdit = useTimelineEdit();
   const hasSelectedChild = useUiStore((s) => s.selectedChild !== null);
 
   const objectList = useMemo(() => Object.values(objects), [objects]);
@@ -550,6 +552,7 @@ export default function App() {
             setTlFilter(key, checked)
           }
           onJumpHistory={jumpToHistory}
+          onTimelineEdit={handleTimelineEdit}
         />
 
         {/* ── Вьюпорт ── */}

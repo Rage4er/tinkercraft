@@ -168,7 +168,9 @@
     "csgResult": "CSG result",
     "goToStep": "Go to step {{step}}",
     "empty": "Empty",
-    "editChildParams": "Edit CSG child size"
+    "editChildParams": "Edit CSG child size",
+    "editStep": "Edit this step's parameters",
+    "editGone": "The object of this step no longer exists in the scene"
   },
   "filters": {
     "add_shape": "Add",
@@ -336,6 +338,8 @@
     "rootHint": "Part of: {{root}}",
     "back": "To object",
     "sides": "Sides",
-    "apply": "Parameters apply immediately"
+    "apply": "Parameters apply immediately",
+    "checking": "Checking whether editing is possible…",
+    "recomputing": "Recomputing CSG…"
   }
 }

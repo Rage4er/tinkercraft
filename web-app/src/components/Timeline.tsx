@@ -147,12 +147,15 @@ export default function Timeline({
   busy,
   onJump,
   filters,
+  onEdit,
 }: {
   operations: TinkerCraftOperation[];
   historyIndex: number;
   busy: boolean;
   onJump: (index: number) => void;
   filters: Record<string, boolean>;
+  /** Фаза 9.4: «править» шаг — перейти к его цели (объект или ребёнок CSG) в панели свойств */
+  onEdit?: (op: TinkerCraftOperation) => void;
 }) {
   const { t } = useTranslation();
   const listRef = useRef<HTMLDivElement>(null);
@@ -187,6 +190,16 @@ export default function Timeline({
           >
             <span className="tl-icon">{opIcon(op)}</span>
             <span className="tl-label">{opLabel(op, t)}</span>
+            {onEdit && (op.type === "add_shape" || op.type === "edit_child_params") && (
+              <button
+                className="tl-edit"
+                title={t("timeline.editStep")}
+                disabled={busy}
+                onClick={(e) => { e.stopPropagation(); onEdit(op); }}
+              >
+                ✎
+              </button>
+            )}
             <span className="tl-idx">{idx}</span>
           </div>
         );
