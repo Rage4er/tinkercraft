@@ -53,6 +53,12 @@ export interface UiStore {
   setShowPM: (v: boolean) => void
   showTextModal: boolean
   setShowTextModal: (v: boolean) => void
+  // Y.5: модалки экспорта/импорта STL (yandex: выбор способа оплаты) — флаги в store,
+  // чтобы App.tsx не держал их локально; монтирует EconomyOverlays.
+  showExportModal: boolean
+  setShowExportModal: (v: boolean) => void
+  showImportModal: boolean
+  setShowImportModal: (v: boolean) => void
 
   // Extrude
   extrudeAxis: 'X' | 'Y' | 'Z'
@@ -134,6 +140,10 @@ export const useUiStore = create<UiStore>((set) => ({
   setShowPM: (v) => set({ showPM: v }),
   showTextModal: false,
   setShowTextModal: (v) => set({ showTextModal: v }),
+  showExportModal: false,
+  setShowExportModal: (v) => set({ showExportModal: v }),
+  showImportModal: false,
+  setShowImportModal: (v) => set({ showImportModal: v }),
 
   extrudeAxis: 'Y',
   setExtrudeAxis: (v) => set({ extrudeAxis: v }),

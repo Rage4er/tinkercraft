@@ -9,10 +9,7 @@ import ProjectManagerModal from "./components/ProjectManagerModal";
 import ToastContainer from "./components/ToastContainer";
 import Toolbar from "./components/Toolbar";
 import TextModal from "./components/TextModal";
-import ExportModal from "./components/ExportModal";
-import ImportModal from "./components/ImportModal";
-import EconomyOnboarding from "./components/EconomyOnboarding";
-import RentalModal from "./components/RentalModal";
+import EconomyOverlays from "./components/EconomyOverlays";
 import StatusBar from "./components/StatusBar";
 import LeftPanel from "./components/LeftPanel";
 import PropertiesPanel from "./components/PropertiesPanel";
@@ -22,9 +19,7 @@ import { useEconomyStore } from "./store/economy-store";
 import { useShallow } from "zustand/shallow";
 import { isWorkerReady } from "./csg/worker-client";
 import { SNAP_VALUES, AUTOSAVE_DELAY_MS } from "./constants";
-import { getPlatform, initPlatform, isEconomyAvailable } from "./platform";
-import { getInitDonePromise } from "./platform/sdk";
-import { applyDebugTokensGrant, installEconomyDebugHelper } from "./platform/debug-mode";
+import { useYandexInit } from "./hooks/useYandexInit";
 import type {
   TransformNR,
   ShapeParams,
@@ -50,9 +45,10 @@ export default function App() {
     extrudeAxis, setExtrudeAxis,
     extrudeDepth, setExtrudeDepth,
     activeTab, setActiveTab,
-    setEconomyPanelOpen,
     cameraMode, setCameraMode,
     showTextModal, setShowTextModal,
+    showExportModal, setShowExportModal,
+    setShowImportModal,
     previewObject, setPreviewObject,
     mirrorPreviewPlane, setMirrorPreviewPlane,
   } = useUiStore(
@@ -71,9 +67,10 @@ export default function App() {
       extrudeAxis: s.extrudeAxis, setExtrudeAxis: s.setExtrudeAxis,
       extrudeDepth: s.extrudeDepth, setExtrudeDepth: s.setExtrudeDepth,
       activeTab: s.activeTab, setActiveTab: s.setActiveTab,
-      setEconomyPanelOpen: s.setEconomyPanelOpen,
       cameraMode: s.cameraMode, setCameraMode: s.setCameraMode,
       showTextModal: s.showTextModal, setShowTextModal: s.setShowTextModal,
+      showExportModal: s.showExportModal, setShowExportModal: s.setShowExportModal,
+      setShowImportModal: s.setShowImportModal,
       previewObject: s.previewObject, setPreviewObject: s.setPreviewObject,
       mirrorPreviewPlane: s.mirrorPreviewPlane, setMirrorPreviewPlane: s.setMirrorPreviewPlane,
     })),
@@ -84,15 +81,9 @@ export default function App() {
   const [textSize, setTextSize] = useState(10);
   const [textDepth, setTextDepth] = useState(5);
 
-  // Export modal state
-  const [showExportModal, setShowExportModal] = useState(false);
-  const [showImportModal, setShowImportModal] = useState(false);
-
   const fitViewRef = useRef<(() => void) | null>(null);
   const resetViewRef = useRef<(() => void) | null>(null);
   const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // P1-1: cleanup обработчиков смены суток (visibilitychange/focus + setInterval)
-  const cleanupRolloverRef = useRef<(() => void) | null>(null);
 
   // FIX (PERF-R16-3): Use useShallow wrapper to prevent re-renders when
   // only the store's internal reference changes but values are the same.
@@ -112,7 +103,6 @@ export default function App() {
       addShape: s.addShape,
       addRawMesh: s.addRawMesh,
       addTextMesh: s.addTextMesh,
-      importStl: s.importStl,
       deleteSelected: s.deleteSelected,
       selectObjects: s.selectObjects,
       clearSelection: s.clearSelection,
@@ -131,7 +121,6 @@ export default function App() {
       renameObject: s.renameObject,
       setColor: s.setColor,
       toggleVisible: s.toggleVisible,
-      exportStl: s.exportStl,
       mirrorSelected: s.mirrorSelected,
       previewMirror: s.previewMirror,
       alignSelected: s.alignSelected,
@@ -160,7 +149,6 @@ export default function App() {
     addShape,
     addRawMesh,
     addTextMesh,
-    importStl,
     deleteSelected,
     selectObjects,
     clearSelection,
@@ -179,7 +167,6 @@ export default function App() {
     renameObject,
     setColor,
     toggleVisible,
-    exportStl,
     mirrorSelected,
     previewMirror,
     alignSelected,
@@ -197,118 +184,17 @@ export default function App() {
     document.documentElement.setAttribute("data-theme", theme);
   }, [theme]);
 
-  // ── Инициализация платформы + экономика (объединено) ──
-  // ⚠️ ВАЖНО: loadFromCloud() вызывается ПОСЛЕ platform.init(),
-  // потому что loadFromCloud() → platform.loadData() → ysdk.player.getData()
-  // вызывает postMessage, который ломается в iframe Yandex (error #185).
-  // RAF в platform.init() завершается только ПОСЛЕ стабилизации React-дерева.
-  const economyInitialized = useRef(false)
-
-  // ⚠️ U10/P1-2: GameplayAPI.start() НЕ вызывается до завершения init SDK.
-  // Старт выполняется в эффекте модалок ниже (getInitDonePromise → start/stop)
-  // — единая точка управления геймплеем, без дублирования.
-
-  useEffect(() => {
-    let disposed = false
-    let syncInterval: ReturnType<typeof setInterval> | null = null
-    const bootstrap = async () => {
-      // 1. Инициализируем платформу (включает RAF-вызовы SDK).
-      // Уже инициализирована из main.tsx (initSdk()) — initPlatform()
-      // вернёт тот же результат без повторной инициализации.
-      const ok = await initPlatform().catch((err) => {
-        console.error('[App] Platform init failed:', err)
-        return false
-      })
-      if (disposed) return
-      if (!ok) {
-        console.warn('[App] Platform init returned false — running in clean mode')
-      }
-
-      // 2. Только ПОСЛЕ platform.init() загружаем экономику
-      if (!economyInitialized.current) {
-        economyInitialized.current = true
-        try {
-          await useEconomyStore.getState().loadFromCloud()
-          await useEconomyStore.getState().initDailyQuests()
-          useEconomyStore.getState().checkSubscriptionExpiry()
-          // UB3-3: debug-хук — выдача 3000 токенов при `?debug-mode`/`?debug-tokens=N`
-          // (и referrer/payload-каналах). Строго ПОСЛЕ loadFromCloud: иначе облако
-          // перезатрёт счёт. Без параметров URL — полный no-op («ничего лишнего»).
-          await applyDebugTokensGrant()
-          void installEconomyDebugHelper()
-          // EC1: показать баннер-оффер если нет подписки и аренда не активна
-          const econ = useEconomyStore.getState()
-          econ.setBannerVisible(econ.shouldShowBannerRO())
-          // UB4-1: platform.init() показывает sticky-баннер безусловно, а оплата
-          // «отключить баннер» обязана убирать и его. syncPlatformBanner() сверяет
-          // SDK с экономикой в обе стороны.
-          void econ.syncPlatformBanner()
-        } catch (e) {
-          console.error('[App] Economy init failed:', e)
-        }
-        if (disposed) return
-
-        // Периодическая синхронизация экономики (каждые 30 сек)
-        syncInterval = setInterval(() => {
-          void useEconomyStore.getState().syncToCloud()
-        }, 30000)
-
-        // ── P1-1: сброс дневных лимитов при смене суток, даже если страница
-        // открыта больше суток. Триггеры: visibilitychange/focus + setInterval ~60с.
-        const checkDayRollover = () => {
-          void useEconomyStore.getState().refreshDayRollover()
-        }
-        const onVisibility = () => {
-          if (document.visibilityState === 'visible') checkDayRollover()
-        }
-        const rolloverInterval = setInterval(checkDayRollover, 60_000)
-        document.addEventListener('visibilitychange', onVisibility)
-        window.addEventListener('focus', checkDayRollover)
-        cleanupRolloverRef.current = () => {
-          clearInterval(rolloverInterval)
-          document.removeEventListener('visibilitychange', onVisibility)
-          window.removeEventListener('focus', checkDayRollover)
-        }
-      }
-    }
-    bootstrap()
-    // Cleanup: интервал синхронизации обязан очищаться при unmount
-    return () => {
-      disposed = true
-      if (syncInterval) clearInterval(syncInterval)
-      cleanupRolloverRef.current?.()
-    }
-  }, [])
+  // ── SDK-bootstrap, LoadingAPI.ready(), Gameplay API (Y.2: hooks/useYandexInit.ts) ──
+  // Gameplay API: showImportModal намеренно не учитывается (поведение 1:1 с до-рефакторингом).
+  useYandexInit({ anyModalOpen: showTextModal || showPM || showExportModal });
 
   // ── Триггеры квестов V2 — оценка по состоянию проекта ──
   // evaluateQuests теперь только обновляет прогресс (без начисления токенов)
   // Токены начисляются через commitQuests() при save/export в document-store
 
-  // Обёртка exportStl — открывает модалку выбора способа экспорта
-  const handleExportStl = useCallback(() => {
-    setShowExportModal(true)
-  }, [])
-
-  // Выполнить экспорт после выбора в модалке.
-  // U8: method передаётся в exportStl() — от него зависит модель кэшбэка:
-  // при 'tokens' кэшбэк уже учтён в цене модалки (нет повторного начисления),
-  // при 'ad' — начисляется после экспорта (P1-1).
-  const handleExportExecute = useCallback((method: 'tokens' | 'ad') => {
-    exportStl(method)
-  }, [exportStl])
-
-  // Обёртка importStl — открывает модалку выбора способа оплаты (§3.1)
-  const handleImportStl = useCallback(() => {
-    setShowImportModal(true)
-  }, [])
-
-  // Выполнить импорт после оплаты в модалке.
-  // U12: файл может быть выбран ДО показа рекламы (ImportModal открывает
-  // file chooser в момент клика — user activation). Если файла нет
-  // (подписка/clean-bypass) — importStl сам откроет диалог.
-  const handleImportExecute = useCallback((file?: File) => {
-    void importStl(file)
-  }, [importStl])
+  // Экспорт/импорт STL открывают модалки (EconomyOverlays, Y.5)
+  const handleExportStl = useCallback(() => setShowExportModal(true), [setShowExportModal])
+  const handleImportStl = useCallback(() => setShowImportModal(true), [setShowImportModal])
 
   useEffect(() => {
     if (workerOk) return;
@@ -323,22 +209,6 @@ export default function App() {
     );
     return () => clearInterval(iv);
   }, [workerOk]);
-
-  // ── LoadingAPI.ready() — ПОСЛЕ полной готовности UI (§A.1 чек-листа) ──
-  // U10/P1-8: Game Ready вызывается ТОЛЬКО когда CSG-воркер поднялся
-  // (workerOk === true) И SDK инициализирован (getInitDonePromise). Ранний
-  // fallback-таймер 15с убран из yandex.ts — ready() не может сработать
-  // при открытом экране "Загрузка CSG (WASM)…".
-  useEffect(() => {
-    if (!workerOk) return
-    let disposed = false
-    void getInitDonePromise().then(() => {
-      if (disposed) return
-      getPlatform()?.loadingReady()
-    })
-    return () => { disposed = true }
-  }, [workerOk]);
-
 
   useEffect(() => {
     if (operations.length === 0) return;
@@ -363,27 +233,6 @@ export default function App() {
     saveProject, openProject, clearSelection, copySelected, pasteClipboard,
     showTextModal, showPM,
   };
-
-  // ── Yandex Gameplay API — обязательное требование модерации ──
-  // При открытии модальных окон — stopGameplay(), при закрытии — startGameplay()
-  // При монтировании (все модалки false) — автоматически вызывает startGameplay().
-  // ⚠️ U10/P1-2: start/stop НЕ выполняются до завершения инициализации SDK
-  // (getInitDonePromise). После init эффект повторно оценит состояние модалок.
-  useEffect(() => {
-    let disposed = false
-    void getInitDonePromise().then(() => {
-      if (disposed) return
-      const platform = getPlatform()
-      if (!platform) return
-      const showAnyModal = showTextModal || showPM || showExportModal
-      if (showAnyModal) {
-        platform.stopGameplay()
-      } else {
-        platform.startGameplay()
-      }
-    })
-    return () => { disposed = true }
-  }, [showTextModal, showPM, showExportModal])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -614,21 +463,12 @@ export default function App() {
 
       {/* (ruler display перенесён в блок экономики ниже — иконка RulerIcon + i18n) */}
 
-      {/* ── ЭКОНОМИКА: онбординг (§6.7) ── */}
-      {/* P0-6: только при реальном Yandex SDK (не clean-фолбэк) */}
-      {isEconomyAvailable() && <EconomyOnboarding />}
-
       {/* ── Ruler distance display ── */}
       {rulerDist !== null && (
         <div className="ruler-display">
           <RulerIcon size={20} /> {t('statusbar.rulerMode')}: <strong>{rulerDist.toFixed(2)} мм</strong>
         </div>
       )}
-
-      {/* ── FIX (UB-1): модалка аренды 24ч (3D-текст / расширенная палитра) ── */}
-      {/* Рендерится всегда: сама возвращает null, если ключ не выставлен либо
-          экономика недоступна (clean-версия). */}
-      <RentalModal />
 
       {/* ── Text Modal ── */}
       {showTextModal && (
@@ -646,23 +486,8 @@ export default function App() {
         />
       )}
 
-      {/* ── Export Modal ── */}
-      {showExportModal && (
-        <ExportModal
-          objects={objects}
-          operations={operations}
-          onClose={() => setShowExportModal(false)}
-          onExport={handleExportExecute}
-        />
-      )}
-
-      {/* ── Import Modal ── */}
-      {showImportModal && (
-        <ImportModal
-          onClose={() => setShowImportModal(false)}
-          onImport={handleImportExecute}
-        />
-      )}
+      {/* ── Экономика: онбординг, аренда, экспорт/импорт (Y.5) ── */}
+      <EconomyOverlays />
 
       {/* ── Project Manager Modal ── */}
       {showPM && (

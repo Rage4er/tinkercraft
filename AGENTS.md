@@ -114,6 +114,9 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 | `src/io/autosave.ts` | Автосохранение в IndexedDB |
 | **Platform (yandex-games ветка)** | |
 | `src/platform/index.ts` | Абстракция платформы (clean / yandex) |
+| `src/components/EconomyPanel.tsx` | Панель экономики (токены, бонус, квесты, аренда, подписки) + `EconomyModeSection` (мини-HUD и режим экономики в правой панели) + хук `useEconomyModeReset`. Вынесено из `PropertiesPanel.tsx` (рефакторинг Y.1) |
+| `src/components/EconomyOverlays.tsx` | Онбординг, модалка аренды, модалки экспорта/импорта STL (флаги в `ui-store`). Вынесено из `App.tsx` (Y.5) |
+| `src/hooks/useYandexInit.ts` | SDK-bootstrap: `initPlatform` → `loadFromCloud` → debug-grant → баннер, синк/rollover, `loadingReady`, Gameplay API. Вынесено из `App.tsx` (Y.2) |
 
 ## Конвенции кода
 
