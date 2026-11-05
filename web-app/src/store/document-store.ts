@@ -34,6 +34,7 @@ import { openStlFilePicker, parseStlFile } from '../io/stl-import'
 import { autosaveSession, restoreSession } from '../io/autosave'
 import i18n from '../i18n'
 import { useEconomyStore, createExportHash, scanForCashback } from './economy-store'
+import type { ExportPaymentMethod } from './economy-types'
 import { countSceneObjects } from './economy-config'
 
 /** Обновить прогресс квестов V2 по состоянию сцены (после каждой мутации) */
@@ -1261,7 +1262,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   //    сложные модели);
   //  - undefined — прямой вызов (clean-режим/подписка): кэшбэк НЕ начисляем,
   //    т.к. нет точки списания — поведение нейтрально для подписчиков.
-  exportStl: (method?: 'tokens' | 'ad') => {
+  exportStl: (method?: ExportPaymentMethod) => {
     const { objects, fileName, operations } = get()
     const objectList = Object.values(objects)
     const paidByTokens = method === 'tokens'

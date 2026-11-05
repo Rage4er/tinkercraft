@@ -7,6 +7,7 @@ import { isEconomyAvailable } from '../platform'
 import { useAdCooldown } from '../platform/ad-timers'
 import { ECONOMY_COSTS, calculateCashbackBreakdown, adShowsLimit } from '../store/economy-config'
 import { ExportIcon, TokenIcon, AdFilmIcon, ClockIcon } from './icons'
+import type { ExportPaymentMethod } from '../store/economy-types'
 
 export default function ExportModal({
   objects,
@@ -17,7 +18,7 @@ export default function ExportModal({
   objects: Record<string, { shapeType: string; transform?: { scaleX: number; scaleY: number; scaleZ: number }; color?: string }>
   operations: Array<{ type: string; ids?: string[] }>
   onClose: () => void
-  onExport: (method: 'tokens' | 'ad') => void
+  onExport: (method: ExportPaymentMethod) => void
 }) {
   const { t } = useTranslation()
   const tokens = useEconomyStore((s) => s.tokens)

@@ -11,6 +11,7 @@ import ImportModal from './ImportModal'
 import { useDocumentStore } from '../store/document-store'
 import { useUiStore } from '../store/ui-store'
 import { isEconomyAvailable } from '../platform'
+import type { ExportPaymentMethod } from '../store/economy-types'
 
 export default function EconomyOverlays() {
   const showExportModal = useUiStore((s) => s.showExportModal)
@@ -26,7 +27,7 @@ export default function EconomyOverlays() {
   // U8: method передаётся в exportStl() — от него зависит модель кэшбэка:
   // при 'tokens' кэшбэк уже учтён в цене модалки (нет повторного начисления),
   // при 'ad' — начисляется после экспорта (P1-1).
-  const handleExportExecute = useCallback((method: 'tokens' | 'ad') => {
+  const handleExportExecute = useCallback((method: ExportPaymentMethod) => {
     exportStl(method)
   }, [exportStl])
 

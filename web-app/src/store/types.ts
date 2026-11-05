@@ -7,6 +7,7 @@ import type {
   TransformNR, CsgBooleanOp,
 } from '../csg/types'
 import type { ClipEntry } from './helpers'
+import type { ExportPaymentMethod } from './economy-types'
 
 export interface DocumentStore {
   operations: TinkerCraftOperation[]
@@ -52,7 +53,7 @@ export interface DocumentStore {
   saveProject: () => Promise<void>
   openDoodle: () => Promise<void>
   saveDoodle: () => Promise<void>
-  exportStl: (method?: 'tokens' | 'ad') => void
+  exportStl: (method?: ExportPaymentMethod) => void
   triggerAutosave: () => Promise<void>
   restoreAutosave: () => Promise<boolean>
   saveToProject: (name: string) => Promise<void>
