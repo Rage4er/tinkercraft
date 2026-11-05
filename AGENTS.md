@@ -79,6 +79,7 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 | **CSG / Build Tree** | |
 | `src/csg/history-tree.ts` | **Build Tree** — параметрическое дерево (primitive/boolean/baked), `rebuildNode`, `mirrorNodeRecursive`, `cloneSubtree` |
 | `src/csg/tree-store.ts` | Zustand-стор для Build Tree |
+| `src/csg/tree-view.ts` | Read-модель Build Tree для UI (`getTreeView`, `findViewNode`, `formatParams`) — Фаза 9.1 |
 | `src/csg/rebuildOps.ts` | `applyMoveDelta`, `applyMirrorToTransform`, `applyAlignToTransform` |
 | `src/csg/worker.ts` | WASM worker — manifold-3d операции, типобезопасные интерфейсы |
 | `src/csg/worker-client.ts` | Promise-обёртка над воркером |
@@ -243,6 +244,7 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 
 - `ARCHITECTURE_TRANSFORMS.md` — единая модель трансформов (Фаза 8)
 - `ARCHITECTURE_RENDER.md` — единый источник данных и отрисовки (Фаза 8.5)
+- `docs/PHASE_9_DESIGN.md` — Фаза 9: решения (операция с результатом, вложенные CSG), риски, статус подзадач
 - `CODE_REVIEW.md` — результаты код-ревью с приоритетами
 - `DEVELOPMENT_PLAN.md` — план разработки (Фазы 0–7)
 - `ARCHITECTURE.md` — описание архитектуры

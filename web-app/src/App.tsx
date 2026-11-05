@@ -16,6 +16,7 @@ import { useUiStore } from "./store/ui-store";
 import { useShallow } from "zustand/shallow";
 import { isWorkerReady } from "./csg/worker-client";
 import { SNAP_VALUES, AUTOSAVE_DELAY_MS } from "./constants";
+import { useSelectedChildGuard } from "./hooks/useSelectedChildGuard";
 import type {
   TransformNR,
   ShapeParams,
@@ -346,6 +347,9 @@ export default function App() {
       console.error("Ошибка генерации текста:", err);
     }
   }, [textInput, textSize, textDepth, addRawMesh]);
+
+  // Фаза 9.1: сброс выбора ребёнка CSG, если узел/выделение исчезли
+  useSelectedChildGuard();
 
   const objectList = useMemo(() => Object.values(objects), [objects]);
   const selSet = useMemo(() => new Set(selectedIds), [selectedIds]);

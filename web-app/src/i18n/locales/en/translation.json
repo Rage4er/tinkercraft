@@ -140,7 +140,13 @@
     "hide": "Hide",
     "show": "Show",
     "delete": "Delete",
-    "import": "Import"
+    "import": "Import",
+    "expand": "Expand",
+    "collapse": "Collapse",
+    "baked": "Baked (not editable)",
+    "mirrored": "Mirrored (not editable)",
+    "nestedCsg": "Nested CSG",
+    "mirroredShort": "mirrored"
   },
   "timeline": {
     "addShape": "Add {{shape}}",
