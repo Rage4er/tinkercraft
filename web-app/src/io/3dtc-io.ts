@@ -69,7 +69,7 @@ function sanitizeObjectKeys(obj: unknown): unknown {
 
 const VALID_OP_TYPES = new Set([
   'add_shape', 'import_mesh', 'move', 'resize_dims', 'fillet',
-  'mirror', 'align', 'group', 'edit_child_params', 'delete', 'visibility', 'color', 'rename',
+  'mirror', 'align', 'group', 'edit_child_params', 'edit_step', 'delete', 'visibility', 'color', 'rename',
 ])
 
 // ────────────────────────────────────────────────────────────
@@ -192,6 +192,16 @@ function restoreOperationMeshArrays(operations: TinkerCraftOperation[]): void {
       if (rv) op.resultVertices = rv
       if (ri) op.resultIndices = ri
       if (rn !== undefined) op.resultNormals = rn
+    } else if (op.type === 'edit_step') {
+      // Фаза 9.5: пересчитанные меши каскада — как у group
+      for (const r of op.replacements ?? []) {
+        const rv = taToNumArray(r.resultVertices)
+        const ri = taToNumArray(r.resultIndices)
+        const rn = taToNumArray(r.resultNormals)
+        if (rv) r.resultVertices = rv
+        if (ri) r.resultIndices = ri
+        if (rn !== undefined) r.resultNormals = rn
+      }
     } else if (op.type === 'import_mesh') {
       const im = op as import('../csg/types').ImportMeshOperation
       const v = taToNumArray(im.vertices)

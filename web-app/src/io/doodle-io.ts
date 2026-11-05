@@ -66,7 +66,7 @@ function sanitizeObjectKeys(obj: unknown): unknown {
 /** WARN-R8-7: Валидные типы операций для проверки схемы .doodle */
 const VALID_OP_TYPES = new Set([
   'add_shape', 'import_mesh', 'move', 'resize_dims', 'fillet',
-  'mirror', 'align', 'group', 'edit_child_params', 'delete', 'visibility', 'color', 'rename',
+  'mirror', 'align', 'group', 'edit_child_params', 'edit_step', 'delete', 'visibility', 'color', 'rename',
 ])
 
 /**
@@ -128,6 +128,12 @@ function restoreOperationMeshArrays(operations: TinkerCraftOperation[]): void {
       op.resultVertices = restoreMeshArray(op.resultVertices) ?? op.resultVertices
       op.resultIndices = restoreMeshArray(op.resultIndices) ?? op.resultIndices
       if (op.resultNormals !== undefined) op.resultNormals = restoreMeshArray(op.resultNormals)
+    } else if (op.type === 'edit_step') {
+      for (const r of op.replacements ?? []) {
+        if (r.resultVertices !== undefined) r.resultVertices = restoreMeshArray(r.resultVertices)
+        if (r.resultIndices !== undefined) r.resultIndices = restoreMeshArray(r.resultIndices)
+        if (r.resultNormals !== undefined) r.resultNormals = restoreMeshArray(r.resultNormals)
+      }
     } else if (op.type === 'import_mesh') {
       const im = op as import('../csg/types').ImportMeshOperation
       const v = restoreMeshArray(im.vertices)

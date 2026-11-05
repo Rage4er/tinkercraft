@@ -18,12 +18,11 @@ import type {
   TreeNode,
 } from '../csg/types'
 import {
-  workerBuildShape, workerCsgBoolean, workerCsgBooleanWithSync,
+  workerBuildShape, workerCsgBooleanWithSync,
   workerBuildImportedMesh, workerApplyFillet,
   workerMirrorObject, workerRebuildScene,
   workerDeleteObjects, workerClearAll, workerSyncObjects, workerSyncMesh,
 } from '../csg/worker-client'
-import type { MeshResult } from '../csg/worker-handlers'
 import { parse3dtc, serialize3dtc, open3dtcFilePicker, downloadBlob } from '../io/3dtc-io'
 import { notify } from './notifications'
 import { saveProject as pmSave, updateProject as pmUpdate, loadProject as pmLoad, listProjects as pmList } from '../io/project-manager'
@@ -34,10 +33,10 @@ import i18n from '../i18n'
 
 export { computeAABB, extractAndCenterInPlace, extractAndCenterGetAABB, computeWorldAABB, extractCenteredAt } from './helpers'
 import { computeAABB, extractAndCenterInPlace, extractAndCenterGetAABB, computeWorldAABB, centerMassAtOrigin, makeObject, nextId, colorForIndex } from './helpers'
-import { computeInverseRSMatrix, transposeRSMatrix } from '../csg/worker-matrix'
 import type { ClipEntry } from './helpers'
 import type { DocumentStore } from './types'
 import { rebuildFromHistory, rebuildBuildTree } from './rebuild'
+import { computeCsgResult, groupOperationFromResult } from './csg-result'
 import { computeEditedChild, editFailureKey } from './edit-child'
 import { cacheSnapshot, getCachedSnapshot, clearSnapshots, cacheTreeSnapshot, getCachedTreeSnapshot } from './snapshots'
 import { OBJECT_SPACING, PASTE_OFFSET } from '../constants'
@@ -60,7 +59,6 @@ import {
 import { getAllNodes } from '../csg/history-tree'
 import { previewMirror as mirrorPreviewFn, mirrorSelected as mirrorConfirmFn, invalidateMirrorCache } from './mirror-store'
 import { devLog, devWarn, devLogCsg, devLogStore } from '../utils/debug'
-import { fmtPoint, fmtTransform } from '../utils/debug-format'
 
 // ── Shared undo/redo/jumpToHistory helper — FIX (MED-18-1): eliminates ~90 lines of duplication ──
 
@@ -128,56 +126,6 @@ function cacheSnapshotWithTree(index: number, objects: Record<string, SceneObjec
   // Cache tree nodes (only the structure, not cached mesh/BBox/hash)
   const nodes = getAllNodes()
   cacheTreeSnapshot(index, nodes)
-}
-
-/**
- * Sync objects into worker cache before CSG/mirror operations.
- * Determines per-object whether to use workerSyncMesh (for CSG results and imported meshes)
- * or workerSyncObjects (for regular primitives), then executes both in parallel.
- *
- * @returns Array of object IDs that were synced as regular primitives (for further syncObjects call)
- */
-async function syncObjectsForOperation(
-  ids: string[],
-  objects: Record<string, SceneObject>,
-): Promise<string[]> {
-  const meshSyncs: Promise<void>[] = []
-  const regularEntries: { objId: string; shapeType: ShapeType; params: ShapeParams; transform: TransformNR }[] = []
-
-  for (const id of ids) {
-    const obj = objects[id]
-    if (!obj) continue
-    const isImport = obj.shapeType === 'import_mesh'
-    const isCSG = obj.shapeType === 'csg'
-    // FIX (CSG-MIRROR-PRIMITIVE-PARAMS, Stage 8.5.10): зеркальный примитив —
-    // зеркало запечено в vertices, params оригинальны → workerSyncMesh.
-    const isMirroredPrimitive = !!obj.mirrored
-    if (isCSG || isImport || isMirroredPrimitive) {
-      // CSG result or imported mesh — sync mesh data with current transform
-      meshSyncs.push(
-        workerSyncMesh(id, obj.vertices, obj.indices, obj.transform).catch(e => console.warn('[syncObjectsForOperation] sync failed:', e)),
-      )
-    } else {
-      // Regular primitive — collect for workerSyncObjects
-      regularEntries.push({
-        objId: id,
-        shapeType: obj.shapeType as ShapeType,
-        params: obj.params,
-        transform: { ...obj.transform },
-      })
-    }
-  }
-
-  // Execute mesh syncs in parallel
-  await Promise.all(meshSyncs)
-
-  // Sync regular primitives in batch
-  if (regularEntries.length > 0) {
-    if (import.meta.env?.DEV) console.log(`[DIAG:syncObjectsForOperation] syncing regular primitives: ${regularEntries.map(e => e.objId).join(', ')}`)
-    await workerSyncObjects(regularEntries).catch(e => console.warn('[syncObjectsForOperation] sync failed:', e))
-  }
-
-  return regularEntries.map(e => e.objId)
 }
 
 // ---- Store ----
@@ -508,154 +456,29 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     set({ busy: true })
     try {
       const t0 = performance.now()
-      // Sync ALL operands into worker cache before CSG.
-      // This ensures the worker has the correct position/rotation/scale
-      // for every operand, even after move/align operations.
-      await syncObjectsForOperation([idA, idB], objects)
+      // Фаза 9.5.0: общее ядро CSG (sync → boolean → pivot = transformA → un-bake RS)
+      // вынесено в computeCsgResult — тем же кодом считает каскад правки прошлого шага.
       syncNodeTransform(idA, objects[idA].transform)
       syncNodeTransform(idB, objects[idB].transform)
-
-      const srOf = (id: string) => {
-        const t = objects[id].transform
-        return { x: t.x, y: t.y, z: t.z, rotX: t.rotX, rotY: t.rotY, rotZ: t.rotZ, scaleX: t.scaleX, scaleY: t.scaleY, scaleZ: t.scaleZ }
-      }
-
-      // DIAG: log operands before CSG
-      const aObj = objects[idA]
-      const bObj = objects[idB]
-      devLogCsg('operandA', { id: idA, shapeType: aObj.shapeType, transform: fmtTransform(aObj.transform), bbox: aObj.aabb ? { min: aObj.aabb.min, max: aObj.aabb.max } : null })
-      devLogCsg('operandB', { id: idB, shapeType: bObj.shapeType, transform: fmtTransform(bObj.transform), bbox: bObj.aabb ? { min: bObj.aabb.min, max: bObj.aabb.max } : null })
-      devLogCsg('send', { idA, idB, op, resultId, transformA: fmtTransform(srOf(idA)), transformB: fmtTransform(srOf(idB)) })
-      // Only send shapeType/params for regular primitives (not 'csg', not 'import_mesh').
-      // CSG results and imports are already synced via syncObjectsForOperation → workerSyncMesh.
-      // import_mesh already excluded by early return above.
-      // FIX (CSG-MIRROR-PRIMITIVE-PARAMS, Stage 8.5.10): зеркальный примитив
-      // (mirrored) тоже НЕ пересобирается из params — syncObjectsForOperation
-      // уже синхронизировал его зеркальные vertices через workerSyncMesh,
-      // а handleCsgBooleanSync при shapeA=undefined использует этот кэш.
-      const isOperandA_Primitive = objects[idA].shapeType !== 'csg' && !objects[idA].mirrored
-      const isOperandB_Primitive = objects[idB].shapeType !== 'csg' && !objects[idB].mirrored
-      let mesh: MeshResult
-
-      // FIX (CSG-BOOLEAN-CSG): When both operands are CSG results, workerCsgBooleanWithSync
-      // cannot rebuild them (no shapeType/params). Use workerCsgBoolean instead —
-      // syncObjectsForOperation already synced the mesh data via workerSyncMesh.
-      if (!isOperandA_Primitive && !isOperandB_Primitive) {
-        // Both operands are CSG — use csgBoolean (no shapeType/params needed)
-        mesh = await workerCsgBoolean(idA, idB, op, resultId, srOf(idA), srOf(idB))
-      } else {
-        // At least one operand is a primitive — use csgBooleanWithSync
-        mesh = await workerCsgBooleanWithSync(
-          idA, idB, op, resultId, srOf(idA), srOf(idB),
-          isOperandA_Primitive ? { shapeType: objects[idA].shapeType, params: objects[idA].params } : undefined,
-          isOperandB_Primitive ? { shapeType: objects[idB].shapeType, params: objects[idB].params } : undefined,
-        )
-      }
+      const res = await computeCsgResult(objects[idA], objects[idB], op, resultId)
       const ms = performance.now() - t0
-      // FIX (PIVOT-TRANSFORMA, Bug 3): pivot CSG = transformA (позиция первого
-      // операнда) — стандарт CAD (Fusion360/Onshape/Tinkercad позиционируют
-      // результат CSG на месте первого операнда). Раньше pivot = COM
-      // (Stage 6.5) — gizmo «съезжал» с transformA на (COM − transformA)
-      // (измерено 0.0192 для куб+призма rot(20,20,20) scale(1,1,0.5)).
-      //
-      // Инвариант §5.4 сохраняется: world = pivot + vertex.
-      // centerMassAtOrigin центрирует вершины по COM: v_COM = v_world − COM
-      // (тот же центр, что и worker-кэш). После сдвига на (COM − transformA):
-      //   v = v_COM + (COM − transformA) = v_world − transformA
-      //   world = pivot + v = transformA + (v_world − transformA) = v_world ✅
-      // Вёркер и рендер используют только world = pivot + TRS·v —
-      // конвенция единого источника (render = data) сохраняется.
-      const { cx: comX, cy: comY, cz: comZ } = centerMassAtOrigin(mesh.vertices, mesh.indices)
-      const tA0 = srOf(idA)
-      const offX = comX - tA0.x, offY = comY - tA0.y, offZ = comZ - tA0.z
-      for (let i = 0; i < mesh.vertices.length; i += 3) {
-        mesh.vertices[i] += offX
-        mesh.vertices[i + 1] += offY
-        mesh.vertices[i + 2] += offZ
-      }
-      // FIX (CSG-PRESERVE-RS, Stage 8.5.9): un-bake RS операнда A из вершин.
-      //
-      // Worker вычисляет boolean в МИРОВЫХ координатах: к origin-центрированному
-      // кэшу каждый операнда применяется полный TRS (handleCsgBoolean/Sync),
-      // ответ — world-вершины. Раньше RS оставался запечённым в вершинах, а
-      // transform получал только позицию → csg_12 терял rot(20,-20,-20) и
-      // scale(1,1,0.5) зеркальной призмы (несогласованность с конвенцией
-      // примитивов/mirror: vertices без RS, полный TRS в transform).
-      //
-      // Теперь вершины приводятся к локальной системе A:
-      //   v = S⁻¹Rᵀ·(v_world − posA)   (после сдвига выше v_world − posA)
-      // transform = полный TRS A → render world = posA + R·S·v = v_world ✅
-      // (det(R·S) > 0 — mirror использует mirrorEuler + abs(scale), поэтому
-      // winding/mirror-хиральность не затрагиваются: они уже в геометрии A.)
-      // Нормали: v' = M⁻¹v ⇒ n' = normalize(Mᵀn), M = R·S.
-      const hasRS = tA0.rotX !== 0 || tA0.rotY !== 0 || tA0.rotZ !== 0 ||
-        tA0.scaleX !== 1 || tA0.scaleY !== 1 || tA0.scaleZ !== 1
-      if (hasRS) {
-        const [u00, u01, u02, u10, u11, u12, u20, u21, u22] =
-          computeInverseRSMatrix(tA0, tA0)
-        for (let i = 0; i < mesh.vertices.length; i += 3) {
-          const x = mesh.vertices[i], y = mesh.vertices[i + 1], z = mesh.vertices[i + 2]
-          mesh.vertices[i] = u00 * x + u01 * y + u02 * z
-          mesh.vertices[i + 1] = u10 * x + u11 * y + u12 * z
-          mesh.vertices[i + 2] = u20 * x + u21 * y + u22 * z
-        }
-        if (mesh.normals) {
-          const [n00, n01, n02, n10, n11, n12, n20, n21, n22] =
-            transposeRSMatrix(tA0, tA0)
-          for (let i = 0; i < mesh.normals.length; i += 3) {
-            const nx = mesh.normals[i], ny = mesh.normals[i + 1], nz = mesh.normals[i + 2]
-            let tx = n00 * nx + n01 * ny + n02 * nz
-            let ty = n10 * nx + n11 * ny + n12 * nz
-            let tz = n20 * nx + n21 * ny + n22 * nz
-            const len = Math.hypot(tx, ty, tz) || 1
-            tx /= len; ty /= len; tz /= len
-            mesh.normals[i] = tx; mesh.normals[i + 1] = ty; mesh.normals[i + 2] = tz
-          }
-        }
-      }
-      const aabb = computeAABB(mesh.vertices)
-
-      // Pivot = transformA (позиция первого операнда) + полный TRS операнда A
-      // (CSG-PRESERVE-RS: rot/scale больше не сбрасываются в identity — RS
-      // убран из вершин выше и живёт в transform, как у примитивов и mirror).
-      // world = pivot + R·S·vertex = transformA + (v_world − transformA) = v_world ✅
-      const resultTransform: TransformNR = {
-        x: tA0.x, y: tA0.y, z: tA0.z,
-        rotX: tA0.rotX, rotY: tA0.rotY, rotZ: tA0.rotZ,
-        scaleX: tA0.scaleX, scaleY: tA0.scaleY, scaleZ: tA0.scaleZ,
-      }
-
-      // DIAG: centering info (Bug 3: pivot = transformA)
-      devLogCsg('center', {
-        assignedLocal: fmtPoint(resultTransform),
-        com: { x: comX, y: comY, z: comZ },
-        transformA: fmtTransform(srOf(idA)),
-        transformB: fmtTransform(srOf(idB)),
-        centeredAabb: { min: fmtPoint(aabb.min), max: fmtPoint(aabb.max) },
-      })
+      const resultTransform = res.transform
 
       // DIAG: CSG children — relative positions within the boolean result
-      const childAObj = objects[idA]
-      const childBObj = objects[idB]
       devLogCsg('children', {
         id: resultId,
         op,
         csgTransform: resultTransform,
-        childA: { id: idA, rel: childAObj.transform, abs: childAObj.transform },
-        childB: { id: idB, rel: childBObj.transform, abs: childBObj.transform },
+        childA: { id: idA, rel: objects[idA].transform, abs: objects[idA].transform },
+        childB: { id: idB, rel: objects[idB].transform, abs: objects[idB].transform },
       })
-      // Store original bbox size for CSG results — used to compute scale relative to original dimensions
-      const originalBboxSize = { x: aabb.max.x - aabb.min.x, y: aabb.max.y - aabb.min.y, z: aabb.max.z - aabb.min.z }
 
-      const newObj: SceneObject = { id: resultId, shapeType: 'csg', params: {}, operation: op, children: [idA, idB], color: objects[idA].color, transform: resultTransform, visible: true, locked: false, vertices: mesh.vertices, indices: mesh.indices, normals: mesh.normals, aabb, originalBboxSize }
+      const newObj: SceneObject = { id: resultId, shapeType: 'csg', params: {}, operation: op, children: [idA, idB], color: objects[idA].color, transform: resultTransform, visible: true, locked: false, vertices: res.vertices, indices: res.indices, normals: res.normals, aabb: res.aabb, originalBboxSize: res.originalBboxSize }
       const newObjects = { ...objects }; delete newObjects[idA]; delete newObjects[idB]; newObjects[resultId] = newObj
-      // Store result vertices/indices AND center position in GroupOperation
-      // so rebuildFromHistory can reconstruct the CSG result geometry at the correct position.
-      // FIX (PIVOT-TRANSFORMA): resultCenter = pivot = transformA — the same point
-      // the vertices were centered around (pivot + vertex = world).
-      // FIX (CSG-PRESERVE-RS, Stage 8.5.9): resultRotation/resultScale = TRS of
-      // operand A — rebuild must restore the full transform, not position only.
-      const histOp: GroupOperation = { type: 'group', ids: [idA, idB], resultId, resultVertices: mesh.vertices, resultIndices: mesh.indices, resultNormals: mesh.normals ?? undefined, resultCenter: { x: tA0.x, y: tA0.y, z: tA0.z }, resultRotation: { x: tA0.rotX, y: tA0.rotY, z: tA0.rotZ }, resultScale: { x: tA0.scaleX, y: tA0.scaleY, z: tA0.scaleZ }, originalBboxSize: originalBboxSize, treeOperation: op as 'union' | 'subtract' | 'intersect', shapeType: 'csg', color: objects[idA].color }
+      // Store result vertices/indices AND pivot (resultCenter/Rotation/Scale = TRS
+      // операнда A, PIVOT-TRANSFORMA + CSG-PRESERVE-RS) in GroupOperation so
+      // rebuildFromHistory can reconstruct the CSG result geometry at the correct position.
+      const histOp: GroupOperation = groupOperationFromResult(res, idA, idB, resultId, op, objects[idA].color)
       const newOps = [...operations.slice(0, historyIndex), histOp]
       // Ensure children are registered in build tree.
       // CSG results (shapeType='csg') and import_mesh are registered as BAKED nodes

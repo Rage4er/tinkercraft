@@ -27,6 +27,7 @@ import { computeInverseRSMatrix, transposeRSMatrix } from '../csg/worker-matrix'
 import { sanitizeParams } from '../csg/worker-handlers'
 import { computeAABB } from './helpers'
 import { isChildEditable } from '../csg/tree-view'
+import { projectHistory } from './project-history'
 
 export type EditChildFailure =
   | 'not_found'       // корень/узел не найден
@@ -55,11 +56,16 @@ const MATCH_REL_TOL = 1e-3
 // Чистая математика
 // ---------------------------------------------------------------------------
 
-/** TRS₀ корня = TRS операнда A на момент создания CSG (из операции group). */
+/**
+ * TRS₀ корня = TRS операнда A на момент создания CSG (из операции group).
+ * Фаза 9.5.0: по эффективной истории — правка move операнда до объединения
+ * меняет pivot результата (replacements.resultCenter/Rotation/Scale).
+ */
 export function findCreationTransform(
-  ops: TinkerCraftOperation[],
+  rawOps: TinkerCraftOperation[],
   rootId: string,
 ): TransformNR | null {
+  const ops = projectHistory(rawOps)
   for (let i = ops.length - 1; i >= 0; i--) {
     const op = ops[i]
     if (op.type !== 'group') continue

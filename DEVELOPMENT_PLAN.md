@@ -447,7 +447,7 @@ web-app/src/components/icons/
 | | | Вызов `rebuildFromHistory(ops.slice(0, index + 1))` | | |
 | | | Обновление объектов и build tree | | |
 | | | Toast-уведомление об успехе/ошибке | | |
-| 9.5 | **Edit modal для fillet/extrude/mirror** — редактирование продвинутых операций | Средний | Средняя | 🔲 |
+| 9.5 | **Edit modal для fillet/extrude/mirror** — редактирование продвинутых операций (дизайн: `docs/PHASE_9_5_DESIGN.md`; 9.5.0 ✅ эффективная история `projectHistory` + `computeCsgResult`; далее 9.5.1 fillet → 9.5.2 move → 9.5.3 mirror → 9.5.4 extrude) | Средний | Средняя | 🔄 |
 | | | Fillet: radius | | |
 | | | Extrude: depth, direction | | |
 | | | Mirror: plane (XY/XZ/YZ) | | |
@@ -601,6 +601,7 @@ web-app/
 | # | Проблема | Приоритет | Статус |
 |---|----------|-----------|--------|
 | | **CENTERING-INCONSISTENCY** — три разных центра масс в проекте: worker (vertex centroid), frontend (`extractCenteredAt(transformA)`), helpers (`centerMassAtOrigin`). Для несимметричных CSG-результатов diff = 3.89 (численный тест union куб+призма). Риск CSG-PRISM-OFFSET на Этапе 8. Унифицировано: единая `centerMassAtOrigin` (`csg/geometry-utils.ts`) в worker + frontend + rebuild. | **CRITICAL** | ✅ **ИСПРАВЛЕНО** (2026-10-14, Этап 6.5) |
+| | **FILLET-LOST-IN-CSG** — CSG с примитивом-кубом после fillet теряет скругление: `handleCsgBooleanSync`, `handleSyncObjects` и `rebuildTreeNode` воркера строят примитив через `buildPrimitive`, игнорируя `params.filletRadius` (`applyFillet` пишет его в params). Union куба r=2 и r=3 со сферой даёт одинаковый меш (найдено тестом 9.5.0). Дерево (`rebuildBuildTree`) fillet тоже не воспроизводит. Блокирует 9.5.1 (правка fillet нечего каскадировать). | **HIGH** | 🔲 перед 9.5.1 |
 | | **CENTERING-RESIDUAL** — остаточный долг 6.5: (1) `handleRebuildScene` внутренне использует world-кэш (самосогласован, но вне origin-конвенции); (2) pivot legacy-документов (центрирование по transformA) не мигрирован — tree-rebuild старых CSG может дать смещение (baked resultVertices путь не затронут); (3) extrude/CSG филлет-примитивов rebuild'ится через `buildPrimitive` без fillet. | **MEDIUM** | 🔲 Этап 7/8 |
 | | **PIVOT-CSG** — pivot CSG-результата = COM (из-за Stage 6.5 `centerMassAtOrigin` + pivot = COM в `csgBoolean`). Gizmo CSG «съезжает» на `(COM − transformA)` (измерено **0.0192** ед. для куб@(20,20,20) + призма@(20,20,20) rot(20,20,20) scale(1,1,0.5)). Исправлено: pivot = transformA, vertices сдвинуты на `(COM − transformA)` в обратную сторону — инвариант `world = pivot + vertex` сохранён. | **CRITICAL** | ✅ **ИСПРАВЛЕНО** (2026-10-17) |
 | | **VIEWPORT-DOUBLE-CENTERING** — `useMeshSync` вычитал `bboxCenter` из вершин всех объектов, но CSG-вершины уже COM-центрированы (§5.4): для асимметричной геометрии (COM ≠ bboxCenter) CSG рендерился со сдвигом **4.2491** ед. Устранено предикатом `isPivotCenteredGeometry` в 3 местах вьюпорта + синхронно в STL-экспорте; diff render-vs-data = 0.00000000. | **CRITICAL** | ✅ **ИСПРАВЛЕНО** (2026-10-16) |

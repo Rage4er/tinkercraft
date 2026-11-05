@@ -28,6 +28,7 @@ import {
 import { notify } from './notifications'
 import i18n from '../i18n'
 import { devLog } from '../utils/debug'
+import { projectHistory } from './project-history'
 
 /** Metadata accumulated over the operation chain. Exported for testing. */
 export interface RebuildMeta {
@@ -57,10 +58,12 @@ export interface RebuildMeta {
  * Pure function — no WASM dependency. Exported for testing.
  * Returns { meta, csgResultIds } matching what rebuildFromHistory uses.
  */
-export function buildRebuildMeta(ops: TinkerCraftOperation[]): {
+export function buildRebuildMeta(rawOps: TinkerCraftOperation[]): {
   meta: Record<string, RebuildMeta>
   csgResultIds: Set<string>
 } {
+  // Фаза 9.5.0: эффективная история (edit_step подставлены). Идемпотентно.
+  const ops = projectHistory(rawOps)
   const meta: Record<string, RebuildMeta> = {}
   const transforms: Record<string, TransformNR> = {}
   const csgResultIds = new Set<string>()
@@ -204,8 +207,10 @@ export function buildRebuildMeta(ops: TinkerCraftOperation[]): {
 }
 
 export async function rebuildFromHistory(
-  ops: TinkerCraftOperation[],
+  rawOps: TinkerCraftOperation[],
 ): Promise<Record<string, SceneObject>> {
+  // Фаза 9.5.0: воркер и мета получают эффективную историю (edit_step подставлены)
+  const ops = projectHistory(rawOps)
   const { meta, csgResultIds } = buildRebuildMeta(ops)
   const result = await workerRebuildScene(ops)
 
@@ -344,9 +349,11 @@ export async function rebuildFromHistory(
  * This is essential for undo/redo to work correctly with tree operations.
  */
 export function rebuildBuildTree(
-  ops: TinkerCraftOperation[],
+  rawOps: TinkerCraftOperation[],
   objects?: Record<string, SceneObject>,
 ): void {
+  // Фаза 9.5.0: дерево строится по эффективной истории. Идемпотентно.
+  const ops = projectHistory(rawOps)
   const transforms: Record<string, TransformNR> = {}
 
   for (const op of ops) {
@@ -544,9 +551,9 @@ export function rebuildBuildTree(
  */
 export function registerBakedNodes(
   objects: Record<string, SceneObject>,
-  ops: TinkerCraftOperation[],
+  rawOps: TinkerCraftOperation[],
 ): void {
-  for (const op of ops) {
+  for (const op of projectHistory(rawOps)) {
     if (op.type === 'import_mesh' && objects[op.id]) {
       const obj = objects[op.id]
       if (obj.vertices && obj.indices) {
