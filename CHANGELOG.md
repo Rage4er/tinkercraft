@@ -10,6 +10,7 @@
 ## [Unreleased]
 
 ### Added
+- **`docs/REFACTORING_YANDEX.md`** — сводка рефакторинга `yandex-games` Y.1–Y.5: карта «что откуда переехало», инварианты (порядок `settleExport`, bootstrap, список модалок), инструкция по следующим merge `main`, ограничения. Счётчики тестов в `README.md`, `AGENTS.md`, `CONTRIBUTING.md`, `web-app/NODEJS_SETUP.md` обновлены до 647 / 47 файлов
 - Отображение версии приложения в StatusBar (справа): `{app.name} v{APP_VERSION}` (`StatusBar.tsx`, `constants.ts`)
 
 ### Fixed
