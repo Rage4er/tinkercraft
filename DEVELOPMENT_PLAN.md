@@ -447,8 +447,8 @@ web-app/src/components/icons/
 | | | Вызов `rebuildFromHistory(ops.slice(0, index + 1))` | | |
 | | | Обновление объектов и build tree | | |
 | | | Toast-уведомление об успехе/ошибке | | |
-| 9.5 | **Edit modal для fillet/extrude/mirror** — редактирование продвинутых операций (дизайн: `docs/PHASE_9_5_DESIGN.md`; 9.5.0 ✅ эффективная история `projectHistory` + `computeCsgResult`; далее 9.5.1 fillet → 9.5.2 move → 9.5.3 mirror → 9.5.4 extrude) | Средний | Средняя | 🔄 |
-| | | Fillet: radius | | |
+| 9.5 | **Edit modal для fillet/extrude/mirror** — редактирование продвинутых операций (дизайн: `docs/PHASE_9_5_DESIGN.md`; 9.5.0 ✅ эффективная история `projectHistory` + `computeCsgResult`; 9.5.1 (fillet) ❌ отменён — fillet удалён из приложения; далее 9.5.2 move → 9.5.3 mirror → 9.5.4 extrude) | Средний | Средняя | 🔄 |
+| | | ~~Fillet: radius~~ — отменено (fillet удалён, см. Фаза 11) | | |
 | | | Extrude: depth, direction | | |
 | | | Mirror: plane (XY/XZ/YZ) | | |
 | 9.6 | **Undo для edit** — запись изменений в историю undo/redo | Средний | Низкая | 🔲 |
@@ -483,12 +483,13 @@ web-app/src/components/icons/
 | Физическая симуляция (Rapier WASM) | Низкий | Высокая | 🔲 |
 | Коллаборативное редактирование (CRDT / WebSocket) | Низкий | Очень высокая | 🔲 |
 | Robot Lab (конструктор роботов) | Отложено | Высокая | 🔲 |
+| **Скругление/фаска рёбер (B-Rep fillet)** — инструмент «выбрал рёбра → скруглил» для любых тел, корректное примыкание в вершинах. Требует B-Rep ядра (OpenCascade/OCCT WASM) поверх/вместо mesh-CSG. Прежний fillet (параметр куба `filletRadius`, все рёбра сразу) удалён из приложения (remove-fillet); старые проекты открываются, скругление не восстанавливается | Средний | Очень высокая | 🔲 |
 
 #### Цели
 
 - Редактирование параметров примитивов прямо в Timeline (размеры, радиусы, сегменты)
 - Раскрытие и редактирование CSG-операций (union/subtract/intersect) — изменение состава и типа
-- Редактирование параметров mirror, fillet, extrude в истории
+- Редактирование параметров mirror, move, extrude в истории (fillet удалён — см. Фаза 11)
 - Перестроение цепочки при изменении любого шага (rebuildFromHistory с нужного индекса)
 - Drag & drop для изменения порядка операций (будущее)
 
@@ -601,7 +602,7 @@ web-app/
 | # | Проблема | Приоритет | Статус |
 |---|----------|-----------|--------|
 | | **CENTERING-INCONSISTENCY** — три разных центра масс в проекте: worker (vertex centroid), frontend (`extractCenteredAt(transformA)`), helpers (`centerMassAtOrigin`). Для несимметричных CSG-результатов diff = 3.89 (численный тест union куб+призма). Риск CSG-PRISM-OFFSET на Этапе 8. Унифицировано: единая `centerMassAtOrigin` (`csg/geometry-utils.ts`) в worker + frontend + rebuild. | **CRITICAL** | ✅ **ИСПРАВЛЕНО** (2026-10-14, Этап 6.5) |
-| | **FILLET-LOST-IN-CSG** — CSG с примитивом-кубом после fillet теряет скругление: `handleCsgBooleanSync`, `handleSyncObjects` и `rebuildTreeNode` воркера строят примитив через `buildPrimitive`, игнорируя `params.filletRadius` (`applyFillet` пишет его в params). Union куба r=2 и r=3 со сферой даёт одинаковый меш (найдено тестом 9.5.0). Дерево (`rebuildBuildTree`) fillet тоже не воспроизводит. Блокирует 9.5.1 (правка fillet нечего каскадировать). | **HIGH** | 🔲 перед 9.5.1 |
+| | **FILLET-LOST-IN-CSG** — ✅ **СНЯТО (fillet удалён)** — CSG с примитивом-кубом после fillet теряет скругление: `handleCsgBooleanSync`, `handleSyncObjects` и `rebuildTreeNode` воркера строят примитив через `buildPrimitive`, игнорируя `params.filletRadius` (`applyFillet` пишет его в params). Union куба r=2 и r=3 со сферой даёт одинаковый меш (найдено тестом 9.5.0). Дерево (`rebuildBuildTree`) fillet тоже не воспроизводит. Блокирует 9.5.1 (правка fillet нечего каскадировать). | **HIGH** | ✅ **СНЯТО** (2026-11-05, remove-fillet): fillet удалён из приложения — старые шаги fillet вырезаются при загрузке |
 | | **CENTERING-RESIDUAL** — остаточный долг 6.5: (1) `handleRebuildScene` внутренне использует world-кэш (самосогласован, но вне origin-конвенции); (2) pivot legacy-документов (центрирование по transformA) не мигрирован — tree-rebuild старых CSG может дать смещение (baked resultVertices путь не затронут); (3) extrude/CSG филлет-примитивов rebuild'ится через `buildPrimitive` без fillet. | **MEDIUM** | 🔲 Этап 7/8 |
 | | **PIVOT-CSG** — pivot CSG-результата = COM (из-за Stage 6.5 `centerMassAtOrigin` + pivot = COM в `csgBoolean`). Gizmo CSG «съезжает» на `(COM − transformA)` (измерено **0.0192** ед. для куб@(20,20,20) + призма@(20,20,20) rot(20,20,20) scale(1,1,0.5)). Исправлено: pivot = transformA, vertices сдвинуты на `(COM − transformA)` в обратную сторону — инвариант `world = pivot + vertex` сохранён. | **CRITICAL** | ✅ **ИСПРАВЛЕНО** (2026-10-17) |
 | | **VIEWPORT-DOUBLE-CENTERING** — `useMeshSync` вычитал `bboxCenter` из вершин всех объектов, но CSG-вершины уже COM-центрированы (§5.4): для асимметричной геометрии (COM ≠ bboxCenter) CSG рендерился со сдвигом **4.2491** ед. Устранено предикатом `isPivotCenteredGeometry` в 3 местах вьюпорта + синхронно в STL-экспорте; diff render-vs-data = 0.00000000. | **CRITICAL** | ✅ **ИСПРАВЛЕНО** (2026-10-16) |

@@ -11,7 +11,7 @@
 import { create } from 'zustand/react'
 import type {
   TinkerCraftOperation, AddShapeOperation, ImportMeshOperation,
-  FilletOperation, MirrorOperation, AlignOperation, ResizeDimsOperation,
+  MirrorOperation, AlignOperation, ResizeDimsOperation,
   MoveOperation, ColorOperation, GroupOperation, RenameOperation, HideShowOperation,
   DeleteOperation, EditChildParamsOperation,
   SceneObject, ShapeParams, ShapeType, TransformNR, Vec3,
@@ -19,7 +19,7 @@ import type {
 } from '../csg/types'
 import {
   workerBuildShape, workerCsgBooleanWithSync,
-  workerBuildImportedMesh, workerApplyFillet,
+  workerBuildImportedMesh,
   workerMirrorObject, workerRebuildScene,
   workerDeleteObjects, workerClearAll, workerSyncObjects, workerSyncMesh,
 } from '../csg/worker-client'
@@ -29,6 +29,7 @@ import { saveProject as pmSave, updateProject as pmUpdate, loadProject as pmLoad
 import { exportToStl, downloadStlBlob, StlTooLargeError } from '../io/stl-export'
 import { openStlFilePicker, parseStlFile } from '../io/stl-import'
 import { autosaveSession, restoreSession } from '../io/autosave'
+import { migrateLegacyFillet, type LegacyFilletMigration } from '../io/legacy-fillet'
 import i18n from '../i18n'
 
 export { computeAABB, extractAndCenterInPlace, extractAndCenterGetAABB, computeWorldAABB, extractCenteredAt } from './helpers'
@@ -82,6 +83,18 @@ async function jumpToHistoryInner(newIdx: number, actionName: string): Promise<v
     setState({ historyIndex: newIdx, objects: newObjects, selectedIds: [], busy: false, lastCsgMs: performance.now() - t0 })
     invalidateMirrorCache()
   } catch (e) { setState({ busy: false }); console.error(actionName + ':', e); notify(i18n.t('errors.operationFailed', { name: actionName.toLowerCase() }), 'error') }
+}
+
+// ── Загрузка старых проектов: скругление удалено (remove-fillet) ──
+
+/**
+ * Миграция истории/объектов перед загрузкой: шаги fillet вырезаются, filletRadius снимается.
+ * Уведомление — один раз на проект (а не на каждый шаг).
+ */
+function migrateLoaded(ops: TinkerCraftOperation[], objects?: Record<string, SceneObject>): LegacyFilletMigration {
+  const m = migrateLegacyFillet(ops, objects)
+  if (m.changed) notify(i18n.t('errors.legacyFilletRemoved'), 'info')
+  return m
 }
 
 // ── Type guard ──
@@ -248,40 +261,6 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       cacheSnapshotWithTree(newOps.length, newObjects)
       invalidateMirrorCache()
     } catch (e) { set({ busy: false }); notify(i18n.t('errors.stlImportFailed') + ': ' + e, 'error') }
-  },
-
-  // ── Fillet ──
-  applyFillet: async (id, radius) => {
-    if (get().busy) return
-    const { objects, operations, historyIndex } = get()
-    const obj = objects[id]
-    if (!obj) return
-    set({ busy: true })
-    try {
-      const t0 = performance.now()
-      const mesh = await workerApplyFillet(id, obj.shapeType, obj.params, radius, obj.transform)
-      const ms = performance.now() - t0
-      const op: FilletOperation = { type: 'fillet', id, radius }
-      const newOps = [...operations.slice(0, historyIndex), op]
-      const newObj = makeObject({
-        ...obj,
-        params: { ...obj.params, filletRadius: radius },
-        vertices: mesh.vertices,
-        indices: mesh.indices,
-        normals: mesh.normals,
-      })
-      const newObjects = { ...objects, [id]: newObj }
-      set({
-        operations: newOps,
-        historyIndex: newOps.length,
-        objects: newObjects,
-        modified: true,
-        busy: false,
-        lastCsgMs: ms,
-      })
-      cacheSnapshotWithTree(newOps.length, newObjects)
-      invalidateMirrorCache()
-    } catch (e) { set({ busy: false }); console.error('applyFillet:', e); notify(i18n.t('errors.filletFailed'), 'error') }
   },
 
   // ── Copy ──
@@ -908,9 +887,13 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
           }
         }
       }
-      rebuildBuildTree(doc.operations, newObjects)
-      set({ operations: doc.operations, historyIndex: doc.operations.length, objects: newObjects, selectedIds: [], fileName: picked.file.name, modified: false, busy: false, lastCsgMs: performance.now() - t0, currentProjectId: null, currentProjectName: null })
-      cacheSnapshotWithTree(doc.operations.length, newObjects)
+      // remove-fillet: в старом файле объекты хранят скруглённые вершины — пересобираем из истории
+      const mig = migrateLoaded(doc.operations, doc.objects)
+      const ops = mig.operations
+      const loadedObjects = mig.changed ? await rebuildFromHistory(ops) : newObjects
+      rebuildBuildTree(ops, loadedObjects)
+      set({ operations: ops, historyIndex: ops.length, objects: loadedObjects, selectedIds: [], fileName: picked.file.name, modified: false, busy: false, lastCsgMs: performance.now() - t0, currentProjectId: null, currentProjectName: null })
+      cacheSnapshotWithTree(ops.length, loadedObjects)
       invalidateMirrorCache()
     } catch (e) { set({ busy: false }); notify(i18n.t('errors.openFailed', { error: e }), 'error') }
   },
@@ -1235,10 +1218,13 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     set({ busy: true })
     try {
       const t0 = performance.now()
-      const newObjects = await rebuildFromHistory(entry.operations)
-      rebuildBuildTree(entry.operations, newObjects)
-      set({ operations: entry.operations, historyIndex: entry.historyIndex, objects: newObjects, selectedIds: [], fileName: entry.fileName, modified: false, busy: false, lastCsgMs: performance.now() - t0 })
-      cacheSnapshotWithTree(entry.historyIndex, newObjects)
+      const mig = migrateLoaded(entry.operations)
+      const ops = mig.operations
+      const idx = mig.remapIndex(entry.historyIndex)
+      const newObjects = await rebuildFromHistory(ops)
+      rebuildBuildTree(ops, newObjects)
+      set({ operations: ops, historyIndex: idx, objects: newObjects, selectedIds: [], fileName: entry.fileName, modified: false, busy: false, lastCsgMs: performance.now() - t0 })
+      cacheSnapshotWithTree(idx, newObjects)
       return true
     } catch (e) { set({ busy: false }); return false }
   },
@@ -1280,10 +1266,11 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     set({ busy: true })
     try {
       const t0 = performance.now()
-      const newObjects = await rebuildFromHistory(record.operations)
-      rebuildBuildTree(record.operations, newObjects)
-      set({ operations: record.operations, historyIndex: record.operations.length, objects: newObjects, selectedIds: [], fileName: null, modified: false, busy: false, lastCsgMs: performance.now() - t0, currentProjectId: id, currentProjectName: record.name })
-      cacheSnapshotWithTree(record.operations.length, newObjects)
+      const ops = migrateLoaded(record.operations).operations
+      const newObjects = await rebuildFromHistory(ops)
+      rebuildBuildTree(ops, newObjects)
+      set({ operations: ops, historyIndex: ops.length, objects: newObjects, selectedIds: [], fileName: null, modified: false, busy: false, lastCsgMs: performance.now() - t0, currentProjectId: id, currentProjectName: record.name })
+      cacheSnapshotWithTree(ops.length, newObjects)
     } catch (e) { set({ busy: false }); console.error('loadFromProject:', e); notify(i18n.t('errors.loadProjectFailed'), 'error') }
   },
 

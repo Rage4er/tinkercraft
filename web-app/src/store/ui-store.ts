@@ -34,10 +34,6 @@ export interface UiStore {
   tlFilters: Record<string, boolean>
   setTlFilter: (key: string, checked: boolean) => void
 
-  // Fillet
-  filletRadius: number
-  setFilletRadius: (v: number) => void
-
   // Shape search
   shapeSearch: string
   setShapeSearch: (v: string) => void
@@ -111,9 +107,6 @@ export const useUiStore = create<UiStore>((set) => ({
   tlFilters: DEFAULT_FILTERS,
   setTlFilter: (key, checked) =>
     set((s) => ({ tlFilters: { ...s.tlFilters, [key]: checked } })),
-
-  filletRadius: 2,
-  setFilletRadius: (v) => set({ filletRadius: v }),
 
   shapeSearch: '',
   setShapeSearch: (v) => set({ shapeSearch: v }),

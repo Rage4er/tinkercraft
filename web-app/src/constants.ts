@@ -47,7 +47,6 @@ export const OP_FILTER_LABELS: Record<string, string> = {
   import_mesh: "filters.import_mesh",
   move: "filters.move",
   resize_dims: "filters.resize_dims",
-  fillet: "filters.fillet",
   mirror: "filters.mirror",
   align: "filters.align",
   group: "filters.group",
@@ -77,11 +76,6 @@ export const AUTOSAVE_DELAY_MS = 3000;
 /** Epsilon for detecting meaningful position/rotation/scale changes in move operations. */
 export const MOVE_DELTA_EPSILON = 1e-6;
 
-// ---- Fillet ----
-/** Safety margin subtracted from max possible fillet radius. */
-export const FILLET_EPSILON = 0.1;
-/** Minimum allowed fillet radius (mm). */
-export const FILLET_MIN_RADIUS = 0.01;
 
 // ---- Vertex merge precision (STL import) ----
 /** Rounding precision for merging coincident vertices during STL import. */

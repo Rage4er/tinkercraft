@@ -13,7 +13,6 @@ import {
   MoveIcon,
   ScaleIcon,
   RotateIcon,
-  FilletIcon,
   MirrorYZIcon,
   AlignXMinIcon,
   AlignXCenterIcon,
@@ -68,8 +67,6 @@ export function opIcon(op: TinkerCraftOperation): React.ReactNode {
     case "resize":
     case "resize_dims":
       return <ScaleIcon size={32} />;
-    case "fillet":
-      return <FilletIcon size={32} />;
     case "mirror":
       return <MirrorYZIcon size={32} />;
     case "align": {
@@ -113,8 +110,6 @@ export function opLabel(op: TinkerCraftOperation, t: (key: string, opts?: Record
     }
     case "resize_dims":
       return t("timeline.resizeDims");
-    case "fillet":
-      return t('timeline.fillet', { radius: op.radius });
     case "mirror":
       return t('timeline.mirror', { plane: op.plane });
     case "align":

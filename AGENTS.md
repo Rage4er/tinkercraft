@@ -100,7 +100,7 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 | `src/components/snap-utils.ts` | Привязка (snap) к геометрии: vertex, edge, face, circle |
 | `src/components/Toolbar.tsx` | Тулбар (файл, undo, view, gizmo, CSG, тема) |
 | `src/components/LeftPanel.tsx` | Палитра фигур + список объектов + история |
-| `src/components/PropertiesPanel.tsx` | Панель свойств (трансформ, resize, fillet, extrude, CSG) |
+| `src/components/PropertiesPanel.tsx` | Панель свойств (трансформ, resize, extrude, CSG) |
 | `src/components/TextModal.tsx` | Модалка 3D текста |
 | `src/components/StatusBar.tsx` | Статус-бар |
 | `src/components/NumInput.tsx` | Numeric input с draft-редактированием |
@@ -112,6 +112,7 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 | `src/io/doodle-io.ts` | **УСТАРЕЛО**: формат .doodle (legacy, не поддерживается) |
 | `src/io/3dtc-io.ts` | Формат .3dtc (ZIP + JSON) — основной формат проекта (v1.2.0+) |
 | `src/io/autosave.ts` | Автосохранение в IndexedDB |
+| `src/io/legacy-fillet.ts` | Миграция старых проектов со скруглением: вырезает шаги `fillet`, снимает `filletRadius`, перенумеровывает `edit_step` (вызывается при всех загрузках в сторе) |
 | **Platform (yandex-games ветка)** | |
 | `src/platform/index.ts` | Абстракция платформы (clean / yandex) |
 
@@ -136,7 +137,6 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 
 ### CSG Worker
 - Воркер кэширует manifold-объекты по `id` (Map)
-- `buildPrimitiveWithFillet` — только cube поддерживает fillet
 - `sanitizeParams()` валидирует пользовательский ввод перед отправкой в воркер
 
 ### Build Tree (Фаза 8)
@@ -236,7 +236,7 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 
 ## Известные ограничения (не баги)
 
-- Fillet работает только для cube (требует специфичной математики для других форм)
+- Скругления (fillet) нет: прежний параметр куба удалён (remove-fillet) до инструмента на B-Rep; старые шаги `fillet` вырезаются при загрузке (`io/legacy-fillet.ts`) — новых не создавать
 
 ## Node.js — Настройка и проверка
 
@@ -253,7 +253,7 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 
 - `ARCHITECTURE_TRANSFORMS.md` — единая модель трансформов (Фаза 8)
 - `ARCHITECTURE_RENDER.md` — единый источник данных и отрисовки (Фаза 8.5)
-- `docs/PHASE_9_5_DESIGN.md` — Фаза 9.5: дизайн правки прошлых шагов (fillet/move/mirror/extrude), каскад CSG
+- `docs/PHASE_9_5_DESIGN.md` — Фаза 9.5: дизайн правки прошлых шагов (move/mirror/extrude; fillet отменён), каскад CSG
 - `docs/PHASE_9_DESIGN.md` — Фаза 9: решения (операция с результатом, вложенные CSG), риски, статус подзадач
 - `CODE_REVIEW.md` — результаты код-ревью с приоритетами
 - `DEVELOPMENT_PLAN.md` — план разработки (Фазы 0–7)

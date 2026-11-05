@@ -104,9 +104,4 @@ describe('ShapeParams', () => {
     expect(p.radius).toBe(12)
     expect(p.segments).toBe(32)
   })
-
-  it('supports filletRadius', () => {
-    const p: ShapeParams = { filletRadius: 2 }
-    expect(p.filletRadius).toBe(2)
-  })
 })

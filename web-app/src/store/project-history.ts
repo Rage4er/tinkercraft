@@ -2,7 +2,7 @@
 // project-history — эффективная история (Фаза 9.5.0)
 // ============================================================
 //
-// Правка прошлого шага N (fillet / move / mirror) записывается append-only
+// Правка прошлого шага N (move / mirror) записывается append-only
 // операцией `edit_step` в конец истории; `operations[N]` не трогается
 // (docs/PHASE_9_5_DESIGN.md, подход B′). Потребители истории (воспроизведение
 // сцены и дерева, калибровка 9.3, замки 9.9) получают ЭФФЕКТИВНУЮ историю —
@@ -34,17 +34,16 @@ export const MAX_CASCADE_STEPS = 50
 
 /** Вид патча, применимый к шагу данного типа; `null` — шаг не редактируется как шаг. */
 export function patchKindFor(type: TinkerCraftOperation['type']): StepPatchKind | null {
-  return type === 'fillet' || type === 'move' || type === 'mirror' ? type : null
+  return type === 'move' || type === 'mirror' ? type : null
 }
 
 /**
  * Отпечаток шага (тип + id цели) — защита от рассинхрона индекса (R7).
- * fillet → id; move → ids; mirror → ids НОВЫХ объектов (через запятую).
+ * move → ids; mirror → ids НОВЫХ объектов (через запятую).
  * `null` — шаг не редактируется как шаг.
  */
 export function stepFingerprint(op: TinkerCraftOperation): EditStepOperation['stepFingerprint'] | null {
   switch (op.type) {
-    case 'fillet': return { type: op.type, targetId: op.id }
     case 'move': return { type: op.type, targetId: op.ids.join(',') }
     case 'mirror': return { type: op.type, targetId: op.ids.join(',') }
     default: return null
@@ -56,9 +55,6 @@ export function stepFingerprint(op: TinkerCraftOperation): EditStepOperation['st
  * `null` — вид патча не соответствует типу шага.
  */
 export function applyStepPatch(op: TinkerCraftOperation, patch: StepPatch): TinkerCraftOperation | null {
-  if (patch.kind === 'fillet' && op.type === 'fillet') {
-    return { ...op, radius: patch.radius }
-  }
   if (patch.kind === 'move' && op.type === 'move') {
     // Патч — полный набор новых дельт: отсутствующий rot/scale означает «нет».
     const { rotDelta: _r, scaleDelta: _s, ...rest } = op
@@ -103,7 +99,6 @@ export function applyReplacement(op: TinkerCraftOperation, r: StepReplacement): 
       ...(r.resultIndices ? { resultIndices: r.resultIndices } : {}),
       ...(r.resultNormals ? { resultNormals: r.resultNormals } : {}),
       ...(r.originalBboxSize ? { originalBboxSize: { ...r.originalBboxSize } } : {}),
-      ...(r.params ? { params: { ...r.params } } : {}),
     }
   }
   return null
@@ -253,7 +248,6 @@ export interface CascadePlan {
 /** Объекты, которые шаг N затрагивает непосредственно. */
 function seedIds(op: TinkerCraftOperation): string[] {
   switch (op.type) {
-    case 'fillet': return [op.id]
     case 'move': return [...op.ids]
     case 'mirror': return [...op.ids]
     default: return []
