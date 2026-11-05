@@ -14,7 +14,7 @@
 - **manifold-3d** (WASM) — CSG операции в Web Worker
 - **Zustand 5** — стейт-менеджмент
 - **Vite 6** — сборка
-- **Vitest 4** — тесты (~387 тестов, 34 файла)
+- **Vitest 4** — тесты (543 теста, 44 файла — ветка `phase-9`)
 - **pnpm** — пакетный менеджер
 
 ## Команды
@@ -23,7 +23,7 @@
 cd web-app
 pnpm dev          # dev-сервер (порт 5000)
 pnpm build        # production-сборка
-pnpm test         # запуск тестов (~272 тестов, 18 файлов)
+pnpm test         # запуск тестов (543 теста, 44 файла)
 pnpm typecheck    # tsc --noEmit
 pnpm e2e:smoke    # дымовой тест в браузере (Playwright; нужен запущенный pnpm dev; см. web-app/e2e/helpers.mjs)
 pnpm e2e:tree     # Фаза 9.1: раскрытие CSG в дереве, выбор ребёнка
@@ -37,19 +37,24 @@ pnpm e2e:edit-child  # Фаза 9.2/9.3: правка параметра реб�
 | 0–7.6 | Ядро CAD, CSG, UI, Mirror, Timeline | ✅ Завершены |
 | **8** | **Единая модель трансформов** | ✅ Завершена (v1.1.0) |
 | **8.5** | **Унификация отрисовки и данных** | ✅ Завершена (v1.2.3) |
-| 9 | Параметрическая история (Timeline edit, редактор детей CSG) | 🔲 Запланирована |
-| 10 | Яндекс.Игры — монетизация | 🔲 Запланирована |
-| 11 | Будущее (SVG, 3MF, STEP, Rapier) | 🔲 Запланирована |
+| **9** | **Параметрическая история** — 9.1–9.4, 9.6–9.9 ✅; 9.5.0 (эффективная история) ✅; 9.5.1 (fillet) ❌ отменена; 9.5.2 move — следующая, затем 9.5.3 mirror, 9.5.4 extrude | 🔄 Идёт (ветка `phase-9`) |
+| 10 | Яндекс.Игры — монетизация (ветка `yandex-games`) | 🔄 Отдельная ветка (Y.1–Y.5 ✅) |
+| 11 | Будущее (SVG, 3MF, STEP, B-Rep fillet, Rapier) | 🔲 Запланирована |
 
 **Фаза 8 в деталях:** `web-app/ARCHITECTURE_TRANSFORMS.md`
 **Фаза 8.5 в деталях:** `web-app/ARCHITECTURE_RENDER.md`
+**Фаза 9 в деталях:** `docs/PHASE_9_DESIGN.md` (9.1–9.9), `docs/PHASE_9_5_DESIGN.md` (9.5: правка прошлых шагов, каскад CSG)
 
 ## Ветки
 
 | Ветка | Назначение |
 |-------|------------|
 | `main` | Чистый CAD (Open Source, GPL-3.0) |
-| `yandex-games` | Версия для Яндекс.Игр (экономика, реклама, токены) |
+| `phase-9` | Фаза 9 (от `main`); `phase-9.5.0` и `remove-fillet` в неё смержены (PR #1–#3) |
+| `phase-9.5.2` | Следующая: правка шага move (от `phase-9`) |
+| `yandex-games` | Версия для Яндекс.Игр (экономика, реклама, токены); Фазу 9 ещё не содержит |
+
+Цепочка: `main` → `phase-9` → `phase-9.5.2`.
 
 ## Архитектура (data flow)
 
@@ -88,6 +93,7 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 | `src/store/project-history.ts` | **Эффективная история** (Фаза 9.5.0): `projectHistory` подставляет `edit_step` (патч шага N + `replacements` замороженных шагов) и выбрасывает их; идемпотентна, вызывается на входе `rebuild.ts` и `findCreationTransform`. `computeCascade` — замыкание зависимостей правки |
 | `src/store/csg-result.ts` | Общее ядро CSG `computeCsgResult` (sync → boolean → pivot = transformA → un-bake RS) для `csgBoolean` и каскада 9.5; `syncObjectsForOperation`, `groupOperationFromResult`, `groupReplacementFromResult` |
 | `src/components/ChildPropertiesPanel.tsx` | Панель свойств выбранного ребёнка CSG (вместо `PropertiesPanel`, пока `ui-store.selectedChild` задан) — Фаза 9.2 |
+| `src/components/ComponentTree.tsx` | Дерево объектов сцены; CSG-результат раскрывается в детей из Build Tree, выбор ребёнка → `ui-store.selectedChild` — Фаза 9.1 |
 | `src/csg/rebuildOps.ts` | `applyMoveDelta`, `applyMirrorToTransform`, `applyAlignToTransform` |
 | `src/csg/worker.ts` | WASM worker — manifold-3d операции, типобезопасные интерфейсы |
 | `src/csg/worker-client.ts` | Promise-обёртка над воркером |
