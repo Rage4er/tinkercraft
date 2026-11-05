@@ -13,7 +13,7 @@
 | 9.3 | Пересборка CSG при смене `params` | ✅ (`store/edit-child.ts`, операция `edit_child_params`) |
 | 9.6 | Undo/redo + сериализация правки | ✅ (воспроизведение дерева по истории в `rebuildBuildTree`, `.3dtc` round-trip) |
 | 9.4 | Timeline edit | ✅ v1 — ✎ у `add_shape`/`edit_child_params` ведёт к форме цели (append-only); правка прочих операций = 9.5 |
-| 9.5 | Edit fillet/extrude/mirror | 🔲 требует переписывания истории (пересчёт сохранённых мешей `group` после шага N) |
+| 9.5 | Edit fillet/extrude/mirror/move | 📐 дизайн — `docs/PHASE_9_5_DESIGN.md` (append + проекция истории, каскад замороженных CSG); ждёт утверждения |
 | 9.7 | Visual feedback | ✅ минимум (текст «Пересчёт CSG…»/«Проверка…») |
 | 9.8 | Зеркальные дети | ✅ зеркальный примитив = primitive + `mirrored[]` (baked без params по-прежнему только просмотр) |
 | 9.9 | Индикатор доступности правки | ✅ `checkChildEditable` в панели (не `csgValid` из ideas: проверяется согласованность дерева и меша) |

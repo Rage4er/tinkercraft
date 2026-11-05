@@ -250,6 +250,7 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 
 - `ARCHITECTURE_TRANSFORMS.md` — единая модель трансформов (Фаза 8)
 - `ARCHITECTURE_RENDER.md` — единый источник данных и отрисовки (Фаза 8.5)
+- `docs/PHASE_9_5_DESIGN.md` — Фаза 9.5: дизайн правки прошлых шагов (fillet/move/mirror/extrude), каскад CSG
 - `docs/PHASE_9_DESIGN.md` — Фаза 9: решения (операция с результатом, вложенные CSG), риски, статус подзадач
 - `CODE_REVIEW.md` — результаты код-ревью с приоритетами
 - `DEVELOPMENT_PLAN.md` — план разработки (Фазы 0–7)
