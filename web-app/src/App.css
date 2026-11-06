@@ -326,7 +326,7 @@ body {
 
 /* ---- Left panel ---- */
 .panel-left {
-  width: 170px;
+  width: 320px;
   background: var(--bg-panel);
   border-right: 1px solid var(--border);
   display: flex;
@@ -403,7 +403,7 @@ body {
 /* ---- Shape grid ---- */
 .shape-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, 1fr);
   gap: 3px;
   padding: 3px 5px;
 }
