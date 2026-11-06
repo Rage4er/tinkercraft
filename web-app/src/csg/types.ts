@@ -397,6 +397,15 @@ export interface TreeNode {
    * Используется primitive- и baked-нодами.
    */
   localTransform?: TransformNR
+  /**
+   * NESTED-MOVED-EDIT: только boolean-узлы. TRS₀ — система, в которой лежат листья
+   * поддерева (трансформ на момент создания CSG / копирования дерева). Пока узел — корень,
+   * `localTransform` следует за объектом (move/rotate/scale), листья не трогаются; когда
+   * узел становится вложенным, воркер переносит его результат на
+   * Mat(localTransform)·Mat(originTransform)⁻¹ (сдвиг ДО объединения). Нет — старое дерево
+   * (поправка не применяется).
+   */
+  originTransform?: TransformNR
 
   // ── Baked nodes (imported STL, non-manifold) ──
   /** Vertex data for baked geometry */

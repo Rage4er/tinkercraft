@@ -63,6 +63,7 @@ try {
   await chevron.click()
 
   // вложенный CSG, сдвинутый до объединения: двигаем результат по X и объединяем с цилиндром
+  // (до NESTED-MOVED-EDIT — замки nested_moved, теперь — правится)
   await page.locator('.ct-item[data-object-id] .ct-name').click()
   const posX = page.locator('.panel-right input.props-input').first()
   await posX.fill('60')
@@ -78,21 +79,18 @@ try {
   await page.waitForFunction(() => document.querySelectorAll('.ct-item[data-object-id]').length === 1, null, { timeout: 15000 })
   await page.locator('.ct-item[data-object-id] .ct-chevron').click()
 
-  // у детей появляются замки с причиной; вложенная операция замка не получает
-  await page.waitForSelector('[data-testid=ct-lock]', { timeout: 15000 })
-  const reasons = await page.locator('[data-testid=ct-lock]').evaluateAll((els) => els.map((e) => e.getAttribute('data-reason')))
-  if (!reasons.every((r) => r === 'nested_moved')) fail('причины замков: ' + reasons.join(','))
-  const lockTitle = await page.locator('[data-testid=ct-lock]').first().getAttribute('title')
-  if (!lockTitle?.includes('Правка недоступна') || !lockTitle.includes('сдвинутый')) fail('подсказка замка: ' + lockTitle)
-
-  // выбор заблокированного ребёнка → сообщение с причиной, а не форма
+  // NESTED-MOVED-EDIT: вложенный CSG, сдвинутый до объединения, больше не заблокирован —
+  // замков нет, ребёнок вложенного CSG открывает форму параметров (правка — e2e:nested-moved-edit)
+  await page.waitForFunction(() => document.querySelectorAll('.ct-child').length >= 2, null, { timeout: 15000 })
+  await page.waitForTimeout(1500)                                     // проверка согласованности корня (9.9)
+  if ((await page.locator('[data-testid=ct-lock]').count()) !== 0) {
+    const reasons = await page.locator('[data-testid=ct-lock]').evaluateAll((els) => els.map((e) => e.getAttribute('data-reason')))
+    fail('у сдвинутого вложенного CSG не должно быть замков: ' + reasons.join(','))
+  }
   await page.locator('.ct-child', { hasText: 'Цилиндр' }).click()
-  await page.locator('[data-testid=child-not-editable]').waitFor({ timeout: 5000 })
-  if ((await page.locator('[data-testid=child-form]').count()) !== 0) fail('форма не должна показываться')
-  if ((await page.locator('.panel-right input.props-input').count()) !== 0) fail('поля ввода не должны показываться')
-  const body = await page.locator('[data-testid=child-not-editable]').innerText()
-  if (!body.includes('сдвинутый')) fail('причина не показана: ' + body)
-  if (shot) await page.screenshot({ path: shot.replace(/\.png$/, '-locked.png') })
+  await page.locator('[data-testid=child-form]').waitFor({ timeout: 5000 })
+  if ((await page.locator('[data-testid=child-not-editable]').count()) !== 0) fail('вместо формы — сообщение «правка недоступна»')
+  if (shot) await page.screenshot({ path: shot.replace(/\.png$/, '-nested.png') })
 
   if (errors.length) fail('ошибки в консоли:\n' + errors.join('\n'))
   console.log('e2e tree OK')

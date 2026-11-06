@@ -4,7 +4,7 @@
 // isolated functions for better readability and testability.
 // ============================================================
 
-import { buildSRTMatrixAroundCenter, buildTransformMatrix } from './worker-matrix'
+import { buildSRTMatrixAroundCenter, buildTransformMatrix, relativeTransformMatrix } from './worker-matrix'
 // Фаза 8, Этап 6.5: единая формула центрирования (объёмный центроид) —
 // та же функция, что использует frontend (store/helpers реэкспортирует её).
 import { centerMassAtOrigin } from './geometry-utils'
@@ -593,6 +593,8 @@ export interface RebuildTreeNodeMessage {
     shapeType?: string
     params?: Record<string, number>
     localTransform?: { x: number; y: number; z: number; rotX: number; rotY: number; rotZ: number; scaleX: number; scaleY: number; scaleZ: number }
+    /** NESTED-MOVED-EDIT: TRS₀ boolean-узла — система, в которой лежат его листья */
+    originTransform?: { x: number; y: number; z: number; rotX: number; rotY: number; rotZ: number; scaleX: number; scaleY: number; scaleZ: number }
     vertices?: number[]
     indices?: number[]
     normals?: number[]
@@ -748,11 +750,20 @@ export async function handleRebuildTreeNode(msg: RebuildTreeNodeMessage): Promis
           const centered = m.transform(centerMatrix)
           m.delete()
           m = centered
-        } else {
-          // Inner boolean: pass-through. Return the boolean result as-is in world
-          // coordinates. The ROOT boolean will center the final result.
-          // See comment above for details.
+        } else if (id !== rootId && nd.originTransform && nd.localTransform) {
+          // NESTED-MOVED-EDIT: листья вложенного CSG лежат в системе его создания
+          // (originTransform = TRS₀), а перед объединением объект стоял в localTransform
+          // (TRS_cur — сдвиг/поворот/масштаб до объединения). Результат переносим
+          // M = Mat(TRS_cur)·Mat(TRS₀)⁻¹; не сдвинутый CSG — identity (без изменений).
+          const corr = relativeTransformMatrix(nd.localTransform, nd.originTransform)
+          if (corr) {
+            const moved = m.transform(corr)
+            m.delete()
+            m = moved
+          }
         }
+        // Inner boolean без originTransform (старое дерево): результат как есть в мировых
+        // координатах системы создания — корень центрирует итог (см. комментарий выше).
       }
     }
 
