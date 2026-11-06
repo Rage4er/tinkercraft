@@ -136,17 +136,9 @@ export const TOOLTIP_DATA: Record<string, TooltipData> = {
   mirror_xy: { labelKey: 'mirror.xy', shortcut: 'B', descriptionKey: 'tooltips.mirrorXy' },
 
   // --- Align (9 кнопок: X/Y/Z × min/center/max) ---
-  align_x_min: { labelKey: 'align.x_min', descriptionKey: 'tooltips.alignXMin' },
-  align_x_center: { labelKey: 'align.x_center', descriptionKey: 'tooltips.alignXCenter' },
-  align_x_max: { labelKey: 'align.x_max', descriptionKey: 'tooltips.alignXMax' },
-  align_y_min: { labelKey: 'align.y_min', descriptionKey: 'tooltips.alignYMin' },
-  align_y_center: { labelKey: 'align.y_center', descriptionKey: 'tooltips.alignYCenter' },
-  align_y_max: { labelKey: 'align.y_max', descriptionKey: 'tooltips.alignYMax' },
-  align_z_min: { labelKey: 'align.z_min', descriptionKey: 'tooltips.alignZMin' },
-  align_z_center: { labelKey: 'align.z_center', descriptionKey: 'tooltips.alignZCenter' },
-  align_z_max: { labelKey: 'align.z_max', descriptionKey: 'tooltips.alignZMax' },
 
   // --- CSG operations ---
+  align_tool: { labelKey: 'alignMode.button', descriptionKey: 'tooltips.alignTool' },
   csg_union: { labelKey: 'csg.union', shortcut: 'U', descriptionKey: 'tooltips.csgUnion' },
   csg_subtract: { labelKey: 'csg.subtract', shortcut: 'X', descriptionKey: 'tooltips.csgSubtract' },
   csg_intersect: { labelKey: 'csg.intersect', shortcut: 'I', descriptionKey: 'tooltips.csgIntersect' },

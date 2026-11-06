@@ -45,7 +45,7 @@ async function renderToolbar(lang: 'ru' | 'en'): Promise<HTMLButtonElement[]> {
         onUndo={noop} onRedo={noop} onCopy={noop} onPaste={noop} onDelete={noop}
         onFitView={noop} onResetView={noop} onToggleCamera={noop} onGizmo={noop} onToggleRuler={noop}
         onMirror={noop} onPreviewMirror={noop} onPreviewMirrorEnd={noop}
-        onAlign={noop} onCsg={noop} onToggleTheme={noop} onClearScene={noop}
+        alignActive={false} onAlignMode={noop} onCsg={noop} onToggleTheme={noop} onClearScene={noop}
       />,
     )
   })
@@ -56,8 +56,8 @@ describe('Toolbar aria-label (ALIGN-REVIT)', () => {
   for (const lang of ['ru', 'en'] as const) {
     it(`${lang}: у всех кнопок тулбара непустой и уникальный aria-label`, async () => {
       const buttons = await renderToolbar(lang)
-      // file 5 + edit 2+3 + view 3 + gizmo 4 (с «выход») + ruler 1 + mirror 3 + align 9 + csg 3 + theme 1 + clear 1
-      expect(buttons.length).toBe(35)
+      // file 5 + edit 2+3 + view 3 + gizmo 4 (с «выход») + ruler 1 + mirror 3 + align 1 (ALIGN-UI-REVIT) + csg 3 + theme 1 + clear 1
+      expect(buttons.length).toBe(27)
       const names = buttons.map((b) => b.getAttribute('aria-label') ?? '')
       const empty = buttons.filter((b) => !(b.getAttribute('aria-label') ?? '').trim()).map((b) => b.outerHTML.slice(0, 80))
       expect(empty).toEqual([])
@@ -74,7 +74,7 @@ describe('Toolbar aria-label (ALIGN-REVIT)', () => {
 
   it('кнопки, на которые опираются e2e, находятся по имени', async () => {
     const names = new Set((await renderToolbar('ru')).map((b) => b.getAttribute('aria-label')))
-    for (const key of ['mirror.yz', 'actions.import', 'align.x_min', 'align.z_max', 'csg.union']) {
+    for (const key of ['mirror.yz', 'actions.import', 'alignMode.button', 'csg.union']) {
       expect(names.has(i18n.t(key))).toBe(true)
     }
   })

@@ -1,7 +1,6 @@
 import type { GizmoMode } from "./Viewport3D";
 import { useTranslation } from "react-i18next";
 import MirrorButtons from "./MirrorButtons";
-import AlignButtons from "./AlignButtons";
 import CsgButtons from "./CsgButtons";
 import IconButton from "./IconButton";
 import ToolbarRowSplit from "./ToolbarRowSplit";
@@ -27,6 +26,7 @@ import {
   TCLogoIcon,
   PerspectiveIcon,
   ThemeIcon,
+  AlignToolIcon,
 } from "./icons";
 import { useToolbarLayout } from "../hooks/useToolbarLayout";
 import type { ToolbarGroup } from "../utils/toolbar-layout";
@@ -44,6 +44,7 @@ export default function Toolbar({
   rulerActive,
   canMirror,
   canAlign,
+  alignActive,
   canCsg,
   theme,
   onOpen,
@@ -64,7 +65,7 @@ export default function Toolbar({
   onMirror,
   onPreviewMirror,
   onPreviewMirrorEnd,
-  onAlign,
+  onAlignMode,
   onCsg,
   onToggleTheme,
   onClearScene,
@@ -81,6 +82,8 @@ export default function Toolbar({
   rulerActive: boolean;
   canMirror: boolean;
   canAlign: boolean;
+  /** Режим выравнивания активен (ALIGN-UI-REVIT) */
+  alignActive: boolean;
   canCsg: boolean;
   theme: "dark" | "light";
   onOpen: () => void;
@@ -101,7 +104,8 @@ export default function Toolbar({
   onMirror: (plane: "XY" | "XZ" | "YZ") => void;
   onPreviewMirror: (plane: "XY" | "XZ" | "YZ") => void;
   onPreviewMirrorEnd: () => void;
-  onAlign: (axis: "X" | "Y" | "Z", anchor: "min" | "center" | "max") => void;
+  /** Кнопка «Выровнять»: вход в режим / выход из него */
+  onAlignMode: () => void;
   onCsg: (op: "union" | "subtract" | "intersect") => void;
   onToggleTheme: () => void;
   onClearScene: () => void;
@@ -116,7 +120,7 @@ export default function Toolbar({
     { id: "gizmo", buttonCount: 4 },
     { id: "ruler", buttonCount: 1 },
     { id: "mirror", buttonCount: 3 },
-    { id: "align", buttonCount: 9 },
+    { id: "align", buttonCount: 1 },
     { id: "csg", buttonCount: 3 },
     { id: "theme", buttonCount: 1 },
     { id: "clear", buttonCount: 1 },
@@ -215,7 +219,20 @@ export default function Toolbar({
       <div className="toolbar-separator" />
 
       {/* Group 7: Align */}
-      <AlignButtons disabled={!canAlign} onAlign={onAlign} maxRows={getRows("align")} />
+      <ToolbarRowSplit
+        rows={getRows("align")}
+        buttons={[
+          <IconButton
+            key="align"
+            icon={<AlignToolIcon size={32} />}
+            label={t("alignMode.button")}
+            onClick={onAlignMode}
+            disabled={!canAlign && !alignActive}
+            tooltip={TOOLTIP_DATA.align_tool}
+            buttonVariant={alignActive ? "active" : "default"}
+          />,
+        ]}
+      />
       <div className="toolbar-separator" />
 
       {/* Group 8: CSG */}
