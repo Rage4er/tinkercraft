@@ -9,11 +9,37 @@
 
 ## [Unreleased]
 
+---
+
+## [1.3.1] — 2026-11-06
+
+### Added
+- **ALIGN-UI-REVIT:** режим выравнивания (одна кнопка, выбор грани/плоскости, множественное, Esc/правый клик). `solvePlaneAlignDelta` — произвольная плоскость. 9 старых кнопок убраны.
+
+### Removed
+- `release.yml` — остаток CaDoodle (Java), не относится к Web.
+
 ### Fixed
+- `NumInput`: `-0.0` → `0` (`formatNum`, −0.04 при одном знаке).
+- `PropertiesPanel`: уникальные `id` (`num-input-pos-*`, `num-input-rot-*`, `num-input-scale-*`), `label` ↔ `id`.
+
+### Known Limitations
+- `NESTED-MOVED-EDIT`, `ALIGN-PLANE-RESOLVE`, `CI-DEDUP`, `CI-E2E` — после.
+
+### Подробно
+
+#### Added
+- **ALIGN-UI-REVIT — режим выравнивания как в Revit (одна кнопка):** кнопка тулбара «Выровнять» (иконка — два столбика разной высоты от одной плоскости) включает режим (`store/align-mode.ts`: `alignMode` + `startAlignMode` / `setPlane` / `setHoveredFace` / `clickFace` / `applyAlignB` / `toggleMultiple` / `exitAlignMode`). Плоскость A — клик по грани объекта (мировые нормаль и точка) или X / Y / Z в панели `AlignPanel` (мировые плоскости YZ / XZ / XY через начало координат); затем клик по грани B — B сдвигается вдоль нормали плоскости, его грань ложится в плоскость A (шаг «Переместить» в истории — воспроизводится и правится ✎). Выбор грани B (`helpers.solvePlaneAlignDelta`): кликнутая грань параллельна плоскости (≤ 1°) — встаёт именно она; не параллельна — крайняя точка B по нормали со стороны, куда смотрит грань (знак dot); протяжённость B — та же реальная геометрия, что у ALIGN-REVIT (`worldProjectionRange`: вершины через полный TRS, без вершин — OBB). Raycast по треугольнику (`components/align-picking.ts`: `pickFace`, `planarFaceTriangles`), подсветка под курсором всей плоской грани (синяя) и выбранной плоскости A (жёлтая), наведение — throttle 50 мс, отсечение по boundingSphere/Box в `Mesh.raycast`. Галочка «Множественное» — после B режим и плоскость остаются. Esc (`hooks/useAlignModeKeys.ts`, capture — выделение не сбрасывается), правый клик, «Готово» — выход. Курсор `crosshair`. Подсказки в статус-баре и панели (ru/en). Тесты: +21 (`__tests__/align-ui.test.tsx` — 16: кнопка, режим, raycast по настоящим мешам Three.js, X/Y/Z, выравнивание на WASM, множественное, Esc, подсказки ru/en; `store/helpers.test.ts` — 5: правила выбора грани B); e2e `pnpm e2e:align-ui-revit`
+
+#### Changed
+- **e2e `align-obb` — через режим «Выровнять»:** повёрнутый цилиндр → плоскость = грань куба, повёрнутый куб → плоскость XY (проверка реальной геометрии та же); `findAlignFace` в `e2e/helpers.mjs` ищет грань на экране по подсветке. `toolbar-aria`: 27 кнопок (было 35)
+
+#### Fixed
 - **UX-NUMINPUT — `NumInput` показывал «-0.0»:** значение, которое после округления до точности поля равно нулю (−0, −1e-6, −0.04 при одном знаке), показывается без минуса (`formatNum`; только отображение — значение не меняется; ввод «-0» отдаётся как `0`). Точность поля прежняя (1 знак у позиции/поворота: «0.0»)
 - **UX-NUMINPUT — одинаковые `id` полей панели свойств:** у позиции и масштаба были одинаковые `num-input-X/Y/Z` (метки «X/Y/Z»), `<label>` масштаба указывала на поле позиции. Теперь `num-input-pos-*`, `num-input-rot-*`, `num-input-scale-*` (`NumInput` принимает `id`; по умолчанию — `num-input-<label>`). e2e обращаются к полю позиции по `#num-input-pos-*` (раньше — `.first()`). Тест: `__tests__/num-input.test.tsx` (+7, проверен откатом)
 
-### Removed
+#### Removed
+- **9 кнопок выравнивания (X/Y/Z × min/center/max)** — из тулбара и из панели свойств (`components/AlignButtons.tsx` удалён, ключи `align.x_min`… и подсказки `tooltips.alignX…` — тоже). Действие `alignSelected` в сторе осталось: шаги `align` старых проектов воспроизводятся и пересчитываются каскадом (re-solve)
 - **`.github/workflows/release.yml`** — остаток сборки Java-приложения CaDoodle (`BowlerStudio/...NameGetter.java`), к TinkerCraft Web не относится; падал на всех тегах (v1.2.0–v1.3.0). Другие workflow от него не зависят (CLEANUP-RELEASE-YML)
 
 ---

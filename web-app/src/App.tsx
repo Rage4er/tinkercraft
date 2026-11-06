@@ -13,6 +13,9 @@ import LeftPanel from "./components/LeftPanel";
 import PropertiesPanel from "./components/PropertiesPanel";
 import ChildPropertiesPanel from "./components/ChildPropertiesPanel";
 import StepPanel from "./components/StepPanel";
+import AlignPanel from "./components/AlignPanel";
+import { useAlignModeStore } from "./store/align-mode";
+import { useAlignModeKeys } from "./hooks/useAlignModeKeys";
 import { useDocumentStore } from "./store/document-store";
 import { useUiStore } from "./store/ui-store";
 import { useShallow } from "zustand/shallow";
@@ -117,7 +120,6 @@ export default function App() {
       exportStl: s.exportStl,
       mirrorSelected: s.mirrorSelected,
       previewMirror: s.previewMirror,
-      alignSelected: s.alignSelected,
       copySelected: s.copySelected,
       pasteClipboard: s.pasteClipboard,
       triggerAutosave: s.triggerAutosave,
@@ -161,7 +163,6 @@ export default function App() {
     exportStl,
     mirrorSelected,
     previewMirror,
-    alignSelected,
     copySelected,
     pasteClipboard,
     triggerAutosave,
@@ -353,6 +354,15 @@ export default function App() {
   // Фаза 9.5.2: сброс выбора шага Timeline (undo до шага, выделение в сцене)
   useSelectedStepGuard();
   const hasSelectedStep = useUiStore((s) => s.selectedStep !== null);
+  // ALIGN-UI-REVIT: режим выравнивания (одна кнопка «Выровнять»)
+  const alignActive = useAlignModeStore((s) => s.alignMode !== null);
+  useAlignModeKeys(); // Esc → выход из режима (capture, раньше общего обработчика)
+  const startAlignMode = useAlignModeStore((s) => s.startAlignMode);
+  const exitAlignMode = useAlignModeStore((s) => s.exitAlignMode);
+  // линейка или гизмо включены во время режима — выходим из режима
+  useEffect(() => {
+    if (rulerActive || gizmoMode !== "none") useAlignModeStore.getState().exitAlignMode();
+  }, [rulerActive, gizmoMode]);
   const handleTimelineEdit = useTimelineEdit();
   const hasSelectedChild = useUiStore((s) => s.selectedChild !== null);
 
@@ -370,7 +380,8 @@ export default function App() {
   // воркер; незамкнутый меш → уведомление errors.csgNonManifold.
   const canCsg = selectedIds.length === 2 && !busy;
   const canMirror = selectedIds.length > 0 && !busy;
-  const canAlign = selectedIds.length >= 2 && !busy;
+  // ALIGN-UI-REVIT: «Выровнять» — режим (плоскость → грань B), нужен хотя бы один объект
+  const canAlign = objectList.length > 0 && !busy;
   const canResize =
     selectedIds.length === 1 &&
     firstSelected?.shapeType !== "import_mesh" &&
@@ -490,6 +501,7 @@ export default function App() {
         rulerActive={rulerActive}
         canMirror={canMirror}
         canAlign={canAlign}
+        alignActive={alignActive}
         canCsg={canCsg}
         theme={theme}
         onOpen={openProject}
@@ -517,7 +529,7 @@ export default function App() {
         onMirror={mirrorSelected}
         onPreviewMirror={handlePreviewMirror}
         onPreviewMirrorEnd={handlePreviewMirrorEnd}
-        onAlign={alignSelected}
+        onAlignMode={() => (alignActive ? exitAlignMode() : startAlignMode())}
         onCsg={csgBoolean}
         onToggleTheme={() => setTheme(theme === "dark" ? "light" : "dark")}
         onClearScene={clearScene}
@@ -621,13 +633,12 @@ export default function App() {
         <div className="panel-right">
           <div className="props-header">{t("properties.header")}</div>
 
-          {hasSelectedStep ? <StepPanel /> : hasSelectedChild ? <ChildPropertiesPanel /> : <PropertiesPanel
+          {alignActive ? <AlignPanel /> : hasSelectedStep ? <StepPanel /> : hasSelectedChild ? <ChildPropertiesPanel /> : <PropertiesPanel
             firstSelected={firstSelected}
             busy={busy}
             selectedIds={selectedIds}
             canResize={canResize}
             canCsg={canCsg}
-            canAlign={canAlign}
             objectList={objectList}
             operationsLength={operations.length}
             fileName={fileName}
@@ -640,7 +651,6 @@ export default function App() {
             onResizeDim={handleResizeDim}
             onResizeObject={resizeObject}
             onCsg={csgBoolean}
-            onAlign={alignSelected}
             onSetColor={setColor}
             onToggleVisible={toggleVisible}
             onShowProjects={() => setShowPM(true)}

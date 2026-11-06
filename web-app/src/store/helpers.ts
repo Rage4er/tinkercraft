@@ -183,6 +183,89 @@ export function solveAlignDeltas(
   return deltas
 }
 
+// ---- Align: плоскость (ALIGN-UI-REVIT) ----
+
+/** Плоскость выравнивания в мире: единичная нормаль и точка на плоскости. */
+export interface WorldPlane { normal: Vec3; point: Vec3 }
+
+/** Плоскость по оси X/Y/Z — мировая плоскость через начало координат (X → YZ, Y → XZ, Z → XY). */
+export function axisPlane(axis: 'X' | 'Y' | 'Z'): WorldPlane {
+  return {
+    normal: { x: axis === 'X' ? 1 : 0, y: axis === 'Y' ? 1 : 0, z: axis === 'Z' ? 1 : 0 },
+    point: { x: 0, y: 0, z: 0 },
+  }
+}
+
+const dot3 = (a: Vec3, b: Vec3): number => a.x * b.x + a.y * b.y + a.z * b.z
+
+function unit(v: Vec3): Vec3 {
+  const l = Math.hypot(v.x, v.y, v.z)
+  return l > 0 ? { x: v.x / l, y: v.y / l, z: v.z / l } : { x: 0, y: 0, z: 1 }
+}
+
+/**
+ * Протяжённость реальной геометрии объекта вдоль нормали `n` (min/max проекции
+ * `n·world`). Та же геометрия, что у `computeWorldAABB` (ALIGN-REVIT): вершины через
+ * полный TRS; без вершин — 8 углов OBB из params. Для осей совпадает с
+ * `computeWorldAABB` (min.x/max.x и т.д.).
+ */
+export function worldProjectionRange(obj: SceneObject, n: Vec3): { min: number; max: number } {
+  const t = obj.transform
+  let min = Infinity, max = -Infinity
+  if (obj.vertices.length === 0) {
+    for (const c of obbCorners(localParamsBox(obj), t)) {
+      const s = dot3(c, n); if (s < min) min = s; if (s > max) max = s
+    }
+    return { min, max }
+  }
+  const [m00, m01, m02, m10, m11, m12, m20, m21, m22] = computeRSMatrix(
+    { rotX: t.rotX, rotY: t.rotY, rotZ: t.rotZ }, { scaleX: t.scaleX, scaleY: t.scaleY, scaleZ: t.scaleZ },
+  )
+  // n·(pos + M·v) = n·pos + (Mᵀn)·v
+  const kx = m00 * n.x + m10 * n.y + m20 * n.z
+  const ky = m01 * n.x + m11 * n.y + m21 * n.z
+  const kz = m02 * n.x + m12 * n.y + m22 * n.z
+  const v = obj.vertices
+  for (let i = 0; i < v.length; i += 3) {
+    const s = kx * v[i] + ky * v[i + 1] + kz * v[i + 2]
+    if (s < min) min = s; if (s > max) max = s
+  }
+  const off = n.x * t.x + n.y * t.y + n.z * t.z
+  return { min: min + off, max: max + off }
+}
+
+/** Порог «грань параллельна плоскости»: |cos| ≥ cos 1°. */
+export const ALIGN_PARALLEL_COS = Math.cos((1 * Math.PI) / 180)
+
+/**
+ * Сдвиг объекта B (мировой вектор вдоль нормали плоскости), чтобы его грань легла в
+ * плоскость A (режим выравнивания ALIGN-UI-REVIT). Выбор грани B:
+ * 1. кликнутая грань B параллельна плоскости (|cos| ≥ cos 1°) — в плоскость встаёт
+ *    ИМЕННО она (точка клика лежит на грани), в т.ч. «ступенька» внутри CSG;
+ * 2. не параллельна — крайняя точка B по нормали плоскости, со стороны, куда смотрит
+ *    кликнутая грань (знак dot): грань «по направлению» к +n → max, к −n → min;
+ * 3. без клика (или грань ⟂ плоскости) — ближайшая к плоскости крайняя точка B.
+ * Протяжённость B — та же реальная геометрия, что у `solveAlignDeltas` (`worldProjectionRange`).
+ */
+export function solvePlaneAlignDelta(
+  obj: SceneObject,
+  plane: WorldPlane,
+  pick?: { normal: Vec3; point: Vec3 },
+): Vec3 {
+  const n = unit(plane.normal)
+  const p0 = dot3(n, plane.point)
+  let s: number
+  const c = pick ? dot3(unit(pick.normal), n) : 0
+  if (pick && Math.abs(c) >= ALIGN_PARALLEL_COS) {
+    s = dot3(n, pick.point) - p0
+  } else {
+    const r = worldProjectionRange(obj, n)
+    const lo = r.min - p0, hi = r.max - p0
+    s = c > 1e-9 ? hi : c < -1e-9 ? lo : (Math.abs(lo) <= Math.abs(hi) ? lo : hi)
+  }
+  return { x: -s * n.x, y: -s * n.y, z: -s * n.z }
+}
+
 /** Returns bbox center for a vertex buffer (no mutation). */
 export function computeCenter(vertices: Float32Array): Vec3 {
   const { min, max } = computeAABB(vertices)

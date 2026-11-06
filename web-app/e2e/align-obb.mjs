@@ -1,15 +1,16 @@
 // e2e/align-obb.mjs — ALIGN-REVIT: выравнивание по реальной геометрии с учётом поворота.
-//  1) куб 20³ (якорь) + цилиндр (r 10, h 20), повёрнутый на rotY 45 → выделить цилиндр,
-//     Shift — куб (якорь — последний) → кнопка тулбара «X мин» (по aria-label) →
-//     X min реальной геометрии цилиндра = X min куба: pivot цилиндра = minX куба + 14.1
-//     (r·cos45 + h/2·sin45), а не + 10 (рамка без поворота);
-//  2) второй куб, повёрнутый rotX 45 → «Z макс» к якорю → pivot Z = 10 − 14.1 = −4.1
-//     (ребро у плоскости), а не 0;
-//  3) уведомлений нет; undo (кнопка «Отменить») возвращает цилиндр на место до выравнивания.
-// Кнопки — по aria-label (`toolbarButton`), не по индексу.
+// С ALIGN-UI-REVIT — через режим «Выровнять» (9 кнопок min/center/max убраны):
+//  1) куб A 20³ + цилиндр (r 10, h 20), повёрнутый на rotY 45 → режим → плоскость = правая
+//     грань A (+X, x = 10) → клик по грани цилиндра, смотрящей в +X → X max реальной
+//     геометрии цилиндра = 10: pivot = 10 − 14.1 (r·cos45 + h/2·sin45), а не 10 − 10
+//     (рамка без поворота);
+//  2) второй куб, повёрнутый rotX 45 → режим → Z (плоскость XY) → клик по грани, смотрящей
+//     вверх → верхнее ребро в z = 0: pivot Z = −14.1 (половина диагонали), а не −10;
+//  3) уведомлений нет; undo (кнопка «Отменить») возвращает куб на место.
+// Кнопки — по aria-label (`toolbarButton`), грани — сканированием подсветки (`findAlignFace`).
 // Запуск: `pnpm dev` в одном терминале, `pnpm e2e:align-obb` в другом.
 // Необязательный аргумент — путь для скриншота: `node e2e/align-obb.mjs /tmp/align.png`.
-import { openApp, toolbarButton } from './helpers.mjs'
+import { openApp, toolbarButton, findAlignFace } from './helpers.mjs'
 
 const shot = process.argv[2]
 const { browser, page, errors } = await openApp()
@@ -50,17 +51,16 @@ async function setField(id, label, value) {
   await f.fill(String(value)); await f.press('Enter')
   await waitSteps(n + 1)
 }
-/** Выделить цель, затем якорь (Shift) → кнопка тулбара по aria-label → один новый шаг. */
-async function align(target, anchor, button) {
-  await pick(target)
-  await row(anchor).click({ modifiers: ['Shift'] })
-  const btn = toolbarButton(page, button)
-  if ((await btn.count()) !== 1) fail(`кнопка тулбара «${button}» не найдена по aria-label`)
-  if (await btn.isDisabled()) fail(`кнопка «${button}» неактивна при двух выделенных`)
+const panel = page.locator('[data-testid=align-panel]')
+/** Клик по точке в режиме выравнивания → новый шаг истории. */
+async function clickStep(p) {
   const n = await steps()
-  await btn.click()
+  await page.mouse.click(p.x, p.y)
   await waitSteps(n + 1)
-  if (!(await page.locator('.tl-item').last().textContent())?.includes('Выровнять')) fail('последний шаг — не «Выровнять»')
+}
+async function startMode() {
+  await toolbarButton(page, 'Выровнять').click()
+  await panel.waitFor({ timeout: 5000 })
 }
 
 try {
@@ -70,43 +70,51 @@ try {
   await pick(cube)
   const cube0 = { x: await num('X'), z: await num('Z') }
 
-  // 1) повёрнутый цилиндр → X мин
+  // 1) повёрнутый цилиндр → плоскость = правая грань куба (+X, x = 10)
   const cyl = await add('Цилиндр')
   await setField(cyl, 'rotY', 45)
   await setField(cyl, 'Y', 40)                                           // не пересекаться с кубом
-  await pick(cyl)
-  const cylX0 = await num('X')
-  await align(cyl, cube, 'X мин')
+  await page.evaluate(() => document.activeElement?.blur()); await page.keyboard.press('KeyF'); await page.waitForTimeout(800)
+  await startMode()
+  const faceA = await findAlignFace(page, cube, (v) => v[0] > 0.95)
+  await page.mouse.click(faceA.x, faceA.y)
+  await page.waitForFunction(() => document.querySelector('[data-testid=align-plane]')?.textContent?.includes('грань'), null, { timeout: 5000 })
+  await clickStep(await findAlignFace(page, cyl, (v) => v[0] > 0.1 && v[0] < 0.95))
+  await panel.waitFor({ state: 'detached', timeout: 5000 })
   await pick(cyl)
   const cylX = await num('X')
-  const expectX = cube0.x - 10 + (10 * Math.SQRT1_2 + 10 * Math.SQRT1_2)  // minX куба + r·cos45 + h/2·sin45
-  if (!near(cylX, expectX)) fail(`цилиндр X после «X мин»: ${cylX}, ожидалось ≈ ${expectX.toFixed(1)} (без поворота было бы ${cube0.x})`)
+  const expectX = cube0.x + 10 - (10 * Math.SQRT1_2 + 10 * Math.SQRT1_2)  // maxX куба − (r·cos45 + h/2·sin45)
+  if (!near(cylX, expectX)) fail(`цилиндр X: ${cylX}, ожидалось ≈ ${expectX.toFixed(1)} (без поворота было бы ${cube0.x})`)
   await pick(cube)
-  if ((await num('X')) !== cube0.x) fail(`якорь сдвинулся: ${await num('X')} (было ${cube0.x}); цилиндр ${cylX0} → ${cylX}`)
+  if ((await num('X')) !== cube0.x) fail(`куб A сдвинулся: ${await num('X')}`)
 
-  // 2) повёрнутый куб → Z макс
+  await page.evaluate(() => document.activeElement?.blur()); await page.keyboard.press('KeyF'); await page.waitForTimeout(800)   // вписать в экран — грани крупнее
+  // 2) повёрнутый куб → Z (плоскость XY)
   const k2 = await add('Куб')
   await setField(k2, 'rotX', 45)
   await setField(k2, 'Y', -40)
-  await align(k2, cube, 'Z макс')
+  await pick(k2)
+  const k2z0 = await num('Z')
+  await startMode()
+  await page.getByRole('radio', { name: 'Z (XY)' }).click()
+  await clickStep(await findAlignFace(page, k2, (v) => v[2] > 0.1 && v[2] < 0.95))
+  await panel.waitFor({ state: 'detached', timeout: 5000 })
   await pick(k2)
   const kz = await num('Z')
-  const expectZ = cube0.z + 10 - 10 * Math.SQRT2                         // maxZ куба − половина диагонали грани
-  if (!near(kz, expectZ)) fail(`куб Z после «Z макс»: ${kz}, ожидалось ≈ ${expectZ.toFixed(1)} (без поворота было бы ${cube0.z})`)
+  const expectZ = -10 * Math.SQRT2                                        // верхнее ребро в z = 0
+  if (!near(kz, expectZ)) fail(`куб Z: ${kz}, ожидалось ≈ ${expectZ.toFixed(1)} (без поворота было бы −10)`)
 
-  // 3) уведомлений нет; undo (Ctrl+Z) ×2 → цилиндр на прежнем X
+  // 3) уведомлений нет; undo → куб на месте
   const toasts = await page.locator('.toast-msg').allTextContents()
   if (toasts.length) fail('уведомления в простом сценарии: ' + toasts.join(' | '))
-  // после выравнивания цилиндра — 4 шага (куб, rotX, Y, align) → 5 отмен = до выравнивания
-  for (let i = 0; i < 5; i++) { await toolbarButton(page, 'Отменить').click(); await page.waitForTimeout(400) }
-  await page.waitForFunction((n) => document.querySelectorAll('.ct-item[data-object-id]').length === n, 2, { timeout: 10000 })
-  await pick(cyl)
-  if (!near(await num('X'), cylX0, 0.001)) fail(`undo: цилиндр X ${await num('X')}, ожидалось ${cylX0}`)
+  await toolbarButton(page, 'Отменить').click(); await page.waitForTimeout(400)
+  await pick(k2)
+  if (!near(await num('Z'), k2z0, 0.001)) fail(`undo: куб Z ${await num('Z')}, ожидалось ${k2z0}`)
 
   if (shot) await page.screenshot({ path: shot })
   const real = errors.filter((e) => !/favicon|DevTools/.test(e))
   if (real.length) fail('ошибки страницы: ' + real.join(' | '))
-  console.log(`E2E ALIGN-OBB: OK — цилиндр rotY45 → X мин: X ${cylX} (≈ ${expectX.toFixed(2)}); куб rotX45 → Z макс: Z ${kz} (≈ ${expectZ.toFixed(2)}); кнопки по aria-label; undo ✓`)
+  console.log(`E2E ALIGN-OBB: OK — цилиндр rotY45 → грань +X куба: X ${cylX} (≈ ${expectX.toFixed(2)}); куб rotX45 → плоскость XY: Z ${kz} (≈ ${expectZ.toFixed(2)}); режим «Выровнять»; undo ✓`)
 } catch (e) {
   console.error('E2E ALIGN-OBB: FAIL —', e.message)
   process.exitCode = 1

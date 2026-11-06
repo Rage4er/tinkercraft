@@ -17,11 +17,46 @@ import {
 } from "./viewport-hooks";
 import { devLogEvent, devLogPointer, devLogTransform } from "../utils/debug";
 import { fmtPoint, fmtPoint2 } from "../utils/debug-format";
+import { useAlignModeStore } from "../store/align-mode";
+import { pickFace, planarFaceTriangles } from "./align-picking";
 
 export type { GizmoMode } from "./viewport-hooks";
 
 // Interaction thresholds
 const DRAG_THRESHOLD_PX = 4;
+/** ALIGN-UI-REVIT: не чаще одного raycast наведения за столько мс */
+const ALIGN_HOVER_THROTTLE_MS = 50;
+
+/** Полупрозрачная подсветка (поверх меша, вне raycast) из мировых треугольников. */
+function makeAlignHighlight(positions: Float32Array, color: number, opacity: number): THREE.Mesh {
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+  const m = new THREE.MeshBasicMaterial({
+    color, transparent: true, opacity, side: THREE.DoubleSide, depthTest: false, depthWrite: false,
+  });
+  const mesh = new THREE.Mesh(g, m);
+  mesh.renderOrder = 999;
+  mesh.raycast = () => { };
+  mesh.userData.alignHighlight = true;
+  return mesh;
+}
+
+/** Плоскость оси X/Y/Z через начало координат (квадрат 400 мм) — подсветка плоскости режима. */
+function axisPlanePositions(axis: "X" | "Y" | "Z"): Float32Array {
+  const s = 200;
+  const q = axis === "X"
+    ? [[0, -s, -s], [0, s, -s], [0, s, s], [0, -s, s]]
+    : axis === "Y"
+      ? [[-s, 0, -s], [s, 0, -s], [s, 0, s], [-s, 0, s]]
+      : [[-s, -s, 0], [s, -s, 0], [s, s, 0], [-s, s, 0]];
+  return new Float32Array([...q[0], ...q[1], ...q[2], ...q[0], ...q[2], ...q[3]]);
+}
+
+function disposeHighlight(scene: THREE.Scene, mesh: THREE.Mesh): void {
+  scene.remove(mesh);
+  mesh.geometry.dispose();
+  (mesh.material as THREE.Material).dispose();
+}
 
 interface DragRect {
   startX: number;
@@ -146,6 +181,62 @@ export default function Viewport3D({
     }
     shapeTypeMapRef.current = map;
   }, [objects, shapeTypeMapRef]);
+
+  // ---- ALIGN-UI-REVIT: режим выравнивания ----
+  const alignMode = useAlignModeStore((s) => s.alignMode);
+  const alignActive = alignMode !== null;
+  const alignActiveRef = useRef(alignActive);
+  useEffect(() => {
+    alignActiveRef.current = alignActive;
+  }, [alignActive]);
+  const alignHoverAtRef = useRef(0);
+  const hovered = alignMode?.hoveredFace ?? null;
+  const alignPlane = alignMode?.plane ?? null;
+
+  /** Грань под курсором (мировые нормаль и точка) или null. */
+  const pickAt = useCallback(
+    (clientX: number, clientY: number) => {
+      const camera = activeCameraRef.current ?? cameraRef.current;
+      const container = containerRef.current;
+      if (!camera || !container) return null;
+      const rect = container.getBoundingClientRect();
+      const x = ((clientX - rect.left) / rect.width) * 2 - 1;
+      const y = -((clientY - rect.top) / rect.height) * 2 + 1;
+      const raycaster = new THREE.Raycaster();
+      raycaster.setFromCamera(new THREE.Vector2(x, y), camera);
+      const meshes: THREE.Mesh[] = [];
+      for (const entry of meshMapRef.current.values()) if (entry.mesh.visible) meshes.push(entry.mesh);
+      return pickFace(raycaster, meshes);
+    },
+    [activeCameraRef, cameraRef, containerRef, meshMapRef],
+  );
+
+  // подсветка грани под курсором (вся плоская грань — то, что встанет в плоскость)
+  useEffect(() => {
+    const scene = sceneRef.current;
+    if (!scene || !hovered) return;
+    const entry = meshMapRef.current.get(hovered.objectId);
+    if (!entry) return;
+    const hl = makeAlignHighlight(planarFaceTriangles(entry.mesh, hovered.triangleIndex), 0x89b4fa, 0.45);
+    scene.add(hl);
+    return () => disposeHighlight(scene, hl);
+  }, [hovered, objects, sceneRef, meshMapRef]);
+
+  // подсветка выбранной плоскости A (грань объекта или плоскость оси)
+  useEffect(() => {
+    const scene = sceneRef.current;
+    if (!scene || !alignPlane) return;
+    let positions: Float32Array | null = null;
+    if ("axis" in alignPlane) positions = axisPlanePositions(alignPlane.axis);
+    else if (alignPlane.triangleIndex !== undefined) {
+      const entry = meshMapRef.current.get(alignPlane.objectId);
+      if (entry) positions = planarFaceTriangles(entry.mesh, alignPlane.triangleIndex);
+    }
+    if (!positions || positions.length === 0) return;
+    const hl = makeAlignHighlight(positions, 0xf9e2af, "axis" in alignPlane ? 0.12 : 0.5);
+    scene.add(hl);
+    return () => disposeHighlight(scene, hl);
+  }, [alignPlane, objects, sceneRef, meshMapRef]);
 
   // ---- Хук 4: Mirror preview ----
   useMirrorPreview(previewObject, mirrorPreviewPlane, sceneRef);
@@ -318,12 +409,22 @@ export default function Viewport3D({
         return;
       }
 
+      // ALIGN-UI-REVIT: подсветка грани при наведении (без нажатых кнопок, throttle)
+      if (alignActiveRef.current && e.buttons === 0) {
+        const now = performance.now();
+        if (now - alignHoverAtRef.current >= ALIGN_HOVER_THROTTLE_MS) {
+          alignHoverAtRef.current = now;
+          const pick = pickAt(e.clientX, e.clientY);
+          useAlignModeStore.getState().setHoveredFace(pick ? { objectId: pick.objectId, triangleIndex: pick.triangleIndex, normal: pick.normal } : null);
+        }
+      }
+
       if (!pointerDownPos.current) return;
       const dx = e.clientX - pointerDownPos.current.x;
       const dy = e.clientY - pointerDownPos.current.y;
       if (Math.hypot(dx, dy) > DRAG_THRESHOLD_PX) isDraggingRef.current = true;
     },
-    [rulerMode, handleRulerPointerMove, cameraRef, containerRef],
+    [rulerMode, handleRulerPointerMove, cameraRef, containerRef, pickAt],
   );
 
   const handlePointerUp = useCallback(
@@ -341,6 +442,24 @@ export default function Viewport3D({
       pointerDownPos.current = null;
 
       if (!start) return;
+
+      // ALIGN-UI-REVIT: в режиме клик — выбор грани (A, затем B), правый клик — выход;
+      // перетаскивание остаётся вращением/панорамой камеры. Выделение не меняется.
+      if (alignActiveRef.current) {
+        const wasDrag = isDraggingRef.current;
+        isDraggingRef.current = false;
+        if (wasDrag) return;
+        const store = useAlignModeStore.getState();
+        if (e.button === 2) {
+          store.exitAlignMode();
+          return;
+        }
+        if (e.button !== 0) return;
+        const pick = pickAt(e.clientX, e.clientY);
+        devLogEvent('align', 'click', { pick: pick ? `${pick.objectId}#${pick.triangleIndex}` : 'none' });
+        if (pick) void store.clickFace(pick);
+        return;
+      }
 
       // If it was a click (not drag) — select object via Raycaster
       if (!isDraggingRef.current) {
@@ -394,6 +513,7 @@ export default function Viewport3D({
       containerRef,
       meshMapRef,
       performDragSelect,
+      pickAt,
     ],
   );
 
@@ -404,6 +524,11 @@ export default function Viewport3D({
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
+      onContextMenu={(e) => { if (alignActiveRef.current) e.preventDefault(); }}
+      style={alignActive ? { cursor: "crosshair" } : undefined}
+      data-align-mode={alignActive ? (alignPlane ? "face-b" : "plane") : undefined}
+      data-align-hover={hovered ? `${hovered.objectId}:${hovered.triangleIndex}` : undefined}
+      data-align-hover-normal={hovered?.normal ? [hovered.normal.x, hovered.normal.y, hovered.normal.z].map((v) => v.toFixed(2)).join(",") : undefined}
     >
       {!workerOk && (
         <div className="viewport-loading">

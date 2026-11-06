@@ -93,10 +93,10 @@ describe('PropertiesPanel — уникальные id полей (UX-NUMINPUT)',
       const noop = (): void => {}
       const h = mount(
         <PropertiesPanel
-          firstSelected={o} busy={false} selectedIds={[o.id]} canResize canCsg={false} canAlign={false}
+          firstSelected={o} busy={false} selectedIds={[o.id]} canResize canCsg={false}
           objectList={[o]} operationsLength={1} fileName={null} currentProjectId={null} currentProjectName={null} modified={false}
           onMoveAxis={noop} onRotAxis={noop} onScaleAxis={noop} onResizeDim={noop} onResizeObject={noop}
-          onCsg={noop} onAlign={noop} onSetColor={noop} onToggleVisible={noop} onShowProjects={noop} onSaveToProject={noop}
+          onCsg={noop} onSetColor={noop} onToggleVisible={noop} onShowProjects={noop} onSaveToProject={noop}
         />,
       )
       const inputs = Array.from(h.querySelectorAll<HTMLInputElement>('input.props-input'))
