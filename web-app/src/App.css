@@ -326,7 +326,7 @@ body {
 
 /* ---- Left panel ---- */
 .panel-left {
-  width: 170px;
+  width: 320px;
   background: var(--bg-panel);
   border-right: 1px solid var(--border);
   display: flex;
@@ -403,7 +403,7 @@ body {
 /* ---- Shape grid ---- */
 .shape-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, 1fr);
   gap: 3px;
   padding: 3px 5px;
 }
@@ -633,6 +633,25 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
   padding-left: 8px;
+}
+
+.tl-edited {
+  color: var(--accent, #89b4fa);
+  font-size: 0.85em;
+}
+
+.tl-edit {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0 4px;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.tl-edit:hover:not(:disabled) {
+  color: var(--accent, var(--text));
 }
 
 .tl-idx {
@@ -1068,6 +1087,64 @@ body {
 
 .ct-del:hover {
   color: var(--accent-red);
+}
+
+/* Фаза 9.1: иконки строк дерева компактнее (панель 168px — при 32px имя схлопывалось) */
+.ct-item .ct-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.ct-item .ct-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.ct-item .ct-icon,
+.ct-item .ct-btn {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.ct-name {
+  min-width: 24px;
+}
+
+/* Фаза 9.1: раскрытие CSG и строки детей */
+.ct-chevron {
+  width: 12px;
+  padding: 0;
+  font-size: 10px;
+  flex-shrink: 0;
+}
+
+.ct-chevron-spacer {
+  display: inline-block;
+  width: 12px;
+  flex-shrink: 0;
+}
+
+.ct-child {
+  border-left: 1px solid var(--border);
+  margin-left: 6px;
+}
+
+.ct-child.ct-readonly .ct-name {
+  font-style: italic;
+  opacity: 0.8;
+}
+
+.ct-child.ct-lock {
+  flex-shrink: 0;
+  font-size: 11px;
+  opacity: 0.8;
+  padding-right: 4px;
+}
+
+.ct-child-selected {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
 }
 
 /* ---- Ruler display ---- */

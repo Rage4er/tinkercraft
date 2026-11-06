@@ -6,6 +6,7 @@ import type {
   SceneObject, ShapeType, ShapeParams, TransformNR, Vec3, MirrorPlane,
 } from '../csg/types'
 import { OBJECT_COLORS } from '../constants'
+import { computeRSMatrix } from '../csg/worker-matrix'
 
 // ---- Mirror list composition (FIX 8.5.12) ----
 
@@ -41,37 +42,145 @@ export function computeAABB(vertices: Float32Array): { min: Vec3; max: Vec3 } {
 }
 
 /**
- * Вычисляет мировую ограничивающую рамку (AABB) объекта.
+ * Мировая рамка объекта по РЕАЛЬНОЙ геометрии с учётом полного TRS (ALIGN-REVIT).
  *
- * Для примитивов — из params + transform.position (надёжно, не зависит от вершин).
- * Для CSG/import — из кэшированного aabb (вершины уже содержат translate).
+ * - Есть вершины (все объекты сцены: примитивы, CSG, импорт) — проекция вершин
+ *   `world = pos + R·S·v` на оси: точная граница меша. Для бокса совпадает с проекцией
+ *   OBB (8 углов); для повёрнутого цилиндра/конуса граница — реальный обод основания,
+ *   а не угол описанного бокса.
+ * - Вершин нет (объект из params, напр. до сборки воркером) — проекция OBB:
+ *   локальная рамка из params → 8 углов → R·S → +pos (`obbWorldAABB`).
  *
- * Важно: obj.aabb кэшируется при создании, но НЕ обновляется при moveObject.
- * Поэтому для примитивов считаем bbox заново из params.
+ * FIX (ALIGN-PRIMITIVE-AABB, ALIGN-REVIT): раньше примитивы считались по params +
+ * позиции без поворота и масштаба, а цилиндр/конус/призма (есть `radius`) — как сфера.
+ * FIX (ALIGN-CSG-AABB, 9.5.2): кэш obj.aabb не используется — он ЛОКАЛЬНЫЙ.
  */
 export function computeWorldAABB(obj: SceneObject): { min: Vec3; max: Vec3 } {
-  // 1. Примитивы — считаем из params + transform (надёжно)
-  if (obj.params && obj.params.width !== undefined && obj.params.height !== undefined && obj.params.depth !== undefined) {
-    const w = obj.params.width / 2
-    const h = obj.params.height / 2
-    const d = obj.params.depth / 2
-    const p = obj.transform
-    return {
-      min: { x: p.x - w, y: p.y - h, z: p.z - d },
-      max: { x: p.x + w, y: p.y + h, z: p.z + d },
-    }
+  if (obj.vertices.length > 0) return worldVerticesAABB(obj.vertices, obj.transform)
+  return obbWorldAABB(localParamsBox(obj), obj.transform)
+}
+
+/**
+ * Локальная рамка примитива из params (система объекта, вершины в origin) — запасной
+ * путь, когда вершин ещё нет. Цилиндрические фигуры — вдоль локальной Z (как
+ * `Manifold.cylinder`).
+ */
+export function localParamsBox(obj: SceneObject): { min: Vec3; max: Vec3 } {
+  const p = obj.params
+  let hx = 0, hy = 0, hz = 0
+  if (p.width !== undefined && p.height !== undefined && p.depth !== undefined) {
+    hx = p.width / 2; hy = p.height / 2; hz = p.depth / 2
+  } else if (p.torusRadius !== undefined && p.tubeRadius !== undefined) {
+    hx = hy = p.torusRadius + p.tubeRadius; hz = p.tubeRadius
+  } else if (p.radius !== undefined && p.height !== undefined) {
+    hx = hy = p.radius; hz = p.height / 2
+  } else if (p.radius !== undefined) {
+    hx = hy = hz = p.radius
   }
-  // 2. Сфера
-  if (obj.params && obj.params.radius !== undefined) {
-    const r = obj.params.radius
-    const p = obj.transform
-    return {
-      min: { x: p.x - r, y: p.y - r, z: p.z - r },
-      max: { x: p.x + r, y: p.y + r, z: p.z + r },
-    }
+  return { min: { x: -hx, y: -hy, z: -hz }, max: { x: hx, y: hy, z: hz } }
+}
+
+/** 8 углов OBB: локальная рамка `box` через полный TRS `t` (pos + R·S·corner). */
+export function obbCorners(box: { min: Vec3; max: Vec3 }, t: TransformNR): Vec3[] {
+  const [m00, m01, m02, m10, m11, m12, m20, m21, m22] = computeRSMatrix(
+    { rotX: t.rotX, rotY: t.rotY, rotZ: t.rotZ }, { scaleX: t.scaleX, scaleY: t.scaleY, scaleZ: t.scaleZ },
+  )
+  const out: Vec3[] = []
+  for (const x of [box.min.x, box.max.x]) for (const y of [box.min.y, box.max.y]) for (const z of [box.min.z, box.max.z]) {
+    out.push({
+      x: m00 * x + m01 * y + m02 * z + t.x,
+      y: m10 * x + m11 * y + m12 * z + t.y,
+      z: m20 * x + m21 * y + m22 * z + t.z,
+    })
   }
-  // 3. CSG / import — используем кэшированный aabb (вершины уже содержат translate)
-  return obj.aabb ?? computeAABB(obj.vertices)
+  return out
+}
+
+/** Проекция OBB на мировые оси: min/max по 8 углам. */
+export function obbWorldAABB(box: { min: Vec3; max: Vec3 }, t: TransformNR): { min: Vec3; max: Vec3 } {
+  const c = obbCorners(box, t)
+  const min = { x: Infinity, y: Infinity, z: Infinity }, max = { x: -Infinity, y: -Infinity, z: -Infinity }
+  for (const v of c) {
+    for (const k of ['x', 'y', 'z'] as const) { if (v[k] < min[k]) min[k] = v[k]; if (v[k] > max[k]) max[k] = v[k] }
+  }
+  return { min, max }
+}
+
+/** AABB вершин объекта в мировых координатах (pos + R·S·v). */
+export function worldVerticesAABB(vertices: Float32Array, t: TransformNR): { min: Vec3; max: Vec3 } {
+  if (vertices.length === 0) return { min: { x: t.x, y: t.y, z: t.z }, max: { x: t.x, y: t.y, z: t.z } }
+  const [m00, m01, m02, m10, m11, m12, m20, m21, m22] = computeRSMatrix(
+    { rotX: t.rotX, rotY: t.rotY, rotZ: t.rotZ }, { scaleX: t.scaleX, scaleY: t.scaleY, scaleZ: t.scaleZ },
+  )
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity, minZ = Infinity, maxZ = -Infinity
+  for (let i = 0; i < vertices.length; i += 3) {
+    const x = vertices[i], y = vertices[i + 1], z = vertices[i + 2]
+    const wx = m00 * x + m01 * y + m02 * z + t.x
+    const wy = m10 * x + m11 * y + m12 * z + t.y
+    const wz = m20 * x + m21 * y + m22 * z + t.z
+    if (wx < minX) minX = wx; if (wx > maxX) maxX = wx
+    if (wy < minY) minY = wy; if (wy > maxY) maxY = wy
+    if (wz < minZ) minZ = wz; if (wz > maxZ) maxZ = wz
+  }
+  return { min: { x: minX, y: minY, z: minZ }, max: { x: maxX, y: maxY, z: maxZ } }
+}
+
+// ---- Extrude ----
+
+/**
+ * Плита extrude по мировой рамке базы (Фаза 9.5.4): поперёк оси — во всю рамку,
+ * вдоль оси — |depth| от грани max (depth > 0) или min (depth < 0). Общая для живого
+ * `extrudeSelected` и пересчёта плиты при правке шага (глубина, сдвиг базы раньше).
+ */
+export function extrudeSlab(
+  bbox: { min: Vec3; max: Vec3 },
+  axis: 'X' | 'Y' | 'Z',
+  depth: number,
+): { params: ShapeParams; transform: TransformNR } {
+  const ax = axis.toLowerCase() as 'x' | 'y' | 'z'
+  const ad = Math.abs(depth)
+  const size = { x: bbox.max.x - bbox.min.x, y: bbox.max.y - bbox.min.y, z: bbox.max.z - bbox.min.z }
+  const c = { x: (bbox.min.x + bbox.max.x) / 2, y: (bbox.min.y + bbox.max.y) / 2, z: (bbox.min.z + bbox.max.z) / 2 }
+  c[ax] = depth > 0 ? bbox.max[ax] + ad / 2 : bbox.min[ax] - ad / 2
+  const dims = { ...size, [ax]: ad }
+  return {
+    params: { width: dims.x, height: dims.y, depth: dims.z },
+    transform: { x: c.x, y: c.y, z: c.z, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 },
+  }
+}
+
+// ---- Align ----
+
+/** Координата рамки по оси для якоря выравнивания. */
+function alignCoord(b: { min: Vec3; max: Vec3 }, ax: 'x' | 'y' | 'z', anchor: 'min' | 'center' | 'max'): number {
+  return anchor === 'min' ? b.min[ax] : anchor === 'max' ? b.max[ax] : (b.min[ax] + b.max[ax]) / 2
+}
+
+/**
+ * Смещения выравнивания: каждая цель из `targetIds` двигается по оси так, чтобы её
+ * рамка (min / center / max) совпала с рамкой якоря `anchorId`. Рамка — по реальной
+ * геометрии с поворотом и масштабом (`computeWorldAABB`, ALIGN-REVIT). Общая для живого
+ * `alignSelected` и re-solve каскада правки шага (9.5.2, решение В2) — одна семантика.
+ * Объекты, которых нет в `objects`, пропускаются.
+ */
+export function solveAlignDeltas(
+  objects: Record<string, SceneObject>,
+  targetIds: string[],
+  axis: 'X' | 'Y' | 'Z',
+  anchor: 'min' | 'center' | 'max',
+  anchorId: string,
+): Record<string, number> {
+  const ax = axis.toLowerCase() as 'x' | 'y' | 'z'
+  const anchorObj = objects[anchorId]
+  if (!anchorObj) return {}
+  const target = alignCoord(computeWorldAABB(anchorObj), ax, anchor)
+  const deltas: Record<string, number> = {}
+  for (const id of targetIds) {
+    const obj = objects[id]
+    if (!obj || id === anchorId) continue
+    deltas[id] = target - alignCoord(computeWorldAABB(obj), ax, anchor)
+  }
+  return deltas
 }
 
 /** Returns bbox center for a vertex buffer (no mutation). */
@@ -203,6 +312,12 @@ export interface ClipEntry {
   csgNormals?: Float32Array
   csgAABB?: { min: Vec3; max: Vec3 }
   csgOriginalBboxSize?: { x: number; y: number; z: number }
+  /**
+   * CSG-INDEPENDENT-COPY: снимок дерева CSG на момент копирования — вставка даёт
+   * независимую параметрическую копию. Нет (запечённый корень, нет системы
+   * создания) — вставка запечённым мешем, как раньше.
+   */
+  csgTree?: import('../csg/types').CopiedTree
   // For mirror primitive (paste from clipboard):
   mirrorVertices?: Float32Array
   mirrorIndices?: Uint32Array

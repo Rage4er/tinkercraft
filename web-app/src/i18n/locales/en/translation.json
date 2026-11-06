@@ -18,8 +18,7 @@
     "subtract": "Subtract",
     "intersect": "Intersect",
     "result": "CSG result",
-    "operations": "CSG operations",
-    "nonManifold": "CSG operations are impossible on this object (non-manifold geometry)"
+    "operations": "CSG operations"
   },
   "mirror": {
     "title": "Mirror",
@@ -109,8 +108,6 @@
     "torusRadius": "Torus radius",
     "tubeRadius": "Tube radius",
     "sides": "Sides",
-    "fillet": "Fillet",
-    "filletTitle": "Fillet",
     "quickSave": "Quick save",
     "save": "Save",
     "projectManager": "Project Manager",
@@ -118,7 +115,9 @@
     "selectObject": "Select an object",
     "toViewProperties": "to view properties",
     "inScene": "In scene:",
-    "objects": "objects"
+    "objects": "objects",
+    "not_editable_title": "Editing unavailable",
+    "not_editable_body": "Editing this child's parameters is unavailable. Reason: {{reason}}"
   },
   "leftPanel": {
     "shapes": "Shapes",
@@ -140,7 +139,11 @@
     "hide": "Hide",
     "show": "Show",
     "delete": "Delete",
-    "import": "Import"
+    "import": "Import",
+    "expand": "Expand",
+    "collapse": "Collapse",
+    "nestedCsg": "Nested CSG",
+    "mirroredShort": "mirrored"
   },
   "timeline": {
     "addShape": "Add {{shape}}",
@@ -149,7 +152,6 @@
     "scale": "Scale",
     "rotate": "Rotate",
     "resizeDims": "Resize",
-    "fillet": "Fillet r={{radius}}",
     "mirror": "Mirror {{plane}}",
     "align": "Align {{axis}} → {{anchor}}",
     "groupUnion": "Union",
@@ -161,21 +163,31 @@
     "rename": "Rename",
     "csgResult": "CSG result",
     "goToStep": "Go to step {{step}}",
-    "empty": "Empty"
+    "empty": "Empty",
+    "editChildParams": "Edit CSG child size",
+    "editStep": "Edit this step's parameters",
+    "editGone": "The object of this step no longer exists in the scene",
+    "editStepOp": "Edit step {{step}}: {{detail}}",
+    "edited": "edited (step {{step}})",
+    "editMoveStep": "Edit this step's offset (CSG below is recomputed)",
+    "editMirrorStep": "Edit this mirror's plane (CSG below is recomputed)",
+    "extrude": "Extrude {{axis}} by {{depth}}",
+    "editExtrudeStep": "Edit this extrusion's depth (CSG below is recomputed)"
   },
   "filters": {
     "add_shape": "Add",
     "import_mesh": "Import",
     "move": "Move",
     "resize_dims": "Resize",
-    "fillet": "Fillet",
     "mirror": "Mirror",
     "align": "Align",
     "group": "CSG",
     "delete": "Delete",
     "visibility": "Visibility",
     "color": "Color",
-    "rename": "Rename"
+    "rename": "Rename",
+    "edit_child_params": "CSG child edit",
+    "edit_step": "Step edit"
   },
   "snap": {
     "label": "Snap:",
@@ -238,7 +250,6 @@
     "noObjectsSelected": "No objects selected",
     "csgNeedTwoObjects": "Select exactly 2 objects for CSG",
     "csgImpossible": "CSG operation impossible (non-manifold geometry)",
-    "filletFailed": "Fillet operation failed",
     "stlImportFailed": "STL import failed",
     "stlExportFailed": "STL export failed",
     "openFailed": "Open error: {{error}}",
@@ -258,12 +269,33 @@
     "pasteFailed": "Paste failed",
     "deleteFailed": "Failed to delete objects",
     "csgFailed": "CSG operation failed",
+    "csgNonManifold": "Mesh is not closed (non-manifold), CSG is not possible. Check the STL.",
     "alignFailed": "Alignment failed",
     "resizeFailed": "Resize failed",
     "resizeCsgFailed": "Failed to resize CSG object",
     "extrudeFailed": "Extrusion failed",
     "operationFailed": "Operation failed: {{name}}",
-    "saveFailed": "Failed to save project"
+    "saveFailed": "Failed to save project",
+    "editChild": {
+      "notFound": "CSG object or its component was not found",
+      "notEditable": "This component cannot be edited (baked or mirrored)",
+      "noOrigin": "This CSG has no creation data — editing is unavailable",
+      "treeMismatch": "The component tree no longer matches the current geometry (the object changed after the merge) — editing is unavailable",
+      "empty": "The edit emptied the result (empty geometry) — change rejected",
+      "failed": "Failed to recompute CSG"
+    },
+    "legacyFilletRemoved": "Fillet has been removed from the app: rounding in this project is not restored, cubes are shown sharp",
+    "editStep": {
+      "notFound": "Step {{step}} not found or not editable",
+      "unsupported": "Editing steps of this type is not available yet",
+      "invalid": "Invalid value",
+      "tooMany": "Too many dependent steps further down the history — edit rejected",
+      "missingOperand": "Step {{step}}: CSG operand not found — edit rejected",
+      "legacy": "Step {{step}}: CSG from an old file without creation data — edit rejected",
+      "empty": "Step {{step}} became empty — edit rejected",
+      "childFailed": "Step {{step}}: the CSG component edit could not be replayed — edit rejected",
+      "failed": "Could not recompute the history (step {{step}})"
+    }
   },
   "toolbar": {
     "label": "Toolbar"
@@ -309,5 +341,44 @@
     "csgIntersect": "Keeps the common part of two objects (intersect)",
     "themeToggle": "Switches between dark and light theme",
     "clearScene": "Removes all objects from the scene"
+  },
+  "childProps": {
+    "title": "CSG component",
+    "type": "Type",
+    "rootHint": "Part of: {{root}}",
+    "back": "To object",
+    "sides": "Sides",
+    "apply": "Parameters apply immediately",
+    "checking": "Checking whether editing is possible…",
+    "recomputing": "Recomputing CSG…"
+  },
+  "tree": {
+    "child_not_editable": "Edit unavailable",
+    "reason": {
+      "nested_moved": "Nested CSG moved before union",
+      "mirror": "Mirrored child",
+      "baked": "Baked mesh",
+      "boolean": "Nested operation — edit its components",
+      "no_origin": "No CSG creation data (pasted copy)"
+    }
+  },
+  "stepPanel": {
+    "title": "Step {{step}}: {{name}}",
+    "move": "Move",
+    "target": "Object",
+    "original": "Originally",
+    "edited": "Edited by step {{step}}",
+    "back": "Back",
+    "offset": "Offset",
+    "rotation": "Rotation",
+    "scale": "Scale",
+    "hint": "The value is applied on Enter or when leaving the field; CSG further down the history is recomputed",
+    "recomputing": "Recomputing CSG…",
+    "mirror": "Mirror",
+    "plane": "Plane",
+    "hintMirror": "The plane is applied immediately; CSG further down the history is recomputed",
+    "extrude": "Extrude",
+    "depth": "Depth",
+    "axis": "Axis"
   }
 }

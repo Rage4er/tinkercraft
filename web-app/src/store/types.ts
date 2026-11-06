@@ -4,7 +4,7 @@
 
 import type {
   TinkerCraftOperation, SceneObject, ShapeType, ShapeParams,
-  TransformNR, CsgBooleanOp,
+  TransformNR, CsgBooleanOp, StepPatch,
 } from '../csg/types'
 import type { ClipEntry } from './helpers'
 
@@ -32,6 +32,10 @@ export interface DocumentStore {
   csgBoolean: (op: CsgBooleanOp) => Promise<void>
   moveObject: (id: string, transform: TransformNR) => Promise<void>
   resizeObject: (id: string, params: ShapeParams) => Promise<void>
+  /** Фаза 9.3: правка params ребёнка CSG (примитива в Build Tree) → пересчёт меша корня. */
+  editChildParams: (rootId: string, nodeId: string, params: ShapeParams) => Promise<void>
+  /** Фаза 9.5.2: правка прошлого шага (сырой индекс) с каскадом CSG/align; true — правка записана */
+  editStepParams: (stepIndex: number, patch: StepPatch) => Promise<boolean>
   extrudeSelected: (axis: 'X' | 'Y' | 'Z', depth: number) => Promise<void>
   renameObject: (id: string, name: string) => void
   setColor: (id: string, color: string, skipHistory?: boolean) => void
@@ -39,7 +43,6 @@ export interface DocumentStore {
   mirrorSelected: (plane: 'XY' | 'XZ' | 'YZ') => Promise<void>
   previewMirror: (plane: 'XY' | 'XZ' | 'YZ') => Promise<void>
   alignSelected: (axis: 'X' | 'Y' | 'Z', anchor: 'min' | 'center' | 'max') => Promise<void>
-  applyFillet: (id: string, radius: number) => Promise<void>
   copySelected: () => void
   pasteClipboard: () => Promise<void>
   undo: () => Promise<void>

@@ -8,7 +8,7 @@
 import type { ShapeType } from "./csg/types";
 
 // ---- App version ----
-export const APP_VERSION = '1.2.4';
+export const APP_VERSION = '1.3.0';
 
 // ---- Shapes (data only, NO JSX) ----
 // Иконки — это строковые ключи, не React-компоненты.
@@ -47,10 +47,11 @@ export const OP_FILTER_LABELS: Record<string, string> = {
   import_mesh: "filters.import_mesh",
   move: "filters.move",
   resize_dims: "filters.resize_dims",
-  fillet: "filters.fillet",
   mirror: "filters.mirror",
   align: "filters.align",
   group: "filters.group",
+  edit_child_params: "filters.edit_child_params",
+  edit_step: "filters.edit_step",
   delete: "filters.delete",
   visibility: "filters.visibility",
   color: "filters.color",
@@ -76,11 +77,6 @@ export const AUTOSAVE_DELAY_MS = 3000;
 /** Epsilon for detecting meaningful position/rotation/scale changes in move operations. */
 export const MOVE_DELTA_EPSILON = 1e-6;
 
-// ---- Fillet ----
-/** Safety margin subtracted from max possible fillet radius. */
-export const FILLET_EPSILON = 0.1;
-/** Minimum allowed fillet radius (mm). */
-export const FILLET_MIN_RADIUS = 0.01;
 
 // ---- Vertex merge precision (STL import) ----
 /** Rounding precision for merging coincident vertices during STL import. */

@@ -13,7 +13,7 @@
 // data-сторона считается через computeRSMatrix (общая математика worker/STL) —
 // независимо от Three.js. Если конвенции разойдутся, тест упадёт.
 //
-// Этап 8.5.5: расширение на import_mesh / csg / mirror / fillet / resize.
+// Этап 8.5.5: расширение на import_mesh / csg / mirror / resize (fillet удалён из приложения).
 // ============================================================
 
 import { describe, it, expect, afterAll } from 'vitest'
@@ -25,7 +25,6 @@ import {
   workerBuildImportedMesh,
   workerCsgBooleanWithSync,
   workerMirrorObject,
-  workerApplyFillet,
 } from './worker-bridge'
 import { computeRSMatrix } from '../csg/worker-matrix'
 import type { ShapeType, ShapeParams, TransformNR } from '../csg/types'
@@ -165,10 +164,10 @@ describe('Render = data (Этап 8.5.3)', () => {
 })
 
 // ============================================================
-// Этап 8.5.5: расширение на import_mesh / csg / mirror / fillet
+// Этап 8.5.5: расширение на import_mesh / csg / mirror
 // ============================================================
 
-describe('Render = data (Этап 8.5.5 — import_mesh / csg / mirror / fillet)', () => {
+describe('Render = data (Этап 8.5.5 — import_mesh / csg / mirror)', () => {
   afterAll(() => {
     workerClearAll()
   })
@@ -258,16 +257,6 @@ describe('Render = data (Этап 8.5.5 — import_mesh / csg / mirror / fillet)
     const mesh = buildRenderTree(mirrored.vertices, mirrored.indices, mirrorT)
     const diff = maxRenderDataDiff(mesh, mirrorT)
     console.log(`  mirror YZ: max |render − data| = ${diff.toExponential(3)}`)
-    expect(diff).toBeLessThan(1e-4)
-  })
-
-  // ── Fillet (cube) ────────────────────────────────────────
-  it('fillet (cube, r=2): render world === data world', async () => {
-    const filletRes = await workerApplyFillet('rd_fillet', 'cube', { width: 10, height: 10, depth: 10 } as ShapeParams, 2, tr({}))
-    const transform = tr({ x: 15, y: 15, z: 15 })
-    const mesh = buildRenderTree(filletRes.vertices, filletRes.indices, transform)
-    const diff = maxRenderDataDiff(mesh, transform)
-    console.log(`  fillet cube r=2: max |render − data| = ${diff.toExponential(3)}`)
     expect(diff).toBeLessThan(1e-4)
   })
 

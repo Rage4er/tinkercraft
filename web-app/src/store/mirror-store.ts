@@ -8,13 +8,13 @@
 //
 // Алгоритм для ВСЕХ типов объектов:
 // 1. ensureInTree + syncNodeTransform → регистрация в build tree
-// 2. cloneSubtree → копируем дерево
-// 3. Для primitive: resetSubtreeTransform + rebuildNode + mirrorVerticesInPlace
-//    Для CSG/import: mirrorTreeNode (отражает все nodы) + reset root to identity + rebuildNode
+// 2. Вершины отражаются напрямую (M·v) + разворот winding
+// 3. CSG: copySubtree с плоскостью — независимая параметрическая копия дерева
+//    (CSG-INDEPENDENT-COPY: примитивы-дети → mirrored[], не запекаются)
 // 4. mirrorPoint/mirrorEuler → вычисляем отражённую позицию/поворот
 // 5. Создаём SceneObject с transform = {mirroredPos, mirroredRot, abs(scale)}
 //    Для primitive — сохраняем shapeType/params (остаются редактируемыми)
-//    Для CSG/import — shapeType: 'import_mesh' (baked)
+//    Для CSG — shapeType: 'csg' (своё дерево), для import — 'import_mesh' (baked)
 //
 // FIX (MIRROR-INNER-CSG): Воркер применяет localTransform для внутренних boolean-нод
 // после центрирования, чтобы они оказались на правильной позиции для внешнего CSG.
@@ -32,18 +32,16 @@ import i18n from '../i18n'
 import {
     getNode,
     createPrimitiveNode,
-    createBakedNode,
+    registerObjectInTree,
     syncNodeTransform,
-    cloneSubtree,
+    copySubtree,
     rebuildNode,
     deleteNode,
     resetSubtreeTransform,
-    mirrorTreeNode,
     mirrorVerticesInPlace,
     mirrorPoint,
     mirrorEuler,
     logMirrorTreeSnapshot,
-    bakeMirroredSubtree,
 } from '../csg/history-tree'
 import { workerSyncObjects, workerSyncMesh } from '../csg/worker-client'
 import { centerMassAtOrigin } from '../csg/geometry-utils'
@@ -101,24 +99,8 @@ async function syncObjectsForOperation(
 
 function ensureInTree(id: string, obj: SceneObject): void {
     if (getNode(id) !== undefined) return
-
-    // CSG results (shapeType='csg') and import_mesh are registered as BAKED nodes
-    // (they have a ready mesh). Primitives are registered with shapeType + params.
-    // FIX (CSG-MIRROR-PRIMITIVE-PARAMS, Stage 8.5.10): зеркальный примитив —
-    // baked-нода (vertices с зеркалом; params без зеркала).
-    const isPrimitive = obj.shapeType !== 'csg' && obj.shapeType !== 'import_mesh' && !obj.mirrored
-
-    if (isPrimitive && obj.shapeType && obj.params) {
-        createPrimitiveNode(id, obj.shapeType, obj.params, obj.transform)
-    } else {
-        createBakedNode(
-            id,
-            obj.vertices || new Float32Array(),
-            obj.indices || new Uint32Array(),
-            obj.normals || null,
-            obj.transform,
-        )
-    }
+    // CSG/import → baked; примитив → primitive; зеркальный примитив → primitive + mirrored (9.8)
+    registerObjectInTree(id, obj)
 }
 
 // ── Единый метод для preview и confirm ──
@@ -201,16 +183,13 @@ export async function mirrorObject(
             indices[i + 2] = tmp
         }
 
-        // 3. Tree-booking: clone + mirror + bake children (parametric edit support)
-        //    NOTE: tree nodes store ORIGINAL vertices (not mirrored) — they are
-        //    rebuilt from params. The SceneObject carries the correct mirrored
-        //    geometry. This is fine because tree rebuild is only used for future
-        //    CSG/mirror ops, and syncObjectsForOperation routes CSG to workerSyncMesh.
+        // 3. CSG-INDEPENDENT-COPY: независимая параметрическая копия дерева —
+        //    узлы `${newId}:${id}`, мировые трансформы отражены, примитивы получают
+        //    плоскость в mirrored[] (params редактируемы, 9.8), а не запекаются.
+        //    Дерево копии воспроизводит её меш (M·v источника) в отражённой системе
+        //    создания (findCreationTransform) — правка ребёнка копии работает как 9.3.
         if (isCSGResult) {
-            const idMap = new Map<string, string>()
-            cloneSubtree(id, newId, idMap)
-            mirrorTreeNode(newId, plane)
-            await bakeMirroredSubtree(newId, plane)
+            copySubtree(id, newId, plane)
         }
 
         // PIVOT-TRANSFORMA srcCom-shift REMOVED (8.5.12): no tree-rebuild,

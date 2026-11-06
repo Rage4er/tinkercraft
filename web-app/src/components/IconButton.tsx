@@ -5,6 +5,7 @@
 // Поддерживает два варианта: compact (только иконка + tooltip) и full (иконка + текст).
 
 import React from 'react'
+import { useTranslation } from 'react-i18next'
 import Tooltip, { type TooltipData } from './Tooltip'
 
 export type IconButtonVariant = 'compact' | 'full'
@@ -29,7 +30,7 @@ export interface IconButtonProps {
   tooltip?: TooltipData
   /** Дополнительный CSS-класс */
   className?: string
-  /** ARIA-label для доступности */
+  /** ARIA-label для доступности (по умолчанию — подпись тултипа, затем title / label) */
   ariaLabel?: string
   /** Обработчики мыши (для preview mirror) */
   onMouseEnter?: () => void
@@ -50,6 +51,11 @@ export default function IconButton({
   onMouseEnter,
   onMouseLeave,
 }: IconButtonProps): React.ReactElement {
+  const { t } = useTranslation()
+  // ALIGN-REVIT: у каждой кнопки — непустое доступное имя. Раньше кнопки тулбара
+  // с одним `tooltip` получали aria-label="" (e2e брали их по индексу). Приоритет:
+  // явный ariaLabel → подпись тултипа (labelKey, уникальна и переводится) → title → label.
+  const accessibleName = ariaLabel ?? (tooltip ? t(tooltip.labelKey) : undefined) ?? title ?? label
   const btnClass = `btn${variant === 'compact' ? ' btn-compact' : ''}${buttonVariant !== 'default' ? ` ${buttonVariant}` : ''}${className ? ` ${className}` : ''}`
 
   const content = (
@@ -58,7 +64,7 @@ export default function IconButton({
       onClick={onClick}
       disabled={disabled}
       title={title ?? ariaLabel}
-      aria-label={ariaLabel ?? title ?? ''}
+      aria-label={accessibleName}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >

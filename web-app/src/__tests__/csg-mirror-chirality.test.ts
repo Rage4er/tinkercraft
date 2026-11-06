@@ -23,7 +23,6 @@ vi.mock('../csg/worker-client', async () => {
   const bridge = await import('./worker-bridge')
   return {
     workerBuildShape: bridge.workerBuildShape,
-    workerApplyFillet: bridge.workerApplyFillet,
     workerBuildImportedMesh: bridge.workerBuildImportedMesh,
     workerSyncObjects: bridge.workerSyncObjects,
     workerSyncMesh: bridge.workerSyncMesh,
@@ -41,9 +40,10 @@ vi.mock('../csg/worker-client', async () => {
 
 import { useDocumentStore } from '../store/document-store'
 import { clearSnapshots } from '../store/snapshots'
-import { clearTree, getNode, treeStore, bakeMirroredSubtree } from '../csg/history-tree'
+import { clearTree, getNode, treeStore, bakeMirroredSubtree, invalidateCache } from '../csg/history-tree'
 import { centerMassAtOrigin } from '../csg/geometry-utils'
 import type { SceneObject, TransformNR, MirrorOperation, GroupOperation } from '../csg/types'
+import { checkRootConsistency } from '../store/edit-child'
 
 const st = () => useDocumentStore.getState()
 
@@ -269,7 +269,8 @@ describe('CSG mirror YZ — хиральность призмы', () => {
     const mop = ops[ops.length - 1] as MirrorOperation
     const mirId = mop.ids[0]
 
-    // Проверяем дерево: mirrored CSG → boolean → baked children
+    // Проверяем дерево: mirrored CSG → boolean → дети-примитивы с зеркалом в mirrored[]
+    // (CSG-INDEPENDENT-COPY: params редактируемы, не запекаются)
     const mirNode = getNode(mirId)
     expect(mirNode?.type).toBe('boolean')
     const childIds = mirNode?.children ?? []
@@ -277,10 +278,10 @@ describe('CSG mirror YZ — хиральность призмы', () => {
 
     for (const childId of childIds) {
       const child = getNode(childId)
-      expect(child?.type).toBe('baked')
+      expect(child?.type).toBe('primitive')
       expect(child?.shapeType).toBeDefined()
       expect(child?.params).toBeDefined()
-      expect(child?.mirroredPlane).toBe('YZ')
+      expect(child?.mirrored).toEqual(['YZ'])
       // Проверяем, что params = оригинальные, не зеркалёные
       const p = child?.params as Record<string, number>
       expect(p.width ?? p.radius ?? p.torusRadius).toBeGreaterThan(0)
@@ -291,7 +292,7 @@ describe('CSG mirror YZ — хиральность призмы', () => {
   // ========================================================
   // Тест 3 — редактирование baked-ребёнка: params → rebuild → mirror applied
   // ========================================================
-  it('Edit baked child: params → rebuild → mirror applied', async () => {
+  it('Mirrored child: params intact, mirror applied by the tree (chirality)', async () => {
     // Создаём CSG
     await st().addShape('cube', { width: 10, height: 10, depth: 10 })
     await st().addShape('prism', { radius: 5, height: 10, sides: 3 })
@@ -306,11 +307,11 @@ describe('CSG mirror YZ — хиральность призмы', () => {
     const mop = ops[ops.length - 1] as MirrorOperation
     const mirId = mop.ids[0]
 
-    // Находим baked-ребёнка (prism)
+    // Ребёнок-призма копии: примитив + mirrored ['YZ'] (CSG-INDEPENDENT-COPY)
     const mirNode = getNode(mirId)!
     const prismChild = mirNode.children!.map(id => getNode(id)).find(n => n?.shapeType === 'prism')!
-    expect(prismChild.type).toBe('baked')
-    expect(prismChild.mirroredPlane).toBe('YZ')
+    expect(prismChild.type).toBe('primitive')
+    expect(prismChild.mirrored).toEqual(['YZ'])
 
     // Проверяем: params = оригинальные (radius: 5, height: 10, sides: 3)
     const p = prismChild.params! as Record<string, number>
@@ -318,16 +319,18 @@ describe('CSG mirror YZ — хиральность призмы', () => {
     expect(p.height).toBe(10)
     expect(p.sides).toBe(3)
 
-    // Вершин у призмы sides=3 — асимметричная (не круг)
-    // Зеркало отражает x-координаты: если bbox.x был [a,b], то зеркальный [−b,−a]
-    const childVerts = prismChild.vertices!
-    let minX = Infinity, maxX = -Infinity
-    for (let i = 0; i < childVerts.length; i += 3) {
-      if (childVerts[i] < minX) minX = childVerts[i]
-      if (childVerts[i] > maxX) maxX = childVerts[i]
-    }
-    // Призма sides=3 не симметрична по x: min ≠ −max
-    expect(Math.abs(minX + maxX)).toBeGreaterThan(0.5)
+    // Хиральность: дерево копии (призма sides=3 отражается воркером по mirrored[])
+    // воспроизводит зеркальный меш объекта — без зеркала у асимметричной призмы bbox не сошёлся бы
+    const consistency = await checkRootConsistency({
+      rootId: mirId, objects: st().objects, operations: st().operations, historyIndex: st().historyIndex,
+    })
+    expect(consistency).toBeNull()
+    // контроль: без зеркала у призмы дерево меш НЕ воспроизводит
+    treeStore.setNode(prismChild.id, { ...prismChild, mirrored: undefined })
+    invalidateCache(prismChild.id)
+    expect(await checkRootConsistency({
+      rootId: mirId, objects: st().objects, operations: st().operations, historyIndex: st().historyIndex,
+    })).toBe('tree_mismatch')
   })
 
   // ========================================================

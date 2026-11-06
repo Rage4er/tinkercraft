@@ -34,10 +34,6 @@ export interface UiStore {
   tlFilters: Record<string, boolean>
   setTlFilter: (key: string, checked: boolean) => void
 
-  // Fillet
-  filletRadius: number
-  setFilletRadius: (v: number) => void
-
   // Shape search
   shapeSearch: string
   setShapeSearch: (v: string) => void
@@ -70,6 +66,17 @@ export interface UiStore {
   // Panels
   activeTab: 'objects' | 'tree'
   setActiveTab: (v: 'objects' | 'tree') => void
+  // Фаза 9.1: раскрытые CSG-узлы в дереве компонентов и выбранный ребёнок CSG.
+  // Ребёнок — НЕ объект сцены (операнды удалены из objects), поэтому его выбор
+  // живёт отдельно от document-store.selectedIds; rootId — объект сцены,
+  // которому принадлежит узел (он же выделен в selectedIds для подсветки).
+  expandedTreeIds: Record<string, boolean>
+  toggleTreeExpanded: (id: string) => void
+  selectedChild: { rootId: string; nodeId: string } | null
+  setSelectedChild: (v: { rootId: string; nodeId: string } | null) => void
+  /** Фаза 9.5.2: выбранный в Timeline прошлый шаг (сырой индекс) — панель «Шаг N» */
+  selectedStep: number | null
+  setSelectedStep: (v: number | null) => void
   cameraMode: 'perspective' | 'orthographic'
   setCameraMode: (v: 'perspective' | 'orthographic' | ((prev: 'perspective' | 'orthographic') => 'perspective' | 'orthographic')) => void
 }
@@ -104,9 +111,6 @@ export const useUiStore = create<UiStore>((set) => ({
   setTlFilter: (key, checked) =>
     set((s) => ({ tlFilters: { ...s.tlFilters, [key]: checked } })),
 
-  filletRadius: 2,
-  setFilletRadius: (v) => set({ filletRadius: v }),
-
   shapeSearch: '',
   setShapeSearch: (v) => set({ shapeSearch: v }),
 
@@ -128,6 +132,13 @@ export const useUiStore = create<UiStore>((set) => ({
 
   activeTab: 'objects',
   setActiveTab: (v) => set({ activeTab: v }),
+  expandedTreeIds: {},
+  toggleTreeExpanded: (id) =>
+    set((s) => ({ expandedTreeIds: { ...s.expandedTreeIds, [id]: !s.expandedTreeIds[id] } })),
+  selectedChild: null,
+  setSelectedChild: (v) => set({ selectedChild: v }),
+  selectedStep: null,
+  setSelectedStep: (v) => set({ selectedStep: v }),
   cameraMode: 'perspective',
   setCameraMode: (v) =>
     set((s) => ({ cameraMode: typeof v === 'function' ? v(s.cameraMode) : v })),

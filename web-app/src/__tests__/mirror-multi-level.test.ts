@@ -14,7 +14,6 @@ vi.mock('../csg/worker-client', async () => {
   const bridge = await import('./worker-bridge')
   return {
     workerBuildShape: bridge.workerBuildShape,
-    workerApplyFillet: bridge.workerApplyFillet,
     workerBuildImportedMesh: bridge.workerBuildImportedMesh,
     workerSyncObjects: bridge.workerSyncObjects,
     workerSyncMesh: bridge.workerSyncMesh,
@@ -167,7 +166,7 @@ describe('Multi-level mirror', () => {
     expect(maxVDiff).toBeLessThan(1e-6)
   })
 
-  it('moveObject mirror primitive → baked node', async () => {
+  it('moveObject mirror primitive → primitive-нода с mirrored (Фаза 9.8; раньше baked)', async () => {
     await st().addShape('prism', { radius: 15, height: 20, sides: 5 })
     const id1 = lastShapeId('prism')
 
@@ -175,7 +174,7 @@ describe('Multi-level mirror', () => {
     await st().mirrorSelected('YZ')
     const id4 = Object.values(st().objects).find(o => o.id !== id1 && o.mirrored?.includes('YZ'))!.id
 
-    // moveObject — should register as baked node (not primitive)
+    // moveObject регистрирует зеркальный примитив как primitive + mirrored (params редактируемы)
     await st().moveObject(id4, {
       x: 5, y: 0, z: 0,
       rotX: 10, rotY: 0, rotZ: 0,
@@ -183,7 +182,9 @@ describe('Multi-level mirror', () => {
     })
 
     const node4 = await import('../csg/history-tree').then(m => m.getNode(id4))
-    expect(node4?.type).toBe('baked')
+    expect(node4?.type).toBe('primitive')
+    expect(node4?.mirrored).toEqual(['YZ'])
+    expect(node4?.params?.radius).toBe(15)
     expect(st().objects[id4].mirrored).toEqual(['YZ'])
   })
 

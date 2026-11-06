@@ -11,11 +11,16 @@ import TextModal from "./components/TextModal";
 import StatusBar from "./components/StatusBar";
 import LeftPanel from "./components/LeftPanel";
 import PropertiesPanel from "./components/PropertiesPanel";
+import ChildPropertiesPanel from "./components/ChildPropertiesPanel";
+import StepPanel from "./components/StepPanel";
 import { useDocumentStore } from "./store/document-store";
 import { useUiStore } from "./store/ui-store";
 import { useShallow } from "zustand/shallow";
 import { isWorkerReady } from "./csg/worker-client";
 import { SNAP_VALUES, AUTOSAVE_DELAY_MS } from "./constants";
+import { useSelectedChildGuard } from "./hooks/useSelectedChildGuard";
+import { useSelectedStepGuard } from "./hooks/useSelectedStepGuard";
+import { useTimelineEdit } from "./hooks/useTimelineEdit";
 import type {
   TransformNR,
   ShapeParams,
@@ -33,7 +38,6 @@ export default function App() {
     snapValue, setSnapValue,
     theme, setTheme,
     tlFilters, setTlFilter,
-    filletRadius, setFilletRadius,
     shapeSearch, setShapeSearch,
     rulerActive, setRulerActive,
     rulerDist, setRulerDist,
@@ -53,7 +57,6 @@ export default function App() {
       snapValue: s.snapValue, setSnapValue: s.setSnapValue,
       theme: s.theme, setTheme: s.setTheme,
       tlFilters: s.tlFilters, setTlFilter: s.setTlFilter,
-      filletRadius: s.filletRadius, setFilletRadius: s.setFilletRadius,
       shapeSearch: s.shapeSearch, setShapeSearch: s.setShapeSearch,
       rulerActive: s.rulerActive, setRulerActive: s.setRulerActive,
       rulerDist: s.rulerDist, setRulerDist: s.setRulerDist,
@@ -115,7 +118,6 @@ export default function App() {
       mirrorSelected: s.mirrorSelected,
       previewMirror: s.previewMirror,
       alignSelected: s.alignSelected,
-      applyFillet: s.applyFillet,
       copySelected: s.copySelected,
       pasteClipboard: s.pasteClipboard,
       triggerAutosave: s.triggerAutosave,
@@ -160,7 +162,6 @@ export default function App() {
     mirrorSelected,
     previewMirror,
     alignSelected,
-    applyFillet,
     copySelected,
     pasteClipboard,
     triggerAutosave,
@@ -347,6 +348,14 @@ export default function App() {
     }
   }, [textInput, textSize, textDepth, addRawMesh]);
 
+  // Фаза 9.1: сброс выбора ребёнка CSG, если узел/выделение исчезли
+  useSelectedChildGuard();
+  // Фаза 9.5.2: сброс выбора шага Timeline (undo до шага, выделение в сцене)
+  useSelectedStepGuard();
+  const hasSelectedStep = useUiStore((s) => s.selectedStep !== null);
+  const handleTimelineEdit = useTimelineEdit();
+  const hasSelectedChild = useUiStore((s) => s.selectedChild !== null);
+
   const objectList = useMemo(() => Object.values(objects), [objects]);
   const selSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const firstSelected = selectedIds.length > 0 ? objects[selectedIds[0]] : null;
@@ -357,12 +366,11 @@ export default function App() {
   const canUndo = historyIndex > 0;
   const canRedo = historyIndex < operations.length;
   // CSG недоступен, если среди выбранных объектов есть non-manifold (import_mesh)
-  const hasNonManifoldSelected = selectedIds.some(id => objects[id]?.shapeType === 'import_mesh');
-  const canCsg = selectedIds.length === 2 && !busy && !hasNonManifoldSelected;
+  // IMPORT-MESH-CSG: импорт (STL, 3D-текст) не блокируется по типу — замкнутость проверяет
+  // воркер; незамкнутый меш → уведомление errors.csgNonManifold.
+  const canCsg = selectedIds.length === 2 && !busy;
   const canMirror = selectedIds.length > 0 && !busy;
   const canAlign = selectedIds.length >= 2 && !busy;
-  const canFillet =
-    selectedIds.length === 1 && firstSelected?.shapeType === "cube" && !busy;
   const canResize =
     selectedIds.length === 1 &&
     firstSelected?.shapeType !== "import_mesh" &&
@@ -483,7 +491,6 @@ export default function App() {
         canMirror={canMirror}
         canAlign={canAlign}
         canCsg={canCsg}
-        nonManifoldSelected={hasNonManifoldSelected}
         theme={theme}
         onOpen={openProject}
         onSave={saveProject}
@@ -544,6 +551,7 @@ export default function App() {
             setTlFilter(key, checked)
           }
           onJumpHistory={jumpToHistory}
+          onTimelineEdit={handleTimelineEdit}
         />
 
         {/* ── Вьюпорт ── */}
@@ -613,36 +621,31 @@ export default function App() {
         <div className="panel-right">
           <div className="props-header">{t("properties.header")}</div>
 
-          <PropertiesPanel
+          {hasSelectedStep ? <StepPanel /> : hasSelectedChild ? <ChildPropertiesPanel /> : <PropertiesPanel
             firstSelected={firstSelected}
             busy={busy}
             selectedIds={selectedIds}
             canResize={canResize}
-            canFillet={canFillet}
             canCsg={canCsg}
             canAlign={canAlign}
-            nonManifoldSelected={hasNonManifoldSelected}
-            filletRadius={filletRadius}
             objectList={objectList}
             operationsLength={operations.length}
             fileName={fileName}
             currentProjectId={currentProjectId}
             currentProjectName={currentProjectName}
             modified={modified}
-            onSetFilletRadius={setFilletRadius}
             onMoveAxis={handleMoveAxis}
             onRotAxis={handleRotAxis}
             onScaleAxis={handleScaleAxis}
             onResizeDim={handleResizeDim}
             onResizeObject={resizeObject}
-            onApplyFillet={applyFillet}
             onCsg={csgBoolean}
             onAlign={alignSelected}
             onSetColor={setColor}
             onToggleVisible={toggleVisible}
             onShowProjects={() => setShowPM(true)}
             onSaveToProject={saveToProject}
-          />
+          />}
         </div>
       </div>
 

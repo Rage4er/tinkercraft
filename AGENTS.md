@@ -14,7 +14,7 @@
 - **manifold-3d** (WASM) — CSG операции в Web Worker
 - **Zustand 5** — стейт-менеджмент
 - **Vite 6** — сборка
-- **Vitest 4** — тесты (~387 тестов, 34 файла)
+- **Vitest 4** — тесты (662 теста, 55 файлов — v1.3.0)
 - **pnpm** — пакетный менеджер
 
 ## Команды
@@ -23,8 +23,17 @@
 cd web-app
 pnpm dev          # dev-сервер (порт 5000)
 pnpm build        # production-сборка
-pnpm test         # запуск тестов (~272 тестов, 18 файлов)
+pnpm test         # запуск тестов (662 теста, 55 файлов)
 pnpm typecheck    # tsc --noEmit
+pnpm e2e:smoke    # дымовой тест в браузере (Playwright; нужен запущенный pnpm dev; см. web-app/e2e/helpers.mjs)
+pnpm e2e:tree     # Фаза 9.1: раскрытие CSG в дереве, выбор ребёнка
+pnpm e2e:edit-child  # Фаза 9.2/9.3: правка параметра ребёнка CSG, undo
+pnpm e2e:edit-step-move  # Фаза 9.5.2: ✎ у шага move → ΔX → CSG пересчитан, undo/redo
+pnpm e2e:edit-step-mirror  # Фаза 9.5.3: ✎ у шага mirror → плоскость XZ → CSG пересчитан, undo/redo
+pnpm e2e:edit-step-extrude  # Фаза 9.5.4: проект из e2e/fixtures/extrude-union.3dtc → ✎ у extrude → глубина 10, undo/redo
+pnpm e2e:independent-copy  # CSG-INDEPENDENT-COPY: зеркало и Ctrl+C/V CSG → правка ребёнка копии не трогает оригинал и наоборот
+pnpm e2e:import-mesh-csg  # IMPORT-MESH-CSG: замкнутый STL (e2e/fixtures/closed-cube.stl) ∪ куб → CSG; незамкнутый → уведомление ru/en
+pnpm e2e:align-obb  # ALIGN-REVIT: повёрнутый цилиндр → «X мин» по основанию, повёрнутый куб → «Z макс» по грани (кнопки по aria-label)
 ```
 
 ## Текущий статус
@@ -34,19 +43,24 @@ pnpm typecheck    # tsc --noEmit
 | 0–7.6 | Ядро CAD, CSG, UI, Mirror, Timeline | ✅ Завершены |
 | **8** | **Единая модель трансформов** | ✅ Завершена (v1.1.0) |
 | **8.5** | **Унификация отрисовки и данных** | ✅ Завершена (v1.2.3) |
-| 9 | Параметрическая история (Timeline edit, редактор детей CSG) | 🔲 Запланирована |
-| 10 | Яндекс.Игры — монетизация | 🔲 Запланирована |
-| 11 | Будущее (SVG, 3MF, STEP, Rapier) | 🔲 Запланирована |
+| **9** | **Параметрическая история** — 9.1–9.4, 9.6–9.9 ✅; 9.5.0 (эффективная история) ✅; 9.5.1 (fillet) ❌ отменена; 9.5.2 move ✅; 9.5.3 mirror ✅; 9.5.4 extrude ✅; CSG-INDEPENDENT-COPY, IMPORT-MESH-CSG, ALIGN-REVIT ✅ | ✅ Завершена (v1.3.0, `phase-9 → main`) |
+| 10 | Яндекс.Игры — монетизация (ветка `yandex-games`) | 🔄 Отдельная ветка (Y.1–Y.5 ✅) |
+| 11 | Будущее (SVG, 3MF, STEP, B-Rep fillet, настоящий extrude 2D→3D, Rapier) | 🔲 Запланирована |
 
 **Фаза 8 в деталях:** `web-app/ARCHITECTURE_TRANSFORMS.md`
 **Фаза 8.5 в деталях:** `web-app/ARCHITECTURE_RENDER.md`
+**Фаза 9 в деталях:** `docs/PHASE_9_DESIGN.md` (9.1–9.9), `docs/PHASE_9_5_DESIGN.md` (9.5: правка прошлых шагов, каскад CSG)
 
 ## Ветки
 
 | Ветка | Назначение |
 |-------|------------|
-| `main` | Чистый CAD (Open Source, GPL-3.0) |
-| `yandex-games` | Версия для Яндекс.Игр (экономика, реклама, токены) |
+| `main` | Чистый CAD (Open Source, GPL-3.0); v1.3.0 — Фаза 9 смержена; push в `main` → деплой GitHub Pages (`deploy.yml`) |
+| `phase-9` | Фаза 9 (от `main`), смержена в `main` в v1.3.0; дальнейшие задачи Фазы 9.x (NESTED-MOVED-EDIT и т.п.) — от неё же или от `main` |
+| `<задача>` | Короткие ветки задач → PR в `main` (или в `phase-9` для задач Фазы 9.x); merge-коммит после зелёного CI, ветка удаляется. До v1.3.0 смержены в `phase-9`: `phase-9.5.0`…`phase-9.5.4`, `remove-fillet`, `ui-left-panel`, `ci-fix`, `csg-independent-copy`, `import-mesh-csg`, `align-revit` и follow-up'ы (PR #1–#15) |
+| `yandex-games` | Версия для Яндекс.Игр (экономика, реклама, токены); отдельно, Фазу 9 ещё не содержит |
+
+Цепочка: `main` (v1.3.0) → ветки задач → PR в `main` (или в `phase-9` для Фазы 9.x). `yandex-games` — отдельно.
 
 ## Архитектура (data flow)
 
@@ -69,15 +83,26 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 | **Store** | |
 | `src/store/document-store.ts` | Zustand store — действия (create), 500 строк |
 | `src/store/ui-store.ts` | Zustand store — UI state (gizmo, theme, camera, modals, etc.) |
-| `src/store/helpers.ts` | Утилиты store (extractAndCenter, extractAndCenterGetAABB, computeAABB, makeObject, nextId, colorForIndex) |
+| `src/store/helpers.ts` | Утилиты store (extractAndCenter, extractAndCenterGetAABB, computeAABB, makeObject, nextId, colorForIndex; `computeWorldAABB` — мировая рамка по реальной геометрии с полным TRS (вершины; без вершин — OBB `obbCorners`/`obbWorldAABB` из `localParamsBox`, ALIGN-REVIT), `worldVerticesAABB`, `solveAlignDeltas` — решатель выравнивания, общий для `alignSelected` и re-solve 9.5.2; `extrudeSlab` — плита extrude по мировой рамке базы, 9.5.4) |
 | `src/store/types.ts` | DocumentStore interface |
 | `src/store/rebuild.ts` | rebuildFromHistory — восстановление объектов из истории операций |
 | `src/store/snapshots.ts` | Snapshot cache для мгновенного undo/redo (PERF-1) |
 | `src/store/notifications.ts` | Toast-уведомления (замена alert) |
-| `src/store/mirror-store.ts` | Store для зеркальных операций |
+| `src/store/mirror-store.ts` | Store для зеркальных операций; зеркало CSG — независимая копия дерева (`copySubtree` с плоскостью) |
 | **CSG / Build Tree** | |
-| `src/csg/history-tree.ts` | **Build Tree** — параметрическое дерево (primitive/boolean/baked), `rebuildNode`, `mirrorNodeRecursive`, `cloneSubtree` |
+| `src/csg/history-tree.ts` | **Build Tree** — параметрическое дерево (primitive/boolean/baked), `rebuildNode`, `mirrorNodeRecursive`, `cloneSubtree`; независимая копия CSG (`copySubtree`, `snapshotSubtree`, `instantiateSubtree`, id узлов `${idКопии}:${idИсточника}`) |
 | `src/csg/tree-store.ts` | Zustand-стор для Build Tree |
+| `src/csg/tree-view.ts` | Read-модель Build Tree для UI (`getTreeView`, `findViewNode`, `formatParams`) и единая проверка редактируемости `isChildEditable` — Фаза 9.1/9.9 |
+| `src/hooks/useRootConsistency.ts` | Согласованность дерева CSG-корня с мешем (замки в дереве) — Фаза 9.9 |
+| `src/csg/child-params.ts` | Поля параметров примитива для формы правки ребёнка CSG (`getParamFields`, `clampFieldValue`) — Фаза 9.2 |
+| `src/store/edit-child.ts` | Пересчёт CSG после смены params ребёнка: калибровка дерева ↔ меш, un-bake в локальную систему корня (`computeEditedChild`, `unbakeToLocal`, `findCreationTransform` — в т.ч. система создания копий: зеркало — отражённая, вставка — `copyTree.origin`) — Фаза 9.3 |
+| `src/store/project-history.ts` | **Эффективная история** (Фаза 9.5.0): `projectHistory` подставляет `edit_step` (патч шага N + `replacements` замороженных шагов) и выбрасывает их; идемпотентна, вызывается на входе `rebuild.ts` и `findCreationTransform`. `computeCascade` — замыкание зависимостей правки |
+| `src/store/csg-result.ts` | Общее ядро CSG `computeCsgResult` (sync → boolean → pivot = transformA → un-bake RS) для `csgBoolean` и каскада 9.5; `syncObjectsForOperation`, `groupOperationFromResult`, `groupReplacementFromResult` |
+| `src/store/edit-step.ts` | **Правка прошлого шага** (Фаза 9.5.2): `computeStepEdit` — гипотетическая проекция + каскад (`group` через `computeCsgResult`, `edit_child_params` путём 9.3, `align` re-solve); атомарный отказ; `isStepEditable` / `SUPPORTED_KINDS` — какие шаги правятся (move, mirror, extrude — группа с `source`); плита extrude пересчитывается по рамке базы (`extrudeSlab`) |
+| `src/components/StepPanel.tsx` | Панель «Шаг N» (вместо `PropertiesPanel`, пока `ui-store.selectedStep` задан): ΔX/ΔY/ΔZ шага move (коммит по Enter/blur), плоскость шага mirror (сразу по выбору), глубина шага extrude (ось — просмотр) → `editStepParams` — Фаза 9.5.2–9.5.4 |
+| `src/hooks/useSelectedStepGuard.ts` | Сброс выбора шага (undo до шага, выделение в сцене, выбор ребёнка CSG) — Фаза 9.5.2 |
+| `src/components/ChildPropertiesPanel.tsx` | Панель свойств выбранного ребёнка CSG (вместо `PropertiesPanel`, пока `ui-store.selectedChild` задан) — Фаза 9.2 |
+| `src/components/ComponentTree.tsx` | Дерево объектов сцены; CSG-результат раскрывается в детей из Build Tree, выбор ребёнка → `ui-store.selectedChild` — Фаза 9.1 |
 | `src/csg/rebuildOps.ts` | `applyMoveDelta`, `applyMirrorToTransform`, `applyAlignToTransform` |
 | `src/csg/worker.ts` | WASM worker — manifold-3d операции, типобезопасные интерфейсы |
 | `src/csg/worker-client.ts` | Promise-обёртка над воркером |
@@ -88,9 +113,9 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 | **Components** | |
 | `src/components/Viewport3D.tsx` | Three.js вьюпорт, гизмо, raycaster, ruler, snap-to-geometry |
 | `src/components/snap-utils.ts` | Привязка (snap) к геометрии: vertex, edge, face, circle |
-| `src/components/Toolbar.tsx` | Тулбар (файл, undo, view, gizmo, CSG, тема) |
+| `src/components/Toolbar.tsx` | Тулбар (файл, undo, view, gizmo, CSG, тема); у каждой кнопки `aria-label` = подпись тултипа (`IconButton`), e2e ищут кнопки по нему (`toolbarButton`/`panelButton` в `e2e/helpers.mjs`), не по индексу |
 | `src/components/LeftPanel.tsx` | Палитра фигур + список объектов + история |
-| `src/components/PropertiesPanel.tsx` | Панель свойств (трансформ, resize, fillet, extrude, CSG) |
+| `src/components/PropertiesPanel.tsx` | Панель свойств (трансформ, resize, CSG; extrude в UI нет — EXTRUDE-3D-SCALE) |
 | `src/components/TextModal.tsx` | Модалка 3D текста |
 | `src/components/StatusBar.tsx` | Статус-бар |
 | `src/components/NumInput.tsx` | Numeric input с draft-редактированием |
@@ -102,6 +127,7 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 | `src/io/doodle-io.ts` | **УСТАРЕЛО**: формат .doodle (legacy, не поддерживается) |
 | `src/io/3dtc-io.ts` | Формат .3dtc (ZIP + JSON) — основной формат проекта (v1.2.0+) |
 | `src/io/autosave.ts` | Автосохранение в IndexedDB |
+| `src/io/legacy-fillet.ts` | Миграция старых проектов со скруглением: вырезает шаги `fillet`, снимает `filletRadius`, перенумеровывает `edit_step` (вызывается при всех загрузках в сторе) |
 | **Platform (yandex-games ветка)** | |
 | `src/platform/index.ts` | Абстракция платформы (clean / yandex) |
 
@@ -121,11 +147,11 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 - Два store: `document-store.ts` (документ/сцена) и `ui-store.ts` (UI state)
 - Actions возвращают Promise при вызове воркера
 - История операций — массив `history[]` с фильтрацией
+- **Эффективная история (Фаза 9.5):** потребители истории читают `projectHistory(ops)`, а не сырые `operations` — новые функции, разбирающие историю, проецируют её на входе (`edit_step` не должна доходить до воспроизведения)
 - Undo/redo через `rebuildFromHistory()` с snapshot cache (`snapshots.ts`) — мгновенный undo/redo при наличии кэша, fallback на WASM rebuild
 
 ### CSG Worker
 - Воркер кэширует manifold-объекты по `id` (Map)
-- `buildPrimitiveWithFillet` — только cube поддерживает fillet
 - `sanitizeParams()` валидирует пользовательский ввод перед отправкой в воркер
 
 ### Build Tree (Фаза 8)
@@ -225,14 +251,17 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 
 ## Известные ограничения (не баги)
 
-- Fillet работает только для cube (требует специфичной математики для других форм)
+- Импортированные меши (STL) не параметризуются (IMPORT-MESH-PARAMETRIC: не требуется); трансформации и CSG работают — CSG допускает замкнутый STL (проверка по manifold в воркере, IMPORT-MESH-CSG), незамкнутый → уведомление `errors.csgNonManifold`; «починка» незамкнутого меша не делается; старые extrude без `group.source` не редактируются как extrude (EXTRUDE-LEGACY: не мигрируем); `extrudeSelected` — движок правки 9.5.4, не UI-инструмент: это «растянуть по оси», а не extrude 2D→3D, кнопку не возвращать (EXTRUDE-3D-SCALE; настоящий extrude — Фаза 11)
+- Скругления (fillet) нет: прежний параметр куба удалён (remove-fillet) до инструмента на B-Rep; старые шаги `fillet` вырезаются при загрузке (`io/legacy-fillet.ts`) — новых не создавать
+- После v1.3.0 открыто: NESTED-MOVED-EDIT (вложенный CSG, сдвинутый до объединения — 🔒 `nested_moved`); связанное зеркало (linked mirror) не делали — копия CSG всегда независимая; «починка» незамкнутого STL; ALIGN-UI-REVIT (явный выбор плоскости); CI-DEDUP (`ci-web.yml` + `build.yml` дублируют), CI-E2E (e2e не в CI); одинаковые `id` полей позиции/поворота и `-0.0` в `NumInput`
+- `.doodle` (legacy) в UI не открывается: `parseDoodle` не вызывается
 
 ## Node.js — Настройка и проверка
 
 Перед работой с проектом убедитесь, что Node.js настроен корректно.
 
 - **Документация:** `web-app/NODEJS_SETUP.md` — полное руководство по настройке Node.js, pnpm, проверке typecheck и тестов
-- **Фактическое состояние:** Node.js v24.11.0, pnpm 11.13.1
+- **Фактическое состояние:** Node.js v24.22.2, pnpm 12.10.1 (зафиксирован в `web-app/package.json` → `packageManager`; CI берёт версию оттуда, Node 24)
 - **node_modules:** 203 MB (pnpm symlink-based, не коммитится)
 - **Проверка:** `cd web-app && pnpm typecheck && pnpm test`
 
@@ -242,6 +271,8 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 
 - `ARCHITECTURE_TRANSFORMS.md` — единая модель трансформов (Фаза 8)
 - `ARCHITECTURE_RENDER.md` — единый источник данных и отрисовки (Фаза 8.5)
+- `docs/PHASE_9_5_DESIGN.md` — Фаза 9.5: дизайн правки прошлых шагов (move/mirror/extrude; fillet отменён), каскад CSG
+- `docs/PHASE_9_DESIGN.md` — Фаза 9: решения (операция с результатом, вложенные CSG), риски, статус подзадач
 - `CODE_REVIEW.md` — результаты код-ревью с приоритетами
 - `DEVELOPMENT_PLAN.md` — план разработки (Фазы 0–7)
 - `ARCHITECTURE.md` — описание архитектуры

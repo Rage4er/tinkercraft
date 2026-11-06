@@ -18,6 +18,8 @@ export type TinkerCraftOperation =
   | MirrorOperation
   | AlignOperation
   | GroupOperation
+  | EditChildParamsOperation
+  | EditStepOperation
   | DeleteOperation
   | HideShowOperation
   | ColorOperation
@@ -60,6 +62,11 @@ export interface ResizeOperation {
   anchor: AnchorPoint
 }
 
+/**
+ * @deprecated Скругление куба удалено из приложения (remove-fillet, до инструмента на B-Rep).
+ * Тип оставлен только для чтения старых `.3dtc`/`.doodle`: при загрузке такие шаги вырезаются
+ * (`io/legacy-fillet.ts::migrateLegacyFillet`), воспроизведение их игнорирует. Не создавать.
+ */
 export interface FilletOperation {
   type: 'fillet'
   id: string
@@ -114,6 +121,126 @@ export interface GroupOperation {
   // ── BuildTree: tree structure for this CSG operation ──
   /** Operation type for tree (union/subtract/intersect) */
   treeOperation?: 'union' | 'subtract' | 'intersect'
+  /**
+   * Фаза 9.5.4: группа — результат extrude (пара `add_shape` плиты + эта `group`).
+   * Пишет `extrudeSelected`; по нему шаг правится как extrude (глубина). `depth` —
+   * исходная глубина (сырая операция не меняется; эффективная — через edit_step).
+   * Старые extrude без `source` как extrude не редактируются (EXTRUDE-LEGACY).
+   */
+  source?: ExtrudeSource
+  /**
+   * CSG-INDEPENDENT-COPY: вставленный CSG (`ids: []`) со СВОИМ деревом — снимок
+   * дерева источника на момент копирования. По нему дерево копии строится заново
+   * при перемотке/загрузке; дети правятся (9.2/9.3) независимо от оригинала.
+   * Без поля (старые вставки) — запечённый меш, как раньше.
+   */
+  copyTree?: CopiedTree
+}
+
+/** CSG-INDEPENDENT-COPY: снимок дерева CSG для вставки (буфер обмена → операция group). */
+export interface CopiedTree {
+  /** Id корня источника (узлы копии — `${idКопии}:${idУзлаИсточника}`) */
+  sourceRootId: string
+  /** Узлы поддерева источника (корень первым), без кэшей */
+  nodes: TreeNode[]
+  /**
+   * Система создания дерева (TRS₀ источника): мировые трансформы детей заданы в ней,
+   * вершины корня — в её локальной системе. Нужна правке ребёнка (findCreationTransform).
+   */
+  origin: TransformNR
+}
+
+/** Фаза 9.5.4: откуда взялась группа extrude. */
+export interface ExtrudeSource {
+  kind: 'extrude'
+  /** Объект, который выдавили (операнд A группы) */
+  baseId: string
+  /** Плита-куб (`add_shape` перед группой, операнд B) */
+  slabId: string
+  axis: 'X' | 'Y' | 'Z'
+  /** Глубина со знаком: > 0 — от грани max по оси, < 0 — от грани min */
+  depth: number
+}
+
+/**
+ * Фаза 9.3: правка параметров ребёнка CSG (примитива в Build Tree).
+ * Хранит новые params ребёнка И готовый меш результата (как `group`):
+ * воспроизведение детерминировано и не требует CSG при загрузке.
+ * Вершины — в локальной системе корня (v = S⁻¹Rᵀ·(v_world − posA)), pivot корня
+ * не меняется.
+ */
+export interface EditChildParamsOperation {
+  type: 'edit_child_params'
+  /** id CSG-объекта сцены (корень дерева) */
+  rootId: string
+  /** id узла-примитива в Build Tree */
+  nodeId: string
+  /** Полные новые params ребёнка */
+  params: ShapeParams
+  resultVertices: Float32Array | number[]
+  resultIndices: Uint32Array | number[]
+  resultNormals?: Float32Array | number[]
+  originalBboxSize?: { x: number; y: number; z: number }
+}
+
+/**
+ * Фаза 9.5: новые значения прошлого шага N — по типу шага.
+ * extrude — только для `group` с `source.kind === 'extrude'` (9.5.4).
+ */
+export type StepPatch =
+  | { kind: 'move'; delta: Vec3; rotDelta?: Vec3; scaleDelta?: Vec3 }
+  | { kind: 'mirror'; plane: MirrorPlane }
+  | { kind: 'extrude'; depth: number }
+
+/** Тип шага, к которому применим патч данного вида. */
+export type StepPatchKind = StepPatch['kind']
+
+/**
+ * Фаза 9.5: пересчитанный «замороженный» шаг ниже по течению от правки
+ * (готовый результат — воспроизведение без CSG при загрузке, решение 1 Фазы 9).
+ * Поля, которых нет, остаются как в исходной операции.
+ */
+export interface StepReplacement {
+  /** Индекс заменяемого шага в сырой истории (меньше индекса самой edit_step) */
+  stepIndex: number
+  /**
+   * Ожидаемый тип шага: несовпадение → замена пропускается.
+   * `add_shape` — плита extrude, пересчитанная по рамке базы (9.5.4); может стоять
+   * ДО правленого шага (плита — часть extrude-пары), остальные — только ниже по течению.
+   */
+  kind: 'group' | 'edit_child_params' | 'align' | 'add_shape'
+  resultVertices?: Float32Array | number[]
+  resultIndices?: Uint32Array | number[]
+  resultNormals?: Float32Array | number[]
+  /** group: pivot результата (= TRS операнда A на момент объединения) */
+  resultCenter?: Vec3
+  resultRotation?: Vec3
+  resultScale?: Vec3
+  originalBboxSize?: Vec3
+  /** align: пересчитанные смещения (политика re-solve, решение В2) */
+  deltas?: Record<string, number>
+  /** add_shape (плита extrude, 9.5.4): новые размеры и положение */
+  params?: ShapeParams
+  transform?: TransformNR
+}
+
+/**
+ * Фаза 9.5: правка параметров прошлого шага N. Append-only: `operations[N]` не
+ * трогается, эффективная история строится чистой функцией `projectHistory`
+ * (store/project-history.ts). Undo/redo — по индексу, как у любой операции.
+ */
+export interface EditStepOperation {
+  type: 'edit_step'
+  /** Индекс шага N в сырой истории (префикс неизменен — индекс стабилен) */
+  stepIndex: number
+  /** Отпечаток шага N (тип + id цели): не совпал → правка игнорируется (R7) */
+  stepFingerprint: { type: TinkerCraftOperation['type']; targetId: string }
+  /** Новые значения шага N */
+  patch: StepPatch
+  /** Прежние значения — только для подписи в Timeline / диффа (undo их не использует) */
+  before?: StepPatch
+  /** ОБЯЗАТЕЛЬНО (может быть пустым): пересчитанные замороженные шаги ниже по течению */
+  replacements: StepReplacement[]
 }
 
 export interface ResizeDimsOperation { type: 'resize_dims'; id: string; params: ShapeParams }
@@ -148,7 +275,6 @@ export interface ShapeParams {
   depth?: number
   radius?: number
   segments?: number
-  filletRadius?: number
   // FIX (MED-18-18): Removed index signature `[key: string]: number | undefined` —
   // ShapeParams should only accept known shape parameters for type safety.
   // Additional params (torusRadius, tubeRadius, tubeSegments, sides) are explicit.
@@ -279,6 +405,15 @@ export interface TreeNode {
   indices?: Uint32Array
   /** Normal data for baked geometry (null = no normals) */
   normals?: Float32Array | null
+
+  /**
+   * Фаза 9.8: упорядоченный список плоскостей зеркала для ЗЕРКАЛЬНОГО ПРИМИТИВА
+   * (`type: 'primitive'`, params — оригинальные). Геометрия = buildPrimitive(params),
+   * отражённая по каждой плоскости в origin (до применения TRS) — как
+   * `SceneObject.mirrored`. В отличие от baked-узла (вершины с зеркалом), params
+   * остаются редактируемыми, а воспроизведение по истории — синхронным.
+   */
+  mirrored?: MirrorPlane[]
 
   /**
    * Mirror plane used when baking this node (Variant B fix for MIRROR-CHIRALITY).

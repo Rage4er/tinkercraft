@@ -1,6 +1,9 @@
 import { useRef, useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import type { TinkerCraftOperation } from "../csg/types";
+import type { TinkerCraftOperation, StepPatch } from "../csg/types";
+import { effectivePatches, applyStepPatch } from "../store/project-history";
+import { isStepEditable } from "../store/edit-step";
+import { fmtVec, fmtNum } from "./StepPanel";
 import {
   CubeIcon,
   SphereIcon,
@@ -13,7 +16,6 @@ import {
   MoveIcon,
   ScaleIcon,
   RotateIcon,
-  FilletIcon,
   MirrorYZIcon,
   AlignXMinIcon,
   AlignXCenterIcon,
@@ -68,8 +70,6 @@ export function opIcon(op: TinkerCraftOperation): React.ReactNode {
     case "resize":
     case "resize_dims":
       return <ScaleIcon size={32} />;
-    case "fillet":
-      return <FilletIcon size={32} />;
     case "mirror":
       return <MirrorYZIcon size={32} />;
     case "align": {
@@ -84,6 +84,10 @@ export function opIcon(op: TinkerCraftOperation): React.ReactNode {
         : (op as { subtractOp?: boolean }).subtractOp
           ? <SubtractIcon size={32} />
           : <UnionIcon size={32} />;
+    case "edit_child_params":
+      return <ScaleIcon size={32} />;
+    case "edit_step":
+      return op.patch.kind === "mirror" ? <MirrorYZIcon size={32} /> : op.patch.kind === "extrude" ? <ScaleIcon size={32} /> : <MoveIcon size={32} />;
     case "delete":
       return <DeleteIcon size={32} />;
     case "visibility":
@@ -111,18 +115,22 @@ export function opLabel(op: TinkerCraftOperation, t: (key: string, opts?: Record
     }
     case "resize_dims":
       return t("timeline.resizeDims");
-    case "fillet":
-      return t('timeline.fillet', { radius: op.radius });
     case "mirror":
       return t('timeline.mirror', { plane: op.plane });
     case "align":
       return t('timeline.align', { axis: op.axis, anchor: op.anchor });
     case "group":
+      // Фаза 9.5.4: группа extrude (source) подписана как выдавливание (эффективная глубина)
+      if (op.source?.kind === "extrude") return t("timeline.extrude", { axis: op.source.axis, depth: fmtNum(op.source.depth) });
       return (op as { isIntersect?: boolean; subtractOp?: boolean }).isIntersect
         ? t("timeline.groupIntersect")
         : (op as { subtractOp?: boolean }).subtractOp
           ? t("timeline.groupSubtract")
           : t("timeline.groupUnion");
+    case "edit_child_params":
+      return t("timeline.editChildParams");
+    case "edit_step":
+      return t("timeline.editStepOp", { step: op.stepIndex + 1, detail: patchDetail(op.patch, op.before, t) });
     case "delete":
       return t("timeline.delete");
     case "visibility":
@@ -136,6 +144,20 @@ export function opLabel(op: TinkerCraftOperation, t: (key: string, opts?: Record
   }
 }
 
+/** Фаза 9.5: «сдвиг (0, 0, 0) → (3, 0, 0)» / «зеркало YZ → XZ» / «выдавливание (глубина 5 → 10)». */
+function patchDetail(p: StepPatch, before: StepPatch | undefined, t: (key: string, opts?: Record<string, unknown>) => string): string {
+  if (p.kind === "move") {
+    const from = before?.kind === "move" ? `${fmtVec(before.delta)} → ` : "";
+    return `${t("stepPanel.offset").toLowerCase()} ${from}${fmtVec(p.delta)}`;
+  }
+  if (p.kind === "extrude") {
+    const from = before?.kind === "extrude" ? `${fmtNum(before.depth)} → ` : "";
+    return `${t("stepPanel.extrude").toLowerCase()} (${t("stepPanel.depth").toLowerCase()} ${from}${fmtNum(p.depth)})`;
+  }
+  const from = before?.kind === "mirror" ? `${before.plane} → ` : "";
+  return `${t("stepPanel.mirror").toLowerCase()} ${from}${p.plane}`;
+}
+
 // ---- Timeline ----
 export default function Timeline({
   operations,
@@ -143,12 +165,15 @@ export default function Timeline({
   busy,
   onJump,
   filters,
+  onEdit,
 }: {
   operations: TinkerCraftOperation[];
   historyIndex: number;
   busy: boolean;
   onJump: (index: number) => void;
   filters: Record<string, boolean>;
+  /** Фаза 9.4/9.5: «править» шаг — цель шага (9.4) или сам шаг (9.5.2 move, 9.5.3 mirror, 9.5.4 extrude); index — сырой индекс */
+  onEdit?: (op: TinkerCraftOperation, index: number) => void;
 }) {
   const { t } = useTranslation();
   const listRef = useRef<HTMLDivElement>(null);
@@ -166,6 +191,11 @@ export default function Timeline({
       .filter(({ op }) => filters[op.type] !== false),
     [operations, filters]
   );
+  // Фаза 9.5: действующие правки шагов (по префиксу до historyIndex) — эффективные значения в подписи
+  const patched = useMemo(
+    () => effectivePatches(operations.slice(0, historyIndex)),
+    [operations, historyIndex]
+  );
   if (visible.length === 0) return <div className="tl-empty">{t("timeline.empty")}</div>;
 
   return (
@@ -174,6 +204,8 @@ export default function Timeline({
         const idx = i + 1;
         // FIXED: Include index in key to prevent duplicates when same op type targets same object
         const key = 'id' in op ? `${op.type}_${(op as { id?: string }).id}_${i}` : `${op.type}_${i}`
+        const edit = patched.get(i)
+        const stepEdit = isStepEditable(op) && idx <= historyIndex
         return (
           <div
             key={key}
@@ -182,7 +214,24 @@ export default function Timeline({
             onClick={() => !busy && onJump(idx)}
           >
             <span className="tl-icon">{opIcon(op)}</span>
-            <span className="tl-label">{opLabel(op, t)}</span>
+            <span className="tl-label">
+              {opLabel(edit ? applyStepPatch(op, edit.patch) ?? op : op, t)}
+              {edit && (
+                <span className="tl-edited" data-testid="tl-edited" title={t("timeline.edited", { step: edit.editIndex + 1 })}>
+                  {" "}✎{edit.editIndex + 1}
+                </span>
+              )}
+            </span>
+            {onEdit && (op.type === "add_shape" || op.type === "edit_child_params" || stepEdit) && (
+              <button
+                className="tl-edit"
+                title={stepEdit ? t(op.type === "mirror" ? "timeline.editMirrorStep" : op.type === "group" ? "timeline.editExtrudeStep" : "timeline.editMoveStep") : t("timeline.editStep")}
+                disabled={busy}
+                onClick={(e) => { e.stopPropagation(); onEdit(op, i); }}
+              >
+                ✎
+              </button>
+            )}
             <span className="tl-idx">{idx}</span>
           </div>
         );

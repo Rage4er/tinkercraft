@@ -4,28 +4,23 @@ import NumInput from "./NumInput";
 import AlignButtons from "./AlignButtons";
 import CsgButtons from "./CsgButtons";
 import type { ShapeParams, SceneObject } from "../csg/types";
-import { EyeIcon, EyeOffIcon, FilletIcon, FolderIcon, SaveIcon } from "./icons";
+import { EyeIcon, EyeOffIcon, FolderIcon, SaveIcon } from "./icons";
 
 export default function PropertiesPanel({
   firstSelected,
   busy,
   selectedIds,
   canResize,
-  canFillet,
   canCsg,
   canAlign,
-  nonManifoldSelected,
-  filletRadius,
   objectList,
   operationsLength,
   fileName,
-  onSetFilletRadius,
   onMoveAxis,
   onRotAxis,
   onScaleAxis,
   onResizeDim,
   onResizeObject,
-  onApplyFillet,
   onCsg,
   onAlign,
   onSetColor,
@@ -40,24 +35,19 @@ export default function PropertiesPanel({
   busy: boolean;
   selectedIds: string[];
   canResize: boolean;
-  canFillet: boolean;
   canCsg: boolean;
   canAlign: boolean;
-  nonManifoldSelected?: boolean;
-  filletRadius: number;
   objectList: SceneObject[];
   operationsLength: number;
   fileName: string | null;
   currentProjectId: string | null;
   currentProjectName: string | null;
   modified: boolean;
-  onSetFilletRadius: (v: number) => void;
   onMoveAxis: (axis: "x" | "y" | "z", val: number) => void;
   onRotAxis: (axis: "rotX" | "rotY" | "rotZ", val: number) => void;
   onScaleAxis: (axis: "scaleX" | "scaleY" | "scaleZ", val: number) => void;
   onResizeDim: (dim: "width" | "height" | "depth", val: number) => void;
   onResizeObject: (id: string, params: ShapeParams) => void;
-  onApplyFillet: (id: string, radius: number) => void;
   onCsg: (op: "union" | "subtract" | "intersect") => void;
   onAlign: (axis: "X" | "Y" | "Z", anchor: "min" | "center" | "max") => void;
   onSetColor: (id: string, color: string, skipHistory?: boolean) => void;
@@ -448,34 +438,13 @@ export default function PropertiesPanel({
         </div>
       )}
 
-      {/* Fillet — только для кубов (не для CSG результатов) */}
-      {canFillet && firstSelected.shapeType === 'cube' && (
-        <div className="csg-group">
-          <div className="csg-group-title">{t("properties.filletTitle")}</div>
-          <NumInput
-            label={t("properties.radius")}
-            unit="мм"
-            min={0}
-            value={filletRadius}
-            onChange={onSetFilletRadius}
-          />
-          <button
-            className="btn primary"
-            disabled={!canFillet}
-            onClick={() => onApplyFillet(firstSelected.id, filletRadius)}
-          >
-            <FilletIcon size={32} /> {t("actions.apply")}
-          </button>
-        </div>
-      )}
-
       {/* Extrude — скрыто в свойствах, доступно на панели инструментов */}
       {/* Mirror — скрыто в свойствах, доступно на панели инструментов */}
 
       {/* CSG + Align */}
       {selectedIds.length === 2 && (
         <>
-          <CsgButtons disabled={!canCsg} onCsg={onCsg} variant="full" nonManifoldSelected={nonManifoldSelected} />
+          <CsgButtons disabled={!canCsg} onCsg={onCsg} variant="full" />
           <AlignButtons disabled={!canAlign} onAlign={onAlign} variant="full" />
         </>
       )}

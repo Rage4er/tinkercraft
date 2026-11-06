@@ -15,7 +15,6 @@
 import {
   initWasm,
   handleBuildShape,
-  handleApplyFillet,
   handleBuildImportedMesh,
   handleCsgBoolean,
   handleCsgBooleanSync,
@@ -55,7 +54,6 @@ function installTransport(): void {
 async function dispatch(msg: BridgeMsg): Promise<void> {
   switch (msg.type) {
     case 'buildShape': await handleBuildShape(msg as never); break
-    case 'applyFillet': await handleApplyFillet(msg as never); break
     case 'buildImportedMesh': await handleBuildImportedMesh(msg as never); break
     case 'csgBoolean': await handleCsgBoolean(msg as never); break
     case 'csgBooleanSync': await handleCsgBooleanSync(msg as never); break
@@ -115,12 +113,6 @@ export async function workerBuildShape(
   objId: string, shapeType: ShapeType, params: ShapeParams, transform: TransformNR,
 ): Promise<MeshResult> {
   return toMeshResult(await call('buildShape', { objId, shapeType, params, transform }))
-}
-
-export async function workerApplyFillet(
-  objId: string, shapeType: ShapeType, params: ShapeParams, radius: number, transform: TransformNR,
-): Promise<MeshResult> {
-  return toMeshResult(await call('applyFillet', { objId, shapeType, params, radius, transform }))
 }
 
 export async function workerBuildImportedMesh(
@@ -193,9 +185,11 @@ export async function workerRebuildNode(
     normals?: number[]
     operation?: 'union' | 'subtract' | 'intersect'
     children?: string[]
+    mirrored?: Array<'XY' | 'XZ' | 'YZ'>
   }>,
+  options?: { worldSpace?: boolean },
 ): Promise<MeshResult> {
-  return toMeshResult(await call('rebuildTreeNode', { nodeId, nodeCount: nodes.length, nodes }))
+  return toMeshResult(await call('rebuildTreeNode', { nodeId, nodeCount: nodes.length, nodes, worldSpace: options?.worldSpace === true }))
 }
 
 export function isWorkerReady(): boolean { return true }

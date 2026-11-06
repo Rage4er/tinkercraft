@@ -14,13 +14,11 @@ export default function CsgButtons({
   disabled,
   onCsg,
   variant = "compact",
-  nonManifoldSelected = false,
   maxRows,
 }: {
   disabled: boolean;
   onCsg: (op: CsgOp) => void;
   variant?: "compact" | "full";
-  nonManifoldSelected?: boolean;
   /** Количество строк для группы (из алгоритма layout) */
   maxRows?: number;
 }) {
@@ -42,8 +40,6 @@ export default function CsgButtons({
       resultRows.push(ops.slice(start, end) as typeof ops);
     }
   }
-
-  const title = disabled && nonManifoldSelected ? t("csg.nonManifold") : undefined;
 
   if (variant === "full") {
     return (

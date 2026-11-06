@@ -21,11 +21,16 @@ import {
   createBooleanNode,
   createBakedNode,
   getNode,
+  setNode,
+  registerObjectInTree,
   mirrorVerticesInPlace,
+  copySubtree,
+  instantiateSubtree,
 } from '../csg/history-tree'
 import { notify } from './notifications'
 import i18n from '../i18n'
 import { devLog } from '../utils/debug'
+import { projectHistory } from './project-history'
 
 /** Metadata accumulated over the operation chain. Exported for testing. */
 export interface RebuildMeta {
@@ -55,10 +60,12 @@ export interface RebuildMeta {
  * Pure function — no WASM dependency. Exported for testing.
  * Returns { meta, csgResultIds } matching what rebuildFromHistory uses.
  */
-export function buildRebuildMeta(ops: TinkerCraftOperation[]): {
+export function buildRebuildMeta(rawOps: TinkerCraftOperation[]): {
   meta: Record<string, RebuildMeta>
   csgResultIds: Set<string>
 } {
+  // Фаза 9.5.0: эффективная история (edit_step подставлены). Идемпотентно.
+  const ops = projectHistory(rawOps)
   const meta: Record<string, RebuildMeta> = {}
   const transforms: Record<string, TransformNR> = {}
   const csgResultIds = new Set<string>()
@@ -74,7 +81,8 @@ export function buildRebuildMeta(ops: TinkerCraftOperation[]): {
       transforms[op.id] = t
 
     } else if (op.type === 'fillet') {
-      if (meta[op.id]) meta[op.id] = { ...meta[op.id], params: { ...meta[op.id].params, filletRadius: op.radius } }
+      // Скругление удалено из приложения (remove-fillet): шаг старых файлов не воспроизводится,
+      // куб остаётся острым. В норме загрузка уже вырезала его (io/legacy-fillet.ts).
 
     } else if (op.type === 'move') {
       const d: Vec3 = op.delta
@@ -108,6 +116,18 @@ export function buildRebuildMeta(ops: TinkerCraftOperation[]): {
             ? composeMirroredList(om.mirrored, op.plane)
             : om.mirrored
           meta[newId] = { ...om, transform: nt, mirrored: mirroredOut }
+          // FIX (MIRROR-CSG-REPLAY, 9.5.3): копия CSG — CSG с ОТРАЖЁННЫМ локальным мешем
+          // оригинала (как живое mirrorSelected: mirrorVerticesInPlace + winding), а не
+          // мировой кэш воркера (его вершины в мире → двойная трансляция и RS у копии).
+          if (om.shapeType === 'csg' && om.resultVertices && om.resultIndices) {
+            const v = new Float32Array(om.resultVertices)
+            const n = om.resultNormals ? new Float32Array(om.resultNormals) : null
+            mirrorVerticesInPlace(v, n, op.plane)
+            const idx = new Uint32Array(om.resultIndices)
+            for (let k = 0; k < idx.length; k += 3) { const tmp = idx[k + 1]; idx[k + 1] = idx[k + 2]; idx[k + 2] = tmp }
+            meta[newId] = { ...meta[newId], resultVertices: v, resultIndices: idx, resultNormals: n ?? undefined }
+            csgResultIds.add(newId)
+          }
         }
       }
 
@@ -144,6 +164,19 @@ export function buildRebuildMeta(ops: TinkerCraftOperation[]): {
 
     } else if (op.type === 'delete') {
       for (const id of op.ids) { delete meta[id]; delete transforms[id] }
+
+    } else if (op.type === 'edit_child_params') {
+      // Фаза 9.3: правка ребёнка CSG подменяет меш результата (pivot не меняется).
+      const m = meta[op.rootId]
+      if (m) {
+        meta[op.rootId] = {
+          ...m,
+          resultVertices: op.resultVertices,
+          resultIndices: op.resultIndices,
+          resultNormals: op.resultNormals,
+          originalBboxSize: op.originalBboxSize ?? m.originalBboxSize,
+        }
+      }
 
     } else if (op.type === 'group') {
       // FIX (PASTE-CSG-COLOR): For pasted CSG (ids: []), use op.color directly.
@@ -189,8 +222,10 @@ export function buildRebuildMeta(ops: TinkerCraftOperation[]): {
 }
 
 export async function rebuildFromHistory(
-  ops: TinkerCraftOperation[],
+  rawOps: TinkerCraftOperation[],
 ): Promise<Record<string, SceneObject>> {
+  // Фаза 9.5.0: воркер и мета получают эффективную историю (edit_step подставлены)
+  const ops = projectHistory(rawOps)
   const { meta, csgResultIds } = buildRebuildMeta(ops)
   const result = await workerRebuildScene(ops)
 
@@ -329,22 +364,44 @@ export async function rebuildFromHistory(
  * This is essential for undo/redo to work correctly with tree operations.
  */
 export function rebuildBuildTree(
-  ops: TinkerCraftOperation[],
+  rawOps: TinkerCraftOperation[],
   objects?: Record<string, SceneObject>,
 ): void {
+  // Фаза 9.5.0: дерево строится по эффективной истории. Идемпотентно.
+  const ops = projectHistory(rawOps)
   const transforms: Record<string, TransformNR> = {}
 
   for (const op of ops) {
     if (op.type === 'add_shape') {
-      if (!getNode(op.id)) {
+      const existing = getNode(op.id)
+      if (!existing) {
         createPrimitiveNode(op.id, op.shapeType, op.params, { ...op.transform })
+      } else if (existing.type === 'primitive') {
+        // Фаза 9.3: дерево не чистится между перемотками, поэтому узел мог сохранить
+        // params/transform из «будущего» (правка ребёнка CSG, resize_dims, move).
+        // Возвращаем начальное состояние — дальнейшие resize_dims / edit_child_params /
+        // move ниже воспроизведут нужный префикс истории. Иммутабельно: снимки
+        // дерева хранят ссылки на узлы.
+        setNode(op.id, { ...existing, params: { ...op.params }, localTransform: { ...op.transform } })
       }
       transforms[op.id] = { ...op.transform }
 
     } else if (op.type === 'import_mesh') {
-      transforms[op.id] = { ...op.transform }
-      // Baked node created in registerBakedNodes() after mesh data is available
-      // (called at end of rebuildBuildTree when `objects` parameter is provided)
+      // IMPORT-MESH-CSG: импорт может стать операндом CSG дальше по истории — baked-узел
+      // нужен ДО шага group (иначе после загрузки CSG с импортом становился запечённым
+      // корнем, а его дети-примитивы — нередактируемыми). Узел — как при живом импорте:
+      // вершины в origin (COM), localTransform = pivot = transform шага + COM. pivot же —
+      // база для move/mirror ниже (живые move двигают pivot). registerBakedNodes в конце
+      // перезапишет узлы импортов, оставшихся в сцене, — тем же мешем.
+      const existing = getNode(op.id)
+      const { pivot, vertices, indices } = importBakedData(op.vertices, op.indices, op.transform, existing?.type !== 'baked')
+      transforms[op.id] = pivot
+      if (existing?.type === 'baked') {
+        // перемотка: вернуть позицию шага (move ниже воспроизведут остальное)
+        setNode(op.id, { ...existing, localTransform: { ...pivot } })
+      } else if (vertices && indices) {
+        createBakedNode(op.id, vertices, indices, null, pivot)
+      }
 
     } else if (op.type === 'move') {
       const d: Vec3 = op.delta
@@ -363,6 +420,20 @@ export function rebuildBuildTree(
         }
       }
 
+    } else if (op.type === 'resize_dims') {
+      // Фаза 9.3: params примитива в дереве воспроизводятся по истории
+      // (раньше терялись при перемотке: дерево хранило «живое» состояние).
+      const n = getNode(op.id)
+      if (n && n.type === 'primitive') {
+        setNode(op.id, { ...n, params: { ...(n.params ?? {}), ...op.params } })
+      }
+
+    } else if (op.type === 'edit_child_params') {
+      const n = getNode(op.nodeId)
+      if (n && n.type === 'primitive') {
+        setNode(op.nodeId, { ...n, params: { ...op.params } })
+      }
+
     } else if (op.type === 'mirror') {
       const origIds = (op as { originalIds?: string[] }).originalIds ?? []
       for (let i = 0; i < origIds.length && i < op.ids.length; i++) {
@@ -373,6 +444,16 @@ export function rebuildBuildTree(
           const nt = applyMirrorToTransform(t as unknown as RebuildTransform, op.plane) as TransformNR
           transforms[newId] = nt
 
+          // CSG-INDEPENDENT-COPY: зеркало CSG — независимая параметрическая копия дерева
+          // источника В ЭТОТ момент истории (узлы `${newId}:${id}` перезаписываются —
+          // правки детей копии воспроизводятся дальше по edit_child_params). Раньше узел
+          // жил только в сессии (MIRROR-TREE-PRESERVE), а после загрузки — заглушка-куб.
+          const srcTree = getNode(origId)
+          if (srcTree?.type === 'boolean') {
+            copySubtree(origId, newId, op.plane, nt)
+            continue
+          }
+
           // FIX (MIRROR-TREE-PRESERVE): Check if node already exists (created by mirrorObject).
           // If yes, update its transform but keep the existing node type (boolean/primitive/baked).
           // If no, create the appropriate node type based on the original.
@@ -382,29 +463,37 @@ export function rebuildBuildTree(
             if (existingNode.localTransform) {
               existingNode.localTransform = { ...nt }
             }
+            // Фаза 9.8: зеркальный примитив — params/зеркало воспроизводятся по префиксу истории
+            // (иначе после undo правки ребёнка узел сохранил бы params из «будущего»).
+            const srcNode = getNode(origId)
+            if (existingNode.type === 'primitive' && srcNode?.type === 'primitive' && srcNode.params) {
+              setNode(newId, {
+                ...existingNode,
+                params: { ...srcNode.params },
+                mirrored: composeMirroredList(srcNode.mirrored, op.plane),
+              })
+            }
           } else {
-            // No pre-existing node — create appropriate node type
-            // FIX (CSG-MIRROR-PRIMITIVE-PARAMS, Stage 8.5.10): mirror-потомок
-            // ПРИМИТИВА регистрируется как BAKED нода из SceneObject.vertices
-            // (в них зеркало). createPrimitiveNode из params дал бы unmirrored
-            // геометрию при любом последующем rebuildNode/tree-путь CSG.
+            // No pre-existing node — create appropriate node type.
+            // Фаза 9.8: mirror-потомок ПРИМИТИВА = primitive с ТЕМИ ЖЕ params и списком
+            // плоскостей (composeMirroredList: соседние одинаковые отменяются) — воспроизводится
+            // синхронно и остаётся редактируемым (раньше — baked из SceneObject.vertices, а когда
+            // операнд уже поглощён CSG и в `objects` его нет — НЕзеркальная копия оригинала,
+            // из-за чего после загрузки/перемотки зеркальный операнд терял зеркало).
+            const origNode = getNode(origId)
             const mirroredObj = objects?.[newId]
-            if (mirroredObj?.mirrored && mirroredObj.vertices.length > 0) {
-              createBakedNode(newId, mirroredObj.vertices, mirroredObj.indices, mirroredObj.normals ?? null, nt)
-              // Set TreeNode.mirroredPlane to last plane for bakeMirroredSubtree compat.
-              // SceneObject.mirrored is the authoritative MirrorPlane[] list (8.5.12).
-              const node = getNode(newId)
-              if (node && mirroredObj.mirrored && mirroredObj.mirrored.length > 0) node.mirroredPlane = mirroredObj.mirrored[mirroredObj.mirrored.length - 1]
+            if (origNode && origNode.type === 'primitive' && origNode.shapeType && origNode.params) {
+              createPrimitiveNode(
+                newId, origNode.shapeType, { ...origNode.params }, nt,
+                composeMirroredList(origNode.mirrored, op.plane),
+              )
+            } else if (mirroredObj?.mirrored && mirroredObj.vertices.length > 0) {
+              registerObjectInTree(newId, { ...mirroredObj, transform: nt })
+            } else if (origNode && origNode.type === 'baked') {
+              createBakedNode(newId, origNode.vertices!, origNode.indices!, origNode.normals ?? null, nt)
             } else {
-              const origNode = getNode(origId)
-              if (origNode && origNode.type === 'primitive') {
-                createPrimitiveNode(newId, origNode.shapeType!, { ...origNode.params! }, nt)
-              } else if (origNode && origNode.type === 'baked') {
-                createBakedNode(newId, origNode.vertices!, origNode.indices!, origNode.normals ?? null, nt)
-              } else {
-                // Fallback: create a placeholder primitive node
-                createPrimitiveNode(newId, 'cube', {}, nt)
-              }
+              // Fallback: create a placeholder primitive node
+              createPrimitiveNode(newId, 'cube', {}, nt)
             }
           }
         }
@@ -432,7 +521,12 @@ export function rebuildBuildTree(
         const treeOp = op.treeOperation ?? 'union'
 
         // FIX (PASTE-CSG-TREE): Pasted CSG has ids: [] (no children).
-        // Register as baked node from stored mesh data instead of boolean node.
+        // CSG-INDEPENDENT-COPY: вставка со снимком дерева — своё дерево копии (параметрическое);
+        // старая вставка без снимка — baked из сохранённого меша.
+        if (op.ids.length === 0 && op.copyTree) {
+          instantiateSubtree(op.copyTree.nodes, op.copyTree.sourceRootId, op.resultId, startT)
+          continue
+        }
         if (op.ids.length === 0) {
           if (objects && objects[op.resultId]) {
             const obj = objects[op.resultId]
@@ -494,14 +588,50 @@ export function rebuildBuildTree(
   }
 }
 
+/** COM вершин шага импорта (по массиву вершин операции — меш шага неизменен). */
+const importComCache = new WeakMap<object, { cx: number; cy: number; cz: number }>()
+
+/**
+ * Данные baked-узла импорта по шагу истории: pivot = transform + COM и — с `withMesh` —
+ * вершины в origin. Как живой importStl/addRawMesh (`centerMassAtOrigin`).
+ * Без `withMesh` (перемотка, узел уже есть) вершины не копируются: COM из кэша.
+ */
+function importBakedData(
+  rawVertices: ArrayLike<number> | undefined,
+  rawIndices: ArrayLike<number> | undefined,
+  transform: TransformNR,
+  withMesh: boolean,
+): { pivot: TransformNR; vertices: Float32Array | null; indices: Uint32Array | null } {
+  if (!rawVertices || !rawIndices || rawVertices.length < 9 || rawIndices.length < 3) {
+    return { pivot: { ...transform }, vertices: null, indices: null }
+  }
+  let com = importComCache.get(rawVertices as object)
+  let vertices: Float32Array | null = null
+  let indices: Uint32Array | null = null
+  if (withMesh || !com) {
+    vertices = new Float32Array(rawVertices)
+    indices = new Uint32Array(rawIndices)
+    if (com) {
+      for (let i = 0; i < vertices.length; i += 3) {
+        vertices[i] -= com.cx; vertices[i + 1] -= com.cy; vertices[i + 2] -= com.cz
+      }
+    } else {
+      com = centerMassAtOrigin(vertices, indices)
+      importComCache.set(rawVertices as object, com)
+    }
+  }
+  const pivot: TransformNR = { ...transform, x: transform.x + com!.cx, y: transform.y + com!.cy, z: transform.z + com!.cz }
+  return withMesh ? { pivot, vertices, indices } : { pivot, vertices: null, indices: null }
+}
+
 /**
  * Register baked nodes after rebuildFromHistory has the mesh data.
  */
 export function registerBakedNodes(
   objects: Record<string, SceneObject>,
-  ops: TinkerCraftOperation[],
+  rawOps: TinkerCraftOperation[],
 ): void {
-  for (const op of ops) {
+  for (const op of projectHistory(rawOps)) {
     if (op.type === 'import_mesh' && objects[op.id]) {
       const obj = objects[op.id]
       if (obj.vertices && obj.indices) {

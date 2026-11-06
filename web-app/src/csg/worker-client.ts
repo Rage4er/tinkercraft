@@ -192,15 +192,6 @@ export async function workerBuildShape(
   return result
 }
 
-export async function workerApplyFillet(
-  objId: string, shapeType: ShapeType, params: ShapeParams, radius: number, transform: TransformNR,
-): Promise<MeshResult> {
-  await waitReady()
-  const result = await send<MeshResult>('applyFillet', { objId, shapeType, params, radius, transform })
-  devLogWorker('receive', 'applyFillet', { objId, shapeType, radius, tris: result.tris }, result.ms)
-  return result
-}
-
 export async function workerBuildImportedMesh(
   objId: string, vertices: Float32Array | number[], indices: Uint32Array | number[],
 ): Promise<MeshResult> {
@@ -321,10 +312,12 @@ export async function workerRebuildNode(
     normals?: number[]
     operation?: 'union' | 'subtract' | 'intersect'
     children?: string[]
+    mirrored?: Array<'XY' | 'XZ' | 'YZ'>
   }>,
+  options?: { worldSpace?: boolean },
 ): Promise<MeshResult> {
   await waitReady()
-  const result = await send<MeshResult>('rebuildTreeNode', { nodeId, nodeCount: nodes.length, nodes })
+  const result = await send<MeshResult>('rebuildTreeNode', { nodeId, nodeCount: nodes.length, nodes, worldSpace: options?.worldSpace === true })
   devLogWorker('receive', 'rebuildTreeNode', { nodeId, tris: result.tris, vertices: result.vertices.length / 3 }, result.ms)
   return result
 }
