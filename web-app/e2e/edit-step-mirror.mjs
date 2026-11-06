@@ -4,7 +4,7 @@
 // уведомлений об отказе нет; undo возвращает YZ (−30), redo — XZ.
 // Запуск: `pnpm dev` в одном терминале, `pnpm e2e:edit-step-mirror` в другом.
 // Необязательный аргумент — путь для скриншота: `node e2e/edit-step-mirror.mjs /tmp/mirror.png`.
-import { openApp } from './helpers.mjs'
+import { openApp, toolbarButton, panelButton } from './helpers.mjs'
 
 const shot = process.argv[2]
 const { browser, page, errors } = await openApp()
@@ -27,7 +27,7 @@ try {
   await page.waitForFunction(() => document.querySelectorAll('.tl-item').length === 3, null, { timeout: 10000 })
 
   // зеркало YZ (кнопки тулбара без подписей: 17-я — зеркало YZ)
-  await page.locator('button.btn-compact').nth(17).click()
+  await toolbarButton(page, 'Зеркало YZ').click()
   await page.waitForFunction(() => document.querySelectorAll('.ct-item[data-object-id]').length === 2, null, { timeout: 15000 })
   await page.locator('.tl-item', { hasText: 'Зеркало YZ' }).waitFor({ timeout: 10000 })
 
@@ -36,7 +36,7 @@ try {
   await page.waitForTimeout(800)
   await objRows.nth(1).click()
   await objRows.nth(2).click({ modifiers: ['Shift'] })
-  await right.locator('.csg-group', { hasText: 'CSG операции' }).locator('button').first().click()
+  await panelButton(page, 'Объединение').click()
   await page.waitForFunction(() => document.querySelectorAll('.ct-item[data-object-id]').length === 2, null, { timeout: 15000 })
   const csgRow = objRows.filter({ hasNotText: 'Призма' })
   await csgRow.click()

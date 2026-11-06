@@ -1,7 +1,7 @@
 // e2e/edit-child.mjs — Фаза 9.2/9.3: правка параметра ребёнка CSG пересобирает результат.
 // Запуск: `pnpm dev` в одном терминале, `pnpm e2e:edit-child` в другом.
 // Необязательный аргумент — путь для скриншота: `node e2e/edit-child.mjs /tmp/edit.png`.
-import { openApp } from './helpers.mjs'
+import { openApp, toolbarButton, panelButton } from './helpers.mjs'
 
 const shot = process.argv[2]
 const { browser, page, errors } = await openApp()
@@ -16,7 +16,7 @@ try {
   const rows = page.locator('.ct-item[data-object-id]')
   await rows.nth(0).click()
   await rows.nth(1).click({ modifiers: ['Shift'] })
-  await page.locator('.panel-right .csg-group', { hasText: 'CSG операции' }).locator('button').first().click()
+  await panelButton(page, 'Объединение').click()
   await page.waitForFunction(() => document.querySelectorAll('.ct-item[data-object-id]').length === 1, null, { timeout: 15000 })
 
   // раскрыть и выбрать куб
@@ -88,13 +88,13 @@ try {
 
   // зеркало призмы по YZ (кнопки тулбара без подписей: 17-я — зеркало YZ)
   await objRows.nth(0).click()
-  await page.locator('button.btn-compact').nth(17).click()
+  await toolbarButton(page, 'Зеркало YZ').click()
   await page.waitForFunction(() => document.querySelectorAll('.ct-item[data-object-id]').length === 3, null, { timeout: 15000 })
 
   // объединить зеркальную копию (3-я строка) со сферой (2-я)
   await objRows.nth(2).click()
   await objRows.nth(1).click({ modifiers: ['Shift'] })
-  await page.locator('.panel-right .csg-group', { hasText: 'CSG операции' }).locator('button').first().click()
+  await panelButton(page, 'Объединение').click()
   await page.waitForFunction(() => document.querySelectorAll('.ct-item[data-object-id]').length === 2, null, { timeout: 15000 })
 
   // раскрыть CSG-результат и выбрать зеркальную призму: замка нет, форма есть

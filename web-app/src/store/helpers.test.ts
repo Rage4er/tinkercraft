@@ -256,7 +256,7 @@ describe('computeWorldAABB / worldVerticesAABB', () => {
     expect(b.min.x).toBeCloseTo(-1, 6)
     expect(b.max.y).toBeCloseTo(2, 6)
   })
-  it('примитив с params — по params + позиции (как раньше)', () => {
+  it('примитив без вершин — OBB из params + позиции (ALIGN-REVIT)', () => {
     expect(computeWorldAABB(cubeObj('k', 5, 4)).min.x).toBe(3)
   })
 })

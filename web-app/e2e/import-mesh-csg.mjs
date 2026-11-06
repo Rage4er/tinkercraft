@@ -7,7 +7,7 @@
 // Запуск: `pnpm dev` в одном терминале, `pnpm e2e:import-mesh-csg` в другом.
 // Необязательный аргумент — путь для скриншота: `node e2e/import-mesh-csg.mjs /tmp/stl.png`.
 import { fileURLToPath } from 'node:url'
-import { openApp } from './helpers.mjs'
+import { openApp, toolbarButton, panelButton } from './helpers.mjs'
 
 const fixture = (name) => fileURLToPath(new URL(`./fixtures/${name}`, import.meta.url))
 const RU = 'Меш не замкнут (non-manifold), CSG невозможен. Проверьте STL.'
@@ -22,16 +22,16 @@ const row = (id) => page.locator(`.ct-item[data-object-id="${id}"]`)
 const ids = async () => objRows.evaluateAll((els) => els.map((e) => e.getAttribute('data-object-id')))
 const rowCount = (n) => page.waitForFunction((k) => document.querySelectorAll('.ct-item[data-object-id]').length === k, n, { timeout: 15000 })
 const toasts = () => page.locator('.toast-msg').allTextContents()
-const union = () => right.locator('.csg-group', { hasText: /CSG/ }).locator('button').first()
+const union = () => panelButton(page, /^(Объединение|Union)$/) // ru/en: шаг 2 переключает язык
 const pos = (axis) => right.locator(`#num-input-${axis}`).first() // первое X/Y/Z — позиция
 
-/** Импорт STL через кнопку тулбара (4-я в группе «Файл») → выбор файла. Возвращает id. */
+/** Импорт STL через кнопку тулбара «Импорт» (по aria-label) → выбор файла. Возвращает id. */
 async function importStl(name) {
   const before = new Set(await ids())
   const chooser = page.waitForEvent('filechooser')
-  await page.locator('button.btn-compact').nth(3).click()
+  await toolbarButton(page, 'Импорт').click()
   const fc = await chooser
-  if ((await fc.element().getAttribute('accept')) !== '.stl') fail('4-я кнопка тулбара — не импорт STL')
+  if ((await fc.element().getAttribute('accept')) !== '.stl') fail('кнопка «Импорт» тулбара — не импорт STL')
   await fc.setFiles(fixture(name))
   await page.waitForFunction((n) => document.querySelectorAll('.ct-item[data-object-id]').length === n, before.size + 1, { timeout: 15000 })
   return (await ids()).find((id) => !before.has(id))

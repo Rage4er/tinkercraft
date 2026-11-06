@@ -4,7 +4,7 @@
 // уведомлений об отказе нет; undo возвращает pivot 8, redo — 12.
 // Запуск: `pnpm dev` в одном терминале, `pnpm e2e:edit-step-move` в другом.
 // Необязательный аргумент — путь для скриншота: `node e2e/edit-step-move.mjs /tmp/step.png`.
-import { openApp } from './helpers.mjs'
+import { openApp, panelButton } from './helpers.mjs'
 
 const shot = process.argv[2]
 const { browser, page, errors } = await openApp()
@@ -29,7 +29,7 @@ try {
   await page.waitForTimeout(800)
   await objRows.nth(0).click()
   await objRows.nth(1).click({ modifiers: ['Shift'] })
-  await right.locator('.csg-group', { hasText: 'CSG операции' }).locator('button').first().click()
+  await panelButton(page, 'Объединение').click()
   await page.waitForFunction(() => document.querySelectorAll('.ct-item[data-object-id]').length === 1, null, { timeout: 15000 })
   await objRows.nth(0).click()
   if ((await propX()) !== '8.0') fail('pivot CSG до правки: ' + (await propX()))

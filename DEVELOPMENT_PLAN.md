@@ -413,7 +413,7 @@ web-app/src/components/icons/
 
 > **Концепция:** Каждая операция в истории — это параметрический объект. Изменяя параметры на любом шаге, мы перестраиваем всё, что было после него.
 >
-> **Статус:** 🔄 Идёт (ветка `phase-9`). 9.1–9.4, 9.6–9.9 ✅; 9.5.0 ✅ (эффективная история); 9.5.1 (fillet) ❌ отменена — fillet удалён; 9.5.2 (move) ✅; 9.5.3 (mirror) ✅; 9.5.4 (extrude) ✅ — **9.5 закрыта**. CSG-INDEPENDENT-COPY ✅; IMPORT-MESH-CSG ✅. Далее — «Активные баги (UX)» (ALIGN-REVIT, NESTED-MOVED-EDIT) и merge `phase-9 → main`. EXTRUDE-UI отменена (см. EXTRUDE-3D-SCALE).
+> **Статус:** 🔄 Идёт (ветка `phase-9`). 9.1–9.4, 9.6–9.9 ✅; 9.5.0 ✅ (эффективная история); 9.5.1 (fillet) ❌ отменена — fillet удалён; 9.5.2 (move) ✅; 9.5.3 (mirror) ✅; 9.5.4 (extrude) ✅ — **9.5 закрыта**. CSG-INDEPENDENT-COPY ✅; IMPORT-MESH-CSG ✅. ALIGN-REVIT ✅. Далее — «Активные баги (UX)» (NESTED-MOVED-EDIT) и merge `phase-9 → main`. EXTRUDE-UI отменена (см. EXTRUDE-3D-SCALE).
 >
 > **Дизайн и решения:** `docs/PHASE_9_DESIGN.md` (9.1–9.9: операция с результатом, вложенные CSG, риски), `docs/PHASE_9_5_DESIGN.md` (9.5: правка прошлых шагов, `edit_step`, каскад CSG, решения В1–В6).
 
@@ -593,7 +593,9 @@ web-app/
 | ID | Приоритет | Описание |
 |---|---|---|
 | NESTED-MOVED-EDIT | 🟡 средний | Правка параметров вложенного CSG, сдвинутого ДО объединения: нужна поправка `TRS_cur·TRS₀⁻¹` для внутреннего boolean (дизайн 9.3, R2). Не блокирует v1, но UX-тупик: пользователь сдвинул CSG → не может править внутренний куб (сейчас — замок 9.9 «nested_moved») |
-| ALIGN-REVIT | 🟡 средний | Переработка инструмента выравнивания по идее Revit: выбрал плоскость (X/Y/Z или грань) → выбрал объект(ы) → выравнивание по реальной геометрии с учётом поворота (не по AABB). **Заменяет точечный фикс ALIGN-PRIMITIVE-AABB** (рамка примитивов по params без поворота; цилиндр/конус/призма — как сфера). В рамках задачи — `aria-label` у **всех** кнопок тулбара, а не только выравнивания: e2e берут по индексу кнопки зеркала (17-я) и импорта STL (4-я) — перестановка кнопок ломает e2e. Срок: следующая после CSG-INDEPENDENT-COPY или «Будущее» |
+| ALIGN-REVIT | ✅ Fixed (align-revit) | Выравнивание по реальной геометрии с учётом поворота и масштаба: рамка — проекция вершин через полный TRS, без вершин — OBB (8 углов локальной рамки из params). Решатель `solveAlignDeltas` общий для живого align и re-solve каскада (move/mirror/extrude). UI прежний — 9 кнопок, якорь — последний выбранный (идея Revit — в поведении, явный выбор плоскости — ALIGN-UI-REVIT). `aria-label` у всех кнопок тулбара (подпись тултипа), e2e — по `aria-label` (`toolbarButton`/`panelButton`), не по индексу. Тесты: `align-obb.test.ts`, `toolbar-aria.test.tsx`, e2e `pnpm e2e:align-obb` |
+| ALIGN-PRIMITIVE-AABB | ✅ Fixed (align-revit) | Рамка примитивов по params без поворота/масштаба; цилиндр/конус/призма — как сфера. Закрыт ALIGN-REVIT |
+| ALIGN-UI-REVIT | 🔲 если понадобится | Явный выбор плоскости/грани → объекты (UI по Revit). Отдельная задача, не начата |
 | IMPORT-MESH-CSG | ✅ Fixed (import-mesh-csg, `fd2f7fc`) | CSG допускает импортированный меш по замкнутости, а не по типу: отказ по `shapeType === 'import_mesh'` убран и в сторе, и в UI (кнопки CSG были неактивны); воркер для незамкнутого меша бросает ошибку с маркером `NON_MANIFOLD` → `notify(t('errors.csgNonManifold'))` (ru/en), объекты/история не меняются. Тесты: `import-mesh-csg.test.ts`, `import-mesh-csg-nonmanifold.test.ts` (сценарий «замкнутый тоже нельзя» перевёрнут), e2e `pnpm e2e:import-mesh-csg` |
 | IMPORT-CSG-STUB | ✅ Fixed (import-mesh-csg) | Скрытый баг: `computeCsgResult` считал импорт примитивом и слал воркеру `shapeType: 'import_mesh'` — тот строил ЗАГЛУШКУ вместо меша STL (незамкнутый треугольник «объединялся»). Не проявлялся, пока импорт отсекался по типу. Регресс-тест: `import-mesh-csg.test.ts` › «IMPORT-CSG-STUB» (проверен откатом) |
 | IMPORT-TREE-RELOAD | ✅ Fixed (import-mesh-csg) | `rebuildBuildTree` создавал baked-узлы импортов только в конце — для CSG с импортом при загрузке/перезапуске ребёнка не было на шаге group → запечённый корень, дети нередактируемы; база move импорта — без COM. Теперь узел создаётся на шаге импорта (pivot = transform + COM). Регресс-тест: `import-mesh-csg.test.ts` › «IMPORT-TREE-RELOAD» (проверен откатом) |
@@ -611,7 +613,7 @@ web-app/
 
 - PropertiesPanel: уникальные id полей позиции и поворота (сейчас оба `num-input-X` — label связывается не с тем полем).
 - NumInput: при `|v| < 1e-4` показывать `0.000`, а не `-0.0`.
-- (`aria-label` всех кнопок тулбара — в ALIGN-REVIT.)
+- ~~`aria-label` всех кнопок тулбара~~ — ✅ ALIGN-REVIT.
 
 ### Функциональные ограничения (принято)
 
