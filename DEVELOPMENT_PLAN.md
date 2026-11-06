@@ -54,7 +54,7 @@
 | **🎉 РЕЛИЗ v1.0.0** | **✅ 2026-08-19** |
 | Фаза 8 — Единая модель трансформов | ✅ Завершена 2026-10-15 (v1.1.0) |
 | **Фаза 8.5 — Унификация отрисовки и данных** | **✅ Завершена (v1.2.3)** |
-| **Фаза 9 — Параметрическая история** | **🔄 Идёт** (ветка `phase-9`): 9.1–9.4, 9.6–9.9 ✅, 9.5.0 ✅, 9.5.1 ❌ отменена, 9.5.2 (move) — следующая |
+| **Фаза 9 — Параметрическая история** | **🔄 Идёт** (ветка `phase-9`): 9.1–9.4, 9.6–9.9 ✅, 9.5.0 ✅, 9.5.1 ❌ отменена, 9.5.2 (move) ✅, 9.5.3 (mirror) — следующая |
 | **Фаза 10 — Яндекс.Игры** | **🔲 Запланирована** |
 | **Фаза 11 — Будущее** | **🔲 Запланирована** |
 
@@ -413,7 +413,7 @@ web-app/src/components/icons/
 
 > **Концепция:** Каждая операция в истории — это параметрический объект. Изменяя параметры на любом шаге, мы перестраиваем всё, что было после него.
 >
-> **Статус:** 🔄 Идёт (ветка `phase-9`). 9.1–9.4, 9.6–9.9 ✅; 9.5.0 ✅ (эффективная история); 9.5.1 (fillet) ❌ отменена — fillet удалён; следующая — 9.5.2 (move).
+> **Статус:** 🔄 Идёт (ветка `phase-9`). 9.1–9.4, 9.6–9.9 ✅; 9.5.0 ✅ (эффективная история); 9.5.1 (fillet) ❌ отменена — fillet удалён; 9.5.2 (move) ✅; следующая — 9.5.3 (mirror).
 >
 > **Дизайн и решения:** `docs/PHASE_9_DESIGN.md` (9.1–9.9: операция с результатом, вложенные CSG, риски), `docs/PHASE_9_5_DESIGN.md` (9.5: правка прошлых шагов, `edit_step`, каскад CSG, решения В1–В6).
 
@@ -440,8 +440,8 @@ web-app/src/components/icons/
 | 9.9 | Индикатор «нельзя править» (замок + сообщение, `isChildEditable`, `useRootConsistency`) | ✅ |
 | 9.5.0 | Эффективная история `projectHistory` + `computeCsgResult` — движок для 9.5 | ✅ (ff72b38, PR #1) |
 | 9.5.1 | Правка fillet | ❌ отменена (fillet удалён, PR #2; см. Фаза 11) |
-| 9.5.2 | Правка шага move с каскадом CSG | 🔲 следующая |
-| 9.5.3 | Правка mirror (плоскость) | 🔲 |
+| 9.5.2 | Правка шага move с каскадом CSG (панель «Шаг N», re-solve align, pivot R8; `store/edit-step.ts`, `StepPanel.tsx`) | ✅ (ветка `phase-9.5.2`) |
+| 9.5.3 | Правка mirror (плоскость) | 🔲 следующая |
 | 9.5.4 | Правка extrude (новые extrude с `group.source`) | 🔲 |
 
 > Прежние пункты этой таблицы с теми же номерами (9.8 CSG-CSG-POSITION-DRIFT, 9.9 MIRROR-CSG-CHILD-RS-LOSS, 9.10 CSG-PRESERVE-RS) — баги Фазы 8/8.5, исправлены там (2026-10-14 и 8.5.9); нумерация 9.x теперь по `docs/PHASE_9_DESIGN.md`.
@@ -486,7 +486,8 @@ web-app/src/components/icons/
 - ✅ Rebuild из истории — уже есть (`rebuild.ts`)
 - ✅ UI правки детей CSG и шагов Timeline (v1) — 9.1–9.4 (`ComponentTree`, `ChildPropertiesPanel`)
 - ✅ Эффективная история для правки прошлых шагов — 9.5.0 (`store/project-history.ts`)
-- 🔲 UI правки шагов move / mirror / extrude («Шаг N», решение В4) — 9.5.2–9.5.4
+- ✅ UI правки шага move («Шаг N», решение В4) — 9.5.2 (`StepPanel`, движок `store/edit-step.ts`)
+- 🔲 UI правки шагов mirror / extrude — 9.5.3–9.5.4 (расширение `SUPPORTED_KINDS` в `edit-step.ts`)
 
 #### Сравнение с профессиональными CAD
 
@@ -590,6 +591,8 @@ web-app/
 |---|----------|-----------|--------|
 | | **CENTERING-INCONSISTENCY** — три разных центра масс в проекте: worker (vertex centroid), frontend (`extractCenteredAt(transformA)`), helpers (`centerMassAtOrigin`). Для несимметричных CSG-результатов diff = 3.89 (численный тест union куб+призма). Риск CSG-PRISM-OFFSET на Этапе 8. Унифицировано: единая `centerMassAtOrigin` (`csg/geometry-utils.ts`) в worker + frontend + rebuild. | **CRITICAL** | ✅ **ИСПРАВЛЕНО** (2026-10-14, Этап 6.5) |
 | | **FILLET-LOST-IN-CSG** — ✅ **СНЯТО (fillet удалён)** — CSG с примитивом-кубом после fillet теряет скругление: `handleCsgBooleanSync`, `handleSyncObjects` и `rebuildTreeNode` воркера строят примитив через `buildPrimitive`, игнорируя `params.filletRadius` (`applyFillet` пишет его в params). Union куба r=2 и r=3 со сферой даёт одинаковый меш (найдено тестом 9.5.0). Дерево (`rebuildBuildTree`) fillet тоже не воспроизводит. Блокирует 9.5.1 (правка fillet нечего каскадировать). | **HIGH** | ✅ **СНЯТО** (2026-11-05, remove-fillet): fillet удалён из приложения — старые шаги fillet вырезаются при загрузке |
+| | **ALIGN-CSG-AABB** — выравнивание с CSG-объектом (якорь или цель) смещалось на позицию операнда A: `computeWorldAABB` брал локальный кэш `obj.aabb`. Найдено при 9.5.2 (re-solve align). | **HIGH** | ✅ **ИСПРАВЛЕНО** (2026-11-06, 9.5.2): рамка по вершинам с полным TRS (`helpers.worldVerticesAABB`), общий решатель `solveAlignDeltas` |
+| | **ALIGN-PRIMITIVE-AABB** — рамка примитива для выравнивания считается по params без поворота/масштаба, а цилиндр/конус/призма (есть `radius`) — как сфера (`±radius` по всем осям, высота не учитывается). Выравнивание повёрнутых/масштабированных примитивов и цилиндров по оси высоты неточно (живое действие и re-solve 9.5.2 согласованы — один решатель). | **MEDIUM** | 🔲 |
 | | **CENTERING-RESIDUAL** — остаточный долг 6.5: (1) `handleRebuildScene` внутренне использует world-кэш (самосогласован, но вне origin-конвенции); (2) pivot legacy-документов (центрирование по transformA) не мигрирован — tree-rebuild старых CSG может дать смещение (baked resultVertices путь не затронут); (3) extrude/CSG филлет-примитивов rebuild'ится через `buildPrimitive` без fillet. | **MEDIUM** | 🔲 Этап 7/8 |
 | | **PIVOT-CSG** — pivot CSG-результата = COM (из-за Stage 6.5 `centerMassAtOrigin` + pivot = COM в `csgBoolean`). Gizmo CSG «съезжает» на `(COM − transformA)` (измерено **0.0192** ед. для куб@(20,20,20) + призма@(20,20,20) rot(20,20,20) scale(1,1,0.5)). Исправлено: pivot = transformA, vertices сдвинуты на `(COM − transformA)` в обратную сторону — инвариант `world = pivot + vertex` сохранён. | **CRITICAL** | ✅ **ИСПРАВЛЕНО** (2026-10-17) |
 | | **VIEWPORT-DOUBLE-CENTERING** — `useMeshSync` вычитал `bboxCenter` из вершин всех объектов, но CSG-вершины уже COM-центрированы (§5.4): для асимметричной геометрии (COM ≠ bboxCenter) CSG рендерился со сдвигом **4.2491** ед. Устранено предикатом `isPivotCenteredGeometry` в 3 местах вьюпорта + синхронно в STL-экспорте; diff render-vs-data = 0.00000000. | **CRITICAL** | ✅ **ИСПРАВЛЕНО** (2026-10-16) |

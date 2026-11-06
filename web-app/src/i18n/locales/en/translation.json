@@ -167,7 +167,10 @@
     "empty": "Empty",
     "editChildParams": "Edit CSG child size",
     "editStep": "Edit this step's parameters",
-    "editGone": "The object of this step no longer exists in the scene"
+    "editGone": "The object of this step no longer exists in the scene",
+    "editStepOp": "Edit step {{step}}: {{detail}}",
+    "edited": "edited (step {{step}})",
+    "editMoveStep": "Edit this step's offset (CSG below is recomputed)"
   },
   "filters": {
     "add_shape": "Add",
@@ -181,7 +184,8 @@
     "visibility": "Visibility",
     "color": "Color",
     "rename": "Rename",
-    "edit_child_params": "CSG child edit"
+    "edit_child_params": "CSG child edit",
+    "edit_step": "Step edit"
   },
   "snap": {
     "label": "Snap:",
@@ -277,7 +281,18 @@
       "empty": "The edit emptied the result (empty geometry) — change rejected",
       "failed": "Failed to recompute CSG"
     },
-    "legacyFilletRemoved": "Fillet has been removed from the app: rounding in this project is not restored, cubes are shown sharp"
+    "legacyFilletRemoved": "Fillet has been removed from the app: rounding in this project is not restored, cubes are shown sharp",
+    "editStep": {
+      "notFound": "Step {{step}} not found or not editable",
+      "unsupported": "Editing steps of this type is not available yet",
+      "invalid": "Invalid value",
+      "tooMany": "Too many dependent steps further down the history — edit rejected",
+      "missingOperand": "Step {{step}}: CSG operand not found — edit rejected",
+      "legacy": "Step {{step}}: CSG from an old file without creation data — edit rejected",
+      "empty": "Step {{step}} became empty — edit rejected",
+      "childFailed": "Step {{step}}: the CSG component edit could not be replayed — edit rejected",
+      "failed": "Could not recompute the history (step {{step}})"
+    }
   },
   "toolbar": {
     "label": "Toolbar"
@@ -343,5 +358,18 @@
       "boolean": "Nested operation — edit its components",
       "no_origin": "No CSG creation data (pasted copy)"
     }
+  },
+  "stepPanel": {
+    "title": "Step {{step}}: {{name}}",
+    "move": "Move",
+    "target": "Object",
+    "original": "Originally",
+    "edited": "Edited by step {{step}}",
+    "back": "Back",
+    "offset": "Offset",
+    "rotation": "Rotation",
+    "scale": "Scale",
+    "hint": "The value is applied on Enter or when leaving the field; CSG further down the history is recomputed",
+    "recomputing": "Recomputing CSG…"
   }
 }

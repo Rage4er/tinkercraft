@@ -9,6 +9,7 @@ import type {
 import {
   projectHistory, projectHistoryDetailed, effectiveOps, effectiveToRawIndex,
   stepFingerprint, applyStepPatch, applyReplacement, computeCascade, patchKindFor,
+  effectivePatches, effectiveOpAt, cascadeSteps,
 } from './project-history'
 import { buildRebuildMeta, rebuildBuildTree } from './rebuild'
 import { findCreationTransform } from './edit-child'
@@ -273,11 +274,46 @@ describe('computeCascade', () => {
       { stepIndex: 4, kind: 'group' }, { stepIndex: 5, kind: 'edit_child_params' }, { stepIndex: 9, kind: 'group' },
     ])
     expect(plan.align).toEqual([7])
+    expect(plan.alignResolve[7]).toEqual(['t'])                 // якорь сдвинут → все цели
+    // все пересчитываемые шаги по порядку истории (замороженные и align вперемешку)
+    expect(cascadeSteps(plan).map((x) => `${x.stepIndex}:${x.kind}`)).toEqual([
+      '4:group', '5:edit_child_params', '7:align', '9:group',
+    ])
+  })
+
+  it('align: якорь не из S → re-solve только целей из S', () => {
+    const ops: TinkerCraftOperation[] = [
+      ...base(),                                                                    // 0..4: c = a ∪ b
+      add('t'), add('k'),                                                           // 5, 6
+      { type: 'align', ids: ['c', 't'], axis: 'Y', anchor: 'center', anchorId: 'k', deltas: { c: 1, t: 2 } }, // 7
+    ]
+    const plan = computeCascade(ops, 1)
+    expect(plan.align).toEqual([7])
+    expect(plan.alignResolve[7]).toEqual(['c'])
+    expect(plan.affectedIds.has('t')).toBe(false)
   })
 
   it('шаг без целей / вне диапазона — пустой план', () => {
     const ops = base()
     expect(computeCascade(ops, 0).frozen).toEqual([])
     expect(computeCascade(ops, 99).frozen).toEqual([])
+  })
+})
+
+describe('effectivePatches / effectiveOpAt (9.5.2)', () => {
+  it('последняя валидная правка шага — с before и сырым индексом правки', () => {
+    const ops = base()
+    const e1 = { ...edit(ops, 1, M(4)), before: M(2) }
+    const e2 = { ...edit(ops, 1, M(7)), before: M(4) }
+    const bad = { ...edit(ops, 3, M(1)), stepFingerprint: { type: 'move' as const, targetId: 'zzz' } }
+    const all = [...ops, e1, bad, e2]
+    const p = effectivePatches(all)
+    expect([...p.keys()]).toEqual([1])                          // правка с чужим отпечатком не считается
+    expect(p.get(1)).toEqual({ patch: M(7), editIndex: 7, before: M(4) })
+    expect(dx(effectiveOpAt(all, 1)!)).toBe(7)
+    expect(dx(effectiveOpAt(all, 3)!)).toBe(5)                  // не правленный шаг — как есть
+    expect(effectiveOpAt(all, 5)).toBeNull()                    // сама edit_step
+    expect(effectiveOpAt(all, 99)).toBeNull()
+    expect(dx(effectiveOpAt(all.slice(0, 6), 1)!)).toBe(4)      // префикс (undo второй правки)
   })
 })

@@ -12,7 +12,8 @@
     "icons": "node scripts/generate-icons.mjs",
     "e2e:smoke": "node e2e/smoke.mjs",
     "e2e:tree": "node e2e/tree.mjs",
-    "e2e:edit-child": "node e2e/edit-child.mjs"
+    "e2e:edit-child": "node e2e/edit-child.mjs",
+    "e2e:edit-step-move": "node e2e/edit-step-move.mjs"
   },
   "dependencies": {
     "i18next": "^26.3.6",

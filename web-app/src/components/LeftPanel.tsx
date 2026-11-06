@@ -57,7 +57,7 @@ export default function LeftPanel({
   tlFilters: Record<string, boolean>;
   onFilterChange: (key: string, checked: boolean) => void;
   onJumpHistory: (index: number) => void;
-  onTimelineEdit?: (op: import("../csg/types").TinkerCraftOperation) => void;
+  onTimelineEdit?: (op: import("../csg/types").TinkerCraftOperation, index: number) => void;
 }) {
   const { t } = useTranslation();
 

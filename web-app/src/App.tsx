@@ -12,12 +12,14 @@ import StatusBar from "./components/StatusBar";
 import LeftPanel from "./components/LeftPanel";
 import PropertiesPanel from "./components/PropertiesPanel";
 import ChildPropertiesPanel from "./components/ChildPropertiesPanel";
+import StepPanel from "./components/StepPanel";
 import { useDocumentStore } from "./store/document-store";
 import { useUiStore } from "./store/ui-store";
 import { useShallow } from "zustand/shallow";
 import { isWorkerReady } from "./csg/worker-client";
 import { SNAP_VALUES, AUTOSAVE_DELAY_MS } from "./constants";
 import { useSelectedChildGuard } from "./hooks/useSelectedChildGuard";
+import { useSelectedStepGuard } from "./hooks/useSelectedStepGuard";
 import { useTimelineEdit } from "./hooks/useTimelineEdit";
 import type {
   TransformNR,
@@ -348,6 +350,9 @@ export default function App() {
 
   // Фаза 9.1: сброс выбора ребёнка CSG, если узел/выделение исчезли
   useSelectedChildGuard();
+  // Фаза 9.5.2: сброс выбора шага Timeline (undo до шага, выделение в сцене)
+  useSelectedStepGuard();
+  const hasSelectedStep = useUiStore((s) => s.selectedStep !== null);
   const handleTimelineEdit = useTimelineEdit();
   const hasSelectedChild = useUiStore((s) => s.selectedChild !== null);
 
@@ -616,7 +621,7 @@ export default function App() {
         <div className="panel-right">
           <div className="props-header">{t("properties.header")}</div>
 
-          {hasSelectedChild ? <ChildPropertiesPanel /> : <PropertiesPanel
+          {hasSelectedStep ? <StepPanel /> : hasSelectedChild ? <ChildPropertiesPanel /> : <PropertiesPanel
             firstSelected={firstSelected}
             busy={busy}
             selectedIds={selectedIds}

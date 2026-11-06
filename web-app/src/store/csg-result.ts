@@ -23,7 +23,7 @@ import {
 } from '../csg/worker-client'
 import type { MeshResult } from '../csg/worker-handlers'
 import { computeAABB, centerMassAtOrigin } from './helpers'
-import { computeInverseRSMatrix, transposeRSMatrix } from '../csg/worker-matrix'
+import { computeInverseRSMatrix, transposeRSMatrix, computeRSMatrix } from '../csg/worker-matrix'
 import { devLogCsg } from '../utils/debug'
 import { fmtPoint, fmtTransform } from '../utils/debug-format'
 
@@ -226,4 +226,48 @@ export function groupOperationFromResult(
 /** Замена замороженного шага `group` для каскада 9.5 — те же поля, что пишет csgBoolean. */
 export function groupReplacementFromResult(stepIndex: number, r: CsgResult): StepReplacement {
   return { stepIndex, kind: 'group', ...resultFields(r) }
+}
+
+/**
+ * Legacy-конвенция `group` без resultRotation/resultScale (extrude, документы до 8.5.9):
+ * RS операнда A ЗАПЕЧЁН в вершины, pivot — только позиция A. Каскад 9.5 пересчитывает
+ * такие шаги в ИХ конвенции: иначе последующие move с rotDelta (дельты эйлеровых углов
+ * относительно identity) дали бы другую ориентацию.
+ * world = posA + R·S·v_local = posA + v_baked ⇒ v_baked = R·S·v_local.
+ */
+export function bakeResultRS(r: CsgResult): CsgResult {
+  const t = r.transform
+  const hasRS = t.rotX !== 0 || t.rotY !== 0 || t.rotZ !== 0 || t.scaleX !== 1 || t.scaleY !== 1 || t.scaleZ !== 1
+  const transform: TransformNR = { x: t.x, y: t.y, z: t.z, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
+  if (!hasRS) return { ...r, transform }
+  const [m00, m01, m02, m10, m11, m12, m20, m21, m22] = computeRSMatrix(
+    { rotX: t.rotX, rotY: t.rotY, rotZ: t.rotZ }, { scaleX: t.scaleX, scaleY: t.scaleY, scaleZ: t.scaleZ },
+  )
+  const vertices = new Float32Array(r.vertices.length)
+  for (let i = 0; i < vertices.length; i += 3) {
+    const x = r.vertices[i], y = r.vertices[i + 1], z = r.vertices[i + 2]
+    vertices[i] = m00 * x + m01 * y + m02 * z
+    vertices[i + 1] = m10 * x + m11 * y + m12 * z
+    vertices[i + 2] = m20 * x + m21 * y + m22 * z
+  }
+  // Нормали: n' = normalize((R·S)⁻ᵀ·n) = normalize(R·S⁻¹·n)
+  let normals: Float32Array | null = null
+  if (r.normals) {
+    const [i00, i01, i02, i10, i11, i12, i20, i21, i22] = computeInverseRSMatrix(t, t)  // S⁻¹Rᵀ → транспонируем
+    normals = new Float32Array(r.normals.length)
+    for (let i = 0; i < normals.length; i += 3) {
+      const nx = r.normals[i], ny = r.normals[i + 1], nz = r.normals[i + 2]
+      let tx = i00 * nx + i10 * ny + i20 * nz
+      let ty = i01 * nx + i11 * ny + i21 * nz
+      let tz = i02 * nx + i12 * ny + i22 * nz
+      const len = Math.hypot(tx, ty, tz) || 1
+      tx /= len; ty /= len; tz /= len
+      normals[i] = tx; normals[i + 1] = ty; normals[i + 2] = tz
+    }
+  }
+  const aabb = computeAABB(vertices)
+  return {
+    vertices, indices: r.indices, normals, aabb, transform,
+    originalBboxSize: { x: aabb.max.x - aabb.min.x, y: aabb.max.y - aabb.min.y, z: aabb.max.z - aabb.min.z },
+  }
 }

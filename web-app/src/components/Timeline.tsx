@@ -1,6 +1,9 @@
 import { useRef, useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import type { TinkerCraftOperation } from "../csg/types";
+import type { TinkerCraftOperation, StepPatch } from "../csg/types";
+import { effectivePatches, applyStepPatch } from "../store/project-history";
+import { isStepEditable } from "../store/edit-step";
+import { fmtVec } from "./StepPanel";
 import {
   CubeIcon,
   SphereIcon,
@@ -83,6 +86,8 @@ export function opIcon(op: TinkerCraftOperation): React.ReactNode {
           : <UnionIcon size={32} />;
     case "edit_child_params":
       return <ScaleIcon size={32} />;
+    case "edit_step":
+      return op.patch.kind === "mirror" ? <MirrorYZIcon size={32} /> : <MoveIcon size={32} />;
     case "delete":
       return <DeleteIcon size={32} />;
     case "visibility":
@@ -122,6 +127,8 @@ export function opLabel(op: TinkerCraftOperation, t: (key: string, opts?: Record
           : t("timeline.groupUnion");
     case "edit_child_params":
       return t("timeline.editChildParams");
+    case "edit_step":
+      return t("timeline.editStepOp", { step: op.stepIndex + 1, detail: patchDetail(op.patch, op.before, t) });
     case "delete":
       return t("timeline.delete");
     case "visibility":
@@ -133,6 +140,16 @@ export function opLabel(op: TinkerCraftOperation, t: (key: string, opts?: Record
     default:
       return "";
   }
+}
+
+/** Фаза 9.5: «сдвиг (0, 0, 0) → (3, 0, 0)» для подписи правки шага. */
+function patchDetail(p: StepPatch, before: StepPatch | undefined, t: (key: string, opts?: Record<string, unknown>) => string): string {
+  if (p.kind === "move") {
+    const from = before?.kind === "move" ? `${fmtVec(before.delta)} → ` : "";
+    return `${t("stepPanel.offset").toLowerCase()} ${from}${fmtVec(p.delta)}`;
+  }
+  const from = before?.kind === "mirror" ? `${before.plane} → ` : "";
+  return `${from}${p.plane}`;
 }
 
 // ---- Timeline ----
@@ -149,8 +166,8 @@ export default function Timeline({
   busy: boolean;
   onJump: (index: number) => void;
   filters: Record<string, boolean>;
-  /** Фаза 9.4: «править» шаг — перейти к его цели (объект или ребёнок CSG) в панели свойств */
-  onEdit?: (op: TinkerCraftOperation) => void;
+  /** Фаза 9.4/9.5: «править» шаг — цель шага (9.4) или сам шаг (9.5.2, move); index — сырой индекс */
+  onEdit?: (op: TinkerCraftOperation, index: number) => void;
 }) {
   const { t } = useTranslation();
   const listRef = useRef<HTMLDivElement>(null);
@@ -168,6 +185,11 @@ export default function Timeline({
       .filter(({ op }) => filters[op.type] !== false),
     [operations, filters]
   );
+  // Фаза 9.5: действующие правки шагов (по префиксу до historyIndex) — эффективные значения в подписи
+  const patched = useMemo(
+    () => effectivePatches(operations.slice(0, historyIndex)),
+    [operations, historyIndex]
+  );
   if (visible.length === 0) return <div className="tl-empty">{t("timeline.empty")}</div>;
 
   return (
@@ -176,6 +198,8 @@ export default function Timeline({
         const idx = i + 1;
         // FIXED: Include index in key to prevent duplicates when same op type targets same object
         const key = 'id' in op ? `${op.type}_${(op as { id?: string }).id}_${i}` : `${op.type}_${i}`
+        const edit = patched.get(i)
+        const stepEdit = isStepEditable(op) && idx <= historyIndex
         return (
           <div
             key={key}
@@ -184,13 +208,20 @@ export default function Timeline({
             onClick={() => !busy && onJump(idx)}
           >
             <span className="tl-icon">{opIcon(op)}</span>
-            <span className="tl-label">{opLabel(op, t)}</span>
-            {onEdit && (op.type === "add_shape" || op.type === "edit_child_params") && (
+            <span className="tl-label">
+              {opLabel(edit ? applyStepPatch(op, edit.patch) ?? op : op, t)}
+              {edit && (
+                <span className="tl-edited" data-testid="tl-edited" title={t("timeline.edited", { step: edit.editIndex + 1 })}>
+                  {" "}✎{edit.editIndex + 1}
+                </span>
+              )}
+            </span>
+            {onEdit && (op.type === "add_shape" || op.type === "edit_child_params" || stepEdit) && (
               <button
                 className="tl-edit"
-                title={t("timeline.editStep")}
+                title={stepEdit ? t("timeline.editMoveStep") : t("timeline.editStep")}
                 disabled={busy}
-                onClick={(e) => { e.stopPropagation(); onEdit(op); }}
+                onClick={(e) => { e.stopPropagation(); onEdit(op, i); }}
               >
                 ✎
               </button>

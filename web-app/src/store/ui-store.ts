@@ -74,6 +74,9 @@ export interface UiStore {
   toggleTreeExpanded: (id: string) => void
   selectedChild: { rootId: string; nodeId: string } | null
   setSelectedChild: (v: { rootId: string; nodeId: string } | null) => void
+  /** Фаза 9.5.2: выбранный в Timeline прошлый шаг (сырой индекс) — панель «Шаг N» */
+  selectedStep: number | null
+  setSelectedStep: (v: number | null) => void
   cameraMode: 'perspective' | 'orthographic'
   setCameraMode: (v: 'perspective' | 'orthographic' | ((prev: 'perspective' | 'orthographic') => 'perspective' | 'orthographic')) => void
 }
@@ -134,6 +137,8 @@ export const useUiStore = create<UiStore>((set) => ({
     set((s) => ({ expandedTreeIds: { ...s.expandedTreeIds, [id]: !s.expandedTreeIds[id] } })),
   selectedChild: null,
   setSelectedChild: (v) => set({ selectedChild: v }),
+  selectedStep: null,
+  setSelectedStep: (v) => set({ selectedStep: v }),
   cameraMode: 'perspective',
   setCameraMode: (v) =>
     set((s) => ({ cameraMode: typeof v === 'function' ? v(s.cameraMode) : v })),
