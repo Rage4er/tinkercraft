@@ -9,7 +9,54 @@
 
 ## [Unreleased]
 
+---
+
+## [1.3.0] — 2026-11-06
+
+**Фаза 9 — Параметрическая история (9.1–9.9, 9.5.0–9.5.4).**
+
 ### Added
+- **9.1–9.3:** дерево компонентов (раскрытие CSG, выбор ребёнка), панель свойств ребёнка (`ChildPropertiesPanel`), пересборка CSG при смене `params` (`edit_child_params`).
+- **9.4:** правка из Timeline v1 — ✎ у `add_shape` / `edit_child_params` ведёт к форме цели (append-only).
+- **9.6:** undo/redo + сериализация правки (`.3dtc` round-trip).
+- **9.7:** индикация «Пересчёт CSG…».
+- **9.8:** правка зеркальных детей CSG (`primitive` + `mirrored[]`).
+- **9.9:** замок 🔒 «правка недоступна» (причины: `baked` / `nested_moved` / `mirror`).
+- **9.5.0:** `projectHistory` (эффективная история), `computeCsgResult` (общее ядро CSG), `computeCascade`.
+- **9.5.1:** отменена (fillet удалён).
+- **9.5.2:** правка шага `move` (каскад CSG, re-solve `align`, pivot CSG).
+- **9.5.3:** правка шага `mirror` (плоскость, `composeMirroredList`, каскад).
+- **9.5.4:** правка шага `extrude` (`GroupOperation.source`, каскад, re-solve `align`).
+- **CSG-INDEPENDENT-COPY:** зеркало и вставка CSG → независимая параметрическая копия (копия дерева, не baked). Правка копии не трогает оригинал.
+- **IMPORT-MESH-CSG:** CSG для замкнутых STL (по manifold, а не по `shapeType`), i18n `errors.csgNonManifold`.
+- **ALIGN-REVIT:** выравнивание по реальной геометрии (вершины, поворот, масштаб), `aria-label` у всех 35 кнопок тулбара.
+- **UI:** левая панель 320px, примитивы в 3 столбца.
+- **CI:** `packageManager: pnpm@12.10.1`, CI зелёный (install + typecheck + 662 теста + build).
+
+### Removed
+- **Fillet** (скругление граней куба) — до появления инструмента на B-Rep (Фаза 11, OCCT); старые шаги `fillet` вырезаются при загрузке.
+- **Кнопка «Extrude»** не возвращается: `extrudeSelected` — не extrude, а «растянуть по оси» (движок правки 9.5.4, не в UI). Настоящий extrude (2D → 3D) — Фаза 11.
+
+### Fixed
+- `MIRROR-CHAIN-REPLAY`, `MIRROR-CSG-REPLAY` (9.5.3).
+- `ALIGN-CSG-AABB` (9.5.2), `ALIGN-PRIMITIVE-AABB` (ALIGN-REVIT).
+- `MIRROR-CSG-TREE-RELOAD`, `PASTE-CSG-RS` (CSG-INDEPENDENT-COPY).
+- `IMPORT-CSG-STUB`, `IMPORT-TREE-RELOAD` (IMPORT-MESH-CSG).
+- `EXTRUDE-AABB` и «move базы до extrude не тянул плиту» (9.5.4).
+- Безымянные кнопки тулбара (`aria-label=""`) — ALIGN-REVIT.
+
+### Known Limitations
+- `NESTED-MOVED-EDIT` — вложенный CSG, сдвинутый до объединения, не правится (🔒 `nested_moved`). После v1.3.0.
+- `CSG-INDEPENDENT-COPY` — связанное зеркало (linked mirror) не делали; копия всегда независимая.
+- `IMPORT-MESH-CSG` — «починка» незамкнутого меша (заполнение дыр) — отдельная задача.
+- `ALIGN-UI-REVIT` (явный выбор плоскости) — отдельная задача.
+- `CI-DEDUP` (`ci-web.yml` и `build.yml` дублируют друг друга), `CI-E2E` (e2e не в CI) — после.
+- `PropertiesPanel`: у полей позиции и поворота одинаковые `id` (`num-input-X`); `NumInput` показывает `-0.0` — мелкий UX, не исправлено.
+- `.doodle` (legacy) — в UI не открывается (`parseDoodle` не вызывается).
+
+### Подробно
+
+#### Added
 - **Фаза 9.1 — раскрытие CSG в дереве компонентов:** вкладка «Дерево» показывает детей CSG-результата (примитивы с краткой сводкой параметров `W20 H20 D20`, вложенные CSG, запечённые/зеркальные — помечены нередактируемыми). Шеврон ▸/▾ раскрывает/сворачивает (в том числе вложенные); клик по ребёнку выбирает его (`ui-store.selectedChild`, корень выделяется в сцене), клик по корню сбрасывает выбор, устаревший выбор сбрасывается при undo/удалении (`hooks/useSelectedChildGuard.ts`). Read-модель дерева `getTreeView`/`findViewNode`/`formatParams` — `csg/tree-view.ts` (снимок с копиями params, защита от циклов и глубины 32). Иконки строк дерева уменьшены 32→20px (при шевроне имя схлопывалось). Решения и риски Фазы 9 — `docs/PHASE_9_DESIGN.md`. Тесты: +8 (`csg/tree-view.test.ts`), e2e `pnpm e2e:tree` (`csg/tree-view.ts`, `components/ComponentTree.tsx`, `store/ui-store.ts`, `hooks/useSelectedChildGuard.ts`, `App.css`, `i18n/locales/{ru,en}`, `e2e/tree.mjs`)
 - **Фаза 9.2/9.3/9.6 — правка параметров ребёнка CSG:** выбор ребёнка в дереве открывает панель «Компонент CSG» (`ChildPropertiesPanel`) вместо свойств объекта; поля зависят от формы (`csg/child-params.ts`: куб W/H/D, сфера R, цилиндр/конус R/H, тор, призма/пирамида R/H/грани). Изменение значения пересчитывает CSG-результат и пишет новую операцию `edit_child_params` (`rootId`, `nodeId`, полные `params`, готовый меш `resultVertices/Indices/Normals`, `originalBboxSize`) — как `group`, воспроизведение детерминировано и не требует CSG при загрузке. Pivot корня не меняется: вершины приводятся к его локальной системе (`v = S⁻¹Rᵀ(v_world − pos₀)`, TRS₀ берётся из операции `group` корня). Работают вложенные CSG, subtract/intersect, повёрнутые/масштабированные операнды, корень, перемещённый после объединения. **Защита:** перед правкой дерево пересчитывается со СТАРЫМИ params и сравнивается с текущим мешем (bbox + объём, допуск 1e-3); при расхождении (например, вложенный CSG, сдвинутый до объединения) правка отклоняется с уведомлением, а не портит геометрию; правка, обнуляющая результат, откатывается; blur без изменения значения не пишет в историю. Операция зарегистрирована в `.3dtc`/`.doodle` (`VALID_OP_TYPES`, восстановление массивов меша), Timeline, фильтрах истории, i18n (ru/en). Кэш воркера корня синхронизируется (`workerSyncMesh`) — следующий CSG берёт новую геометрию. Воркер: флаг `worldSpace` в `rebuildTreeNode` (корень не центрируется по COM, ответ в системе создания CSG), `rebuildBooleanWorld` в `history-tree.ts`. Тесты: +24 (`__tests__/edit-child-params.test.ts` на реальном WASM: сравнение с «свежим» CSG, RS, вложенные, отказ, undo/redo с очищенными снимками, `.3dtc` round-trip; `csg/child-params.test.ts`), e2e `pnpm e2e:edit-child` (`store/edit-child.ts`, `store/document-store.ts`, `components/ChildPropertiesPanel.tsx`, `csg/child-params.ts`, `csg/types.ts`, `csg/worker-handlers.ts`, `csg/worker-client.ts`, `csg/history-tree.ts`, `store/rebuild.ts`, `io/3dtc-io.ts`, `io/doodle-io.ts`, `components/Timeline.tsx`, `constants.ts`, `i18n/locales/{ru,en}`, `App.tsx`, `e2e/edit-child.mjs`)
 - **Фаза 9.4 (v1) — правка шага из Timeline:** у шагов `add_shape` и `edit_child_params` кнопка ✎ выделяет цель шага — живой объект сцены или ребёнка CSG (с раскрытием предков в дереве и переключением на вкладку «Дерево») — и открывает его форму параметров. История остаётся append-only: правка = новая операция над текущим состоянием (`resize_dims` / `edit_child_params`). Если объекта шага уже нет в сцене — уведомление. Остальные операции (move, fillet, mirror…) не редактируются: это переписывание истории (9.5) (`hooks/useTimelineEdit.ts`, `csg/tree-view.ts::locateNode`, `components/Timeline.tsx`, `components/LeftPanel.tsx`, `App.tsx`, `App.css`)
@@ -29,7 +76,7 @@
 - **ALIGN-REVIT — выравнивание по реальной геометрии с учётом поворота + `aria-label` у всех кнопок тулбара:** рамка выравнивания (`helpers.computeWorldAABB`) — проекция реальной геометрии через полный TRS (`pos + R·S·v` по вершинам); без вершин — OBB: локальная рамка из params (`localParamsBox`) → 8 углов (`obbCorners`) → проекция (`obbWorldAABB`). Повёрнутый цилиндр выравнивается по основанию / ободу, повёрнутый куб — по реальной грани/ребру, масштаб учитывается. Один решатель `solveAlignDeltas` у живого `alignSelected` и re-solve каскада правки шага (move / mirror / extrude). UI не менялся: 9 кнопок (min/center/max × X/Y/Z), якорь — последний выбранный; явный выбор плоскости — отдельная задача ALIGN-UI-REVIT. Воспроизведение align — по сохранённым `deltas`: старые проекты при загрузке не сдвигаются. `IconButton` даёт доступное имя по умолчанию — подпись тултипа (`labelKey`), затем `title`/`label`. e2e берут кнопки по `aria-label` (`toolbarButton`/`panelButton` в `e2e/helpers.mjs`), а не по индексу (зеркало — 17-я, импорт — 4-я, «Объединение» — первая в группе). Тесты: +16 (`__tests__/align-obb.test.ts` — 12 на реальном WASM: OBB, цилиндр/куб/масштаб/повёрнутый якорь, каскад move/mirror/extrude; `__tests__/toolbar-aria.test.tsx` — 4: 35 кнопок ru/en с непустым уникальным именем, снимок списка), проверены откатом; e2e `pnpm e2e:align-obb` (`store/helpers.ts`, `components/IconButton.tsx`, `e2e/*.mjs`, `package.json`)
 - Отображение версии приложения в StatusBar (справа): `{app.name} v{APP_VERSION}` (`StatusBar.tsx`, `constants.ts`)
 
-### Changed
+#### Changed
 - **DEVELOPMENT_PLAN — EXTRUDE-3D-SCALE (принято):** `extrudeSelected` — не extrude, а «растянуть 3D-объект по оси» (дублирует `scale`); в UI как «Extrude» не возвращать, настоящий extrude (эскиз → 3D) — Фаза 11; движок остаётся для правки шага 9.5.4. Задача EXTRUDE-UI отменена. AGENTS.md: цепочка веток (ветки задач → PR в `phase-9`), extrude — движок правки, не UI-инструмент
 - **DEVELOPMENT_PLAN — `aria-label` для всех кнопок тулбара** (в ALIGN-REVIT): e2e берут кнопки зеркала и импорта STL по индексу — хрупко при перестановке кнопок
 - **e2e `independent-copy` — проверка по тому, что видит пользователь:** дети копии ищутся по подписи внутри строки объекта (а не по id узлов), замки проверяются сразу после раскрытия; вставка без дерева падает с «не раскрывается — запечённый меш». Проверено откатом: старое зеркало → «замок 🔒 mirror», старая вставка → «запечённый меш». Решения CSG-INDEPENDENT-COPY (независимая копия, снимок на момент Ctrl+C, правила `findCreationTransform` для копий) записаны в `docs/PHASE_9_DESIGN.md` (`e2e/independent-copy.mjs`)
@@ -38,7 +85,7 @@
 - **Ядро CSG вынесено в `computeCsgResult` (Фаза 9.5.0, без изменения поведения):** sync операндов → boolean → pivot = transformA → un-bake RS операнда A — общая функция для `csgBoolean` и будущего каскада 9.5 (иначе каскад через запасной путь воркера дал бы pivot = COM, риск R1). Туда же перенесён `syncObjectsForOperation`; `groupOperationFromResult`/`groupReplacementFromResult` строят операцию `group` и замену для `edit_step` из одного результата. Тест: результат побайтно равен операции `group`, записанной `csgBoolean` (`store/csg-result.ts`, `store/document-store.ts`)
 - **`rebuildBuildTree` воспроизводит params/transform примитивов по префиксу истории (Фаза 9.3):** дерево не чистится между перемотками, поэтому узел мог хранить состояние из «будущего» (после undo правка ребёнка оставалась в дереве при откатанном меше). Теперь `add_shape` сбрасывает `params`/`localTransform` существующего узла к начальным (иммутабельно через `setNode` — снимки дерева хранят ссылки), а `resize_dims` и `edit_child_params` применяют params заново. Побочно исправляет потерю `resize_dims` в дереве при undo/redo (`store/rebuild.ts`)
 
-### Fixed
+#### Fixed
 - **ALIGN-PRIMITIVE-AABB — выравнивание примитивов без поворота и масштаба:** рамка примитива считалась по params + позиции: поворот и масштаб игнорировались, а цилиндр/конус/призма/пирамида (есть `radius`) — как сфера радиуса r. Повёрнутый цилиндр «выравнивался как сфера», повёрнутый куб — по ±w/2. Теперь — по реальной геометрии (ALIGN-REVIT). Регресс: `__tests__/align-obb.test.ts`, e2e `pnpm e2e:align-obb` (проверены откатом)
 - **Безымянные кнопки тулбара:** `IconButton` без `ariaLabel`/`title` ставил `aria-label=""` (почти все кнопки тулбара) — теперь имя из подписи тултипа. Регресс: `__tests__/toolbar-aria.test.tsx`
 - **IMPORT-CSG-STUB — импорт в CSG подменялся примитивом-заглушкой:** `computeCsgResult` считал `import_mesh` примитивом (`shapeType !== 'csg'`) и отправлял воркеру `shapeA = { shapeType: 'import_mesh', params: {} }` — воркер строил заглушку вместо меша STL. Скрыто, пока импорт отсекался по типу; найдено тестом IMPORT-MESH-CSG (незамкнутый треугольник «объединялся») (`store/csg-result.ts`). Регресс-тест `import-mesh-csg.test.ts` › «IMPORT-CSG-STUB» (STL ∩ большой куб = STL: объём 1000 и рамка, импорт — операнд A и B) — проверен откатом фикса
@@ -51,7 +98,7 @@
 - **MIRROR-CSG-REPLAY — зеркальная копия CSG-объекта при воспроизведении смещалась** (двойная трансляция и RS): копия брала мировые вершины кэша воркера как локальные. Теперь `buildRebuildMeta` даёт копии отражённый локальный меш оригинала (как живое `mirrorSelected`: `mirrorVerticesInPlace` + winding) и включает её в `csgResultIds` (`store/rebuild.ts`). Найдено при 9.5.3
 - **ALIGN-CSG-AABB — выравнивание с CSG-объектом смещалось на позицию операнда A:** `computeWorldAABB` для CSG/импорта брал кэш `obj.aabb`, а он в локальной системе объекта (вершины CSG — относительно pivot = TRS A); после пересборки из истории кэш был другим. Теперь рамка — по вершинам с полным TRS (`helpers.worldVerticesAABB`); решатель вынесен в `helpers.solveAlignDeltas` (общий для `alignSelected` и re-solve 9.5.2). Найдено при 9.5.2. Тесты: `__tests__/align-csg.test.ts` — живой `alignSelected` с двумя CSG (X min/center/max, воспроизведение из истории), `solveAlignDeltas` с CSG-целью (`store/helpers.test.ts`)
 
-### Removed
+#### Removed
 - **Блокировка CSG по типу для импорта (UI):** `App.tsx` делал кнопки CSG неактивными при любом выделенном `import_mesh` (`hasNonManifoldSelected`); проп `nonManifoldSelected` (`Toolbar`, `PropertiesPanel`, `CsgButtons` — подсказка там всё равно не выводилась) и ключ `csg.nonManifold` удалены; захардкоженная русская строка в `csgBoolean` заменена на `errors.csgNonManifold`
 - **Скругление куба (fillet) удалено из приложения** — до появления нормального инструмента (выбор рёбер, любые тела, B-Rep; см. DEVELOPMENT_PLAN «Фаза 11 — Будущее»). Прежний fillet был глобальным параметром куба (`filletRadius`, скругление всех рёбер сразу), а не инструментом CAD, и терялся в CSG (FILLET-LOST-IN-CSG). Убраны: секция «Скругление» в панели свойств, шаг fillet и фильтр в Timeline, действие `applyFillet`, состояние `filletRadius` в ui-store, сообщение воркера `applyFillet` (`handleApplyFillet`, `workerApplyFillet`), `buildPrimitiveWithFillet`, `buildRoundedBox`, `FILLET_EPSILON`/`FILLET_MIN_RADIUS`, `FilletIcon`, `ShapeParams.filletRadius`, патч `{ kind: 'fillet' }` правки шага (9.5) и `StepReplacement.params`, i18n `properties.fillet*`, `timeline.fillet`, `filters.fillet`, `errors.filletFailed`. Ветка 9.5.1 (каскад fillet) не вливается.
 - **Старые проекты со скруглением открываются:** тип операции `fillet` оставлен (deprecated) и принимается `.3dtc`/`.doodle`; при загрузке (`openProject`, проекты IndexedDB, автосейв) `io/legacy-fillet.ts::migrateLegacyFillet` вырезает шаги fillet (в Timeline не остаётся «мёртвых» шагов, на которых Ctrl+Z ничего не делает), снимает `filletRadius` из params операций и объектов, перенумеровывает `edit_step`; объекты `.3dtc` со скруглёнными вершинами пересобираются из истории — кубы острые. Уведомление «скругление удалено…» — одно на проект. Воспроизведение (`buildRebuildMeta`, воркер `rebuildScene`) шаг fillet игнорирует и без миграции. Тесты: +9 (`io/legacy-fillet.test.ts` — 4, `__tests__/legacy-fillet-load.test.ts` — 5 на реальном WASM: `.3dtc` через `openProject`, файл без скругления без изменений, `.doodle`, автосейв), −2 (fillet-кейсы `render-data-invariant`, `types.test`); `project-history.test.ts` переведён на патчи move (`csg/types.ts`, `csg/worker-handlers.ts`, `csg/worker.ts`, `csg/worker-client.ts`, `csg/rebuildOps.ts`, `store/document-store.ts`, `store/types.ts`, `store/ui-store.ts`, `store/rebuild.ts`, `store/project-history.ts`, `components/PropertiesPanel.tsx`, `components/Timeline.tsx`, `components/icons/index.tsx`, `App.tsx`, `constants.ts`, `constants.tsx`, `io/legacy-fillet.ts`, `i18n/locales/{ru,en}`)

@@ -14,7 +14,7 @@
 - **manifold-3d** (WASM) — CSG операции в Web Worker
 - **Zustand 5** — стейт-менеджмент
 - **Vite 6** — сборка
-- **Vitest 4** — тесты (662 теста, 55 файлов — ветка `phase-9`)
+- **Vitest 4** — тесты (662 теста, 55 файлов — v1.3.0)
 - **pnpm** — пакетный менеджер
 
 ## Команды
@@ -43,9 +43,9 @@ pnpm e2e:align-obb  # ALIGN-REVIT: повёрнутый цилиндр → «X �
 | 0–7.6 | Ядро CAD, CSG, UI, Mirror, Timeline | ✅ Завершены |
 | **8** | **Единая модель трансформов** | ✅ Завершена (v1.1.0) |
 | **8.5** | **Унификация отрисовки и данных** | ✅ Завершена (v1.2.3) |
-| **9** | **Параметрическая история** — 9.1–9.4, 9.6–9.9 ✅; 9.5.0 (эффективная история) ✅; 9.5.1 (fillet) ❌ отменена; 9.5.2 move ✅; 9.5.3 mirror ✅; 9.5.4 extrude ✅ — 9.5 закрыта | 🔄 Идёт (ветка `phase-9`) |
+| **9** | **Параметрическая история** — 9.1–9.4, 9.6–9.9 ✅; 9.5.0 (эффективная история) ✅; 9.5.1 (fillet) ❌ отменена; 9.5.2 move ✅; 9.5.3 mirror ✅; 9.5.4 extrude ✅; CSG-INDEPENDENT-COPY, IMPORT-MESH-CSG, ALIGN-REVIT ✅ | ✅ Завершена (v1.3.0, `phase-9 → main`) |
 | 10 | Яндекс.Игры — монетизация (ветка `yandex-games`) | 🔄 Отдельная ветка (Y.1–Y.5 ✅) |
-| 11 | Будущее (SVG, 3MF, STEP, B-Rep fillet, Rapier) | 🔲 Запланирована |
+| 11 | Будущее (SVG, 3MF, STEP, B-Rep fillet, настоящий extrude 2D→3D, Rapier) | 🔲 Запланирована |
 
 **Фаза 8 в деталях:** `web-app/ARCHITECTURE_TRANSFORMS.md`
 **Фаза 8.5 в деталях:** `web-app/ARCHITECTURE_RENDER.md`
@@ -55,12 +55,12 @@ pnpm e2e:align-obb  # ALIGN-REVIT: повёрнутый цилиндр → «X �
 
 | Ветка | Назначение |
 |-------|------------|
-| `main` | Чистый CAD (Open Source, GPL-3.0) |
-| `phase-9` | Фаза 9 (от `main`); `phase-9.5.0` и `remove-fillet` в неё смержены (PR #1–#3) |
-| `<задача>` | Короткие ветки задач от `phase-9` → PR в `phase-9` (merge-коммит, после зелёного CI), ветка удаляется. Смержены: `phase-9.5.0`…`phase-9.5.4`, `remove-fillet`, `ui-left-panel`, `ci-fix`, `csg-independent-copy`, `import-mesh-csg` и follow-up'ы (PR #1–#13) |
-| `yandex-games` | Версия для Яндекс.Игр (экономика, реклама, токены); Фазу 9 ещё не содержит |
+| `main` | Чистый CAD (Open Source, GPL-3.0); v1.3.0 — Фаза 9 смержена; push в `main` → деплой GitHub Pages (`deploy.yml`) |
+| `phase-9` | Фаза 9 (от `main`), смержена в `main` в v1.3.0; дальнейшие задачи Фазы 9.x (NESTED-MOVED-EDIT и т.п.) — от неё же или от `main` |
+| `<задача>` | Короткие ветки задач → PR в `main` (или в `phase-9` для задач Фазы 9.x); merge-коммит после зелёного CI, ветка удаляется. До v1.3.0 смержены в `phase-9`: `phase-9.5.0`…`phase-9.5.4`, `remove-fillet`, `ui-left-panel`, `ci-fix`, `csg-independent-copy`, `import-mesh-csg`, `align-revit` и follow-up'ы (PR #1–#15) |
+| `yandex-games` | Версия для Яндекс.Игр (экономика, реклама, токены); отдельно, Фазу 9 ещё не содержит |
 
-Цепочка: `main` → `phase-9` → (ветки задач → PR в `phase-9`); после — merge `phase-9 → main` (v1.3.0).
+Цепочка: `main` (v1.3.0) → ветки задач → PR в `main` (или в `phase-9` для Фазы 9.x). `yandex-games` — отдельно.
 
 ## Архитектура (data flow)
 
@@ -253,6 +253,8 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 
 - Импортированные меши (STL) не параметризуются (IMPORT-MESH-PARAMETRIC: не требуется); трансформации и CSG работают — CSG допускает замкнутый STL (проверка по manifold в воркере, IMPORT-MESH-CSG), незамкнутый → уведомление `errors.csgNonManifold`; «починка» незамкнутого меша не делается; старые extrude без `group.source` не редактируются как extrude (EXTRUDE-LEGACY: не мигрируем); `extrudeSelected` — движок правки 9.5.4, не UI-инструмент: это «растянуть по оси», а не extrude 2D→3D, кнопку не возвращать (EXTRUDE-3D-SCALE; настоящий extrude — Фаза 11)
 - Скругления (fillet) нет: прежний параметр куба удалён (remove-fillet) до инструмента на B-Rep; старые шаги `fillet` вырезаются при загрузке (`io/legacy-fillet.ts`) — новых не создавать
+- После v1.3.0 открыто: NESTED-MOVED-EDIT (вложенный CSG, сдвинутый до объединения — 🔒 `nested_moved`); связанное зеркало (linked mirror) не делали — копия CSG всегда независимая; «починка» незамкнутого STL; ALIGN-UI-REVIT (явный выбор плоскости); CI-DEDUP (`ci-web.yml` + `build.yml` дублируют), CI-E2E (e2e не в CI); одинаковые `id` полей позиции/поворота и `-0.0` в `NumInput`
+- `.doodle` (legacy) в UI не открывается: `parseDoodle` не вызывается
 
 ## Node.js — Настройка и проверка
 
