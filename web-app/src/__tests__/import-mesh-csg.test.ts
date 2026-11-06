@@ -228,3 +228,56 @@ describe('IMPORT-MESH-CSG: незамкнутый STL → уведомление
     expect(warnings()).toEqual([])
   })
 })
+
+// Регресс скрытого бага: computeCsgResult считал import_mesh примитивом и слал воркеру
+// shapeType 'import_mesh' — воркер строил ЗАГЛУШКУ вместо меша STL. Проверка по геометрии:
+// пересечение с большим кубом, целиком содержащим STL, = сам STL (объём 1000, его рамка).
+describe('IMPORT-CSG-STUB: в CSG идёт меш STL, а не заглушка', () => {
+  it('STL ∩ большой куб = STL (объём 1000, рамка STL)', async () => {
+    const stl = await importMesh('cube.stl', CLOSED_CUBE)
+    const p = st().objects[stl].transform
+    const big = await newId(() => st().addShape('cube', { width: 40, height: 40, depth: 40 }))
+    await st().moveObject(big, { ...st().objects[big].transform, x: p.x, y: p.y, z: p.z })
+    for (const [a, b] of [[stl, big], [big, stl]]) { // импорт — операнд A и операнд B
+      const idx = st().historyIndex
+      const root = await csg(a, b, 'intersect')
+      expect(warnings()).toEqual([])
+      const r = st().objects[root]
+      expect(meshVolume(worldVerts(r), r.indices)).toBeCloseTo(1000, 1)
+      const box = worldBox(r)
+      const want = [p.x - 5, p.y - 5, p.z - 5, p.x + 5, p.y + 5, p.z + 5]
+      for (let i = 0; i < 6; i++) expect(box[i]).toBeCloseTo(want[i], 3)
+      await st().undo()
+      expect(st().historyIndex).toBe(idx)
+    }
+  })
+})
+
+// Регресс скрытого бага: rebuildBuildTree создавал baked-узлы импортов только в конце —
+// после загрузки CSG с импортом становился запечённым корнем; move импорта шёл без COM.
+describe('IMPORT-TREE-RELOAD: узел импорта в дереве по истории', () => {
+  it('чистое дерево по истории: узел импорта на месте объекта (pivot с COM), CSG — boolean с импортом', async () => {
+    const stl = await importMesh('cube.stl', CLOSED_CUBE)
+    await st().moveObject(stl, { ...st().objects[stl].transform, y: 7, z: 3 })
+    const livePivot = st().objects[stl].transform
+    const c = await cubeNextTo(stl, 5)
+    const root = await csg(stl, c)
+    const ops = st().operations
+    const csgStep = ops.findIndex((o) => o.type === 'group')
+
+    // до CSG: узел импорта — baked в позиции живого объекта (а не transform шага без COM)
+    clearTree()
+    rebuildBuildTree(ops.slice(0, csgStep))
+    const n = getNode(stl)
+    expect(n?.type).toBe('baked')
+    for (const k of ['x', 'y', 'z'] as const) expect(n!.localTransform![k]).toBeCloseTo(livePivot[k], 6)
+
+    // вся история: корень — boolean с ребёнком-импортом, дерево воспроизводит меш
+    clearTree()
+    const objects = await rebuildFromHistory(ops)
+    rebuildBuildTree(ops, objects)
+    expect(getNode(root)?.type).toBe('boolean')
+    expect(getNode(root)?.children).toEqual([stl, c])
+    expect(await checkRootConsistency({ rootId: root, objects, operations: ops, historyIndex: ops.length })).toBeNull()
+  })
+})
