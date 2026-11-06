@@ -14,7 +14,7 @@
 - **manifold-3d** (WASM) — CSG операции в Web Worker
 - **Zustand 5** — стейт-менеджмент
 - **Vite 6** — сборка
-- **Vitest 4** — тесты (709 тестов, 58 файлов — `main` после v1.3.1)
+- **Vitest 4** — тесты (715 тестов + 6 `it.fails` (известные баги UX-AUDIT), 59 файлов — `main` после v1.3.1)
 - **pnpm** — пакетный менеджер
 
 ## Команды
@@ -23,7 +23,7 @@
 cd web-app
 pnpm dev          # dev-сервер (порт 5000)
 pnpm build        # production-сборка
-pnpm test         # запуск тестов (709 тестов, 58 файлов)
+pnpm test         # запуск тестов (715 тестов + 6 `it.fails` (известные баги UX-AUDIT), 59 файлов)
 pnpm typecheck    # tsc --noEmit
 pnpm e2e:smoke    # дымовой тест в браузере (Playwright; нужен запущенный pnpm dev; см. web-app/e2e/helpers.mjs)
 pnpm e2e:tree     # Фаза 9.1: раскрытие CSG в дереве, выбор ребёнка
@@ -34,6 +34,7 @@ pnpm e2e:edit-step-extrude  # Фаза 9.5.4: проект из e2e/fixtures/ext
 pnpm e2e:independent-copy  # CSG-INDEPENDENT-COPY: зеркало и Ctrl+C/V CSG → правка ребёнка копии не трогает оригинал и наоборот
 pnpm e2e:import-mesh-csg  # IMPORT-MESH-CSG: замкнутый STL (e2e/fixtures/closed-cube.stl) ∪ куб → CSG; незамкнутый → уведомление ru/en
 pnpm e2e:nested-moved-edit  # NESTED-MOVED-EDIT: G сдвинут и повёрнут до ∪ цилиндр → правка сферы во вложенном G без замка; undo/redo
+pnpm e2e:ux-audit  # UX-AUDIT: ✅-сценарии без покрытия (примитивы, интерфейс, .3dtc/STL, 100k) + известные баги (обязаны воспроизводиться)
 pnpm e2e:align-ui-revit  # ALIGN-UI-REVIT: «Выровнять» → Z → верх B в 0; грань A → B; «Множественное»; Esc; правый клик
 pnpm e2e:align-obb  # ALIGN-REVIT: режимом «Выровнять» — повёрнутый цилиндр к грани куба, повёрнутый куб к плоскости XY (реальная геометрия)
 ```
@@ -185,6 +186,7 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 - Мок IndexedDB: `src/__mocks__/indexeddb.ts` (in-memory IDB для jsdom)
 - Среда: jsdom (через vite.config.ts)
 - Имена: `describe('FunctionName')` → `it('описание')`
+- Известный, но ещё не исправленный баг: `it.fails('ID ожидание: …')` + `it('ID реальность: …')` (а не `skip`): тест подтверждает баг на каждом прогоне и краснеет после фикса; в e2e — `known(...)` (см. `e2e/ux-audit.mjs`). Реестр — `DEVELOPMENT_PLAN.md` › «UX-AUDIT»
 
 ### CSS
 - Тёмная/светлая темы через CSS-переменные в `App.css`
