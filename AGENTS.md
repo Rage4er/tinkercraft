@@ -56,10 +56,10 @@ pnpm e2e:import-mesh-csg  # IMPORT-MESH-CSG: замкнутый STL (e2e/fixture
 |-------|------------|
 | `main` | Чистый CAD (Open Source, GPL-3.0) |
 | `phase-9` | Фаза 9 (от `main`); `phase-9.5.0` и `remove-fillet` в неё смержены (PR #1–#3) |
-| `phase-9.5.4` | Правка шага extrude (от `phase-9`), PR в `phase-9`; `phase-9.5.2`/`phase-9.5.3` смержены (PR #4, #5) |
+| `<задача>` | Короткие ветки задач от `phase-9` → PR в `phase-9` (merge-коммит, после зелёного CI), ветка удаляется. Смержены: `phase-9.5.0`…`phase-9.5.4`, `remove-fillet`, `ui-left-panel`, `ci-fix`, `csg-independent-copy`, `import-mesh-csg` и follow-up'ы (PR #1–#13) |
 | `yandex-games` | Версия для Яндекс.Игр (экономика, реклама, токены); Фазу 9 ещё не содержит |
 
-Цепочка: `main` → `phase-9` → `phase-9.5.4`; после — merge `phase-9 → main`.
+Цепочка: `main` → `phase-9` → (ветки задач → PR в `phase-9`); после — merge `phase-9 → main` (v1.3.0).
 
 ## Архитектура (data flow)
 
@@ -114,7 +114,7 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 | `src/components/snap-utils.ts` | Привязка (snap) к геометрии: vertex, edge, face, circle |
 | `src/components/Toolbar.tsx` | Тулбар (файл, undo, view, gizmo, CSG, тема) |
 | `src/components/LeftPanel.tsx` | Палитра фигур + список объектов + история |
-| `src/components/PropertiesPanel.tsx` | Панель свойств (трансформ, resize, extrude, CSG) |
+| `src/components/PropertiesPanel.tsx` | Панель свойств (трансформ, resize, CSG; extrude в UI нет — EXTRUDE-3D-SCALE) |
 | `src/components/TextModal.tsx` | Модалка 3D текста |
 | `src/components/StatusBar.tsx` | Статус-бар |
 | `src/components/NumInput.tsx` | Numeric input с draft-редактированием |
@@ -250,7 +250,7 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 
 ## Известные ограничения (не баги)
 
-- Импортированные меши (STL) не параметризуются (IMPORT-MESH-PARAMETRIC: не требуется); трансформации и CSG работают — CSG допускает замкнутый STL (проверка по manifold в воркере, IMPORT-MESH-CSG), незамкнутый → уведомление `errors.csgNonManifold`; «починка» незамкнутого меша не делается; старые extrude без `group.source` не редактируются как extrude (EXTRUDE-LEGACY: не мигрируем)
+- Импортированные меши (STL) не параметризуются (IMPORT-MESH-PARAMETRIC: не требуется); трансформации и CSG работают — CSG допускает замкнутый STL (проверка по manifold в воркере, IMPORT-MESH-CSG), незамкнутый → уведомление `errors.csgNonManifold`; «починка» незамкнутого меша не делается; старые extrude без `group.source` не редактируются как extrude (EXTRUDE-LEGACY: не мигрируем); `extrudeSelected` — движок правки 9.5.4, не UI-инструмент: это «растянуть по оси», а не extrude 2D→3D, кнопку не возвращать (EXTRUDE-3D-SCALE; настоящий extrude — Фаза 11)
 - Скругления (fillet) нет: прежний параметр куба удалён (remove-fillet) до инструмента на B-Rep; старые шаги `fillet` вырезаются при загрузке (`io/legacy-fillet.ts`) — новых не создавать
 
 ## Node.js — Настройка и проверка
