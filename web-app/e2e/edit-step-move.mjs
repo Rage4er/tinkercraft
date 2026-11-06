@@ -12,7 +12,7 @@ const fail = (msg) => { throw new Error(msg) }
 const right = page.locator('.panel-right')
 const objRows = page.locator('.ct-item[data-object-id]')
 /** Позиция X выделенного объекта в панели свойств. */
-const propX = () => right.locator('#num-input-X').first().inputValue()  // первое X — позиция (у поворота тот же id)
+const propX = () => right.locator('#num-input-pos-X').inputValue()  // поле позиции X
 try {
   await page.locator('button.tab-btn', { hasText: 'Дерево' }).click()
 
@@ -20,7 +20,7 @@ try {
   await page.getByText('Куб', { exact: true }).first().click()
   await page.waitForTimeout(800)
   await objRows.nth(0).click()
-  const x = right.locator('#num-input-X').first()
+  const x = right.locator('#num-input-pos-X')
   await x.fill('8'); await x.press('Enter')
   await page.locator('.tl-item', { hasText: 'Переместить' }).waitFor({ timeout: 10000 })
 

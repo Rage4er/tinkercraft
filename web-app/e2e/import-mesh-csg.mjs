@@ -23,7 +23,7 @@ const ids = async () => objRows.evaluateAll((els) => els.map((e) => e.getAttribu
 const rowCount = (n) => page.waitForFunction((k) => document.querySelectorAll('.ct-item[data-object-id]').length === k, n, { timeout: 15000 })
 const toasts = () => page.locator('.toast-msg').allTextContents()
 const union = () => panelButton(page, /^(Объединение|Union)$/) // ru/en: шаг 2 переключает язык
-const pos = (axis) => right.locator(`#num-input-${axis}`).first() // первое X/Y/Z — позиция
+const pos = (axis) => right.locator(`#num-input-pos-${axis}`) // поле позиции
 
 /** Импорт STL через кнопку тулбара «Импорт» (по aria-label) → выбор файла. Возвращает id. */
 async function importStl(name) {

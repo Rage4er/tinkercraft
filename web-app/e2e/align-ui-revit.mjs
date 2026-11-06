@@ -24,7 +24,7 @@ const row = (id) => page.locator(`.ct-item[data-object-id="${id}"]`)
 const ids = async () => objRows.evaluateAll((els) => els.map((e) => e.getAttribute('data-object-id')))
 const steps = () => page.locator('.tl-item').count()
 const waitSteps = (n) => page.waitForFunction((k) => document.querySelectorAll('.tl-item').length === k, n, { timeout: 15000 })
-const pos = (axis) => right.locator(`#num-input-${axis}`).first()
+const pos = (axis) => right.locator(`#num-input-pos-${axis}`)      // поле позиции (UX-NUMINPUT)
 const hint = () => page.locator('[data-testid=align-hint]').textContent()
 const panel = page.locator('[data-testid=align-panel]')
 
@@ -44,7 +44,7 @@ async function pick(id) {
 }
 async function setField(id, label, value) {
   await pick(id)
-  const f = right.locator(`#num-input-${label}`).first()
+  const f = right.locator(`#num-input-pos-${label}`)                   // позиция X/Y/Z
   const n = await steps()
   await f.fill(String(value)); await f.press('Enter')
   await waitSteps(n + 1)

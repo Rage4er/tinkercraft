@@ -612,8 +612,9 @@ web-app/
 
 ### Мелкие UX/accessibility (после 9.5.4)
 
-- PropertiesPanel: уникальные id полей позиции и поворота (сейчас оба `num-input-X` — label связывается не с тем полем).
-- NumInput: при `|v| < 1e-4` показывать `0.000`, а не `-0.0`.
+- ~~PropertiesPanel: уникальные id полей~~ — ✅ UX-NUMINPUT: на деле совпадали позиция и масштаб (метки «X/Y/Z»); теперь `num-input-pos-*` / `rot-*` / `scale-*`.
+- ~~NumInput: «-0.0»~~ — ✅ UX-NUMINPUT: ноль после округления — без минуса (`formatNum`).
+- ~~CLEANUP-RELEASE-YML~~ — ✅ удалён `release.yml` (Java CaDoodle, падал на всех тегах).
 - ~~`aria-label` всех кнопок тулбара~~ — ✅ ALIGN-REVIT.
 
 ### Функциональные ограничения (принято)
