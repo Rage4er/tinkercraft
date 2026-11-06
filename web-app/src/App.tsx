@@ -36,7 +36,6 @@ export default function App() {
     snapValue, setSnapValue,
     theme, setTheme,
     tlFilters, setTlFilter,
-    filletRadius, setFilletRadius,
     shapeSearch, setShapeSearch,
     rulerActive, setRulerActive,
     rulerDist, setRulerDist,
@@ -56,7 +55,6 @@ export default function App() {
       snapValue: s.snapValue, setSnapValue: s.setSnapValue,
       theme: s.theme, setTheme: s.setTheme,
       tlFilters: s.tlFilters, setTlFilter: s.setTlFilter,
-      filletRadius: s.filletRadius, setFilletRadius: s.setFilletRadius,
       shapeSearch: s.shapeSearch, setShapeSearch: s.setShapeSearch,
       rulerActive: s.rulerActive, setRulerActive: s.setRulerActive,
       rulerDist: s.rulerDist, setRulerDist: s.setRulerDist,
@@ -118,7 +116,6 @@ export default function App() {
       mirrorSelected: s.mirrorSelected,
       previewMirror: s.previewMirror,
       alignSelected: s.alignSelected,
-      applyFillet: s.applyFillet,
       copySelected: s.copySelected,
       pasteClipboard: s.pasteClipboard,
       triggerAutosave: s.triggerAutosave,
@@ -163,7 +160,6 @@ export default function App() {
     mirrorSelected,
     previewMirror,
     alignSelected,
-    applyFillet,
     copySelected,
     pasteClipboard,
     triggerAutosave,
@@ -369,8 +365,6 @@ export default function App() {
   const canCsg = selectedIds.length === 2 && !busy && !hasNonManifoldSelected;
   const canMirror = selectedIds.length > 0 && !busy;
   const canAlign = selectedIds.length >= 2 && !busy;
-  const canFillet =
-    selectedIds.length === 1 && firstSelected?.shapeType === "cube" && !busy;
   const canResize =
     selectedIds.length === 1 &&
     firstSelected?.shapeType !== "import_mesh" &&
@@ -627,24 +621,20 @@ export default function App() {
             busy={busy}
             selectedIds={selectedIds}
             canResize={canResize}
-            canFillet={canFillet}
             canCsg={canCsg}
             canAlign={canAlign}
             nonManifoldSelected={hasNonManifoldSelected}
-            filletRadius={filletRadius}
             objectList={objectList}
             operationsLength={operations.length}
             fileName={fileName}
             currentProjectId={currentProjectId}
             currentProjectName={currentProjectName}
             modified={modified}
-            onSetFilletRadius={setFilletRadius}
             onMoveAxis={handleMoveAxis}
             onRotAxis={handleRotAxis}
             onScaleAxis={handleScaleAxis}
             onResizeDim={handleResizeDim}
             onResizeObject={resizeObject}
-            onApplyFillet={applyFillet}
             onCsg={csgBoolean}
             onAlign={alignSelected}
             onSetColor={setColor}

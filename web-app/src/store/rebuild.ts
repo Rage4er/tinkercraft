@@ -79,7 +79,8 @@ export function buildRebuildMeta(rawOps: TinkerCraftOperation[]): {
       transforms[op.id] = t
 
     } else if (op.type === 'fillet') {
-      if (meta[op.id]) meta[op.id] = { ...meta[op.id], params: { ...meta[op.id].params, filletRadius: op.radius } }
+      // Скругление удалено из приложения (remove-fillet): шаг старых файлов не воспроизводится,
+      // куб остаётся острым. В норме загрузка уже вырезала его (io/legacy-fillet.ts).
 
     } else if (op.type === 'move') {
       const d: Vec3 = op.delta

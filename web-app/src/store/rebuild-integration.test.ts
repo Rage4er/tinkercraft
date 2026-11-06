@@ -209,15 +209,14 @@ describe('buildRebuildMeta: color update', () => {
   })
 })
 
-describe('buildRebuildMeta: fillet updates params', () => {
-  it('adds filletRadius to params', () => {
+describe('buildRebuildMeta: устаревший fillet игнорируется (remove-fillet)', () => {
+  it('шаг fillet старого файла не меняет params — куб острый', () => {
     const ops: TinkerCraftOperation[] = [
       makeAddShape('a', 'cube', { width: 20, height: 20, depth: 20 }),
       makeFillet('a', 2.5),
     ]
     const { meta } = buildRebuildMeta(ops)
-    expect(meta['a'].params.filletRadius).toBe(2.5)
-    expect(meta['a'].params.width).toBe(20)
+    expect(meta['a'].params).toEqual({ width: 20, height: 20, depth: 20 })
   })
 })
 
@@ -284,7 +283,7 @@ describe('buildRebuildMeta: resize_dims', () => {
   })
 })
 
-describe('buildRebuildMeta: full pipeline add → move → fillet → group → move', () => {
+describe('buildRebuildMeta: full pipeline add → move → (legacy fillet) → group → move', () => {
   it('tracks through full operation chain', () => {
     const ops: TinkerCraftOperation[] = [
       makeAddShape('cube1', 'cube', { width: 20, height: 20, depth: 20 }),

@@ -36,7 +36,7 @@ TinkerCraft — браузерный 3D CAD-редактор. Пользоват
 2. **App.tsx** вызывает action из `document-store.ts`
 3. **Store** добавляет операцию в `history[]`, вызывает `rebuildFromHistory()`
 4. **rebuildFromHistory()** отправляет операции в `worker-client.ts` (Promise RPC)
-5. **Worker** выполняет manifold-3d операции (build, union, subtract, fillet...)
+5. **Worker** выполняет manifold-3d операции (build, union, subtract, mirror...)
 6. **Worker** возвращает mesh (vertices + indices)
 7. **Store** центрирует CSG-результаты через `extractAndCenter()`
 8. **Viewport3D** обновляет Three.js меши
@@ -57,7 +57,7 @@ Zustand store. Содержит:
 - `objects: SceneObject[]` — текущая сцена
 - `history: Operation[]` — история операций (undo/redo)
 - `selectedIds: string[]` — выделенные объекты
-- Actions: `addShape`, `csgBoolean`, `applyFillet`, `moveObject`, `undo`, `redo` и др.
+- Actions: `addShape`, `csgBoolean`, `moveObject`, `undo`, `redo` и др.
 
 **Правило:** Store — единственный источник истины. Все мутации идут через actions.
 
@@ -67,7 +67,7 @@ Web Worker с manifold-3d (WASM). Воркер кэширует manifold-объ�
 
 **worker-client.ts** — типобезопасный RPC: отправляет сообщения, возвращает Promise.
 
-**worker.ts** — обрабатывает сообщения: `buildShape`, `csgOp`, `applyFillet`, `rebuildScene`.
+**worker.ts** — обрабатывает сообщения: `buildShape`, `csgOp`, `rebuildScene`.
 
 **Правило:** Worker НЕ центрирует геометрию. Центрирование — ответственность store.
 
@@ -108,7 +108,7 @@ Render = data (см. `web-app/ARCHITECTURE_RENDER.md`).
 
 ### История операций (undo/redo)
 
-`history[]` — массив операций (AddShape, Move, CSG, Fillet, Mirror...).
+`history[]` — массив операций (AddShape, Move, CSG, Mirror...).
 Undo/redo = полный rebuild через `rebuildFromHistory()`. Нет кэша snapshots (PERF-1 — отложено).
 Фильтрация: некоторые операции (выделение) не попадают в историю.
 
@@ -139,7 +139,6 @@ interface SceneObject {
   indices: number[];              // triangle indices
   visible: boolean;
   color: string;
-  filletRadius?: number;
   isCSG?: boolean;                // результат булевой операции
 }
 ```
@@ -150,7 +149,7 @@ interface SceneObject {
 type Operation =
   | { type: 'addShape'; id: string; shapeType: ShapeType; params; transform; name }
   | { type: 'csg'; id: string; operands: string[]; op: 'union' | 'subtract' | 'intersect' }
-  | { type: 'fillet'; id: string; radius: number }
+  | { type: 'fillet'; id: string; radius: number }   // устарело: только чтение старых файлов (remove-fillet)
   | { type: 'move'; id: string; dx; dy; dz }
   | { type: 'mirror'; id: string; axis: 'x' | 'y' | 'z' }
   | ...

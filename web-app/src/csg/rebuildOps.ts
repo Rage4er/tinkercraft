@@ -24,7 +24,6 @@ export interface RebuildTransform {
 export interface ShapeMeta {
   shapeType: ShapeType
   params: ShapeParams
-  filletRadius: number
 }
 
 /**

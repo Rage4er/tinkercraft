@@ -192,15 +192,6 @@ export async function workerBuildShape(
   return result
 }
 
-export async function workerApplyFillet(
-  objId: string, shapeType: ShapeType, params: ShapeParams, radius: number, transform: TransformNR,
-): Promise<MeshResult> {
-  await waitReady()
-  const result = await send<MeshResult>('applyFillet', { objId, shapeType, params, radius, transform })
-  devLogWorker('receive', 'applyFillet', { objId, shapeType, radius, tris: result.tris }, result.ms)
-  return result
-}
-
 export async function workerBuildImportedMesh(
   objId: string, vertices: Float32Array | number[], indices: Uint32Array | number[],
 ): Promise<MeshResult> {

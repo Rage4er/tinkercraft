@@ -43,7 +43,7 @@ export const devLogParams = (action: string, shapeType: string, params: Record<s
 }
 
 /**
- * Event logger — logs user events (pointer, transform, resize, fillet, color, visibility).
+ * Event logger — logs user events (pointer, transform, resize, color, visibility).
  * @example devLogEvent(category, event, data)
  */
 export const devLogEvent = (category: string, event: string, data?: unknown): void => {

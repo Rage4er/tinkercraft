@@ -377,13 +377,6 @@ export const EyeOffIcon = (p: any) => (
   </Icon>
 )
 
-export const FilletIcon = (p: any) => (
-  <Icon {...p}>
-    <rect {...line} x="10" y="10" width="44" height="44" rx="6" />
-    <path d="M10 26a16 16 0 0 1 16-16v16Z" {...face(0.22)} />
-  </Icon>
-)
-
 export const ColorIcon = (p: any) => (
   <Icon {...p}>
     <circle cx="32" cy="32" r="20" {...face(0.22)} />

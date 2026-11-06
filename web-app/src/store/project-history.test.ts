@@ -33,16 +33,20 @@ function edit(
   return { type: 'edit_step', stepIndex, stepFingerprint: fp, patch, replacements }
 }
 
-/** cube a (0) → fillet a r2 (1) → cube b (2) → move a (3) → union a+b → c (4) */
+/** cube a (0) → move a +2 (1) → cube b (2) → move a +5 (3) → union a+b → c (4) */
 function base(): TinkerCraftOperation[] {
   return [
     add('a'),
-    { type: 'fillet', id: 'a', radius: 2 },
+    { type: 'move', ids: ['a'], delta: { x: 2, y: 0, z: 0 } },
     add('b', 20),
     { type: 'move', ids: ['a'], delta: { x: 5, y: 0, z: 0 } },
     group('a', 'b', 'c', 5),
   ]
 }
+
+/** Патч move по X (шаг 1 базового сценария) */
+const M = (x: number): StepPatch => ({ kind: 'move', delta: { x, y: 0, z: 0 } })
+const dx = (op: TinkerCraftOperation) => (op as { delta: { x: number } }).delta.x
 
 beforeEach(() => clearTree())
 
@@ -50,19 +54,19 @@ describe('projectHistory', () => {
   it('без edit_step — тождество (тот же массив) и идемпотентность', () => {
     const ops = base()
     expect(projectHistory(ops)).toBe(ops)
-    const withEdit = [...ops, edit(ops, 1, { kind: 'fillet', radius: 3 })]
+    const withEdit = [...ops, edit(ops, 1, M(3))]
     const once = projectHistory(withEdit)
     expect(projectHistory(once)).toBe(once)
   })
 
   it('подставляет patch в шаг N, выбрасывает edit_step, исходные операции не мутирует', () => {
     const ops = base()
-    const raw = [...ops, edit(ops, 1, { kind: 'fillet', radius: 3 })]
+    const raw = [...ops, edit(ops, 1, M(3))]
     const eff = projectHistory(raw)
     expect(eff).toHaveLength(ops.length)
     expect(eff.some((o) => o.type === 'edit_step')).toBe(false)
-    expect(eff[1]).toEqual({ type: 'fillet', id: 'a', radius: 3 })
-    expect(ops[1]).toEqual({ type: 'fillet', id: 'a', radius: 2 })
+    expect(eff[1]).toEqual({ type: 'move', ids: ['a'], delta: { x: 3, y: 0, z: 0 } })
+    expect(ops[1]).toEqual({ type: 'move', ids: ['a'], delta: { x: 2, y: 0, z: 0 } })
     // незатронутые шаги — те же объекты (без копирования)
     expect(eff[0]).toBe(ops[0])
     expect(eff[4]).toBe(ops[4])
@@ -70,10 +74,10 @@ describe('projectHistory', () => {
 
   it('последняя правка шага побеждает; префикс без неё (= undo) — предыдущая', () => {
     const ops = base()
-    const raw = [...ops, edit(ops, 1, { kind: 'fillet', radius: 3 }), edit(ops, 1, { kind: 'fillet', radius: 4 })]
-    expect((projectHistory(raw)[1] as { radius: number }).radius).toBe(4)
-    expect((effectiveOps(raw, raw.length - 1)[1] as { radius: number }).radius).toBe(3)
-    expect((effectiveOps(raw, ops.length)[1] as { radius: number }).radius).toBe(2)
+    const raw = [...ops, edit(ops, 1, M(3)), edit(ops, 1, M(4))]
+    expect(dx(projectHistory(raw)[1])).toBe(4)
+    expect(dx(effectiveOps(raw, raw.length - 1)[1])).toBe(3)
+    expect(dx(effectiveOps(raw, ops.length)[1])).toBe(2)
   })
 
   it('move: патч — полный набор дельт (rot/scale без значения снимаются)', () => {
@@ -88,16 +92,18 @@ describe('projectHistory', () => {
   it('mirror: смена плоскости; несовпадение вида патча → null', () => {
     const op: TinkerCraftOperation = { type: 'mirror', originalIds: ['a'], ids: ['a2'], plane: 'YZ' }
     expect(applyStepPatch(op, { kind: 'mirror', plane: 'XZ' })).toMatchObject({ plane: 'XZ' })
-    expect(applyStepPatch(op, { kind: 'fillet', radius: 1 })).toBeNull()
+    expect(applyStepPatch(op, M(1))).toBeNull()
+    expect(applyStepPatch({ type: 'fillet', id: 'a', radius: 2 }, M(1))).toBeNull()   // устаревший шаг не правится
+    expect(stepFingerprint({ type: 'fillet', id: 'a', radius: 2 })).toBeNull()
     expect(patchKindFor('group')).toBeNull()
     expect(stepFingerprint(op)).toEqual({ type: 'mirror', targetId: 'a2' })
   })
 
   it('несовпадение отпечатка / индекса / вида → правка игнорируется целиком', () => {
     const ops = base()
-    const good = edit(ops, 1, { kind: 'fillet', radius: 3 })
+    const good = edit(ops, 1, M(3))
     const cases: Array<[EditStepOperation, string]> = [
-      [{ ...good, stepFingerprint: { type: 'fillet', targetId: 'zzz' } }, 'fingerprint'],
+      [{ ...good, stepFingerprint: { type: 'move', targetId: 'zzz' } }, 'fingerprint'],
       [{ ...good, stepIndex: 99 }, 'bad_index'],
       [{ ...good, stepIndex: -1 }, 'bad_index'],
       [{ ...good, patch: { kind: 'mirror', plane: 'XY' } }, 'kind'],
@@ -113,11 +119,11 @@ describe('projectHistory', () => {
 
   it('edit_step не может ссылаться на шаг после себя или на другую edit_step', () => {
     const ops = base()
-    const e1 = edit(ops, 1, { kind: 'fillet', radius: 3 })
+    const e1 = edit(ops, 1, M(3))
     const onEdit: EditStepOperation = { ...e1, stepIndex: ops.length }   // указывает на e1
     const r = projectHistoryDetailed([...ops, e1, onEdit])
     expect(r.ignored).toEqual([{ index: ops.length + 1, reason: 'bad_index' }])
-    expect((r.ops[1] as { radius: number }).radius).toBe(3)
+    expect(dx(r.ops[1])).toBe(3)
   })
 
   it('гипотетическая правка: patch применён, замороженные шаги не тронуты', () => {
@@ -126,13 +132,13 @@ describe('projectHistory', () => {
     expect(eff).not.toBe(ops)
     expect((eff[3] as { delta: { x: number } }).delta.x).toBe(9)
     expect(eff[4]).toBe(ops[4])
-    const bad = projectHistoryDetailed(ops, { stepIndex: 0, patch: { kind: 'fillet', radius: 1 } })
+    const bad = projectHistoryDetailed(ops, { stepIndex: 0, patch: M(1) })   // шаг 0 — add_shape
     expect(bad.ignored).toEqual([{ index: -1, reason: 'kind' }])
   })
 
   it('effectiveToRawIndex: эффективный индекс → сырой', () => {
     const ops = base()
-    const raw = [...ops.slice(0, 2), edit(ops, 1, { kind: 'fillet', radius: 3 }), ...ops.slice(2)]
+    const raw = [...ops.slice(0, 2), edit(ops, 1, M(3)), ...ops.slice(2)]
     expect(effectiveToRawIndex(raw)).toEqual([0, 1, 3, 4, 5])
   })
 })
@@ -147,7 +153,8 @@ describe('projectHistory — каскад CSG и pivot (потребители)'
       resultCenter: { x: 12, y: 0, z: 0 }, resultRotation: { x: 0, y: 30, z: 0 }, resultScale: { x: 2, y: 1, z: 1 },
       originalBboxSize: { x: 1, y: 1, z: 0 },
     }
-    const raw = [...ops, edit(ops, 3, { kind: 'move', delta: { x: 12, y: 0, z: 0 }, rotDelta: { x: 0, y: 30, z: 0 }, scaleDelta: { x: 1, y: 0, z: 0 } }, [repl])]   // scaleDelta аддитивна: 1 + 1 = 2
+    // сдвиг a: +2 (шаг 1) + 10 (правленый шаг 3) = 12
+    const raw = [...ops, edit(ops, 3, { kind: 'move', delta: { x: 10, y: 0, z: 0 }, rotDelta: { x: 0, y: 30, z: 0 }, scaleDelta: { x: 1, y: 0, z: 0 } }, [repl])]   // scaleDelta аддитивна: 1 + 1 = 2
     return { ops, raw, repl }
   }
 
@@ -179,7 +186,7 @@ describe('projectHistory — каскад CSG и pivot (потребители)'
     const ops: TinkerCraftOperation[] = [...base(), add('d', 40), group('c', 'd', 'e', 5)]
     const r4: StepReplacement = { stepIndex: 4, kind: 'group', resultVertices: [9, 9, 9], resultIndices: [0, 0, 0] }
     const r6: StepReplacement = { stepIndex: 6, kind: 'group', resultVertices: [8, 8, 8], resultIndices: [0, 0, 0] }
-    const raw = [...ops, edit(ops, 1, { kind: 'fillet', radius: 3 }, [r4, r6])]
+    const raw = [...ops, edit(ops, 1, M(3), [r4, r6])]
     const eff = projectHistory(raw) as GroupOperation[]
     expect(eff[4].resultVertices).toEqual([9, 9, 9])
     expect(eff[6].resultVertices).toEqual([8, 8, 8])
@@ -191,26 +198,26 @@ describe('projectHistory — каскад CSG и pivot (потребители)'
 
   it('замены разных правок: на шаг побеждает последняя, прочие сохраняются', () => {
     const ops: TinkerCraftOperation[] = [...base(), add('d', 40), group('c', 'd', 'e', 5)]
-    const e1 = edit(ops, 1, { kind: 'fillet', radius: 3 }, [
+    const e1 = edit(ops, 1, M(3), [
       { stepIndex: 4, kind: 'group', resultVertices: [1] }, { stepIndex: 6, kind: 'group', resultVertices: [2] },
     ])
     const e2 = edit(ops, 3, { kind: 'move', delta: { x: 6, y: 0, z: 0 } }, [{ stepIndex: 4, kind: 'group', resultVertices: [3] }])
     const eff = projectHistory([...ops, e1, e2]) as GroupOperation[]
     expect(eff[4].resultVertices).toEqual([3])
     expect(eff[6].resultVertices).toEqual([2])
-    expect((eff[1] as unknown as { radius: number }).radius).toBe(3)
+    expect(dx(eff[1])).toBe(3)
   })
 
-  it('edit_child_params ниже по течению: меш и params ребёнка из замены', () => {
+  it('edit_child_params ниже по течению: меш из замены, params ребёнка — из операции', () => {
     const ops: TinkerCraftOperation[] = [
       ...base(),
       { type: 'edit_child_params', rootId: 'c', nodeId: 'b', params: { width: 12, height: 10, depth: 10 }, resultVertices: [0], resultIndices: [0] },
     ]
-    const repl: StepReplacement = { stepIndex: 5, kind: 'edit_child_params', resultVertices: [7], resultIndices: [1], params: { width: 12, height: 10, depth: 10, filletRadius: 3 } }
-    const raw = [...ops, edit(ops, 1, { kind: 'fillet', radius: 3 }, [repl])]
+    const repl: StepReplacement = { stepIndex: 5, kind: 'edit_child_params', resultVertices: [7], resultIndices: [1] }
+    const raw = [...ops, edit(ops, 1, M(3), [repl])]
     expect(buildRebuildMeta(raw).meta.c.resultVertices).toEqual([7])
     rebuildBuildTree(raw)
-    expect(getNode('b')?.params).toEqual({ width: 12, height: 10, depth: 10, filletRadius: 3 })
+    expect(getNode('b')?.params).toEqual({ width: 12, height: 10, depth: 10 })
   })
 
   it('align: deltas из замены (re-solve, В2)', () => {
@@ -229,7 +236,7 @@ describe('projectHistory — каскад CSG и pivot (потребители)'
 })
 
 describe('computeCascade', () => {
-  it('fillet → group → group: оба CSG; несвязанный CSG не попадает', () => {
+  it('move → group → group: оба CSG; несвязанный CSG не попадает', () => {
     const ops: TinkerCraftOperation[] = [
       ...base(),                       // 0..4: c = a ∪ b
       add('d', 40), group('c', 'd', 'e'), // 5, 6: e = c ∪ d
@@ -243,7 +250,7 @@ describe('computeCascade', () => {
   it('mirror переносит зависимость на копию; delete обрывает', () => {
     const ops: TinkerCraftOperation[] = [
       add('a'),                                                  // 0
-      { type: 'fillet', id: 'a', radius: 2 },                    // 1
+      { type: 'move', ids: ['a'], delta: { x: 1, y: 0, z: 0 } }, // 1
       { type: 'mirror', originalIds: ['a'], ids: ['a2'], plane: 'YZ' }, // 2
       add('b'), group('a2', 'b', 'c'),                           // 3, 4 — зависит через копию
       { type: 'delete', ids: ['a'] },                            // 5
