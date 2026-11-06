@@ -14,7 +14,7 @@
 - **manifold-3d** (WASM) — CSG операции в Web Worker
 - **Zustand 5** — стейт-менеджмент
 - **Vite 6** — сборка
-- **Vitest 4** — тесты (591 тест, 48 файлов — ветка `phase-9.5.3`)
+- **Vitest 4** — тесты (591 тест, 48 файлов — ветка `phase-9`)
 - **pnpm** — пакетный менеджер
 
 ## Команды
@@ -53,10 +53,10 @@ pnpm e2e:edit-step-mirror  # Фаза 9.5.3: ✎ у шага mirror → плос
 |-------|------------|
 | `main` | Чистый CAD (Open Source, GPL-3.0) |
 | `phase-9` | Фаза 9 (от `main`); `phase-9.5.0` и `remove-fillet` в неё смержены (PR #1–#3) |
-| `phase-9.5.3` | Правка шага mirror (от `phase-9`), PR в `phase-9`; следующая — `phase-9.5.4` (extrude) |
+| `phase-9.5.4` | Следующая: правка шага extrude (от `phase-9`); `phase-9.5.2`/`phase-9.5.3` смержены (PR #4, #5) |
 | `yandex-games` | Версия для Яндекс.Игр (экономика, реклама, токены); Фазу 9 ещё не содержит |
 
-Цепочка: `main` → `phase-9` → `phase-9.5.3` → `phase-9.5.4`.
+Цепочка: `main` → `phase-9` → `phase-9.5.4`.
 
 ## Архитектура (data flow)
 
@@ -247,6 +247,7 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 
 ## Известные ограничения (не баги)
 
+- Импортированные меши (STL) не параметризуются — только CSG и трансформации (IMPORT-MESH-PARAMETRIC: не требуется); старые extrude без `group.source` не редактируются как extrude (EXTRUDE-LEGACY: не мигрируем)
 - Скругления (fillet) нет: прежний параметр куба удалён (remove-fillet) до инструмента на B-Rep; старые шаги `fillet` вырезаются при загрузке (`io/legacy-fillet.ts`) — новых не создавать
 
 ## Node.js — Настройка и проверка
