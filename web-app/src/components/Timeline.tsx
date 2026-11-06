@@ -142,14 +142,14 @@ export function opLabel(op: TinkerCraftOperation, t: (key: string, opts?: Record
   }
 }
 
-/** Фаза 9.5: «сдвиг (0, 0, 0) → (3, 0, 0)» для подписи правки шага. */
+/** Фаза 9.5: «сдвиг (0, 0, 0) → (3, 0, 0)» / «зеркало YZ → XZ» для подписи правки шага. */
 function patchDetail(p: StepPatch, before: StepPatch | undefined, t: (key: string, opts?: Record<string, unknown>) => string): string {
   if (p.kind === "move") {
     const from = before?.kind === "move" ? `${fmtVec(before.delta)} → ` : "";
     return `${t("stepPanel.offset").toLowerCase()} ${from}${fmtVec(p.delta)}`;
   }
   const from = before?.kind === "mirror" ? `${before.plane} → ` : "";
-  return `${from}${p.plane}`;
+  return `${t("stepPanel.mirror").toLowerCase()} ${from}${p.plane}`;
 }
 
 // ---- Timeline ----
@@ -166,7 +166,7 @@ export default function Timeline({
   busy: boolean;
   onJump: (index: number) => void;
   filters: Record<string, boolean>;
-  /** Фаза 9.4/9.5: «править» шаг — цель шага (9.4) или сам шаг (9.5.2, move); index — сырой индекс */
+  /** Фаза 9.4/9.5: «править» шаг — цель шага (9.4) или сам шаг (9.5.2 move, 9.5.3 mirror); index — сырой индекс */
   onEdit?: (op: TinkerCraftOperation, index: number) => void;
 }) {
   const { t } = useTranslation();
@@ -219,7 +219,7 @@ export default function Timeline({
             {onEdit && (op.type === "add_shape" || op.type === "edit_child_params" || stepEdit) && (
               <button
                 className="tl-edit"
-                title={stepEdit ? t("timeline.editMoveStep") : t("timeline.editStep")}
+                title={stepEdit ? t(op.type === "mirror" ? "timeline.editMirrorStep" : "timeline.editMoveStep") : t("timeline.editStep")}
                 disabled={busy}
                 onClick={(e) => { e.stopPropagation(); onEdit(op, i); }}
               >

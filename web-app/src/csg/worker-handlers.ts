@@ -911,6 +911,11 @@ export async function handleRebuildScene(msg: RebuildSceneMessage): Promise<void
               const m = applyTransform(buildPrimitive(origShape.shapeType, origShape.params), nt)
               setCached(newId, m)
               currentTransforms.set(newId, nt)
+              // FIX (MIRROR-CHAIN-REPLAY, 9.5.3): копия — тоже примитив (незеркальная форма
+              // из params; список mirrored[] применяет rebuildFromHistory). Без этого зеркало
+              // КОПИИ уходило в ветку CSG/импорта: отражение кэша в мире + список mirrored[]
+              // на main thread → последняя плоскость применялась дважды (YZ∘YZ = тождество).
+              shapeInfos.set(newId, { shapeType: origShape.shapeType, params: { ...origShape.params } })
             } else {
               // FIX (MIRROR-CSG-REBUILD): CSG result or imported mesh —
               // mirror the cached manifold geometry around origin.

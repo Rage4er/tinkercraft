@@ -1,9 +1,10 @@
 // ============================================================
-// StepPanel — правка прошлого шага истории (Фаза 9.5.2: move)
+// StepPanel — правка прошлого шага истории (Фаза 9.5.2: move, 9.5.3: mirror)
 // ============================================================
 // Открывается кнопкой ✎ у шага в Timeline (ui-store.selectedStep — сырой индекс шага).
 // Показывается вместо PropertiesPanel/ChildPropertiesPanel (панель, не модалка —
-// PHASE_9_5_DESIGN §6). Значение коммитится по Enter / уходу из поля (NumInput):
+// PHASE_9_5_DESIGN §6). Move — значение коммитится по Enter / уходу из поля (NumInput);
+// mirror — плоскость коммитится сразу по выбору. Затем
 // document-store.editStepParams записывает edit_step с каскадом пересчёта CSG и
 // align ниже по истории (store/edit-step.ts). Результат виден в 3D сразу; при
 // отказе store показывает уведомление с номером шага.
@@ -16,7 +17,7 @@ import { useUiStore } from '../store/ui-store'
 import { effectiveOpAt, effectivePatches } from '../store/project-history'
 import { buildRebuildMeta } from '../store/rebuild'
 import { displayName } from './ComponentTree'
-import type { MoveOperation, StepPatch, Vec3 } from '../csg/types'
+import type { MoveOperation, MirrorPlane, StepPatch, Vec3 } from '../csg/types'
 
 type Group = 'delta' | 'rotDelta' | 'scaleDelta'
 type Axis = 'x' | 'y' | 'z'
@@ -72,13 +73,16 @@ export default function StepPanel() {
     const prefix = operations.slice(0, historyIndex)
     const raw = prefix[stepIndex]
     const eff = effectiveOpAt(prefix, stepIndex)
-    if (!raw || raw.type !== 'move' || !eff || eff.type !== 'move') return null
+    if (!raw || (raw.type !== 'move' && raw.type !== 'mirror')) return null
+    if (!eff || (eff.type !== 'move' && eff.type !== 'mirror') || eff.type !== raw.type) return null
     // имена объектов на момент шага — по эффективной истории до него
+    // (mirror — объекты, которые зеркалятся: копии появляются этим шагом)
     const meta = buildRebuildMeta(prefix.slice(0, stepIndex)).meta
     const edit = effectivePatches(prefix).get(stepIndex)
+    const ids = raw.type === 'mirror' ? raw.originalIds : raw.ids
     return {
-      names: raw.ids.map((id) => (meta[id] ? displayName({ id, shapeType: meta[id].shapeType, name: meta[id].name }, t) : id)).join(', '),
-      original: raw,
+      names: ids.map((id) => (meta[id] ? displayName({ id, shapeType: meta[id].shapeType, name: meta[id].name }, t) : id)).join(', '),
+      original: raw.type === 'move' ? `Δ ${fmtVec(raw.delta)}` : raw.plane,
       eff,
       editedBy: edit ? edit.editIndex + 1 : null,
     }
@@ -86,19 +90,7 @@ export default function StepPanel() {
 
   if (stepIndex === null || !info) return null
   const { eff } = info
-
-  const commit = (group: Group, axis: Axis, v: number) => {
-    const patch = movePatchWith(eff, group, axis, v)
-    if (patch) void editStepParams(stepIndex, patch)
-  }
-
-  const groups: Array<{ group: Group; title: string; vec: Vec3 }> = [
-    { group: 'delta', title: t('stepPanel.offset'), vec: eff.delta },
-  ]
-  // Поворот и масштаб — только если шаг их меняет (moveObject пишет их всегда, обычно
-  // нулями; gizmo поворота/масштаба — отдельными шагами). В патч они уходят целиком.
-  if (nonZero(eff.rotDelta)) groups.push({ group: 'rotDelta', title: t('stepPanel.rotation'), vec: eff.rotDelta! })
-  if (nonZero(eff.scaleDelta)) groups.push({ group: 'scaleDelta', title: t('stepPanel.scale'), vec: eff.scaleDelta! })
+  const edit = (patch: StepPatch | null) => { if (patch) void editStepParams(stepIndex, patch) }
 
   return (
     <div data-testid="step-panel" data-step={stepIndex}>
@@ -108,7 +100,7 @@ export default function StepPanel() {
         </button>
       </div>
       <div className="props-section-title">
-        {t('stepPanel.title', { step: stepIndex + 1, name: t('stepPanel.move') })}
+        {t('stepPanel.title', { step: stepIndex + 1, name: t(eff.type === 'mirror' ? 'stepPanel.mirror' : 'stepPanel.move') })}
       </div>
       <div className="props-row">
         <span className="props-label">{t('stepPanel.target')}</span>
@@ -116,13 +108,37 @@ export default function StepPanel() {
       </div>
       <div className="props-row">
         <span className="props-label">{t('stepPanel.original')}</span>
-        <span className="props-value" data-testid="step-original">Δ {fmtVec(info.original.delta)}</span>
+        <span className="props-value" data-testid="step-original">{info.original}</span>
       </div>
       {info.editedBy !== null && (
         <div className="text-sm text-muted-xs" data-testid="step-edited" style={{ padding: '2px 12px 6px' }}>
           {t('stepPanel.edited', { step: info.editedBy })}
         </div>
       )}
+      {eff.type === 'move'
+        ? <MoveForm stepIndex={stepIndex} op={eff} busy={busy} onPatch={edit} />
+        : <MirrorForm plane={eff.plane} busy={busy} onPatch={edit} />}
+      <div className="text-sm text-muted-xs" data-testid="step-status" style={{ padding: '4px 12px' }}>
+        {busy ? t('stepPanel.recomputing') : t(eff.type === 'mirror' ? 'stepPanel.hintMirror' : 'stepPanel.hint')}
+      </div>
+    </div>
+  )
+}
+
+/** Поля шага move: ΔX/ΔY/ΔZ; поворот/масштаб — только если шаг их меняет. */
+function MoveForm({ stepIndex, op, busy, onPatch }: {
+  stepIndex: number; op: MoveOperation; busy: boolean; onPatch: (p: StepPatch | null) => void
+}) {
+  const { t } = useTranslation()
+  const groups: Array<{ group: Group; title: string; vec: Vec3 }> = [
+    { group: 'delta', title: t('stepPanel.offset'), vec: op.delta },
+  ]
+  // Поворот и масштаб — только если шаг их меняет (moveObject пишет их всегда, обычно
+  // нулями; gizmo поворота/масштаба — отдельными шагами). В патч они уходят целиком.
+  if (nonZero(op.rotDelta)) groups.push({ group: 'rotDelta', title: t('stepPanel.rotation'), vec: op.rotDelta! })
+  if (nonZero(op.scaleDelta)) groups.push({ group: 'scaleDelta', title: t('stepPanel.scale'), vec: op.scaleDelta! })
+  return (
+    <>
       {groups.map(({ group, title, vec }) => (
         <div className="csg-group" data-testid={`step-${group}`} key={group}>
           <div className="csg-group-title">{title}</div>
@@ -134,14 +150,42 @@ export default function StepPanel() {
               step={FIELD[group].step}
               value={vec[axis]}
               disabled={busy}
-              onChange={(v) => commit(group, axis, v)}
+              onChange={(v) => onPatch(movePatchWith(op, group, axis, v))}
             />
           ))}
         </div>
       ))}
-      <div className="text-sm text-muted-xs" data-testid="step-status" style={{ padding: '4px 12px' }}>
-        {busy ? t('stepPanel.recomputing') : t('stepPanel.hint')}
+    </>
+  )
+}
+
+const PLANES: MirrorPlane[] = ['YZ', 'XZ', 'XY']
+
+/** Плоскость шага mirror: выбор применяется сразу (без «Применить»), та же — ничего не делает. */
+function MirrorForm({ plane, busy, onPatch }: {
+  plane: MirrorPlane; busy: boolean; onPatch: (p: StepPatch | null) => void
+}) {
+  const { t } = useTranslation()
+  return (
+    <div className="csg-group" data-testid="step-mirror">
+      <div className="csg-group-title" id="step-plane-label">{t('stepPanel.plane')}</div>
+      <div className="props-row" role="radiogroup" aria-labelledby="step-plane-label" style={{ gap: 4 }}>
+        {PLANES.map((p) => (
+          <button
+            key={p}
+            type="button"
+            role="radio"
+            aria-checked={p === plane}
+            className={`btn btn-compact${p === plane ? ' active' : ''}`}
+            data-testid={`step-plane-${p}`}
+            disabled={busy}
+            onClick={() => onPatch(p === plane ? null : { kind: 'mirror', plane: p })}
+          >
+            {p}
+          </button>
+        ))}
       </div>
     </div>
   )
 }
+

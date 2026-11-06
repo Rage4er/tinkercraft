@@ -1,8 +1,8 @@
 // src/hooks/useTimelineEdit.ts — Timeline → «править шаг» (Фаза 9.4)
 //
 // История append-only: правка параметров шага = правка ТЕКУЩЕГО состояния его цели
-// (resize_dims для живого объекта, edit_child_params для ребёнка CSG); шаг move —
-// сам шаг (Фаза 9.5.2, панель «Шаг N», edit_step с каскадом). Хук находит,
+// (resize_dims для живого объекта, edit_child_params для ребёнка CSG); шаги move и
+// mirror — сам шаг (Фаза 9.5.2/9.5.3, панель «Шаг N», edit_step с каскадом). Хук находит,
 // где цель шага живёт сейчас, и выделяет её: объект сцены или ребёнок в дереве
 // компонентов (с раскрытием предков) — панель свойств покажет нужную форму.
 import { useCallback } from 'react'
@@ -17,7 +17,7 @@ import { isStepEditable } from '../store/edit-step'
 export function useTimelineEdit(): (op: TinkerCraftOperation, index: number) => void {
   const { t } = useTranslation()
   return useCallback((op: TinkerCraftOperation, index: number) => {
-    // Фаза 9.5.2: прошлый шаг move правится как ШАГ (edit_step с каскадом) — панель «Шаг N».
+    // Фаза 9.5.2/9.5.3: прошлый шаг move/mirror правится как ШАГ (edit_step с каскадом) — панель «Шаг N».
     // Выделение в сцене снимается: панель шага показывается вместо свойств объекта.
     if (isStepEditable(op)) {
       useUiStore.getState().setSelectedChild(null)

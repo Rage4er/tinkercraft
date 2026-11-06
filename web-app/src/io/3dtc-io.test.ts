@@ -187,6 +187,34 @@ describe('3dtc-io round-trip', () => {
     expect(al).toEqual({ stepIndex: 5, kind: 'align', deltas: { k: 0 } })
   })
 
+  it('edit_step mirror (9.5.3): плоскость, before и замена group переживают round-trip', async () => {
+    const T: TransformNR = { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
+    const ops: TinkerCraftOperation[] = [
+      { type: 'add_shape', id: 'a', shapeType: 'prism', params: { radius: 10, height: 20, sides: 5 }, color: '#fff', transform: T },
+      { type: 'mirror', originalIds: ['a'], ids: ['a2'], plane: 'YZ' },
+      { type: 'add_shape', id: 'b', shapeType: 'sphere', params: { radius: 6 }, color: '#fff', transform: T },
+      { type: 'group', ids: ['a2', 'b'], resultId: 'c', resultVertices: [0, 0, 0, 1, 0, 0, 0, 1, 0], resultIndices: [0, 1, 2], resultCenter: { x: -5, y: 0, z: 0 } },
+      {
+        type: 'edit_step', stepIndex: 1, stepFingerprint: { type: 'mirror', targetId: 'a2' },
+        patch: { kind: 'mirror', plane: 'XZ' }, before: { kind: 'mirror', plane: 'YZ' },
+        replacements: [{
+          stepIndex: 3, kind: 'group',
+          resultVertices: new Float32Array([0, 0.5, 0, 1, 0, 0, 0, 1, 0]), resultIndices: new Uint32Array([0, 2, 1]),
+          resultCenter: { x: 0, y: -5, z: 0 }, resultRotation: { x: 0, y: 0, z: 0 }, resultScale: { x: 1, y: 1, z: 1 },
+        }],
+      },
+    ]
+    const parsed = await parse3dtc(await serialize3dtc({ objects: {}, operations: ops, operationsTrimmed: false }))
+    const e = parsed.operations[4]
+    expect(e.type).toBe('edit_step')
+    if (e.type !== 'edit_step') return
+    expect(e.patch).toEqual({ kind: 'mirror', plane: 'XZ' })
+    expect(e.before).toEqual({ kind: 'mirror', plane: 'YZ' })
+    expect(e.stepFingerprint).toEqual({ type: 'mirror', targetId: 'a2' })
+    expect(e.replacements[0].resultIndices).toEqual([0, 2, 1])
+    expect(e.replacements[0].resultCenter).toEqual({ x: 0, y: -5, z: 0 })
+  })
+
   it('rejects unsupported version', async () => {
     // Создаём ZIP с version "1.0.0" (старый .doodle)
     const zip = new JSZip()
