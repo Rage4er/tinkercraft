@@ -1,9 +1,13 @@
 // e2e/independent-copy.mjs — CSG-INDEPENDENT-COPY: зеркало и вставка CSG дают независимую
 // параметрическую копию. Куб ∪ сфера (сфера сдвинута в куб — радиус меняет меш) →
-//  1) зеркало YZ → у копии дети без замка; радиус сферы копии +1 → копия пересчитана, оригинал нет;
+//  1) зеркало YZ → копия раскрывается, у её детей нет замка; радиус сферы копии +1 →
+//     копия пересчитана, оригинал нет;
 //  2) правка сферы оригинала → копия не тронута;
 //  3) Ctrl+C / Ctrl+V оригинала → правка сферы вставки → вставка пересчитана, оригинал нет;
 //  undo/redo правки вставки; уведомлений об отказе и ошибок в консоли нет.
+// Дети ищутся по подписи внутри строки объекта (не по id узлов) — тест проверяет то, что
+// видит пользователь. Проверено откатом: старый путь зеркала (дети запечены, 🔒 «mirror») и
+// старая вставка (запечённый меш, не раскрывается) падают с понятной причиной.
 // Запуск: `pnpm dev` в одном терминале, `pnpm e2e:independent-copy` в другом.
 // Необязательный аргумент — путь для скриншота: `node e2e/independent-copy.mjs /tmp/copy.png`.
 import { openApp } from './helpers.mjs'
@@ -14,37 +18,41 @@ const fail = (msg) => { throw new Error(msg) }
 const right = page.locator('.panel-right')
 const objRows = page.locator('.ct-item[data-object-id]')
 const row = (id) => page.locator(`.ct-item[data-object-id="${id}"]`)
-const child = (nodeId) => page.locator(`.ct-child[data-node-id="${nodeId}"]`)
+/** Строка ребёнка `label` первого уровня под объектом `rootId` (строка объекта и дети — в одной обёртке). */
+const childOf = (rootId, label) => row(rootId).locator('xpath=..').locator('.ct-child', { hasText: label })
 const tris = async (id) => (await row(id).locator('.ct-tri').textContent())?.replace(/\D/g, '')
 const ids = async () => objRows.evaluateAll((els) => els.map((e) => e.getAttribute('data-object-id')))
 const rowCount = (n) => page.waitForFunction((k) => document.querySelectorAll('.ct-item[data-object-id]').length === k, n, { timeout: 15000 })
+const radiusRe = (r) => new RegExp(`R${r}(\\D|$)`)
 const noRejects = async () => {
   const toasts = await page.locator('.toast-msg').allTextContents()
   if (toasts.some((m) => /отклон|не удалось|нельзя|недоступ/i.test(m))) fail('уведомление об отказе: ' + toasts.join(' | '))
 }
 
-/** Выбрать ребёнка CSG, убедиться, что он правится, и поставить радиус. */
-async function editRadius(nodeId, radius) {
-  const r = child(nodeId)
-  if ((await r.locator('[data-testid=ct-lock]').count()) !== 0) fail(`у ${nodeId} замок: ` + (await r.locator('[data-testid=ct-lock]').getAttribute('data-reason')))
+/** Раскрыть CSG в дереве; копия без своего дерева (запечённый меш) не раскрывается. */
+async function expand(id, what) {
+  const chevron = row(id).locator('.ct-chevron')
+  if ((await chevron.count()) === 0) fail(`${what} не раскрывается в дереве — запечённый меш, а не своё дерево`)
+  if ((await chevron.textContent())?.trim() !== '▾') await chevron.click() // ▸ — свёрнут
+}
+
+/** Ребёнок-сфера объекта `rootId`: выбрать, убедиться, что правится, поставить радиус. */
+async function editSphereRadius(rootId, what, radius) {
+  const r = childOf(rootId, 'Сфера')
+  if ((await r.count()) !== 1) fail(`${what}: нет ребёнка «Сфера» (дети: ${(await row(rootId).locator('xpath=..').locator('.ct-child').allInnerTexts()).join(' | ')})`)
+  const lock = r.locator('[data-testid=ct-lock]')
+  if ((await lock.count()) !== 0) fail(`${what}: у сферы замок 🔒 «${await lock.getAttribute('data-reason')}» — копию нельзя править`)
   await r.click()
-  const panel = page.locator('[data-testid=child-props]')
-  await panel.waitFor({ timeout: 5000 })
+  await page.locator('[data-testid=child-props]').waitFor({ timeout: 5000 })
   await page.waitForFunction(() => document.querySelector('[data-testid=child-check]') === null, null, { timeout: 15000 })
-  if ((await page.locator('[data-testid=child-unavailable]').count()) !== 0) fail(`${nodeId}: правка недоступна`)
+  if ((await page.locator('[data-testid=child-unavailable]').count()) !== 0) fail(`${what}: правка сферы недоступна`)
   const input = page.locator('[data-testid=child-form] input.props-input').first()
   await input.fill(String(radius))
   await input.blur()
-  await page.waitForFunction(
-    ([sel, re]) => new RegExp(re).test(document.querySelector(sel)?.textContent ?? ''),
-    [`.ct-child[data-node-id="${nodeId}"]`, `R${radius}(\\D|$)`], { timeout: 15000 },
-  )
+  await r.filter({ hasText: radiusRe(radius) }).waitFor({ timeout: 15000 })
 }
 
-const expand = async (id) => {
-  const chevron = row(id).locator('.ct-chevron')
-  if ((await chevron.textContent())?.trim() !== '▾') await chevron.click() // ▸ — свёрнут
-}
+const sphereRadius = async (rootId) => Number((await childOf(rootId, 'Сфера').textContent())?.match(/R(\d+)/)?.[1])
 
 try {
   await page.locator('button.tab-btn', { hasText: 'Дерево' }).click()
@@ -72,15 +80,18 @@ try {
   await page.locator('button.btn-compact').nth(17).click() // 17-я кнопка тулбара — зеркало YZ
   await rowCount(2)
   const mirror = (await ids()).find((id) => id !== root)
-  await expand(mirror)
-  for (const n of [`${mirror}:${cube}`, `${mirror}:${sphere}`]) {
-    if ((await child(n).count()) !== 1) fail('у зеркальной копии нет ребёнка ' + n + ': ' + (await page.locator('.ct-child').allInnerTexts()).join(' | '))
+  await expand(mirror, 'Зеркальная копия')
+  for (const label of ['Куб', 'Сфера']) {
+    const r = childOf(mirror, label)
+    if ((await r.count()) !== 1) fail(`у зеркальной копии нет ребёнка «${label}»`)
+    const lock = r.locator('[data-testid=ct-lock]')
+    if ((await lock.count()) !== 0) fail(`зеркальная копия: у ребёнка «${label}» замок 🔒 «${await lock.getAttribute('data-reason')}» — копию нельзя править`)
   }
-  const radius0 = Number((await child(`${mirror}:${sphere}`).textContent())?.match(/R(\d+)/)?.[1])
+  const radius0 = await sphereRadius(mirror)
   if (!radius0) fail('радиус сферы копии не прочитан')
   const rootTris0 = await tris(root), mirrorTris0 = await tris(mirror)
 
-  await editRadius(`${mirror}:${sphere}`, radius0 + 1)
+  await editSphereRadius(mirror, 'Зеркальная копия', radius0 + 1)
   await noRejects()
   const mirrorTris1 = await tris(mirror)
   if (mirrorTris1 === mirrorTris0) fail(`копия не пересчитана (треугольников ${mirrorTris0})`)
@@ -88,13 +99,13 @@ try {
   if (shot) await page.screenshot({ path: shot })
 
   // ── 2. Правка оригинала → копия не тронута ──
-  await expand(root)
-  await editRadius(sphere, radius0 + 3)
+  await expand(root, 'Оригинал')
+  await editSphereRadius(root, 'Оригинал', radius0 + 3)
   await noRejects()
   const rootTris1 = await tris(root)
   if (rootTris1 === rootTris0) fail('оригинал не пересчитан')
   if ((await tris(mirror)) !== mirrorTris1) fail('правка оригинала изменила зеркальную копию')
-  if (!new RegExp(`R${radius0 + 1}(\\D|$)`).test((await child(`${mirror}:${sphere}`).textContent()) ?? '')) fail('радиус ребёнка копии изменился')
+  if ((await sphereRadius(mirror)) !== radius0 + 1) fail('правка оригинала изменила радиус ребёнка копии')
 
   // ── 3. Ctrl+C / Ctrl+V оригинала → правка вставки ──
   await row(root).locator('.ct-name').click()
@@ -103,10 +114,10 @@ try {
   await page.keyboard.press('Control+v')
   await rowCount(3)
   const pasted = (await ids()).find((id) => id !== root && id !== mirror)
-  await expand(pasted)
-  if (!new RegExp(`R${radius0 + 3}(\\D|$)`).test((await child(`${pasted}:${sphere}`).textContent()) ?? '')) fail('вставка не повторяет оригинал на момент копирования')
+  await expand(pasted, 'Вставленная копия')
+  if ((await sphereRadius(pasted)) !== radius0 + 3) fail('вставка не повторяет оригинал на момент копирования')
   const pastedTris0 = await tris(pasted)
-  await editRadius(`${pasted}:${sphere}`, radius0 + 1)
+  await editSphereRadius(pasted, 'Вставленная копия', radius0 + 1)
   await noRejects()
   const pastedTris1 = await tris(pasted)
   if (pastedTris1 === pastedTris0) fail('вставка не пересчитана')
@@ -114,17 +125,15 @@ try {
   if ((await tris(mirror)) !== mirrorTris1) fail('правка вставки изменила зеркальную копию')
 
   // undo → вставка как была, redo → правленая
+  const trisIs = (id, n) => page.waitForFunction(
+    ([sel, want]) => (document.querySelector(sel)?.textContent ?? '').replace(/\D/g, '') === want,
+    [`.ct-item[data-object-id="${id}"] .ct-tri`, n], { timeout: 15000 },
+  )
   await page.locator('.props-header').click()
   await page.keyboard.press('Control+z')
-  await page.waitForFunction(
-    ([sel, re]) => new RegExp(re).test(document.querySelector(sel)?.textContent ?? ''),
-    [`.ct-item[data-object-id="${pasted}"] .ct-tri`, `^\\D*${pastedTris0}\\D*$`], { timeout: 15000 },
-  )
+  await trisIs(pasted, pastedTris0)
   await page.keyboard.press('Control+y')
-  await page.waitForFunction(
-    ([sel, re]) => new RegExp(re).test(document.querySelector(sel)?.textContent ?? ''),
-    [`.ct-item[data-object-id="${pasted}"] .ct-tri`, `^\\D*${pastedTris1}\\D*$`], { timeout: 15000 },
-  )
+  await trisIs(pasted, pastedTris1)
   if ((await tris(root)) !== rootTris1) fail('undo/redo вставки изменили оригинал')
 
   if (errors.length) fail('ошибки в консоли:\n' + errors.join('\n'))

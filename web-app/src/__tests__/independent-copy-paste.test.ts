@@ -286,3 +286,40 @@ describe('CSG-INDEPENDENT-COPY: вставка CSG → копия дерева',
     expectSameWorld(after, fresh)
   })
 })
+
+// Регресс давнего бага (до CSG-INDEPENDENT-COPY): операция вставки писала только
+// resultCenter — повёрнутый/масштабированный вставленный CSG после перемотки и
+// загрузки терял поворот и масштаб. Касается и новой вставки (с деревом), и старой (мешем).
+describe('PASTE-CSG-RS: вставленный CSG сохраняет полный TRS после перемотки/загрузки', () => {
+  const RS: Partial<TransformNR> = { rotX: 10, rotY: 20, rotZ: 50, scaleX: 1.5, scaleY: 1, scaleZ: 2 }
+
+  for (const legacy of [false, true]) {
+    it(legacy ? 'старая вставка мешем (без дерева)' : 'вставка с деревом', async () => {
+      const { root } = await base()
+      await st().moveObject(root, { ...st().objects[root].transform, ...RS })
+      st().selectObjects([root], false)
+      st().copySelected()
+      if (legacy) useDocumentStore.setState({ clipboard: st().clipboard.map(e => ({ ...e, csgTree: undefined })) })
+      await st().pasteClipboard()
+      const copy = st().selectedIds[0]
+      const live = st().objects[copy]
+      expect(live.transform).toMatchObject(RS)
+      expect(getNode(copy)?.type).toBe(legacy ? 'baked' : 'boolean')
+
+      // перемотка без снимков: undo вставки → redo
+      clearSnapshots()
+      await st().undo()
+      expect(st().objects[copy]).toBeUndefined()
+      await st().redo()
+      expect(st().objects[copy].transform).toEqual(live.transform)
+      expectSameWorld(st().objects[copy], live)
+
+      // загрузка .3dtc
+      const blob = await serialize3dtc({ objects: st().objects, operations: st().operations, operationsTrimmed: false })
+      const ops = (await parse3dtc(blob)).operations as TinkerCraftOperation[]
+      const objects = await rebuildFromHistory(ops)
+      expect(objects[copy].transform).toEqual(live.transform)
+      expectSameWorld(objects[copy], live)
+    })
+  }
+})

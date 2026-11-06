@@ -331,3 +331,25 @@ describe('CSG-INDEPENDENT-COPY: зеркало CSG → копия дерева',
     expectSameWorld(after, fresh)
   })
 })
+
+// Регресс давнего бага: дерево зеркального CSG жило только в сессии
+// (MIRROR-TREE-PRESERVE), а после загрузки rebuildBuildTree ставил заглушку-куб.
+describe('MIRROR-CSG-TREE-RELOAD: дерево зеркального CSG после загрузки', () => {
+  it('после .3dtc — boolean-корень с детьми источника, а не заглушка-куб; дерево воспроизводит меш', async () => {
+    const { c, s, copy } = await scene()
+    const blob = await serialize3dtc({ objects: st().objects, operations: st().operations, operationsTrimmed: false })
+
+    reset()
+    const ops = (await parse3dtc(blob)).operations as TinkerCraftOperation[]
+    const objects = await rebuildFromHistory(ops)
+    rebuildBuildTree(ops, objects) // чистое дерево — как после перезапуска приложения
+    useDocumentStore.setState({ operations: ops, historyIndex: ops.length, objects })
+
+    const node = getNode(copy)
+    expect(node?.type).toBe('boolean')
+    expect(node?.shapeType).toBeUndefined()
+    expect(node?.children).toEqual([`${copy}:${c}`, `${copy}:${s}`])
+    expect(getNode(`${copy}:${c}`)).toMatchObject({ type: 'primitive', shapeType: 'cube', mirrored: ['YZ'] })
+    expect(await checkChildEditable({ rootId: copy, nodeId: `${copy}:${c}`, objects, operations: ops, historyIndex: ops.length })).toBeNull()
+  })
+})
