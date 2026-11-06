@@ -21,7 +21,7 @@ import type {
   SceneObject, ShapeParams, TransformNR, TinkerCraftOperation, GroupOperation, Vec3,
 } from '../csg/types'
 import {
-  getNode, setNode, invalidateCache, rebuildBooleanWorld,
+  getNode, setNode, invalidateCache, rebuildBooleanWorld, mirrorPoint, mirrorEuler,
 } from '../csg/history-tree'
 import { computeInverseRSMatrix, transposeRSMatrix } from '../csg/worker-matrix'
 import { sanitizeParams } from '../csg/worker-handlers'
@@ -66,13 +66,47 @@ export function findCreationTransform(
   rootId: string,
 ): TransformNR | null {
   const ops = projectHistory(rawOps)
-  for (let i = ops.length - 1; i >= 0; i--) {
+  return creationTransformBefore(ops, ops.length, rootId, 0)
+}
+
+/** Глубина цепочки копий (зеркало зеркала …) — защита от порчи истории. */
+const MAX_COPY_CHAIN = 64
+
+/**
+ * TRS₀ корня по префиксу `ops[0..end)` эффективной истории.
+ * CSG-INDEPENDENT-COPY: зеркальная копия — отражённая система источника
+ * (дерево копии = отражённое дерево источника, вершины = M·v источника);
+ * вставленная копия — система источника из снимка (`copyTree.origin`).
+ */
+function creationTransformBefore(
+  ops: TinkerCraftOperation[],
+  end: number,
+  rootId: string,
+  depth: number,
+): TransformNR | null {
+  if (depth > MAX_COPY_CHAIN) return null
+  for (let i = end - 1; i >= 0; i--) {
     const op = ops[i]
+    if (op.type === 'mirror') {
+      const k = op.ids.indexOf(rootId)
+      if (k < 0) continue
+      const src = op.originalIds?.[k]
+      const t = src ? creationTransformBefore(ops, i, src, depth + 1) : null
+      if (!t) return null
+      const p = mirrorPoint({ x: t.x, y: t.y, z: t.z }, op.plane)
+      const r = mirrorEuler({ x: t.rotX, y: t.rotY, z: t.rotZ }, op.plane)
+      return {
+        x: p.x, y: p.y, z: p.z, rotX: r.x, rotY: r.y, rotZ: r.z,
+        scaleX: Math.abs(t.scaleX), scaleY: Math.abs(t.scaleY), scaleZ: Math.abs(t.scaleZ),
+      }
+    }
     if (op.type !== 'group') continue
     const g: GroupOperation = op
     if (g.resultId !== rootId) continue
-    // Вставленный CSG (ids: []) и legacy без resultCenter не имеют системы создания
-    if (g.ids.length === 0 || !g.resultCenter) return null
+    // Вставленный CSG (ids: []): своя система — только у копии с деревом
+    if (g.ids.length === 0) return g.copyTree ? { ...g.copyTree.origin } : null
+    // legacy без resultCenter не имеет системы создания
+    if (!g.resultCenter) return null
     return {
       x: g.resultCenter.x, y: g.resultCenter.y, z: g.resultCenter.z,
       rotX: g.resultRotation?.x ?? 0, rotY: g.resultRotation?.y ?? 0, rotZ: g.resultRotation?.z ?? 0,

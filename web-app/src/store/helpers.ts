@@ -282,6 +282,12 @@ export interface ClipEntry {
   csgNormals?: Float32Array
   csgAABB?: { min: Vec3; max: Vec3 }
   csgOriginalBboxSize?: { x: number; y: number; z: number }
+  /**
+   * CSG-INDEPENDENT-COPY: снимок дерева CSG на момент копирования — вставка даёт
+   * независимую параметрическую копию. Нет (запечённый корень, нет системы
+   * создания) — вставка запечённым мешем, как раньше.
+   */
+  csgTree?: import('../csg/types').CopiedTree
   // For mirror primitive (paste from clipboard):
   mirrorVertices?: Float32Array
   mirrorIndices?: Uint32Array

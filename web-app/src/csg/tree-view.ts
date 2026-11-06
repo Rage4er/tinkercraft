@@ -13,10 +13,10 @@ import { getNode } from './history-tree'
  */
 export type NotEditableReason =
   | 'boolean'       // вложенная операция — править её компоненты
-  | 'baked'         // запечённый меш (импорт, вставленный CSG)
-  | 'mirror'        // запечённая зеркальная копия без params (legacy)
+  | 'baked'         // запечённый меш (импорт, старая вставка CSG без дерева — в т.ч. отражённый)
+  | 'mirror'        // примитив, запечённый зеркалом CSG (legacy; с CSG-INDEPENDENT-COPY не создаётся)
   | 'nested_moved'  // дерево не воспроизводит меш (вложенный CSG сдвинут до объединения и т.п.)
-  | 'no_origin'     // у корня нет данных о создании (вставленная копия, legacy)
+  | 'no_origin'     // у корня нет данных о создании (старая вставка CSG без дерева, legacy)
   | null
 
 /** Статическая (синхронная) проверка узла — ЕДИНЫЙ источник для дерева, панели и store. */
@@ -32,7 +32,11 @@ export function nodeEditability(node: TreeNode): { editable: boolean; reason: No
     return { editable: true, reason: null }
   }
   if (node.type === 'boolean') return { editable: false, reason: 'boolean' }
-  if (node.type === 'baked' && node.mirroredPlane !== undefined) return { editable: false, reason: 'mirror' }
+  // CSG-INDEPENDENT-COPY: «mirror» — только примитив, запечённый старым зеркалом CSG
+  // (у него остались params); отражённый настоящий baked-меш остаётся «baked».
+  if (node.type === 'baked' && node.mirroredPlane !== undefined && node.params !== undefined) {
+    return { editable: false, reason: 'mirror' }
+  }
   return { editable: false, reason: 'baked' }
 }
 

@@ -24,6 +24,8 @@ import {
   setNode,
   registerObjectInTree,
   mirrorVerticesInPlace,
+  copySubtree,
+  instantiateSubtree,
 } from '../csg/history-tree'
 import { notify } from './notifications'
 import i18n from '../i18n'
@@ -430,6 +432,16 @@ export function rebuildBuildTree(
           const nt = applyMirrorToTransform(t as unknown as RebuildTransform, op.plane) as TransformNR
           transforms[newId] = nt
 
+          // CSG-INDEPENDENT-COPY: зеркало CSG — независимая параметрическая копия дерева
+          // источника В ЭТОТ момент истории (узлы `${newId}:${id}` перезаписываются —
+          // правки детей копии воспроизводятся дальше по edit_child_params). Раньше узел
+          // жил только в сессии (MIRROR-TREE-PRESERVE), а после загрузки — заглушка-куб.
+          const srcTree = getNode(origId)
+          if (srcTree?.type === 'boolean') {
+            copySubtree(origId, newId, op.plane, nt)
+            continue
+          }
+
           // FIX (MIRROR-TREE-PRESERVE): Check if node already exists (created by mirrorObject).
           // If yes, update its transform but keep the existing node type (boolean/primitive/baked).
           // If no, create the appropriate node type based on the original.
@@ -497,7 +509,12 @@ export function rebuildBuildTree(
         const treeOp = op.treeOperation ?? 'union'
 
         // FIX (PASTE-CSG-TREE): Pasted CSG has ids: [] (no children).
-        // Register as baked node from stored mesh data instead of boolean node.
+        // CSG-INDEPENDENT-COPY: вставка со снимком дерева — своё дерево копии (параметрическое);
+        // старая вставка без снимка — baked из сохранённого меша.
+        if (op.ids.length === 0 && op.copyTree) {
+          instantiateSubtree(op.copyTree.nodes, op.copyTree.sourceRootId, op.resultId, startT)
+          continue
+        }
         if (op.ids.length === 0) {
           if (objects && objects[op.resultId]) {
             const obj = objects[op.resultId]

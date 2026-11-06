@@ -241,6 +241,38 @@ describe('3dtc-io round-trip', () => {
     expect(e.replacements[1].resultVertices).toEqual([0, 0, 2, 1, 0, 0, 0, 1, 0])
   })
 
+  it('CSG-INDEPENDENT-COPY: снимок дерева вставки (copyTree) и полный TRS переживают round-trip', async () => {
+    const T: TransformNR = { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
+    const ops: TinkerCraftOperation[] = [{
+      type: 'group', ids: [], resultId: 'p', resultVertices: [0, 0, 0, 1, 0, 0, 0, 1, 0], resultIndices: [0, 1, 2],
+      resultCenter: { x: 5, y: 0, z: 5 }, resultRotation: { x: 0, y: 0, z: 50 }, resultScale: { x: 1, y: 2, z: 1 },
+      copyTree: {
+        sourceRootId: 'r',
+        origin: { ...T, x: 10, rotZ: 30 },
+        nodes: [
+          { id: 'r', type: 'boolean', operation: 'union', children: ['a', 'k'], relativeToParent: null, localTransform: T },
+          { id: 'a', type: 'primitive', shapeType: 'sphere', params: { radius: 8 }, mirrored: ['YZ'], parentId: 'r', relativeToParent: null, localTransform: { ...T, x: 14 } },
+          { id: 'k', type: 'baked', vertices: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]), indices: new Uint32Array([0, 1, 2]), normals: null, mirroredPlane: 'XZ', parentId: 'r', relativeToParent: null, localTransform: T },
+        ],
+      },
+    }]
+    const parsed = await parse3dtc(await serialize3dtc({ objects: {}, operations: ops, operationsTrimmed: false }))
+    const g = parsed.operations[0]
+    if (g.type !== 'group' || !g.copyTree) throw new Error('group с copyTree expected')
+    expect(g.resultRotation).toEqual({ x: 0, y: 0, z: 50 })
+    expect(g.resultScale).toEqual({ x: 1, y: 2, z: 1 })
+    expect(g.copyTree.sourceRootId).toBe('r')
+    expect(g.copyTree.origin).toEqual({ ...T, x: 10, rotZ: 30 })
+    expect(g.copyTree.nodes.map(n => n.id)).toEqual(['r', 'a', 'k'])
+    expect(g.copyTree.nodes[1]).toMatchObject({ type: 'primitive', params: { radius: 8 }, mirrored: ['YZ'], parentId: 'r' })
+    const k = g.copyTree.nodes[2]
+    // baked-узел снимка — типизированные массивы (как TreeNode), а не number[]
+    expect(k.vertices).toBeInstanceOf(Float32Array)
+    expect(Array.from(k.vertices!)).toEqual([0, 0, 0, 1, 0, 0, 0, 1, 0])
+    expect(k.indices).toBeInstanceOf(Uint32Array)
+    expect(k.mirroredPlane).toBe('XZ')
+  })
+
   it('rejects unsupported version', async () => {
     // Создаём ZIP с version "1.0.0" (старый .doodle)
     const zip = new JSZip()
