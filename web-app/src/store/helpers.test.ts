@@ -268,6 +268,15 @@ describe('solveAlignDeltas', () => {
     expect(solveAlignDeltas(objects, ['k'], 'X', 'center', 'c')).toEqual({ k: 10 })
     expect(solveAlignDeltas(objects, ['k'], 'X', 'max', 'c')).toEqual({ k: 11 - 1 })
   })
+  it('два CSG: цель-CSG выравнивается по мировой рамке якоря-CSG (pivot ≠ 0, масштаб у цели)', () => {
+    // A: рамка X [19, 21]; B: pivot 50, масштаб 3 → рамка X [47, 53]
+    const objects = { A: csgObj('A', { x: 20, y: 20, z: 20 }), B: csgObj('B', { x: 50, y: 20, z: 20, scaleX: 3 }) }
+    const d = solveAlignDeltas(objects, ['B'], 'X', 'min', 'A')
+    expect(d.B).toBeCloseTo(19 - 47, 6)
+    const moved = { ...objects.B, transform: { ...objects.B.transform, x: objects.B.transform.x + d.B } }
+    expect(computeWorldAABB(moved).min.x).toBeCloseTo(computeWorldAABB(objects.A).min.x, 6)
+    expect(solveAlignDeltas(objects, ['B'], 'X', 'max', 'A').B).toBeCloseTo(21 - 53, 6)
+  })
   it('якорь и отсутствующие объекты пропускаются; нет якоря — пусто', () => {
     const objects = { a: cubeObj('a', 0), b: cubeObj('b', 4) }
     expect(solveAlignDeltas(objects, ['a', 'b', 'ghost'], 'X', 'min', 'b')).toEqual({ a: 4 })

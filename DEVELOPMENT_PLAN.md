@@ -587,12 +587,25 @@ web-app/
 
 ## Известные проблемы и технический долг
 
+### Активные баги (UX)
+
+| ID | Статус | Описание |
+|---|---|---|
+| ALIGN-PRIMITIVE-AABB | 🔲 | Выравнивание повёрнутых/масштабированных примитивов неточно: рамка считается по params без поворота, а цилиндр/конус/призма (есть `radius`) — как сфера (`±radius` по всем осям, высота не учитывается). Живое действие и re-solve 9.5.2 согласованы (общий `solveAlignDeltas`). Исправить в 9.5.3 или отдельной веткой |
+| ALIGN-CSG-AABB | ✅ (5b0add8) | Живой align с CSG смещался на позицию операнда A (`computeWorldAABB` брал локальный кэш `obj.aabb`) — исправлен: рамка по вершинам с полным TRS. Покрыто тестами: `__tests__/align-csg.test.ts` (живой `alignSelected`, два CSG, X min/center/max + воспроизведение), `store/helpers.test.ts` (`solveAlignDeltas` с CSG-якорем и CSG-целью), `__tests__/edit-step-move.test.ts` (re-solve) |
+
+### Мелкие UX/accessibility (после 9.5.4)
+
+- PropertiesPanel: одинаковые id `num-input-X` у позиции и поворота — label связывается не с тем полем.
+- NumInput: `-0.0` при значении около нуля.
+- Кнопки выравнивания: нет `aria-label` (e2e берёт по индексу — хрупко).
+
+### Общий реестр
+
 | # | Проблема | Приоритет | Статус |
 |---|----------|-----------|--------|
 | | **CENTERING-INCONSISTENCY** — три разных центра масс в проекте: worker (vertex centroid), frontend (`extractCenteredAt(transformA)`), helpers (`centerMassAtOrigin`). Для несимметричных CSG-результатов diff = 3.89 (численный тест union куб+призма). Риск CSG-PRISM-OFFSET на Этапе 8. Унифицировано: единая `centerMassAtOrigin` (`csg/geometry-utils.ts`) в worker + frontend + rebuild. | **CRITICAL** | ✅ **ИСПРАВЛЕНО** (2026-10-14, Этап 6.5) |
 | | **FILLET-LOST-IN-CSG** — ✅ **СНЯТО (fillet удалён)** — CSG с примитивом-кубом после fillet теряет скругление: `handleCsgBooleanSync`, `handleSyncObjects` и `rebuildTreeNode` воркера строят примитив через `buildPrimitive`, игнорируя `params.filletRadius` (`applyFillet` пишет его в params). Union куба r=2 и r=3 со сферой даёт одинаковый меш (найдено тестом 9.5.0). Дерево (`rebuildBuildTree`) fillet тоже не воспроизводит. Блокирует 9.5.1 (правка fillet нечего каскадировать). | **HIGH** | ✅ **СНЯТО** (2026-11-05, remove-fillet): fillet удалён из приложения — старые шаги fillet вырезаются при загрузке |
-| | **ALIGN-CSG-AABB** — выравнивание с CSG-объектом (якорь или цель) смещалось на позицию операнда A: `computeWorldAABB` брал локальный кэш `obj.aabb`. Найдено при 9.5.2 (re-solve align). | **HIGH** | ✅ **ИСПРАВЛЕНО** (2026-11-06, 9.5.2): рамка по вершинам с полным TRS (`helpers.worldVerticesAABB`), общий решатель `solveAlignDeltas` |
-| | **ALIGN-PRIMITIVE-AABB** — рамка примитива для выравнивания считается по params без поворота/масштаба, а цилиндр/конус/призма (есть `radius`) — как сфера (`±radius` по всем осям, высота не учитывается). Выравнивание повёрнутых/масштабированных примитивов и цилиндров по оси высоты неточно (живое действие и re-solve 9.5.2 согласованы — один решатель). | **MEDIUM** | 🔲 |
 | | **CENTERING-RESIDUAL** — остаточный долг 6.5: (1) `handleRebuildScene` внутренне использует world-кэш (самосогласован, но вне origin-конвенции); (2) pivot legacy-документов (центрирование по transformA) не мигрирован — tree-rebuild старых CSG может дать смещение (baked resultVertices путь не затронут); (3) extrude/CSG филлет-примитивов rebuild'ится через `buildPrimitive` без fillet. | **MEDIUM** | 🔲 Этап 7/8 |
 | | **PIVOT-CSG** — pivot CSG-результата = COM (из-за Stage 6.5 `centerMassAtOrigin` + pivot = COM в `csgBoolean`). Gizmo CSG «съезжает» на `(COM − transformA)` (измерено **0.0192** ед. для куб@(20,20,20) + призма@(20,20,20) rot(20,20,20) scale(1,1,0.5)). Исправлено: pivot = transformA, vertices сдвинуты на `(COM − transformA)` в обратную сторону — инвариант `world = pivot + vertex` сохранён. | **CRITICAL** | ✅ **ИСПРАВЛЕНО** (2026-10-17) |
 | | **VIEWPORT-DOUBLE-CENTERING** — `useMeshSync` вычитал `bboxCenter` из вершин всех объектов, но CSG-вершины уже COM-центрированы (§5.4): для асимметричной геометрии (COM ≠ bboxCenter) CSG рендерился со сдвигом **4.2491** ед. Устранено предикатом `isPivotCenteredGeometry` в 3 местах вьюпорта + синхронно в STL-экспорте; diff render-vs-data = 0.00000000. | **CRITICAL** | ✅ **ИСПРАВЛЕНО** (2026-10-16) |

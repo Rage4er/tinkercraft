@@ -14,7 +14,7 @@
 - **manifold-3d** (WASM) — CSG операции в Web Worker
 - **Zustand 5** — стейт-менеджмент
 - **Vite 6** — сборка
-- **Vitest 4** — тесты (570 тестов, 46 файлов — ветка `phase-9.5.2`)
+- **Vitest 4** — тесты (574 теста, 47 файлов — ветка `phase-9`)
 - **pnpm** — пакетный менеджер
 
 ## Команды
@@ -23,7 +23,7 @@
 cd web-app
 pnpm dev          # dev-сервер (порт 5000)
 pnpm build        # production-сборка
-pnpm test         # запуск тестов (570 тестов, 46 файлов)
+pnpm test         # запуск тестов (574 теста, 47 файлов)
 pnpm typecheck    # tsc --noEmit
 pnpm e2e:smoke    # дымовой тест в браузере (Playwright; нужен запущенный pnpm dev; см. web-app/e2e/helpers.mjs)
 pnpm e2e:tree     # Фаза 9.1: раскрытие CSG в дереве, выбор ребёнка
@@ -52,10 +52,10 @@ pnpm e2e:edit-step-move  # Фаза 9.5.2: ✎ у шага move → ΔX → CSG 
 |-------|------------|
 | `main` | Чистый CAD (Open Source, GPL-3.0) |
 | `phase-9` | Фаза 9 (от `main`); `phase-9.5.0` и `remove-fillet` в неё смержены (PR #1–#3) |
-| `phase-9.5.2` | Правка шага move (от `phase-9`), PR в `phase-9`; следующая — `phase-9.5.3` (mirror) |
+| `phase-9.5.3` | Следующая: правка шага mirror (от `phase-9`); `phase-9.5.2` смержена (PR #4) |
 | `yandex-games` | Версия для Яндекс.Игр (экономика, реклама, токены); Фазу 9 ещё не содержит |
 
-Цепочка: `main` → `phase-9` → `phase-9.5.2` → `phase-9.5.3`.
+Цепочка: `main` → `phase-9` → `phase-9.5.3`.
 
 ## Архитектура (data flow)
 
