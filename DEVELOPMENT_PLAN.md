@@ -600,6 +600,7 @@ web-app/
 | ALIGN-PLANE-RESOLVE | 🔲 низкий | Выравнивание режимом пишется шагом move: при правке прошлого шага (9.5) объект НЕ перевыравнивается по плоскости (в отличие от шагов `align` с re-solve). Нужна операция «align по плоскости» с re-solve, если понадобится |
 | CI-DEDUP | ✅ Fixed (ci-dedup) | `build.yml` дублировал `ci-web.yml` (install + typecheck + test; 4 прогона на PR). Удалён; `ci-web.yml` — единственный CI: без фильтра путей (docs-PR тоже проверяется), push — только `main` |
 | CI-E2E | 🔲 средний | e2e (Playwright, WebGL, dev-сервер) не в CI — регресс UI ловится только локально |
+| CLEANUP-DEAD-CODE | 🔲 низкий | `restoreTreeFromSnapshot` (`store/document-store.ts`) нигде не вызывается — undo/redo восстанавливают дерево через `rebuildBuildTree`. Удалить (`chore:`, ~5 мин); в NESTED-MOVED-EDIT лишь дополнен полем TRS₀. После CI-E2E / ALIGN-PLANE-RESOLVE |
 | IMPORT-MESH-CSG | ✅ Fixed (import-mesh-csg, `fd2f7fc`) | CSG допускает импортированный меш по замкнутости, а не по типу: отказ по `shapeType === 'import_mesh'` убран и в сторе, и в UI (кнопки CSG были неактивны); воркер для незамкнутого меша бросает ошибку с маркером `NON_MANIFOLD` → `notify(t('errors.csgNonManifold'))` (ru/en), объекты/история не меняются. Тесты: `import-mesh-csg.test.ts`, `import-mesh-csg-nonmanifold.test.ts` (сценарий «замкнутый тоже нельзя» перевёрнут), e2e `pnpm e2e:import-mesh-csg` |
 | IMPORT-CSG-STUB | ✅ Fixed (import-mesh-csg) | Скрытый баг: `computeCsgResult` считал импорт примитивом и слал воркеру `shapeType: 'import_mesh'` — тот строил ЗАГЛУШКУ вместо меша STL (незамкнутый треугольник «объединялся»). Не проявлялся, пока импорт отсекался по типу. Регресс-тест: `import-mesh-csg.test.ts` › «IMPORT-CSG-STUB» (проверен откатом) |
 | IMPORT-TREE-RELOAD | ✅ Fixed (import-mesh-csg) | `rebuildBuildTree` создавал baked-узлы импортов только в конце — для CSG с импортом при загрузке/перезапуске ребёнка не было на шаге group → запечённый корень, дети нередактируемы; база move импорта — без COM. Теперь узел создаётся на шаге импорта (pivot = transform + COM). Регресс-тест: `import-mesh-csg.test.ts` › «IMPORT-TREE-RELOAD» (проверен откатом) |
@@ -613,6 +614,10 @@ web-app/
 
 Регресс-тесты MIRROR-*-REPLAY проверены откатом исправлений: без них падают 4 теста `edit-step-mirror.test.ts` (оба «воспроизведение = живое», R12 и зеркало CSG).
 
+### Процесс: `main` — production
+
+**`main` — production.** Любой push в `main` (merge PR) сразу выкладывает GitHub Pages (`deploy.yml`). Поэтому: в `main` — только через PR после зелёного CI, ничего «в процессе»; версия в `web-app/package.json` и `APP_VERSION` (`src/constants.ts`) должна соответствовать коду — значимый merge (фича, фикс) сопровождается patch-релизом: версия + CHANGELOG `[x.y.z]` + тег `vX.Y.Z` после зелёного деплоя. Пример: NESTED-MOVED-EDIT попал на сайт merge'ем PR #21 при версии 1.3.1 — закрыто v1.3.2.
+
 ### Мелкие UX/accessibility (после 9.5.4)
 
 - ~~PropertiesPanel: уникальные id полей~~ — ✅ UX-NUMINPUT: на деле совпадали позиция и масштаб (метки «X/Y/Z»); теперь `num-input-pos-*` / `rot-*` / `scale-*`.
@@ -624,6 +629,7 @@ web-app/
 
 | ID | Решение | Почему |
 |---|---|---|
+| NESTED-MOVED-OLD-SESSION | ❌ не мигрируем | Дерево живой сессии, начатой до v1.3.2 (boolean без `originTransform`): сдвинутый до объединения вложенный CSG — 🔒 `nested_moved` (предохранитель, геометрия не портится). Сохранённые проекты при загрузке перестраивают дерево из истории (TRS₀ есть) — правка работает; достаточно перезагрузить страницу |
 | IMPORT-MESH-PARAMETRIC | ❌ не требуется | Сложные STL не разбить на простые тела — параметризация импорта не нужна. Достаточно трансформаций (move/rotate/scale — работают) и CSG (работает для замкнутых STL с IMPORT-MESH-CSG; незамкнутый — уведомление). Импорт в дереве CSG — 🔒 baked |
 | EXTRUDE-LEGACY | ❌ не мигрируем | Проект молодой, пользователей нет. Старые extrude без `group.source` не редактируются как extrude (только ✎ ребёнка CSG, 9.2); новые extrude — с `source`, редактируются (9.5.4) |
 | Fillet | Фаза 11 | B-Rep (OCCT WASM) — далёкое будущее, см. «Фаза 11 — Будущее» |

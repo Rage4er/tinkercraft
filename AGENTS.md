@@ -57,12 +57,14 @@ pnpm e2e:align-obb  # ALIGN-REVIT: режимом «Выровнять» — п�
 
 | Ветка | Назначение |
 |-------|------------|
-| `main` | Чистый CAD (Open Source, GPL-3.0); v1.3.0 — Фаза 9 смержена; push в `main` → деплой GitHub Pages (`deploy.yml`) |
+| `main` | Чистый CAD (Open Source, GPL-3.0), **production**: push в `main` → деплой GitHub Pages (`deploy.yml`). Фаза 9 — с v1.3.0 |
 | `phase-9` | Фаза 9 (от `main`) — смержена в `main` (v1.3.0, v1.3.1) и удалена после v1.3.1 |
 | `<задача>` | Короткие ветки задач от `main` → PR в `main` (merge-коммит после зелёного CI), ветка удаляется. Push в `main` → деплой GitHub Pages. До v1.3.1 задачи Фазы 9 шли через `phase-9` (PR #1–#17) |
 | `yandex-games` | Версия для Яндекс.Игр (экономика, реклама, токены); отдельно, Фазу 9 ещё не содержит |
 
-Цепочка: `main` (v1.3.1) → ветки задач → PR в `main`. `yandex-games` — отдельно.
+Цепочка: `main` (v1.3.2) → ветки задач → PR в `main`. `yandex-games` — отдельно.
+
+**`main` — production.** Любой push в `main` (merge PR) сразу выкладывает GitHub Pages (`deploy.yml`). Поэтому: в `main` — только через PR после зелёного CI, ничего «в процессе»; версия в `web-app/package.json` и `APP_VERSION` (`src/constants.ts`) должна соответствовать коду — значимый merge (фича, фикс) сопровождается patch-релизом: версия + CHANGELOG `[x.y.z]` + тег `vX.Y.Z` после зелёного деплоя.
 
 ## Архитектура (data flow)
 
@@ -261,6 +263,7 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 - Скругления (fillet) нет: прежний параметр куба удалён (remove-fillet) до инструмента на B-Rep; старые шаги `fillet` вырезаются при загрузке (`io/legacy-fillet.ts`) — новых не создавать
 - После v1.3.1 открыто: связанное зеркало (linked mirror) не делали — копия CSG всегда независимая; «починка» незамкнутого STL; CI-E2E (e2e не в CI; CI — один workflow `ci-web.yml`, CI-DEDUP ✅)
 - Выравнивание режимом «Выровнять» (ALIGN-UI-REVIT) пишется шагом move: при правке прошлого шага объект не перевыравнивается по плоскости (ALIGN-PLANE-RESOLVE); шаги `align` старых проектов — с re-solve, как раньше
+- Дерево живой сессии, начатой до v1.3.2 (boolean-узлы без `originTransform`), для вложенного CSG, сдвинутого до объединения, остаётся под замком `nested_moved` (предохранитель); после перезагрузки/загрузки проекта дерево перестраивается из истории с TRS₀ — правка работает
 - `.doodle` (legacy) в UI не открывается: `parseDoodle` не вызывается
 
 ## Node.js — Настройка и проверка
