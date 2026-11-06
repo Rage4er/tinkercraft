@@ -28,7 +28,6 @@ vi.mock('../csg/worker-client', () => {
     workerCsgBoolean: vi.fn(),
     workerCsgBooleanWithSync: vi.fn(),
     workerBuildImportedMesh: vi.fn(),
-    workerApplyFillet: vi.fn(),
     workerMirrorObject: vi.fn(),
     workerRebuildScene: vi.fn(async () => ({ results: [], ms: 0 })),
     workerDeleteObjects: vi.fn(async () => { }),

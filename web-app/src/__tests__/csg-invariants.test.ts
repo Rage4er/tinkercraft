@@ -27,7 +27,6 @@ vi.mock('../csg/worker-client', async () => {
   const b = await import('./worker-bridge')
   return {
     workerBuildShape: b.workerBuildShape,
-    workerApplyFillet: b.workerApplyFillet,
     workerBuildImportedMesh: b.workerBuildImportedMesh,
     workerSyncObjects: b.workerSyncObjects,
     workerSyncMesh: b.workerSyncMesh,

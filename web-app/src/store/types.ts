@@ -41,7 +41,6 @@ export interface DocumentStore {
   mirrorSelected: (plane: 'XY' | 'XZ' | 'YZ') => Promise<void>
   previewMirror: (plane: 'XY' | 'XZ' | 'YZ') => Promise<void>
   alignSelected: (axis: 'X' | 'Y' | 'Z', anchor: 'min' | 'center' | 'max') => Promise<void>
-  applyFillet: (id: string, radius: number) => Promise<void>
   copySelected: () => void
   pasteClipboard: () => Promise<void>
   undo: () => Promise<void>

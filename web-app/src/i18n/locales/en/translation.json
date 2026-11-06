@@ -109,8 +109,6 @@
     "torusRadius": "Torus radius",
     "tubeRadius": "Tube radius",
     "sides": "Sides",
-    "fillet": "Fillet",
-    "filletTitle": "Fillet",
     "quickSave": "Quick save",
     "save": "Save",
     "projectManager": "Project Manager",
@@ -155,7 +153,6 @@
     "scale": "Scale",
     "rotate": "Rotate",
     "resizeDims": "Resize",
-    "fillet": "Fillet r={{radius}}",
     "mirror": "Mirror {{plane}}",
     "align": "Align {{axis}} → {{anchor}}",
     "groupUnion": "Union",
@@ -177,7 +174,6 @@
     "import_mesh": "Import",
     "move": "Move",
     "resize_dims": "Resize",
-    "fillet": "Fillet",
     "mirror": "Mirror",
     "align": "Align",
     "group": "CSG",
@@ -248,7 +244,6 @@
     "noObjectsSelected": "No objects selected",
     "csgNeedTwoObjects": "Select exactly 2 objects for CSG",
     "csgImpossible": "CSG operation impossible (non-manifold geometry)",
-    "filletFailed": "Fillet operation failed",
     "stlImportFailed": "STL import failed",
     "stlExportFailed": "STL export failed",
     "openFailed": "Open error: {{error}}",
@@ -281,7 +276,8 @@
       "treeMismatch": "The component tree no longer matches the current geometry (the object changed after the merge) — editing is unavailable",
       "empty": "The edit emptied the result (empty geometry) — change rejected",
       "failed": "Failed to recompute CSG"
-    }
+    },
+    "legacyFilletRemoved": "Fillet has been removed from the app: rounding in this project is not restored, cubes are shown sharp"
   },
   "toolbar": {
     "label": "Toolbar"

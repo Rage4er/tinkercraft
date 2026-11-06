@@ -8,7 +8,6 @@ import { buildSRTMatrixAroundCenter, buildTransformMatrix } from './worker-matri
 // Фаза 8, Этап 6.5: единая формула центрирования (объёмный центроид) —
 // та же функция, что использует frontend (store/helpers реэкспортирует её).
 import { centerMassAtOrigin } from './geometry-utils'
-import { FILLET_EPSILON, FILLET_MIN_RADIUS } from '../constants.ts'
 import type { RebuildTransform } from './rebuildOps'
 import { applyMoveDelta, applyMirrorToTransform, applyAlignToTransform } from './rebuildOps'
 import type { MirrorOperation } from './types'
@@ -147,7 +146,6 @@ export function disposeAllCached(): void {
 export interface ShapeInfo {
   shapeType: string
   params: Record<string, number>
-  filletRadius: number
 }
 
 /** Re-export RebuildTransform for worker.ts */
@@ -297,52 +295,6 @@ export function buildPrimitive(shapeType: string, params: Record<string, number>
   return m
 }
 
-/** Build a rounded box via warp + refine (only for cube). */
-export function buildRoundedBox(w: number, h: number, d: number, r: number): ManifoldObject {
-  const wasm = getWasm()
-  const { Manifold } = wasm
-  const maxR = Math.min(w, h, d) / 2 - FILLET_EPSILON
-  const cr = Math.max(FILLET_MIN_RADIUS, Math.min(r, maxR))
-  const hw = w / 2 - cr
-  const hh = h / 2 - cr
-  const hd = d / 2 - cr
-
-  const cube = Manifold.cube([w, h, d], true)
-  const refined = cube.refine(6)
-  cube.delete()
-
-  const warped = refined.warp((v: number[]) => {
-    const x = v[0], y = v[1], z = v[2]
-    const ex = Math.max(0, Math.abs(x) - hw)
-    const ey = Math.max(0, Math.abs(y) - hh)
-    const ez = Math.max(0, Math.abs(z) - hd)
-    const len = Math.sqrt(ex * ex + ey * ey + ez * ez)
-    if (len < 1e-9) return
-    const s = cr / len
-    v[0] = Math.sign(x) * hw + ex * s * Math.sign(x || 1)
-    v[1] = Math.sign(y) * hh + ey * s * Math.sign(y || 1)
-    v[2] = Math.sign(z) * hd + ez * s * Math.sign(z || 1)
-  })
-  refined.delete()
-  return warped
-}
-
-/** Build primitive with optional fillet (only works for cube). */
-export function buildPrimitiveWithFillet(
-  shapeType: string,
-  params: Record<string, number>,
-  r: number,
-): ManifoldObject {
-  if (r > 0 && shapeType === 'cube') {
-    return buildRoundedBox(
-      params.width ?? 20,
-      params.height ?? 20,
-      params.depth ?? 20,
-      r,
-    )
-  }
-  return buildPrimitive(shapeType, params)
-}
 
 // --- Transform helpers ---
 
@@ -468,16 +420,6 @@ export interface BuildShapeMessage {
   transform: { x: number; y: number; z: number; rotX: number; rotY: number; rotZ: number; scaleX?: number; scaleY?: number; scaleZ?: number }
 }
 
-export interface ApplyFilletMessage {
-  reqId: string
-  type: 'applyFillet'
-  objId: string
-  shapeType: string
-  params: Record<string, number>
-  radius: number
-  transform: { x: number; y: number; z: number; rotX: number; rotY: number; rotZ: number; scaleX?: number; scaleY?: number; scaleZ?: number }
-}
-
 export interface BuildImportedMeshMessage {
   reqId: string
   type: 'buildImportedMesh'
@@ -549,35 +491,6 @@ export async function handleBuildShape(msg: BuildShapeMessage): Promise<void> {
   // Transform применяется в store (addShape) как spawn-позиция SceneObject.transform.
   // FIX (Phase 8.5, Stage 8.5.1): vertices в origin, render = data.
   let m = buildPrimitive(shapeType, safeP)
-
-  setCached(msg.objId, m)
-
-  const mesh = extractMesh(m)
-  safePostMessage(
-    {
-      reqId: msg.reqId,
-      type: 'mesh',
-      objId: msg.objId,
-      vertices: mesh.vertices,
-      indices: mesh.indices,
-      normals: mesh.normals,
-      tris: mesh.tris,
-      ms: performance.now() - t0,
-    },
-    buildTransferList(mesh),
-  )
-}
-
-/** Handle applyFillet message. */
-export async function handleApplyFillet(msg: ApplyFilletMessage): Promise<void> {
-  const t0 = performance.now()
-  const shapeType = msg.shapeType
-  const safeP = sanitizeParams(msg.params)
-  const radius = clamp(msg.radius, 0, 1e4)
-
-  // DRY: use buildPrimitiveWithFillet instead of duplicated switch (WARN-R8-3)
-  // ⚠️ НЕ применяем transform к вершинам — vertices остаются в origin (COM).
-  let m = buildPrimitiveWithFillet(shapeType, safeP, radius)
 
   setCached(msg.objId, m)
 
@@ -876,7 +789,7 @@ export async function handleRebuildScene(msg: RebuildSceneMessage): Promise<void
 
   try {
     const wasm = getWasm()
-    const shapeInfos: Map<string, { shapeType: string; params: Record<string, number>; filletRadius: number }> = new Map()
+    const shapeInfos: Map<string, { shapeType: string; params: Record<string, number> }> = new Map()
     const currentTransforms: Map<string, RebuildTransform> = new Map()
     // FIX (8.5.2.5): CSG-результаты group-операций исключаются из центрирования
     // в results-петле — rebuild.ts использует сохранённые pivot-центрированные
@@ -902,7 +815,7 @@ export async function handleRebuildScene(msg: RebuildSceneMessage): Promise<void
         const par = op.params as Record<string, number>
         const m = applyTransform(buildPrimitive(st, sanitizeParams(par)), t)
         setCached(op.id as string, m)
-        shapeInfos.set(op.id as string, { shapeType: st, params: par, filletRadius: 0 })
+        shapeInfos.set(op.id as string, { shapeType: st, params: par })
         currentTransforms.set(op.id as string, { ...t })
       } else if (op.type === 'import_mesh') {
         const raw = op.transform as { x: number; y: number; z: number; rotX: number; rotY: number; rotZ: number; scaleX?: number; scaleY?: number; scaleZ?: number } | undefined
@@ -916,7 +829,7 @@ export async function handleRebuildScene(msg: RebuildSceneMessage): Promise<void
         // загрузки проекта/.3dtc импортированная геометрия ИСЧЕЗАЛА.
         // Конвенция как у примитивов: в cache запекается ТОЛЬКО translation
         // (rotation/scale применяются на рендере через pivot и в CSG через
-        // applySRAroundCenter). shapeInfos НЕ заполняем: ветки move/mirror/fillet
+        // applySRAroundCenter). shapeInfos НЕ заполняем: ветки move/mirror/align
         // должны обрабатывать baked-геометрию через cache-transform, а не через
         // buildPrimitive (иначе rebuild строил бы куб-заглушку 20×20×20).
         const verts = op.vertices as Float32Array | number[] | undefined
@@ -942,15 +855,8 @@ export async function handleRebuildScene(msg: RebuildSceneMessage): Promise<void
           console.warn(`[rebuild] Baked mesh skipped for ${op.id}: verts=${vertCount}, idxs=${idxCount}`)
         }
       } else if (op.type === 'fillet') {
-        const id = op.id as string
-        const info = shapeInfos.get(id)
-        const t = currentTransforms.get(id)
-        if (info && t && info.shapeType !== 'import_mesh') {
-          const r = op.radius as number
-          info.filletRadius = r
-          const m = applyTransform(buildPrimitiveWithFillet(info.shapeType, info.params, r), t)
-          setCached(id, m)
-        }
+        // Скругление удалено из приложения (remove-fillet): операция старых файлов
+        // не воспроизводится — куб остаётся острым. В норме загрузка уже вырезала её.
       } else if (op.type === 'move') {
         const d = op.delta as { x: number; y: number; z: number }
         const rd = (op as { rotDelta?: { x: number; y: number; z: number } }).rotDelta
@@ -968,7 +874,7 @@ export async function handleRebuildScene(msg: RebuildSceneMessage): Promise<void
               // - At CSG time via applySRAroundCenter in the group handler
               // Previously buildTransformMatrix baked full RS+T into vertices,
               // causing doubling when viewport also applied RS via pivot.
-              const fresh = buildPrimitiveWithFillet(info.shapeType, info.params, info.filletRadius)
+              const fresh = buildPrimitive(info.shapeType, info.params)
               const tm = applyTransform(fresh, { x: nt.x, y: nt.y, z: nt.z })
               setCached(id, tm)
             } else {
@@ -1002,7 +908,7 @@ export async function handleRebuildScene(msg: RebuildSceneMessage): Promise<void
             if (origT && origShape) {
               // Primitive — rebuild at mirrored position
               const nt = applyMirrorToTransform(origT, op.plane as 'XY' | 'XZ' | 'YZ')
-              const m = applyTransform(buildPrimitiveWithFillet(origShape.shapeType, origShape.params, origShape.filletRadius), nt)
+              const m = applyTransform(buildPrimitive(origShape.shapeType, origShape.params), nt)
               setCached(newId, m)
               currentTransforms.set(newId, nt)
             } else {
@@ -1040,7 +946,7 @@ export async function handleRebuildScene(msg: RebuildSceneMessage): Promise<void
             const nt = applyAlignToTransform(t, axis, delta)
             currentTransforms.set(id, nt)
             if (info) {
-              const m = applyTransform(buildPrimitiveWithFillet(info.shapeType, info.params, info.filletRadius), nt)
+              const m = applyTransform(buildPrimitive(info.shapeType, info.params), nt)
               setCached(id, m)
             } else {
               const dx = axis === 'x' ? delta : 0
@@ -1066,7 +972,7 @@ export async function handleRebuildScene(msg: RebuildSceneMessage): Promise<void
         const t = currentTransforms.get(id)
         if (info && t) {
           info.params = { ...info.params, ...np }
-          const m = applyTransform(buildPrimitiveWithFillet(info.shapeType, info.params, info.filletRadius), t)
+          const m = applyTransform(buildPrimitive(info.shapeType, info.params), t)
           setCached(id, m)
         }
       } else if (op.type === 'group') {

@@ -62,6 +62,11 @@ export interface ResizeOperation {
   anchor: AnchorPoint
 }
 
+/**
+ * @deprecated Скругление куба удалено из приложения (remove-fillet, до инструмента на B-Rep).
+ * Тип оставлен только для чтения старых `.3dtc`/`.doodle`: при загрузке такие шаги вырезаются
+ * (`io/legacy-fillet.ts::migrateLegacyFillet`), воспроизведение их игнорирует. Не создавать.
+ */
 export interface FilletOperation {
   type: 'fillet'
   id: string
@@ -144,7 +149,6 @@ export interface EditChildParamsOperation {
  * Extrude (`kind: 'extrude'`) добавится в 9.5.4 вместе с `GroupOperation.source`.
  */
 export type StepPatch =
-  | { kind: 'fillet'; radius: number }
   | { kind: 'move'; delta: Vec3; rotDelta?: Vec3; scaleDelta?: Vec3 }
   | { kind: 'mirror'; plane: MirrorPlane }
 
@@ -169,8 +173,6 @@ export interface StepReplacement {
   resultRotation?: Vec3
   resultScale?: Vec3
   originalBboxSize?: Vec3
-  /** edit_child_params: полные params ребёнка (если правка затронула и их, напр. fillet) */
-  params?: ShapeParams
   /** align: пересчитанные смещения (политика re-solve, решение В2) */
   deltas?: Record<string, number>
 }
@@ -226,7 +228,6 @@ export interface ShapeParams {
   depth?: number
   radius?: number
   segments?: number
-  filletRadius?: number
   // FIX (MED-18-18): Removed index signature `[key: string]: number | undefined` —
   // ShapeParams should only accept known shape parameters for type safety.
   // Additional params (torusRadius, tubeRadius, tubeSegments, sides) are explicit.
