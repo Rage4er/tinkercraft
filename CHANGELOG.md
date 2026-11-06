@@ -9,6 +9,9 @@
 
 ## [Unreleased]
 
+### Changed
+- **CI-DEDUP — один CI-workflow вместо двух:** `build.yml` («Test package») удалён — он дублировал `ci-web.yml` (те же install + typecheck + test, без build); на PR с кодом шло 4 прогона (2 workflow × push + pull_request). В `ci-web.yml` («CI (web-app)», install + typecheck + test + build, Node 24, pnpm из `packageManager`) снят фильтр путей — PR только с документацией тоже получает проверку (раньше её давал лишь `build.yml`), а `push` — только `main` (ветки задач проверяются через `pull_request`). `deploy.yml` не менялся
+
 ---
 
 ## [1.3.1] — 2026-11-06
