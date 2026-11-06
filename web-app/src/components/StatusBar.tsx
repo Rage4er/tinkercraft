@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { APP_VERSION } from "../constants";
+import { useAlignModeStore, alignHintKey } from "../store/align-mode";
 
 export default function StatusBar({
   workerOk,
@@ -25,6 +26,7 @@ export default function StatusBar({
   fps: number;
 }) {
   const { t, i18n } = useTranslation();
+  const alignMode = useAlignModeStore((s) => s.alignMode);
   const currentLang = i18n.language?.startsWith("ru") ? "ru" : "en";
   const toggleLanguage = () => {
     const next = currentLang === "en" ? "ru" : "en";
@@ -78,6 +80,11 @@ export default function StatusBar({
       {rulerActive && (
         <span className="status-item" style={{ color: "#facc15" }}>
           {t("statusbar.rulerMode")}
+        </span>
+      )}
+      {alignMode && (
+        <span className="status-item" style={{ color: "#89b4fa" }} data-testid="align-hint">
+          {t(alignHintKey(alignMode))}
         </span>
       )}
       <span className="status-item status-auto">

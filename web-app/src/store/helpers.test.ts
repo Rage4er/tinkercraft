@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { centerMassAtOrigin, computeCenter, computeWorldAABB, worldVerticesAABB, solveAlignDeltas, composeMirroredList, extrudeSlab } from './helpers'
+import { centerMassAtOrigin, computeCenter, computeWorldAABB, worldVerticesAABB, solveAlignDeltas, composeMirroredList, extrudeSlab, solvePlaneAlignDelta, worldProjectionRange, axisPlane } from './helpers'
 import type { SceneObject, TransformNR } from '../csg/types'
 
 // Helper: build a triangular mesh for a prism with given sides, height, z_offset.
@@ -310,5 +310,33 @@ describe('extrudeSlab (9.5.4)', () => {
     const s = extrudeSlab(box, 'X', -4)
     expect(s.params).toEqual({ width: 4, height: 10, depth: 10 })
     expect(s.transform).toMatchObject({ x: 18, y: 0, z: 0 })
+  })
+})
+
+describe('solvePlaneAlignDelta / worldProjectionRange (ALIGN-UI-REVIT)', () => {
+  const plane = { normal: { x: 0, y: 0, z: 1 }, point: { x: 0, y: 0, z: 10 } }   // плоскость z = 10
+  const c = () => csgObj('c', { z: 0 })                                         // куб ±1 в z = 0
+  it('проекция на нормаль: для осей = computeWorldAABB; на диагональ — по вершинам', () => {
+    const o = csgObj('c', { x: 5, scaleX: 3 })
+    expect(worldProjectionRange(o, { x: 1, y: 0, z: 0 })).toEqual({ min: 2, max: 8 })
+    const d = worldProjectionRange(o, { x: Math.SQRT1_2, y: Math.SQRT1_2, z: 0 })
+    expect(d.max).toBeCloseTo((8 + 1) * Math.SQRT1_2, 6)
+  })
+  it('кликнутая грань параллельна плоскости → в плоскость встаёт именно она (точка клика)', () => {
+    // «ступенька»: грань z = 0.5 внутри объекта
+    expect(solvePlaneAlignDelta(c(), plane, { normal: { x: 0, y: 0, z: -1 }, point: { x: 0, y: 0, z: 0.5 } }).z).toBeCloseTo(9.5, 9)
+  })
+  it('не параллельна → крайняя точка со стороны, куда смотрит грань (знак dot)', () => {
+    const up = { normal: { x: 0.8, y: 0, z: 0.6 }, point: { x: 1, y: 0, z: 0 } }
+    const down = { normal: { x: 0.8, y: 0, z: -0.6 }, point: { x: 1, y: 0, z: 0 } }
+    expect(solvePlaneAlignDelta(c(), plane, up).z).toBeCloseTo(9, 9)      // max z = 1 → 10
+    expect(solvePlaneAlignDelta(c(), plane, down).z).toBeCloseTo(11, 9)   // min z = −1 → 10
+  })
+  it('без клика (или грань ⟂ плоскости) → ближайшая к плоскости крайняя точка', () => {
+    expect(solvePlaneAlignDelta(c(), plane).z).toBeCloseTo(9, 9)
+    expect(solvePlaneAlignDelta(csgObj('c', { z: 30 }), plane, { normal: { x: 1, y: 0, z: 0 }, point: { x: 1, y: 0, z: 30 } }).z).toBeCloseTo(-19, 9)
+  })
+  it('axisPlane: X → YZ через начало координат', () => {
+    expect(axisPlane('X')).toEqual({ normal: { x: 1, y: 0, z: 0 }, point: { x: 0, y: 0, z: 0 } })
   })
 })

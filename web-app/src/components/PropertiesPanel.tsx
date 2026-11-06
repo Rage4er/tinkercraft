@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import NumInput from "./NumInput";
-import AlignButtons from "./AlignButtons";
 import CsgButtons from "./CsgButtons";
 import type { ShapeParams, SceneObject } from "../csg/types";
 import { EyeIcon, EyeOffIcon, FolderIcon, SaveIcon } from "./icons";
@@ -12,7 +11,6 @@ export default function PropertiesPanel({
   selectedIds,
   canResize,
   canCsg,
-  canAlign,
   objectList,
   operationsLength,
   fileName,
@@ -22,7 +20,6 @@ export default function PropertiesPanel({
   onResizeDim,
   onResizeObject,
   onCsg,
-  onAlign,
   onSetColor,
   onToggleVisible,
   onShowProjects,
@@ -36,7 +33,6 @@ export default function PropertiesPanel({
   selectedIds: string[];
   canResize: boolean;
   canCsg: boolean;
-  canAlign: boolean;
   objectList: SceneObject[];
   operationsLength: number;
   fileName: string | null;
@@ -49,7 +45,6 @@ export default function PropertiesPanel({
   onResizeDim: (dim: "width" | "height" | "depth", val: number) => void;
   onResizeObject: (id: string, params: ShapeParams) => void;
   onCsg: (op: "union" | "subtract" | "intersect") => void;
-  onAlign: (axis: "X" | "Y" | "Z", anchor: "min" | "center" | "max") => void;
   onSetColor: (id: string, color: string, skipHistory?: boolean) => void;
   onToggleVisible: (id: string) => void;
   onShowProjects: () => void;
@@ -441,12 +436,9 @@ export default function PropertiesPanel({
       {/* Extrude — скрыто в свойствах, доступно на панели инструментов */}
       {/* Mirror — скрыто в свойствах, доступно на панели инструментов */}
 
-      {/* CSG + Align */}
+      {/* CSG (выравнивание — режим «Выровнять» в тулбаре, ALIGN-UI-REVIT) */}
       {selectedIds.length === 2 && (
-        <>
-          <CsgButtons disabled={!canCsg} onCsg={onCsg} variant="full" />
-          <AlignButtons disabled={!canAlign} onAlign={onAlign} variant="full" />
-        </>
+        <CsgButtons disabled={!canCsg} onCsg={onCsg} variant="full" />
       )}
     </>
   );

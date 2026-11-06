@@ -232,6 +232,15 @@ export const MirrorXYIcon = (p: any) => (
 /* ===== Группа 8 · Выравнивание ===== */
 /* ===== Группа 8 · Выравнивание (Z-up: X/Y горизонтальные, Z вертикальная) ===== */
 // X — горизонтальная ось экрана: вертикальная планка
+// ALIGN-UI-REVIT: одна кнопка «Выровнять» — два столбика разной высоты от одной плоскости
+export const AlignToolIcon = (p: any) => (
+  <Icon {...p}>
+    <path {...line} d="M8 52h48" />
+    <Shape d="M16 52V18h12v34Z" />
+    <Shape d="M36 52V32h12v20Z" />
+  </Icon>
+)
+
 export const AlignXMinIcon = (p: any) => (
   <Icon {...p}>
     <path {...line} d="M14 10v44" />

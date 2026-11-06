@@ -14,7 +14,7 @@
 - **manifold-3d** (WASM) — CSG операции в Web Worker
 - **Zustand 5** — стейт-менеджмент
 - **Vite 6** — сборка
-- **Vitest 4** — тесты (662 теста, 55 файлов — ветка `phase-9`)
+- **Vitest 4** — тесты (683 теста, 56 файлов — ветка `phase-9` после v1.3.0)
 - **pnpm** — пакетный менеджер
 
 ## Команды
@@ -23,7 +23,7 @@
 cd web-app
 pnpm dev          # dev-сервер (порт 5000)
 pnpm build        # production-сборка
-pnpm test         # запуск тестов (662 теста, 55 файлов)
+pnpm test         # запуск тестов (683 теста, 56 файлов)
 pnpm typecheck    # tsc --noEmit
 pnpm e2e:smoke    # дымовой тест в браузере (Playwright; нужен запущенный pnpm dev; см. web-app/e2e/helpers.mjs)
 pnpm e2e:tree     # Фаза 9.1: раскрытие CSG в дереве, выбор ребёнка
@@ -33,7 +33,8 @@ pnpm e2e:edit-step-mirror  # Фаза 9.5.3: ✎ у шага mirror → плос
 pnpm e2e:edit-step-extrude  # Фаза 9.5.4: проект из e2e/fixtures/extrude-union.3dtc → ✎ у extrude → глубина 10, undo/redo
 pnpm e2e:independent-copy  # CSG-INDEPENDENT-COPY: зеркало и Ctrl+C/V CSG → правка ребёнка копии не трогает оригинал и наоборот
 pnpm e2e:import-mesh-csg  # IMPORT-MESH-CSG: замкнутый STL (e2e/fixtures/closed-cube.stl) ∪ куб → CSG; незамкнутый → уведомление ru/en
-pnpm e2e:align-obb  # ALIGN-REVIT: повёрнутый цилиндр → «X мин» по основанию, повёрнутый куб → «Z макс» по грани (кнопки по aria-label)
+pnpm e2e:align-ui-revit  # ALIGN-UI-REVIT: «Выровнять» → Z → верх B в 0; грань A → B; «Множественное»; Esc; правый клик
+pnpm e2e:align-obb  # ALIGN-REVIT: режимом «Выровнять» — повёрнутый цилиндр к грани куба, повёрнутый куб к плоскости XY (реальная геометрия)
 ```
 
 ## Текущий статус
@@ -43,9 +44,9 @@ pnpm e2e:align-obb  # ALIGN-REVIT: повёрнутый цилиндр → «X �
 | 0–7.6 | Ядро CAD, CSG, UI, Mirror, Timeline | ✅ Завершены |
 | **8** | **Единая модель трансформов** | ✅ Завершена (v1.1.0) |
 | **8.5** | **Унификация отрисовки и данных** | ✅ Завершена (v1.2.3) |
-| **9** | **Параметрическая история** — 9.1–9.4, 9.6–9.9 ✅; 9.5.0 (эффективная история) ✅; 9.5.1 (fillet) ❌ отменена; 9.5.2 move ✅; 9.5.3 mirror ✅; 9.5.4 extrude ✅ — 9.5 закрыта | 🔄 Идёт (ветка `phase-9`) |
+| **9** | **Параметрическая история** — 9.1–9.4, 9.6–9.9 ✅; 9.5.0 (эффективная история) ✅; 9.5.1 (fillet) ❌ отменена; 9.5.2 move ✅; 9.5.3 mirror ✅; 9.5.4 extrude ✅; CSG-INDEPENDENT-COPY, IMPORT-MESH-CSG, ALIGN-REVIT ✅ | ✅ Завершена (v1.3.0, `phase-9 → main`) |
 | 10 | Яндекс.Игры — монетизация (ветка `yandex-games`) | 🔄 Отдельная ветка (Y.1–Y.5 ✅) |
-| 11 | Будущее (SVG, 3MF, STEP, B-Rep fillet, Rapier) | 🔲 Запланирована |
+| 11 | Будущее (SVG, 3MF, STEP, B-Rep fillet, настоящий extrude 2D→3D, Rapier) | 🔲 Запланирована |
 
 **Фаза 8 в деталях:** `web-app/ARCHITECTURE_TRANSFORMS.md`
 **Фаза 8.5 в деталях:** `web-app/ARCHITECTURE_RENDER.md`
@@ -55,12 +56,12 @@ pnpm e2e:align-obb  # ALIGN-REVIT: повёрнутый цилиндр → «X �
 
 | Ветка | Назначение |
 |-------|------------|
-| `main` | Чистый CAD (Open Source, GPL-3.0) |
-| `phase-9` | Фаза 9 (от `main`); `phase-9.5.0` и `remove-fillet` в неё смержены (PR #1–#3) |
-| `<задача>` | Короткие ветки задач от `phase-9` → PR в `phase-9` (merge-коммит, после зелёного CI), ветка удаляется. Смержены: `phase-9.5.0`…`phase-9.5.4`, `remove-fillet`, `ui-left-panel`, `ci-fix`, `csg-independent-copy`, `import-mesh-csg` и follow-up'ы (PR #1–#13) |
-| `yandex-games` | Версия для Яндекс.Игр (экономика, реклама, токены); Фазу 9 ещё не содержит |
+| `main` | Чистый CAD (Open Source, GPL-3.0); v1.3.0 — Фаза 9 смержена; push в `main` → деплой GitHub Pages (`deploy.yml`) |
+| `phase-9` | Фаза 9 (от `main`), смержена в `main` в v1.3.0; дальнейшие задачи Фазы 9.x (NESTED-MOVED-EDIT и т.п.) — от неё же или от `main` |
+| `<задача>` | Короткие ветки задач → PR в `main` (или в `phase-9` для задач Фазы 9.x); merge-коммит после зелёного CI, ветка удаляется. До v1.3.0 смержены в `phase-9`: `phase-9.5.0`…`phase-9.5.4`, `remove-fillet`, `ui-left-panel`, `ci-fix`, `csg-independent-copy`, `import-mesh-csg`, `align-revit` и follow-up'ы (PR #1–#15) |
+| `yandex-games` | Версия для Яндекс.Игр (экономика, реклама, токены); отдельно, Фазу 9 ещё не содержит |
 
-Цепочка: `main` → `phase-9` → (ветки задач → PR в `phase-9`); после — merge `phase-9 → main` (v1.3.0).
+Цепочка: `main` (v1.3.0) → ветки задач → PR в `main` (или в `phase-9` для Фазы 9.x). `yandex-games` — отдельно.
 
 ## Архитектура (data flow)
 
@@ -83,7 +84,7 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 | **Store** | |
 | `src/store/document-store.ts` | Zustand store — действия (create), 500 строк |
 | `src/store/ui-store.ts` | Zustand store — UI state (gizmo, theme, camera, modals, etc.) |
-| `src/store/helpers.ts` | Утилиты store (extractAndCenter, extractAndCenterGetAABB, computeAABB, makeObject, nextId, colorForIndex; `computeWorldAABB` — мировая рамка по реальной геометрии с полным TRS (вершины; без вершин — OBB `obbCorners`/`obbWorldAABB` из `localParamsBox`, ALIGN-REVIT), `worldVerticesAABB`, `solveAlignDeltas` — решатель выравнивания, общий для `alignSelected` и re-solve 9.5.2; `extrudeSlab` — плита extrude по мировой рамке базы, 9.5.4) |
+| `src/store/helpers.ts` | Утилиты store (extractAndCenter, extractAndCenterGetAABB, computeAABB, makeObject, nextId, colorForIndex; `computeWorldAABB` — мировая рамка по реальной геометрии с полным TRS (вершины; без вершин — OBB `obbCorners`/`obbWorldAABB` из `localParamsBox`, ALIGN-REVIT), `worldVerticesAABB`, `solveAlignDeltas` — решатель выравнивания, общий для `alignSelected` и re-solve 9.5.2; `solvePlaneAlignDelta`/`worldProjectionRange`/`axisPlane` — выравнивание грани по плоскости (ALIGN-UI-REVIT); `extrudeSlab` — плита extrude по мировой рамке базы, 9.5.4) |
 | `src/store/types.ts` | DocumentStore interface |
 | `src/store/rebuild.ts` | rebuildFromHistory — восстановление объектов из истории операций |
 | `src/store/snapshots.ts` | Snapshot cache для мгновенного undo/redo (PERF-1) |
@@ -99,6 +100,10 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 | `src/store/project-history.ts` | **Эффективная история** (Фаза 9.5.0): `projectHistory` подставляет `edit_step` (патч шага N + `replacements` замороженных шагов) и выбрасывает их; идемпотентна, вызывается на входе `rebuild.ts` и `findCreationTransform`. `computeCascade` — замыкание зависимостей правки |
 | `src/store/csg-result.ts` | Общее ядро CSG `computeCsgResult` (sync → boolean → pivot = transformA → un-bake RS) для `csgBoolean` и каскада 9.5; `syncObjectsForOperation`, `groupOperationFromResult`, `groupReplacementFromResult` |
 | `src/store/edit-step.ts` | **Правка прошлого шага** (Фаза 9.5.2): `computeStepEdit` — гипотетическая проекция + каскад (`group` через `computeCsgResult`, `edit_child_params` путём 9.3, `align` re-solve); атомарный отказ; `isStepEditable` / `SUPPORTED_KINDS` — какие шаги правятся (move, mirror, extrude — группа с `source`); плита extrude пересчитывается по рамке базы (`extrudeSlab`) |
+| `src/store/align-mode.ts` | **Режим выравнивания** (ALIGN-UI-REVIT): `alignMode` (плоскость A — грань или ось, «Множественное», грань под курсором), `clickFace` (A, затем B), `applyAlignB` → `solvePlaneAlignDelta` → `moveObject` |
+| `src/components/AlignPanel.tsx` | Панель режима выравнивания (вместо свойств): подсказка, X/Y/Z, текущая плоскость, «Множественное», «Готово» |
+| `src/components/align-picking.ts` | Raycast по треугольнику (`pickFace` — мировые нормаль и точка) и плоская грань для подсветки (`planarFaceTriangles`) |
+| `src/hooks/useAlignModeKeys.ts` | Esc → выход из режима выравнивания (capture, раньше общего обработчика App) |
 | `src/components/StepPanel.tsx` | Панель «Шаг N» (вместо `PropertiesPanel`, пока `ui-store.selectedStep` задан): ΔX/ΔY/ΔZ шага move (коммит по Enter/blur), плоскость шага mirror (сразу по выбору), глубина шага extrude (ось — просмотр) → `editStepParams` — Фаза 9.5.2–9.5.4 |
 | `src/hooks/useSelectedStepGuard.ts` | Сброс выбора шага (undo до шага, выделение в сцене, выбор ребёнка CSG) — Фаза 9.5.2 |
 | `src/components/ChildPropertiesPanel.tsx` | Панель свойств выбранного ребёнка CSG (вместо `PropertiesPanel`, пока `ui-store.selectedChild` задан) — Фаза 9.2 |
@@ -253,6 +258,9 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 
 - Импортированные меши (STL) не параметризуются (IMPORT-MESH-PARAMETRIC: не требуется); трансформации и CSG работают — CSG допускает замкнутый STL (проверка по manifold в воркере, IMPORT-MESH-CSG), незамкнутый → уведомление `errors.csgNonManifold`; «починка» незамкнутого меша не делается; старые extrude без `group.source` не редактируются как extrude (EXTRUDE-LEGACY: не мигрируем); `extrudeSelected` — движок правки 9.5.4, не UI-инструмент: это «растянуть по оси», а не extrude 2D→3D, кнопку не возвращать (EXTRUDE-3D-SCALE; настоящий extrude — Фаза 11)
 - Скругления (fillet) нет: прежний параметр куба удалён (remove-fillet) до инструмента на B-Rep; старые шаги `fillet` вырезаются при загрузке (`io/legacy-fillet.ts`) — новых не создавать
+- После v1.3.0 открыто: NESTED-MOVED-EDIT (вложенный CSG, сдвинутый до объединения — 🔒 `nested_moved`); связанное зеркало (linked mirror) не делали — копия CSG всегда независимая; «починка» незамкнутого STL; CI-DEDUP (`ci-web.yml` + `build.yml` дублируют), CI-E2E (e2e не в CI); одинаковые `id` полей позиции/поворота и `-0.0` в `NumInput`
+- Выравнивание режимом «Выровнять» (ALIGN-UI-REVIT) пишется шагом move: при правке прошлого шага объект не перевыравнивается по плоскости (ALIGN-PLANE-RESOLVE); шаги `align` старых проектов — с re-solve, как раньше
+- `.doodle` (legacy) в UI не открывается: `parseDoodle` не вызывается
 
 ## Node.js — Настройка и проверка
 
