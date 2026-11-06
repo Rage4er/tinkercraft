@@ -38,7 +38,7 @@ import type { ClipEntry } from './helpers'
 import type { DocumentStore } from './types'
 import { rebuildFromHistory, rebuildBuildTree } from './rebuild'
 import { computeCsgResult, groupOperationFromResult } from './csg-result'
-import { computeEditedChild, editFailureKey } from './edit-child'
+import { computeEditedChild, editFailureKey, findCreationTransform } from './edit-child'
 import { computeStepEdit, editStepFailureKey } from './edit-step'
 import { cacheSnapshot, getCachedSnapshot, clearSnapshots, cacheTreeSnapshot, getCachedTreeSnapshot } from './snapshots'
 import { OBJECT_SPACING, PASTE_OFFSET } from '../constants'
@@ -57,6 +57,8 @@ import {
   clearTree,
   resetSubtreeTransform,
   registerObjectInTree,
+  snapshotSubtree,
+  instantiateSubtree,
 } from '../csg/history-tree'
 import { getAllNodes } from '../csg/history-tree'
 import { previewMirror as mirrorPreviewFn, mirrorSelected as mirrorConfirmFn, invalidateMirrorCache } from './mirror-store'
@@ -266,7 +268,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
 
   // ── Copy ──
   copySelected: () => {
-    const { selectedIds, objects } = get()
+    const { selectedIds, objects, operations, historyIndex } = get()
     const clips: ClipEntry[] = selectedIds.flatMap(id => {
       const obj = objects[id]
       if (!obj) return []
@@ -282,6 +284,12 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         entry.csgNormals = obj.normals ? new Float32Array(obj.normals) : undefined
         entry.csgAABB = obj.aabb ? { min: { ...obj.aabb.min }, max: { ...obj.aabb.max } } : undefined
         entry.csgOriginalBboxSize = obj.originalBboxSize ? { ...obj.originalBboxSize } : undefined
+        // CSG-INDEPENDENT-COPY: снимок дерева + система создания — вставка станет
+        // независимой параметрической копией. Нет дерева/системы — вставка мешем (как раньше).
+        const origin = getNode(id)?.type === 'boolean'
+          ? findCreationTransform(operations.slice(0, historyIndex), id)
+          : null
+        if (origin) entry.csgTree = { sourceRootId: id, nodes: snapshotSubtree(id), origin }
       } else if (obj.mirrored) {
         // FIX (8.5.12): mirror primitive — copy vertices (mirror baked) + mirrored flag.
         // Paste will register as baked node with vertices from clip.
@@ -331,13 +339,23 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
             type: 'group', ids: [], resultId: id,
             resultVertices: clip.csgVertices, resultIndices: clip.csgIndices,
             resultNormals: clip.csgNormals, resultCenter: { x: transform.x, y: transform.y, z: transform.z },
+            // PASTE-CSG-RS: вершины CSG — без RS (8.5.9), полный TRS вставки — в истории
+            // (иначе после перемотки/загрузки вставленный повёрнутый CSG терял поворот/масштаб)
+            resultRotation: { x: transform.rotX, y: transform.rotY, z: transform.rotZ },
+            resultScale: { x: transform.scaleX, y: transform.scaleY, z: transform.scaleZ },
             originalBboxSize: clip.csgOriginalBboxSize,
             treeOperation: 'union', shapeType: 'csg', color: clip.color,
           }
+          if (clip.csgTree) histOp.copyTree = clip.csgTree
           newObjects = { ...newObjects, [id]: obj }
           newOps.push(histOp)
-          // Register baked node for CSG paste
-          createBakedNode(id, clip.csgVertices, clip.csgIndices, clip.csgNormals ?? null, transform)
+          if (clip.csgTree) {
+            // CSG-INDEPENDENT-COPY: своё дерево копии (узлы `${id}:${idИсточника}`)
+            instantiateSubtree(clip.csgTree.nodes, clip.csgTree.sourceRootId, id, transform)
+          } else {
+            // Старый буфер без дерева — запечённый меш
+            createBakedNode(id, clip.csgVertices, clip.csgIndices, clip.csgNormals ?? null, transform)
+          }
         } else if (clip.mirrored && clip.mirrorVertices && clip.mirrorIndices) {
           // FIX (8.5.12): Paste mirror primitive — use baked vertices (mirror baked),
           // preserve mirrored flag (multi-level mirror composition).

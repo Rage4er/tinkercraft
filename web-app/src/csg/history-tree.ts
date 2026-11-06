@@ -37,6 +37,7 @@ const IDENTITY_TRANSFORM: TransformNR = {
 import { workerRebuildNode } from './worker-client'
 import { treeStore } from './tree-store'
 import { devLog, devWarn } from '../utils/debug'
+import { composeMirroredList } from '../store/helpers'
 
 // ---------------------------------------------------------------------------
 // Re-export treeStore for tests and external access
@@ -1086,22 +1087,7 @@ export async function bakeMirroredSubtree(
     })
     bakedCount++
   } else if (node.type === 'baked' && node.vertices && node.indices) {
-    // Already-baked child: mirror vertices in-place + swap winding.
-    mirrorVerticesInPlace(node.vertices, node.normals, plane)
-    swapWindingInPlace(node.indices)
-
-    // Track mirror plane for double-mirror detection.
-    // Same plane → double mirror cancels (geometry returns to original).
-    // Different plane → leave as-is (edit flow composes them — separate task).
-    if (!node.mirroredPlane) {
-      node.mirroredPlane = plane
-    } else if (node.mirroredPlane === plane) {
-      delete node.mirroredPlane
-    } else {
-      devWarn('mirror', `bakeMirroredSubtree: node ${nodeId} already mirrored on plane ${node.mirroredPlane}, new plane ${plane} — edit flow must compose (separate task)`)
-    }
-
-    invalidateCache(node.id)
+    mirrorBakedNodeInPlace(node, plane)
     bakedCount++
   } else if (node.type === 'boolean' && node.children) {
     // Recurse into children (boolean node transform is mirrored by mirrorNodeRecursive).
@@ -1111,6 +1097,25 @@ export async function bakeMirroredSubtree(
   }
 
   return bakedCount
+}
+
+/**
+ * Already-baked node: mirror vertices in-place + swap winding (mutates the node).
+ * Track mirror plane for double-mirror detection: same plane → double mirror
+ * cancels (geometry returns to original); different plane → left as-is.
+ */
+function mirrorBakedNodeInPlace(node: TreeNode, plane: 'XY' | 'XZ' | 'YZ'): void {
+  if (!node.vertices || !node.indices) return
+  mirrorVerticesInPlace(node.vertices, node.normals, plane)
+  swapWindingInPlace(node.indices)
+  if (!node.mirroredPlane) {
+    node.mirroredPlane = plane
+  } else if (node.mirroredPlane === plane) {
+    delete node.mirroredPlane
+  } else {
+    devWarn('mirror', `baked node ${node.id} already mirrored on plane ${node.mirroredPlane}, new plane ${plane} — edit flow must compose (separate task)`)
+  }
+  invalidateCache(node.id)
 }
 
 /** Build origin-centered mesh for a primitive node (WASM or worker fallback). */
@@ -1433,6 +1438,141 @@ function cloneRecursive(
 
   treeStore.setNode(newId, clone)
   return clone
+}
+
+// ---------------------------------------------------------------------------
+// Независимая параметрическая копия CSG (CSG-INDEPENDENT-COPY)
+// ---------------------------------------------------------------------------
+//
+// Зеркало и вставка CSG-результата дают СВОЁ дерево (копию узлов с params), а
+// не запечённый меш: дети копии правятся как у оригинала (9.2/9.3), и копия с
+// оригиналом не связаны. Id узлов копии детерминированы — `${idКопии}:${idИсточника}`
+// (корень — сам id копии), поэтому правки ребёнка копии (`edit_child_params.nodeId`)
+// воспроизводятся по истории: дерево копии строится заново при перемотке/загрузке.
+
+/** Id узла копии: корень источника → id копии, остальные — `${copyRootId}:${sourceNodeId}`. */
+export function copyNodeId(copyRootId: string, sourceRootId: string, sourceNodeId: string): string {
+  return sourceNodeId === sourceRootId ? copyRootId : `${copyRootId}:${sourceNodeId}`
+}
+
+/** Глубокая копия узла без кэшей (снимок не делит массивы/объекты с деревом). */
+function copyNodeData(n: TreeNode): TreeNode {
+  const c: TreeNode = {
+    id: n.id,
+    type: n.type,
+    relativeToParent: n.relativeToParent
+      ? {
+        positionDelta: { ...n.relativeToParent.positionDelta },
+        rotationDelta: { ...n.relativeToParent.rotationDelta },
+        scaleRatio: { ...n.relativeToParent.scaleRatio },
+      }
+      : null,
+  }
+  if (n.shapeType !== undefined) c.shapeType = n.shapeType
+  if (n.params) c.params = { ...n.params }
+  if (n.localTransform) c.localTransform = { ...n.localTransform }
+  if (n.vertices) c.vertices = new Float32Array(n.vertices)
+  if (n.indices) c.indices = new Uint32Array(n.indices)
+  if (n.normals !== undefined) c.normals = n.normals ? new Float32Array(n.normals) : null
+  if (n.mirrored) c.mirrored = [...n.mirrored]
+  if (n.mirroredPlane) c.mirroredPlane = n.mirroredPlane
+  if (n.operation) c.operation = n.operation
+  if (n.children) c.children = [...n.children]
+  if (n.parentId) c.parentId = n.parentId
+  return c
+}
+
+/**
+ * Снимок поддерева (корень первым), глубокая копия без кэшей — для буфера обмена
+ * и операции вставки. Пусто, если узла нет; бросает при цикле.
+ */
+export function snapshotSubtree(rootId: string): TreeNode[] {
+  const out: TreeNode[] = []
+  const visited = new Set<string>()
+  const walk = (id: string): void => {
+    if (visited.has(id)) throw new Error(`Cycle detected during snapshot: ${id}`)
+    visited.add(id)
+    const n = treeStore.getNode(id)
+    if (!n) return
+    const c = copyNodeData(n)
+    if (id === rootId) delete c.parentId
+    out.push(c)
+    if (n.type === 'boolean') for (const ch of n.children ?? []) walk(ch)
+  }
+  walk(rootId)
+  return out
+}
+
+/**
+ * Записать снимок поддерева в дерево под корнем `copyRootId` (id — `copyNodeId`).
+ * Существующие узлы с теми же id ПЕРЕЗАПИСЫВАЮТСЯ — так перемотка возвращает
+ * копию к состоянию на момент её создания (правки детей воспроизводятся дальше по истории).
+ * `rootTransform` — localTransform корня копии (позиция объекта сцены).
+ */
+export function instantiateSubtree(
+  nodes: TreeNode[],
+  sourceRootId: string,
+  copyRootId: string,
+  rootTransform?: TransformNR,
+): void {
+  const map = (id: string) => copyNodeId(copyRootId, sourceRootId, id)
+  for (const n of nodes) {
+    const c = copyNodeData(n)
+    c.id = map(n.id)
+    if (c.children) c.children = c.children.map(map)
+    if (n.id === sourceRootId) {
+      delete c.parentId
+      if (rootTransform) c.localTransform = { ...rootTransform }
+    } else if (c.parentId) {
+      c.parentId = map(c.parentId)
+    }
+    treeStore.setNode(c.id, c)
+  }
+  invalidateCache(copyRootId)
+}
+
+/** Отразить ГЕОМЕТРИЮ узлов копии: примитив → список mirrored[] (params редактируемы, 9.8), baked → вершины. */
+function mirrorCopyGeometry(nodeId: string, plane: 'XY' | 'XZ' | 'YZ'): void {
+  const node = treeStore.getNode(nodeId)
+  if (!node) return
+  if (node.type === 'primitive') {
+    const mirrored = composeMirroredList(node.mirrored, plane)
+    const next: TreeNode = { ...node, cachedMesh: undefined, cachedBBox: undefined, cacheHash: undefined }
+    if (mirrored) next.mirrored = mirrored
+    else delete next.mirrored
+    treeStore.setNode(node.id, next)
+  } else if (node.type === 'baked') {
+    mirrorBakedNodeInPlace(node, plane)
+  } else if (node.type === 'boolean') {
+    for (const ch of node.children ?? []) mirrorCopyGeometry(ch, plane)
+  }
+  invalidateCache(node.id)
+}
+
+/**
+ * Независимая параметрическая копия поддерева `sourceId` с корнем `copyRootId`;
+ * с `plane` — зеркальная: мировые трансформы узлов отражены (mirrorTreeNode),
+ * примитивы получают плоскость в `mirrored[]` (а не запекаются), baked-узлы
+ * отражают вершины. Узлы с id копии перезаписываются.
+ */
+export function copySubtree(
+  sourceId: string,
+  copyRootId: string,
+  plane?: 'XY' | 'XZ' | 'YZ',
+  rootTransform?: TransformNR,
+): void {
+  const nodes = snapshotSubtree(sourceId)
+  if (nodes.length === 0) throw new Error(`Source node ${sourceId} not found`)
+  instantiateSubtree(nodes, sourceId, copyRootId)
+  if (plane) {
+    mirrorTreeNode(copyRootId, plane)
+    mirrorCopyGeometry(copyRootId, plane)
+  }
+  if (rootTransform) {
+    const root = treeStore.getNode(copyRootId)
+    if (root) root.localTransform = { ...rootTransform }
+  }
+  invalidateCache(copyRootId)
 }
 
 /** Generate a unique ID for the tree (separate prefix from document store) */

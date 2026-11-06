@@ -57,7 +57,8 @@ describe('getTreeView', () => {
   it('запечённый и зеркальный дети помечены нередактируемыми', () => {
     createPrimitiveNode('a', 'cube', { width: 10, height: 10, depth: 10 }, T())
     createBakedNode('m', new Float32Array(9), new Uint32Array(3), null, T(4))
-    setNode('m', { ...getNode('m')!, shapeType: 'cube', mirroredPlane: 'YZ' })
+    // legacy: примитив, запечённый зеркалом CSG (params сохранены) — «mirror»
+    setNode('m', { ...getNode('m')!, shapeType: 'cube', params: { width: 10, height: 10, depth: 10 }, mirroredPlane: 'YZ' })
     createBakedNode('imp', new Float32Array(9), new Uint32Array(3), null, T(8))
     createBooleanNode('r1', 'union', 'a', 'm', T())
     createBooleanNode('r2', 'union', 'r1', 'imp', T())
@@ -131,11 +132,16 @@ describe('isChildEditable — единая проверка (9.9)', () => {
     createPrimitiveNode('a', 'cube', { width: 20, height: 20, depth: 20 }, T())
     createPrimitiveNode('b', 'sphere', { radius: 5 }, T(3))
     createBooleanNode('r', 'union', 'a', 'b', T())
+    // legacy: примитив, запечённый зеркалом CSG (params сохранены) — «mirror»
     createBakedNode('m', new Float32Array(9), new Uint32Array(3), null, T())
-    setNode('m', { ...getNode('m')!, mirroredPlane: 'YZ' })
+    setNode('m', { ...getNode('m')!, shapeType: 'cube', params: { width: 1, height: 1, depth: 1 }, mirroredPlane: 'YZ' })
+    // CSG-INDEPENDENT-COPY: отражённый настоящий baked-меш (без params) — «baked»
+    createBakedNode('mb', new Float32Array(9), new Uint32Array(3), null, T())
+    setNode('mb', { ...getNode('mb')!, mirroredPlane: 'YZ' })
     createBakedNode('k', new Float32Array(9), new Uint32Array(3), null, T())
     expect(isChildEditable('r')).toEqual({ editable: false, reason: 'boolean' })
     expect(isChildEditable('m')).toEqual({ editable: false, reason: 'mirror' })
+    expect(isChildEditable('mb')).toEqual({ editable: false, reason: 'baked' })
     expect(isChildEditable('k')).toEqual({ editable: false, reason: 'baked' })
     expect(isChildEditable('нет')).toEqual({ editable: false, reason: 'baked' })
   })
