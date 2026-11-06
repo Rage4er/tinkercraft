@@ -128,7 +128,11 @@ function restoreTreeFromSnapshot(index: number): void {
       if (lt) createBakedNode(nd.id, verts, idxs, nrm, lt)
     } else if (nd.type === 'boolean' && nd.operation && nd.children) {
       const lt = nd.localTransform
-      if (lt) createBooleanNode(nd.id, nd.operation, nd.children[0], nd.children[1], lt)
+      if (lt) {
+        const b = createBooleanNode(nd.id, nd.operation, nd.children[0], nd.children[1], lt)
+        // NESTED-MOVED-EDIT: TRS₀ из снимка (createBooleanNode взял бы текущий трансформ)
+        if (nd.originTransform) b.originTransform = { ...nd.originTransform }
+      }
     }
   }
 }
@@ -351,7 +355,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
           newOps.push(histOp)
           if (clip.csgTree) {
             // CSG-INDEPENDENT-COPY: своё дерево копии (узлы `${id}:${idИсточника}`)
-            instantiateSubtree(clip.csgTree.nodes, clip.csgTree.sourceRootId, id, transform)
+            instantiateSubtree(clip.csgTree.nodes, clip.csgTree.sourceRootId, id, transform, clip.csgTree.origin)
           } else {
             // Старый буфер без дерева — запечённый меш
             createBakedNode(id, clip.csgVertices, clip.csgIndices, clip.csgNormals ?? null, transform)

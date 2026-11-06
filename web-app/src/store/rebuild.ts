@@ -420,6 +420,22 @@ export function rebuildBuildTree(
         }
       }
 
+    } else if (op.type === 'align') {
+      // ALIGN-TREE-REPLAY (NESTED-MOVED-EDIT): выравнивание двигает операнды так же, как
+      // move — узел дерева обязан это знать, иначе после перемотки/загрузки выровненный
+      // до объединения операнд (примитив или вложенный CSG) стоял в дереве на старом месте
+      // и дерево корня не воспроизводило меш (замок nested_moved). Живой путь это
+      // маскировал: csgBoolean синхронизирует узлы операндов с объектами перед CSG.
+      const axis = op.axis.toLowerCase() as 'x' | 'y' | 'z'
+      for (const [id, delta] of Object.entries(op.deltas)) {
+        const t = transforms[id]
+        if (!t) continue
+        const nt = applyAlignToTransform(t as unknown as RebuildTransform, axis, delta) as TransformNR
+        transforms[id] = nt
+        const node = getNode(id)
+        if (node && node.localTransform) node.localTransform = { ...nt }
+      }
+
     } else if (op.type === 'resize_dims') {
       // Фаза 9.3: params примитива в дереве воспроизводятся по истории
       // (раньше терялись при перемотке: дерево хранило «живое» состояние).
@@ -524,7 +540,7 @@ export function rebuildBuildTree(
         // CSG-INDEPENDENT-COPY: вставка со снимком дерева — своё дерево копии (параметрическое);
         // старая вставка без снимка — baked из сохранённого меша.
         if (op.ids.length === 0 && op.copyTree) {
-          instantiateSubtree(op.copyTree.nodes, op.copyTree.sourceRootId, op.resultId, startT)
+          instantiateSubtree(op.copyTree.nodes, op.copyTree.sourceRootId, op.resultId, startT, op.copyTree.origin)
           continue
         }
         if (op.ids.length === 0) {

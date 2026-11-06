@@ -14,7 +14,7 @@
 - **manifold-3d** (WASM) — CSG операции в Web Worker
 - **Zustand 5** — стейт-менеджмент
 - **Vite 6** — сборка
-- **Vitest 4** — тесты (690 тестов, 57 файлов — v1.3.1)
+- **Vitest 4** — тесты (709 тестов, 58 файлов — `main` после v1.3.1)
 - **pnpm** — пакетный менеджер
 
 ## Команды
@@ -23,7 +23,7 @@
 cd web-app
 pnpm dev          # dev-сервер (порт 5000)
 pnpm build        # production-сборка
-pnpm test         # запуск тестов (690 тестов, 57 файлов)
+pnpm test         # запуск тестов (709 тестов, 58 файлов)
 pnpm typecheck    # tsc --noEmit
 pnpm e2e:smoke    # дымовой тест в браузере (Playwright; нужен запущенный pnpm dev; см. web-app/e2e/helpers.mjs)
 pnpm e2e:tree     # Фаза 9.1: раскрытие CSG в дереве, выбор ребёнка
@@ -33,6 +33,7 @@ pnpm e2e:edit-step-mirror  # Фаза 9.5.3: ✎ у шага mirror → плос
 pnpm e2e:edit-step-extrude  # Фаза 9.5.4: проект из e2e/fixtures/extrude-union.3dtc → ✎ у extrude → глубина 10, undo/redo
 pnpm e2e:independent-copy  # CSG-INDEPENDENT-COPY: зеркало и Ctrl+C/V CSG → правка ребёнка копии не трогает оригинал и наоборот
 pnpm e2e:import-mesh-csg  # IMPORT-MESH-CSG: замкнутый STL (e2e/fixtures/closed-cube.stl) ∪ куб → CSG; незамкнутый → уведомление ru/en
+pnpm e2e:nested-moved-edit  # NESTED-MOVED-EDIT: G сдвинут и повёрнут до ∪ цилиндр → правка сферы во вложенном G без замка; undo/redo
 pnpm e2e:align-ui-revit  # ALIGN-UI-REVIT: «Выровнять» → Z → верх B в 0; грань A → B; «Множественное»; Esc; правый клик
 pnpm e2e:align-obb  # ALIGN-REVIT: режимом «Выровнять» — повёрнутый цилиндр к грани куба, повёрнутый куб к плоскости XY (реальная геометрия)
 ```
@@ -91,7 +92,7 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 | `src/store/notifications.ts` | Toast-уведомления (замена alert) |
 | `src/store/mirror-store.ts` | Store для зеркальных операций; зеркало CSG — независимая копия дерева (`copySubtree` с плоскостью) |
 | **CSG / Build Tree** | |
-| `src/csg/history-tree.ts` | **Build Tree** — параметрическое дерево (primitive/boolean/baked), `rebuildNode`, `mirrorNodeRecursive`, `cloneSubtree`; независимая копия CSG (`copySubtree`, `snapshotSubtree`, `instantiateSubtree`, id узлов `${idКопии}:${idИсточника}`) |
+| `src/csg/history-tree.ts` | **Build Tree** — параметрическое дерево (primitive/boolean/baked), `rebuildNode`, `mirrorNodeRecursive`, `cloneSubtree`; независимая копия CSG (`copySubtree`, `snapshotSubtree`, `instantiateSubtree`, id узлов `${idКопии}:${idИсточника}`); у boolean-узла `originTransform` (TRS₀ — система листьев; вложенный boolean воркер переносит на `Mat(localTransform)·Mat(originTransform)⁻¹`, NESTED-MOVED-EDIT) |
 | `src/csg/tree-store.ts` | Zustand-стор для Build Tree |
 | `src/csg/tree-view.ts` | Read-модель Build Tree для UI (`getTreeView`, `findViewNode`, `formatParams`) и единая проверка редактируемости `isChildEditable` — Фаза 9.1/9.9 |
 | `src/hooks/useRootConsistency.ts` | Согласованность дерева CSG-корня с мешем (замки в дереве) — Фаза 9.9 |
@@ -112,7 +113,7 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 | `src/csg/worker.ts` | WASM worker — manifold-3d операции, типобезопасные интерфейсы |
 | `src/csg/worker-client.ts` | Promise-обёртка над воркером |
 | `src/csg/worker-handlers.ts` | Индивидуальные handlers для каждой операции |
-| `src/csg/worker-matrix.ts` | Чистая матричная математика (SRT, RS, transform) |
+| `src/csg/worker-matrix.ts` | Чистая матричная математика (SRT, RS, transform); `relativeTransformMatrix` — поправка вложенного CSG `Mat(TRS_cur)·Mat(TRS₀)⁻¹` (NESTED-MOVED-EDIT) |
 | `src/csg/types.ts` | Типы операций, сцены, параметров, `TreeNode` |
 | `src/csg/BUILD_TREE_SPEC.md` | Спецификация Build Tree (1410 строк) |
 | **Components** | |
@@ -258,7 +259,7 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 
 - Импортированные меши (STL) не параметризуются (IMPORT-MESH-PARAMETRIC: не требуется); трансформации и CSG работают — CSG допускает замкнутый STL (проверка по manifold в воркере, IMPORT-MESH-CSG), незамкнутый → уведомление `errors.csgNonManifold`; «починка» незамкнутого меша не делается; старые extrude без `group.source` не редактируются как extrude (EXTRUDE-LEGACY: не мигрируем); `extrudeSelected` — движок правки 9.5.4, не UI-инструмент: это «растянуть по оси», а не extrude 2D→3D, кнопку не возвращать (EXTRUDE-3D-SCALE; настоящий extrude — Фаза 11)
 - Скругления (fillet) нет: прежний параметр куба удалён (remove-fillet) до инструмента на B-Rep; старые шаги `fillet` вырезаются при загрузке (`io/legacy-fillet.ts`) — новых не создавать
-- После v1.3.0 открыто: NESTED-MOVED-EDIT (вложенный CSG, сдвинутый до объединения — 🔒 `nested_moved`); связанное зеркало (linked mirror) не делали — копия CSG всегда независимая; «починка» незамкнутого STL; CI-E2E (e2e не в CI; CI — один workflow `ci-web.yml`, CI-DEDUP ✅)
+- После v1.3.1 открыто: связанное зеркало (linked mirror) не делали — копия CSG всегда независимая; «починка» незамкнутого STL; CI-E2E (e2e не в CI; CI — один workflow `ci-web.yml`, CI-DEDUP ✅)
 - Выравнивание режимом «Выровнять» (ALIGN-UI-REVIT) пишется шагом move: при правке прошлого шага объект не перевыравнивается по плоскости (ALIGN-PLANE-RESOLVE); шаги `align` старых проектов — с re-solve, как раньше
 - `.doodle` (legacy) в UI не открывается: `parseDoodle` не вызывается
 

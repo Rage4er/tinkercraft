@@ -338,7 +338,7 @@
   "tree": {
     "child_not_editable": "Edit unavailable",
     "reason": {
-      "nested_moved": "Nested CSG moved before union",
+      "nested_moved": "The component tree does not reproduce the current geometry",
       "mirror": "Mirrored child",
       "baked": "Baked mesh",
       "boolean": "Nested operation — edit its components",

@@ -33,6 +33,8 @@ interface SnapshotTree {
     shapeType?: string
     params?: Record<string, number>
     localTransform?: { x: number; y: number; z: number; rotX: number; rotY: number; rotZ: number; scaleX: number; scaleY: number; scaleZ: number }
+    /** NESTED-MOVED-EDIT: TRS₀ boolean-узла */
+    originTransform?: { x: number; y: number; z: number; rotX: number; rotY: number; rotZ: number; scaleX: number; scaleY: number; scaleZ: number }
     // FIX (MED-18-9): Use ArrayLike<number> to accept both TypedArray and number[]
     vertices?: ArrayLike<number>
     indices?: ArrayLike<number>
@@ -78,6 +80,7 @@ function serializeTree(nodes: TreeNode[]): SnapshotTree {
       shapeType: node.shapeType,
       params: node.params as Record<string, number> | undefined,
       localTransform: node.localTransform,
+      originTransform: node.originTransform,
       vertices: node.vertices ? (node.vertices as Float32Array) : undefined,
       indices: node.indices ? (node.indices as Uint32Array) : undefined,
       normals: node.normals ? (node.normals as Float32Array) : undefined,

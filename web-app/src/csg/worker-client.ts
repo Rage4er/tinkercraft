@@ -307,6 +307,8 @@ export async function workerRebuildNode(
     shapeType?: string
     params?: Record<string, number>
     localTransform?: { x: number; y: number; z: number; rotX: number; rotY: number; rotZ: number; scaleX: number; scaleY: number; scaleZ: number }
+    /** NESTED-MOVED-EDIT: TRS₀ boolean-узла (система листьев) */
+    originTransform?: { x: number; y: number; z: number; rotX: number; rotY: number; rotZ: number; scaleX: number; scaleY: number; scaleZ: number }
     vertices?: number[]
     indices?: number[]
     normals?: number[]

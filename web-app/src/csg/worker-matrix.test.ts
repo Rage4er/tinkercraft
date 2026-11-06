@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { composeTransforms, subtractTransform, buildSRTMatrixAroundCenter, buildTransformMatrix, applyMatrix4ToVec3 } from './worker-matrix'
+import { composeTransforms, subtractTransform, buildSRTMatrixAroundCenter, buildTransformMatrix, applyMatrix4ToVec3, relativeTransformMatrix } from './worker-matrix'
 import type { RelativeTransform, TransformNR } from './types'
 
 function makeT(o: Partial<TransformNR> = {}): TransformNR {
@@ -540,5 +540,30 @@ describe('buildTransformMatrix with negative scale', () => {
     expect(result.x).toBeCloseTo(-3, 3)
     expect(result.y).toBeCloseTo(-2, 3)
     expect(result.z).toBeCloseTo(1, 3)
+  })
+})
+
+describe('relativeTransformMatrix (NESTED-MOVED-EDIT)', () => {
+  const pts = [{ x: 1, y: 2, z: 3 }, { x: -4, y: 0.5, z: 7 }, { x: 0, y: -9, z: -2 }]
+  it('M·(Mat(O)·v) = Mat(L)·v — сдвиг, поворот, неравномерный масштаб', () => {
+    const O = makeT({ x: 5, y: -3, z: 2, rotX: 10, rotY: 40, rotZ: -25, scaleX: 1.3, scaleY: 0.8, scaleZ: 2 })
+    const L = makeT({ x: 60, y: 7, z: -11, rotX: -30, rotY: 15, rotZ: 70, scaleX: 0.5, scaleY: 1.7, scaleZ: 1.1 })
+    const M = relativeTransformMatrix(L, O)!
+    const mO = buildTransformMatrix({ x: O.x, y: O.y, z: O.z }, O, O)
+    const mL = buildTransformMatrix({ x: L.x, y: L.y, z: L.z }, L, L)
+    for (const v of pts) {
+      const got = applyMatrix4ToVec3(M, applyMatrix4ToVec3(mO, v))
+      const want = applyMatrix4ToVec3(mL, v)
+      expect(got.x).toBeCloseTo(want.x, 9); expect(got.y).toBeCloseTo(want.y, 9); expect(got.z).toBeCloseTo(want.z, 9)
+    }
+  })
+  it('только сдвиг → чистый перенос на p_cur − p₀', () => {
+    const M = relativeTransformMatrix(makeT({ x: 10, y: 1, rotZ: 30 }), makeT({ x: 4, y: -2, rotZ: 30 }))!
+    const p = applyMatrix4ToVec3(M, { x: 3, y: 3, z: 3 })
+    expect(p.x).toBeCloseTo(9, 9); expect(p.y).toBeCloseTo(6, 9); expect(p.z).toBeCloseTo(3, 9)
+  })
+  it('трансформы совпадают — null (обычный CSG не меняется)', () => {
+    const T = makeT({ x: 1, rotY: 20, scaleZ: 2 })
+    expect(relativeTransformMatrix(T, { ...T })).toBeNull()
   })
 })

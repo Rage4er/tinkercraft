@@ -251,7 +251,7 @@ describe('editChildParams (Фаза 9.3)', () => {
     expect(st().operations.length).toBe(opsBefore)
   })
 
-  it('вложенный CSG, сдвинутый до объединения: дерево не совпадает с мешем → правка отклонена', async () => {
+  it('NESTED-MOVED-EDIT: вложенный CSG, сдвинутый до объединения, — правка проходит (раньше отклонялась)', async () => {
     const c = await shape('cube', { width: 20, height: 20, depth: 20 }, at(0))
     const s = await shape('sphere', { radius: 8, segments: 32 }, at(14))
     const inner = await csg(c, s, 'union')
@@ -263,9 +263,10 @@ describe('editChildParams (Фаза 9.3)', () => {
 
     await st().editChildParams(outer, c, { width: 40 })
 
-    expect(st().operations.length).toBe(opsBefore)
-    expect(st().objects[outer]).toBe(objBefore)
-    expect(getNode(c)?.params?.width).toBe(20)
+    // подробно (эталон «свежего» сценария, поворот/масштаб) — nested-moved-edit.test.ts
+    expect(st().operations.length).toBe(opsBefore + 1)
+    expect(st().objects[outer]).not.toBe(objBefore)
+    expect(getNode(c)?.params?.width).toBe(40)
   })
 })
 
@@ -369,14 +370,14 @@ describe('checkChildEditable (Фаза 9.9)', () => {
     expect(getNode(c)).toBe(nodeBefore)
   })
 
-  it('tree_mismatch — сдвинутый до объединения вложенный CSG', async () => {
+  it('NESTED-MOVED-EDIT: сдвинутый до объединения вложенный CSG согласован (раньше tree_mismatch)', async () => {
     const c = await shape('cube', { width: 20, height: 20, depth: 20 }, at(0))
     const s = await shape('sphere', { radius: 8, segments: 32 }, at(14))
     const inner = await csg(c, s, 'union')
     await st().moveObject(inner, { ...st().objects[inner].transform, x: 60, z: 10 })
     const cyl = await shape('cylinder', { radius: 6, height: 24 }, at(40))
     const outer = await csg(inner, cyl, 'union')
-    expect(await checkChildEditable(args(outer, c))).toBe('tree_mismatch')
+    expect(await checkChildEditable(args(outer, c))).toBeNull()
   })
 
   it('not_editable для вложенного boolean, not_found для неизвестного узла', async () => {

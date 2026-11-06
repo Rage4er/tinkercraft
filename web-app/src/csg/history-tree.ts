@@ -137,6 +137,8 @@ export function createBooleanNode(
     // Корневая нода при создании: relativeToParent = null (Фаза 8)
     relativeToParent: null,
     localTransform: transform ? { ...transform } : undefined,
+    // NESTED-MOVED-EDIT: листья лежат в системе создания — TRS₀ = transform на момент CSG
+    ...(transform ? { originTransform: { ...transform } } : {}),
   }
   treeStore.setNode(id, node)
 
@@ -364,9 +366,11 @@ function computeNodeHash(node: TreeNode): string {
   }
   if (node.type === 'boolean' && node.children) {
     const t = node.localTransform
-    const tStr = t
+    const o = node.originTransform
+    // NESTED-MOVED-EDIT: TRS₀ влияет на геометрию вложенного boolean (поправка воркера)
+    const tStr = (t
       ? `${t.x},${t.y},${t.z},${t.rotX},${t.rotY},${t.rotZ},${t.scaleX},${t.scaleY},${t.scaleZ}`
-      : 'none'
+      : 'none') + (o ? `@${o.x},${o.y},${o.z},${o.rotX},${o.rotY},${o.rotZ},${o.scaleX},${o.scaleY},${o.scaleZ}` : '')
     const childHashes = node.children
       .map(id => {
         const child = treeStore.getNode(id)
@@ -505,6 +509,7 @@ interface WorkerNode {
   shapeType?: string
   params?: Record<string, number>
   localTransform?: TransformNR
+  originTransform?: TransformNR
   vertices?: number[]
   indices?: number[]
   normals?: number[]
@@ -538,6 +543,7 @@ function collectSubtreeForWorker(rootId: string): WorkerNode[] {
     if (node.shapeType !== undefined) workerNode.shapeType = node.shapeType
     if (node.params !== undefined) workerNode.params = node.params as Record<string, number>
     if (node.localTransform !== undefined) workerNode.localTransform = node.localTransform
+    if (node.originTransform !== undefined) workerNode.originTransform = node.originTransform
     if (node.vertices !== undefined) workerNode.vertices = Array.from(node.vertices)
     if (node.indices !== undefined) workerNode.indices = Array.from(node.indices)
     if (node.normals !== undefined) workerNode.normals = Array.from(node.normals || [])
@@ -596,6 +602,7 @@ async function applyCSGMeshes(node: TreeNode, parentWorld: TransformNR): Promise
       shapeType: n.shapeType,
       params: n.params as Record<string, number> | undefined,
       localTransform: n.localTransform,
+      originTransform: n.originTransform,
       vertices: n.vertices ? Array.from(n.vertices) : undefined,
       indices: n.indices ? Array.from(n.indices) : undefined,
       normals: n.normals ? Array.from(n.normals) : undefined,
@@ -1004,10 +1011,22 @@ function mirrorNodeRecursive(
   //    (e.g. -30 → -29.999999999999993) that breaks exact equality checks.
   const newLocal: TransformNR = newWorld
 
+  // NESTED-MOVED-EDIT: TRS₀ отражается тем же сопряжением, что и localTransform —
+  // поправка копии Mat(L')·Mat(O')⁻¹ = R·(Mat(L)·Mat(O)⁻¹)·R совпадает с отражённой геометрией
+  const o = node.originTransform
+  const newOrigin: TransformNR | undefined = o
+    ? (() => {
+      const p = mirrorPoint({ x: o.x, y: o.y, z: o.z }, plane, center)
+      const r = mirrorEuler({ x: o.rotX, y: o.rotY, z: o.rotZ }, plane)
+      return { x: p.x, y: p.y, z: p.z, rotX: r.x, rotY: r.y, rotZ: r.z, scaleX: Math.abs(o.scaleX), scaleY: Math.abs(o.scaleY), scaleZ: Math.abs(o.scaleZ) }
+    })()
+    : undefined
+
   setNode(node.id, {
     ...node,
     relativeToParent: newRelative,
     localTransform: newLocal,
+    ...(newOrigin ? { originTransform: newOrigin } : {}),
   })
 
   devLog('mirrorNodeRecursive', {
@@ -1471,6 +1490,7 @@ function copyNodeData(n: TreeNode): TreeNode {
   if (n.shapeType !== undefined) c.shapeType = n.shapeType
   if (n.params) c.params = { ...n.params }
   if (n.localTransform) c.localTransform = { ...n.localTransform }
+  if (n.originTransform) c.originTransform = { ...n.originTransform }
   if (n.vertices) c.vertices = new Float32Array(n.vertices)
   if (n.indices) c.indices = new Uint32Array(n.indices)
   if (n.normals !== undefined) c.normals = n.normals ? new Float32Array(n.normals) : null
@@ -1507,13 +1527,15 @@ export function snapshotSubtree(rootId: string): TreeNode[] {
  * Записать снимок поддерева в дерево под корнем `copyRootId` (id — `copyNodeId`).
  * Существующие узлы с теми же id ПЕРЕЗАПИСЫВАЮТСЯ — так перемотка возвращает
  * копию к состоянию на момент её создания (правки детей воспроизводятся дальше по истории).
- * `rootTransform` — localTransform корня копии (позиция объекта сцены).
+ * `rootTransform` — localTransform корня копии (позиция объекта сцены); `rootOrigin` —
+ * её система создания (TRS₀), если снимок её не хранит (NESTED-MOVED-EDIT).
  */
 export function instantiateSubtree(
   nodes: TreeNode[],
   sourceRootId: string,
   copyRootId: string,
   rootTransform?: TransformNR,
+  rootOrigin?: TransformNR,
 ): void {
   const map = (id: string) => copyNodeId(copyRootId, sourceRootId, id)
   for (const n of nodes) {
@@ -1523,6 +1545,9 @@ export function instantiateSubtree(
     if (n.id === sourceRootId) {
       delete c.parentId
       if (rootTransform) c.localTransform = { ...rootTransform }
+      // NESTED-MOVED-EDIT: система листьев копии — система создания источника
+      // (снимок до этой правки originTransform не хранил — берём `copyTree.origin`)
+      if (c.type === 'boolean' && !c.originTransform && rootOrigin) c.originTransform = { ...rootOrigin }
     } else if (c.parentId) {
       c.parentId = map(c.parentId)
     }

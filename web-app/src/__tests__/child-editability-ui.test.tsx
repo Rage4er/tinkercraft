@@ -33,7 +33,7 @@ import ChildPropertiesPanel from '../components/ChildPropertiesPanel'
 import { useDocumentStore } from '../store/document-store'
 import { useUiStore } from '../store/ui-store'
 import { clearSnapshots } from '../store/snapshots'
-import { clearTree, createBakedNode, createPrimitiveNode, createBooleanNode } from '../csg/history-tree'
+import { clearTree, createBakedNode, createPrimitiveNode, createBooleanNode, getNode, setNode, invalidateCache } from '../csg/history-tree'
 import { getTreeView } from '../csg/tree-view'
 import type { SceneObject, TransformNR } from '../csg/types'
 
@@ -103,14 +103,24 @@ async function healthyCsg(): Promise<{ rootId: string; cube: string }> {
   return { rootId: await csg(c, s), cube: c }
 }
 
-/** Вложенный CSG, сдвинутый до объединения: дерево не воспроизводит меш внешнего корня. */
-async function movedNestedCsg(): Promise<{ outer: string; cube: string }> {
+/**
+ * Дерево, которое НЕ воспроизводит меш внешнего корня: вложенный CSG сдвинут до
+ * объединения, а у его узла нет TRS₀ (`originTransform`) — как у дерева до
+ * NESTED-MOVED-EDIT. С TRS₀ такой CSG правится (nested-moved-edit.test.ts); замок
+ * `nested_moved` остаётся предохранителем для любого расхождения дерева и меша.
+ */
+async function mismatchedNestedCsg(): Promise<{ outer: string; cube: string }> {
   const c = await shape('cube', { width: 20, height: 20, depth: 20 }, at(0))
   const s = await shape('sphere', { radius: 8, segments: 32 }, at(14))
   const inner = await csg(c, s)
   await st().moveObject(inner, { ...st().objects[inner].transform, x: 60, z: 10 })
   const cyl = await shape('cylinder', { radius: 6, height: 24 }, at(40))
-  return { outer: await csg(inner, cyl), cube: c }
+  const outer = await csg(inner, cyl)
+  const { originTransform: _legacy, ...node } = getNode(inner)!
+  void _legacy
+  setNode(inner, node)
+  invalidateCache(inner)
+  return { outer, cube: c }
 }
 
 const locks = () => Array.from(host.querySelectorAll<HTMLElement>('[data-testid=ct-lock]'))
@@ -126,8 +136,8 @@ describe('ComponentTree — замок у нередактируемых дет�
     expect(host.querySelectorAll('.ct-child.ct-readonly')).toHaveLength(0)
   })
 
-  it('вложенный CSG, сдвинутый до объединения: замок + подсказка с причиной', async () => {
-    const { outer } = await movedNestedCsg()
+  it('дерево не воспроизводит меш (вложенный CSG без TRS₀ — старое дерево): замок + подсказка с причиной', async () => {
+    const { outer } = await mismatchedNestedCsg()
     useUiStore.setState({ expandedTreeIds: { [outer]: true } })
     renderTree()
     await until(() => locks().length > 0)
@@ -216,8 +226,8 @@ describe('ChildPropertiesPanel — сообщение вместо формы (9
     expect(host.querySelectorAll('input.props-input')).toHaveLength(3)
   })
 
-  it('вложенный сдвинутый: сообщение с причиной, формы нет', async () => {
-    const { outer, cube } = await movedNestedCsg()
+  it('дерево не воспроизводит меш: сообщение с причиной, формы нет', async () => {
+    const { outer, cube } = await mismatchedNestedCsg()
     renderPanel(outer, cube)
     await until(() => host.querySelector('[data-testid=child-not-editable]') !== null)
     const box = host.querySelector<HTMLElement>('[data-testid=child-not-editable]')!
