@@ -27,12 +27,13 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 9
+          # версия pnpm — из packageManager в web-app/package.json
+          package_json_file: web-app/package.json
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: 'pnpm'
           cache-dependency-path: web-app/pnpm-lock.yaml
 

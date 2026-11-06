@@ -256,7 +256,7 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 Перед работой с проектом убедитесь, что Node.js настроен корректно.
 
 - **Документация:** `web-app/NODEJS_SETUP.md` — полное руководство по настройке Node.js, pnpm, проверке typecheck и тестов
-- **Фактическое состояние:** Node.js v24.11.0, pnpm 11.13.1
+- **Фактическое состояние:** Node.js v24.22.2, pnpm 12.10.1 (зафиксирован в `web-app/package.json` → `packageManager`; CI берёт версию оттуда, Node 24)
 - **node_modules:** 203 MB (pnpm symlink-based, не коммитится)
 - **Проверка:** `cd web-app && pnpm typecheck && pnpm test`
 
