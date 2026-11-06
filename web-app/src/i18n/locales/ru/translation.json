@@ -18,8 +18,7 @@
     "subtract": "Вычитание",
     "intersect": "Пересечение",
     "result": "CSG результат",
-    "operations": "CSG операции",
-    "nonManifold": "CSG операции с данным объектом невозможны (non-manifold геометрия)"
+    "operations": "CSG операции"
   },
   "mirror": {
     "title": "Зеркало",
@@ -271,6 +270,7 @@
     "pasteFailed": "Ошибка вставки",
     "deleteFailed": "Ошибка удаления объектов",
     "csgFailed": "Ошибка CSG-операции",
+    "csgNonManifold": "Меш не замкнут (non-manifold), CSG невозможен. Проверьте STL.",
     "alignFailed": "Ошибка выравнивания",
     "resizeFailed": "Ошибка изменения размера",
     "resizeCsgFailed": "Ошибка изменения размера CSG-объекта",

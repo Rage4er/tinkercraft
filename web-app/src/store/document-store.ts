@@ -37,7 +37,7 @@ import { computeAABB, extractAndCenterInPlace, extractAndCenterGetAABB, centerMa
 import type { ClipEntry } from './helpers'
 import type { DocumentStore } from './types'
 import { rebuildFromHistory, rebuildBuildTree } from './rebuild'
-import { computeCsgResult, groupOperationFromResult } from './csg-result'
+import { computeCsgResult, groupOperationFromResult, isNonManifoldError } from './csg-result'
 import { computeEditedChild, editFailureKey, findCreationTransform } from './edit-child'
 import { computeStepEdit, editStepFailureKey } from './edit-step'
 import { cacheSnapshot, getCachedSnapshot, clearSnapshots, cacheTreeSnapshot, getCachedTreeSnapshot } from './snapshots'
@@ -444,11 +444,9 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const [idA, idB] = selectedIds
     if (!objects[idA] || !objects[idB]) return
 
-    // Non-manifold geometry (imported STL, 3D text) cannot be used in CSG operations
-    if (objects[idA].shapeType === 'import_mesh' || objects[idB].shapeType === 'import_mesh') {
-      notify('CSG операции с данным объектом невозможны (non-manifold геометрия)', 'warning')
-      return
-    }
+    // IMPORT-MESH-CSG: импортированный меш (STL, 3D-текст) допускается к CSG, если он
+    // замкнут — это решает воркер (manifold построился). Незамкнутый → ошибка с маркером
+    // NON_MANIFOLD → уведомление errors.csgNonManifold, объекты и история не меняются.
 
     const resultId = nextId('csg')
     set({ busy: true })
@@ -505,7 +503,11 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       invalidateMirrorCache()
       // Rebuild tree node to cache the mesh in history-tree
       rebuildNode(resultId).catch(e => console.error('[csgBoolean] rebuildNode failed:', e))
-    } catch (e) { set({ busy: false }); console.error('csgBoolean:', e); notify(i18n.t('errors.csgFailed'), 'error') }
+    } catch (e) {
+      set({ busy: false })
+      if (isNonManifoldError(e)) { notify(i18n.t('errors.csgNonManifold'), 'warning'); return }
+      console.error('csgBoolean:', e); notify(i18n.t('errors.csgFailed'), 'error')
+    }
   },
 
   // ── Move ──

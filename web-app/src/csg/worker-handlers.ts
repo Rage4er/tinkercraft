@@ -102,6 +102,20 @@ export async function initWasm(): Promise<void> {
 /** Кэш manifold-объектов по id (null = non-manifold import, CSG not supported) */
 export const cache = new Map<string, ManifoldObject | null>()
 
+/**
+ * IMPORT-MESH-CSG: маркер ошибки CSG над незамкнутым (non-manifold) мешем. Воркер
+ * бросает `Error('NON_MANIFOLD: <id>')`, стор по маркеру показывает
+ * `errors.csgNonManifold` (а не общее «CSG не удалась»).
+ */
+export const NON_MANIFOLD_ERROR = 'NON_MANIFOLD'
+
+/** Операнд CSG закэширован как non-manifold (меш не замкнут) → ошибка с маркером. */
+function assertManifoldOperands(...ids: string[]): void {
+  for (const id of ids) {
+    if (cache.has(id) && cache.get(id) === null) throw new Error(`${NON_MANIFOLD_ERROR}: ${id}`)
+  }
+}
+
 // --- Cache disposal helpers (CRIT-R8-1: prevent WASM memory leaks) ---
 
 /** Safely delete a ManifoldObject's WASM memory. Ignores already-disposed objects. */
@@ -1132,6 +1146,7 @@ export async function handleRebuildScene(msg: RebuildSceneMessage): Promise<void
 /** Handle csgBoolean message. */
 export async function handleCsgBoolean(msg: CsgBooleanMessage): Promise<void> {
   const t0 = performance.now()
+  assertManifoldOperands(msg.idA, msg.idB)
   const aOrig = cache.get(msg.idA)
   const bOrig = cache.get(msg.idB)
   if (!aOrig || !bOrig) throw new Error(`Objects not found: ${msg.idA}, ${msg.idB}`)
@@ -1347,6 +1362,7 @@ export async function handleCsgBooleanSync(msg: CsgBooleanSyncMessage): Promise<
   }
 
   // Perform boolean: apply transform ONE TIME to each origin-centered operand
+  assertManifoldOperands(msg.idA, msg.idB)
   const aOrig = cache.get(msg.idA)
   const bOrig = cache.get(msg.idB)
   if (!aOrig || !bOrig) throw new Error(`Objects not found: ${msg.idA}, ${msg.idB}`)

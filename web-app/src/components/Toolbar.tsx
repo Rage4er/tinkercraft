@@ -45,7 +45,6 @@ export default function Toolbar({
   canMirror,
   canAlign,
   canCsg,
-  nonManifoldSelected,
   theme,
   onOpen,
   onSave,
@@ -83,7 +82,6 @@ export default function Toolbar({
   canMirror: boolean;
   canAlign: boolean;
   canCsg: boolean;
-  nonManifoldSelected: boolean;
   theme: "dark" | "light";
   onOpen: () => void;
   onSave: () => void;
@@ -221,7 +219,7 @@ export default function Toolbar({
       <div className="toolbar-separator" />
 
       {/* Group 8: CSG */}
-      <CsgButtons disabled={!canCsg} onCsg={onCsg} nonManifoldSelected={nonManifoldSelected} maxRows={getRows("csg")} />
+      <CsgButtons disabled={!canCsg} onCsg={onCsg} maxRows={getRows("csg")} />
       <div className="toolbar-separator" />
 
       {/* Group 9: Theme */}

@@ -13,7 +13,6 @@ export default function PropertiesPanel({
   canResize,
   canCsg,
   canAlign,
-  nonManifoldSelected,
   objectList,
   operationsLength,
   fileName,
@@ -38,7 +37,6 @@ export default function PropertiesPanel({
   canResize: boolean;
   canCsg: boolean;
   canAlign: boolean;
-  nonManifoldSelected?: boolean;
   objectList: SceneObject[];
   operationsLength: number;
   fileName: string | null;
@@ -446,7 +444,7 @@ export default function PropertiesPanel({
       {/* CSG + Align */}
       {selectedIds.length === 2 && (
         <>
-          <CsgButtons disabled={!canCsg} onCsg={onCsg} variant="full" nonManifoldSelected={nonManifoldSelected} />
+          <CsgButtons disabled={!canCsg} onCsg={onCsg} variant="full" />
           <AlignButtons disabled={!canAlign} onAlign={onAlign} variant="full" />
         </>
       )}

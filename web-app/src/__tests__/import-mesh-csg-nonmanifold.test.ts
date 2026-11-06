@@ -3,6 +3,7 @@
 // ============================================================
 // Реальный WASM. Пользователь видит уведомление, а не пустой результат и не падение;
 // объекты и история не меняются, busy сброшен. Контроль — обычный CSG примитивов.
+// IMPORT-MESH-CSG: замкнутый STL теперь допускается (тест перевёрнут).
 
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 
@@ -86,15 +87,16 @@ describe('import_mesh → CSG: предсказуемое поведение', (
     }
   })
 
-  it('текущее ограничение: замкнутый STL тоже не допускается к CSG (то же уведомление)', async () => {
-    // csgBoolean отсекает ЛЮБОЙ import_mesh до воркера, не проверяя замкнутость.
-    // Если CSG для замкнутых STL будет включён — этот тест нужно перевернуть.
+  it('замкнутый STL ∪ куб — работает (IMPORT-MESH-CSG: проверка по замкнутости, а не по типу)', async () => {
+    // Раньше («текущее ограничение») csgBoolean отсекал ЛЮБОЙ import_mesh. Подробно — import-mesh-csg.test.ts.
     const closed = await importMesh('cube.stl', CLOSED_CUBE)
     const c = await cube()
     const { before, thrown } = await tryCsg(closed, c)
     expect(thrown).toBeNull()
-    expect(st().objects).toBe(before.objects)
-    expect(warnings()).toHaveLength(1)
+    expect(st().objects).not.toBe(before.objects)
+    expect(st().operations).toHaveLength(before.operations.length + 1)
+    expect(st().objects[st().selectedIds[0]].shapeType).toBe('csg')
+    expect(warnings()).toHaveLength(0)
   })
 
   it('контроль: куб ∪ сфера работает как раньше (CSG-результат, шаг истории, без уведомлений)', async () => {
