@@ -1,5 +1,5 @@
 // ============================================================
-// step-panel-ui.test.tsx — Фаза 9.5.2/9.5.3: Timeline ✎ у move/mirror → панель «Шаг N»
+// step-panel-ui.test.tsx — Фаза 9.5.2–9.5.4: Timeline ✎ у move/mirror/extrude → панель «Шаг N»
 // ============================================================
 // Настоящий WASM через worker-bridge: коммит поля запускает реальный каскад CSG.
 
@@ -27,7 +27,7 @@ vi.mock('../csg/worker-client', async () => {
 import { createRoot, type Root } from 'react-dom/client'
 import { act } from 'react-dom/test-utils'
 import i18n from '../i18n'
-import StepPanel, { movePatchWith, fmtVec } from '../components/StepPanel'
+import StepPanel, { movePatchWith, fmtVec, extrudePatchWith } from '../components/StepPanel'
 import Timeline from '../components/Timeline'
 import { useTimelineEdit } from '../hooks/useTimelineEdit'
 import { useSelectedStepGuard } from '../hooks/useSelectedStepGuard'
@@ -249,6 +249,69 @@ describe('StepPanel (9.5.3, mirror)', () => {
     expect(rows2[idx].querySelector('[data-testid=tl-edited]')).not.toBeNull()
     expect(rows2[idx].textContent).toContain('XZ')                      // эффективная плоскость в подписи шага
     expect(rows2[n].textContent).toContain(`${i18n.t('stepPanel.mirror').toLowerCase()} YZ → XZ`)
+  })
+})
+
+/** куб → extrude Z 5. Возвращает сырой индекс группы extrude и id результата. */
+async function extruded(): Promise<{ idx: number; ext: string }> {
+  await st().addShape('cube', { width: 10, height: 10, depth: 10 })
+  const cube = Object.keys(st().objects)[0]
+  st().selectObjects([cube], false)
+  await st().extrudeSelected('Z', 5)
+  const ext = st().selectedIds[0]
+  useDocumentStore.setState({ selectedIds: [] })
+  return { idx: st().operations.findIndex((o) => o.type === 'group'), ext }
+}
+
+describe('StepPanel (9.5.4, extrude)', () => {
+  it('extrudePatchWith: та же глубина с точностью 0.1 и ~0 → null', () => {
+    expect(extrudePatchWith(5, 5)).toBeNull()
+    expect(extrudePatchWith(5.04, 5)).toBeNull()
+    expect(extrudePatchWith(5, 0)).toBeNull()
+    expect(extrudePatchWith(5, -3)).toEqual({ kind: 'extrude', depth: -3 })
+  })
+
+  it('✎ у группы extrude → глубина (ось — только просмотр); 5 → 10 пишет edit_step; подписи', async () => {
+    const { idx, ext } = await extruded()
+    act(() => root.render(<Harness />))
+    const rows = Array.from(host.querySelectorAll<HTMLElement>('.tl-item'))
+    expect(rows[idx].querySelector('.tl-label')?.textContent).toContain(i18n.t('timeline.extrude', { axis: 'Z', depth: '5' }))
+    expect(rows[idx].querySelector('.tl-edit')?.getAttribute('title')).toBe(i18n.t('timeline.editExtrudeStep'))
+    act(() => { rows[idx].querySelector<HTMLButtonElement>('.tl-edit')!.click() })
+
+    const panel = () => host.querySelector<HTMLElement>('[data-testid=step-panel]')!
+    expect(panel().textContent).toContain(i18n.t('stepPanel.title', { step: idx + 1, name: i18n.t('stepPanel.extrude') }))
+    expect(panel().textContent).toContain(i18n.t('shapes.cube'))              // что выдавливается
+    expect(host.querySelector('[data-testid=step-axis]')?.textContent).toBe('Z')
+    expect(host.querySelector('[data-testid=step-axis]')?.tagName).not.toBe('INPUT')
+    const input = () => host.querySelector<HTMLInputElement>('[data-testid=step-extrude] input.props-input')!
+    expect(input().value).toBe('5.0')
+
+    const n = st().operations.length
+    typeInto(input(), '10')
+    await until(() => st().operations.length === n + 1 && !st().busy)
+    expect(st().operations[n].type).toBe('edit_step')
+    expect(useNotifications.getState().notifications.filter((x) => x.type !== 'info')).toHaveLength(0)
+    expect(input().value).toBe('10.0')
+    // плита выше: верх результата 5 + 10
+    const o = st().objects[ext]
+    let maxZ = -Infinity
+    for (let i = 2; i < o.vertices.length; i += 3) maxZ = Math.max(maxZ, o.vertices[i] + o.transform.z)
+    expect(maxZ).toBeCloseTo(15, 4)
+    const rows2 = Array.from(host.querySelectorAll<HTMLElement>('.tl-item'))
+    expect(rows2[idx].querySelector('.tl-label')?.textContent).toContain(i18n.t('timeline.extrude', { axis: 'Z', depth: '10' }))
+    expect(rows2[n].textContent).toContain(`${i18n.t('stepPanel.depth').toLowerCase()} 5 → 10`)
+  })
+
+  it('старый extrude без source: у группы ✎ нет', async () => {
+    const { idx } = await extruded()
+    useDocumentStore.setState({
+      operations: st().operations.map((o) => (o.type === 'group' ? (({ source: _s, ...rest }) => rest)(o) : o)),
+    })
+    act(() => root.render(<Harness />))
+    const rows = Array.from(host.querySelectorAll<HTMLElement>('.tl-item'))
+    expect(rows[idx].querySelector('.tl-edit')).toBeNull()
+    expect(rows[idx].querySelector('.tl-label')?.textContent).toBe(i18n.t('timeline.groupUnion'))
   })
 })
 

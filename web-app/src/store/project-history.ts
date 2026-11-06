@@ -2,7 +2,7 @@
 // project-history — эффективная история (Фаза 9.5.0)
 // ============================================================
 //
-// Правка прошлого шага N (move / mirror) записывается append-only
+// Правка прошлого шага N (move / mirror / extrude) записывается append-only
 // операцией `edit_step` в конец истории; `operations[N]` не трогается
 // (docs/PHASE_9_5_DESIGN.md, подход B′). Потребители истории (воспроизведение
 // сцены и дерева, калибровка 9.3, замки 9.9) получают ЭФФЕКТИВНУЮ историю —
@@ -32,20 +32,27 @@ export const MAX_CASCADE_STEPS = 50
 // Отпечаток и применимость патча
 // ---------------------------------------------------------------------------
 
-/** Вид патча, применимый к шагу данного типа; `null` — шаг не редактируется как шаг. */
-export function patchKindFor(type: TinkerCraftOperation['type']): StepPatchKind | null {
-  return type === 'move' || type === 'mirror' ? type : null
+/**
+ * Вид патча, применимый к шагу; `null` — шаг не редактируется как шаг.
+ * extrude — только группа с `source.kind === 'extrude'` (9.5.4; старые extrude без
+ * source — нет, EXTRUDE-LEGACY).
+ */
+export function patchKindFor(op: TinkerCraftOperation): StepPatchKind | null {
+  if (op.type === 'move' || op.type === 'mirror') return op.type
+  if (op.type === 'group' && op.source?.kind === 'extrude') return 'extrude'
+  return null
 }
 
 /**
  * Отпечаток шага (тип + id цели) — защита от рассинхрона индекса (R7).
- * move → ids; mirror → ids НОВЫХ объектов (через запятую).
- * `null` — шаг не редактируется как шаг.
+ * move → ids; mirror → ids НОВЫХ объектов (через запятую); extrude-группа → id плиты
+ * (уникален для каждого extrude). `null` — шаг не редактируется как шаг.
  */
 export function stepFingerprint(op: TinkerCraftOperation): EditStepOperation['stepFingerprint'] | null {
   switch (op.type) {
     case 'move': return { type: op.type, targetId: op.ids.join(',') }
     case 'mirror': return { type: op.type, targetId: op.ids.join(',') }
+    case 'group': return op.source?.kind === 'extrude' ? { type: op.type, targetId: op.source.slabId } : null
     default: return null
   }
 }
@@ -68,6 +75,10 @@ export function applyStepPatch(op: TinkerCraftOperation, patch: StepPatch): Tink
   if (patch.kind === 'mirror' && op.type === 'mirror') {
     return { ...op, plane: patch.plane }
   }
+  if (patch.kind === 'extrude' && op.type === 'group' && op.source?.kind === 'extrude') {
+    // Эффективная глубина; плита и меш группы — замены каскада (add_shape + group)
+    return { ...op, source: { ...op.source, depth: patch.depth } }
+  }
   return null
 }
 
@@ -77,6 +88,13 @@ export function applyStepPatch(op: TinkerCraftOperation, patch: StepPatch): Tink
  */
 export function applyReplacement(op: TinkerCraftOperation, r: StepReplacement): TinkerCraftOperation | null {
   if (op.type !== r.kind) return null
+  if (op.type === 'add_shape') {
+    return {
+      ...op,
+      ...(r.params ? { params: { ...r.params } } : {}),
+      ...(r.transform ? { transform: { ...r.transform } } : {}),
+    }
+  }
   if (op.type === 'align') {
     return r.deltas ? { ...op, deltas: { ...r.deltas } } : op
   }
@@ -140,10 +158,15 @@ function validateEdit(ops: TinkerCraftOperation[], at: number, e: EditStepOperat
   if (!fp || !e.stepFingerprint || fp.type !== e.stepFingerprint.type || fp.targetId !== e.stepFingerprint.targetId) {
     return 'fingerprint'
   }
-  if (!e.patch || patchKindFor(target.type) !== e.patch.kind) return 'kind'
+  if (!e.patch || patchKindFor(target) !== e.patch.kind) return 'kind'
   for (const r of e.replacements ?? []) {
-    // Замена — только ниже по течению от шага N и выше самой правки
-    if (!isIndex(r.stepIndex, e.stepIndex + 1, at) || ops[r.stepIndex].type !== r.kind) return 'replacement'
+    // Замена — ниже по течению от шага N и выше самой правки. Исключения (9.5.4):
+    // плита extrude (`add_shape`) стоит ДО своей группы; правка extrude пересчитывает
+    // и саму группу N (её меш — плита другой толщины).
+    const lo = r.kind === 'add_shape' ? 0
+      : r.kind === 'group' && e.patch.kind === 'extrude' ? e.stepIndex
+        : e.stepIndex + 1
+    if (!isIndex(r.stepIndex, lo, at) || ops[r.stepIndex].type !== r.kind) return 'replacement'
   }
   return null
 }
@@ -183,7 +206,7 @@ export function projectHistoryDetailed(
   }
   if (hypothetical) {
     const target = ops[hypothetical.stepIndex]
-    if (target && target.type !== 'edit_step' && patchKindFor(target.type) === hypothetical.patch.kind) {
+    if (target && target.type !== 'edit_step' && patchKindFor(target) === hypothetical.patch.kind) {
       patches.set(hypothetical.stepIndex, hypothetical.patch)
     } else {
       ignored.push({ index: -1, reason: target ? 'kind' : 'bad_index' })
@@ -327,6 +350,11 @@ export function computeCascade(effective: TinkerCraftOperation[], stepIndex: num
   if (!target || target.type === 'edit_step') return plan
   const S = plan.affectedIds
   for (const id of seedIds(target)) S.add(id)
+  // 9.5.4: правка extrude меняет плиту → сама группа N пересчитывается, её результат — в S
+  if (target.type === 'group' && target.source?.kind === 'extrude') {
+    plan.frozen.push({ stepIndex, kind: 'group' })
+    if (target.resultId) S.add(target.resultId)
+  }
 
   for (let j = stepIndex + 1; j < effective.length; j++) {
     const op = effective[j]

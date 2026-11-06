@@ -171,7 +171,9 @@
     "editStepOp": "Edit step {{step}}: {{detail}}",
     "edited": "edited (step {{step}})",
     "editMoveStep": "Edit this step's offset (CSG below is recomputed)",
-    "editMirrorStep": "Edit this mirror's plane (CSG below is recomputed)"
+    "editMirrorStep": "Edit this mirror's plane (CSG below is recomputed)",
+    "extrude": "Extrude {{axis}} by {{depth}}",
+    "editExtrudeStep": "Edit this extrusion's depth (CSG below is recomputed)"
   },
   "filters": {
     "add_shape": "Add",
@@ -374,6 +376,9 @@
     "recomputing": "Recomputing CSG…",
     "mirror": "Mirror",
     "plane": "Plane",
-    "hintMirror": "The plane is applied immediately; CSG further down the history is recomputed"
+    "hintMirror": "The plane is applied immediately; CSG further down the history is recomputed",
+    "extrude": "Extrude",
+    "depth": "Depth",
+    "axis": "Axis"
   }
 }

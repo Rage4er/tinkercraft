@@ -96,6 +96,30 @@ export function worldVerticesAABB(vertices: Float32Array, t: TransformNR): { min
   return { min: { x: minX, y: minY, z: minZ }, max: { x: maxX, y: maxY, z: maxZ } }
 }
 
+// ---- Extrude ----
+
+/**
+ * Плита extrude по мировой рамке базы (Фаза 9.5.4): поперёк оси — во всю рамку,
+ * вдоль оси — |depth| от грани max (depth > 0) или min (depth < 0). Общая для живого
+ * `extrudeSelected` и пересчёта плиты при правке шага (глубина, сдвиг базы раньше).
+ */
+export function extrudeSlab(
+  bbox: { min: Vec3; max: Vec3 },
+  axis: 'X' | 'Y' | 'Z',
+  depth: number,
+): { params: ShapeParams; transform: TransformNR } {
+  const ax = axis.toLowerCase() as 'x' | 'y' | 'z'
+  const ad = Math.abs(depth)
+  const size = { x: bbox.max.x - bbox.min.x, y: bbox.max.y - bbox.min.y, z: bbox.max.z - bbox.min.z }
+  const c = { x: (bbox.min.x + bbox.max.x) / 2, y: (bbox.min.y + bbox.max.y) / 2, z: (bbox.min.z + bbox.max.z) / 2 }
+  c[ax] = depth > 0 ? bbox.max[ax] + ad / 2 : bbox.min[ax] - ad / 2
+  const dims = { ...size, [ax]: ad }
+  return {
+    params: { width: dims.x, height: dims.y, depth: dims.z },
+    transform: { x: c.x, y: c.y, z: c.z, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 },
+  }
+}
+
 // ---- Align ----
 
 /** Координата рамки по оси для якоря выравнивания. */

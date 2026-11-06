@@ -96,7 +96,7 @@ describe('projectHistory', () => {
     expect(applyStepPatch(op, M(1))).toBeNull()
     expect(applyStepPatch({ type: 'fillet', id: 'a', radius: 2 }, M(1))).toBeNull()   // устаревший шаг не правится
     expect(stepFingerprint({ type: 'fillet', id: 'a', radius: 2 })).toBeNull()
-    expect(patchKindFor('group')).toBeNull()
+    expect(patchKindFor({ type: 'group', ids: [] })).toBeNull()                  // группа без source
     expect(stepFingerprint(op)).toEqual({ type: 'mirror', targetId: 'a2' })
   })
 
@@ -348,5 +348,53 @@ describe('правка шага mirror (9.5.3): проекция и каскад
     expect(plan.frozen).toEqual([{ stepIndex: 4, kind: 'group' }])
     expect(plan.affectedIds.has('c')).toBe(true)
     expect(plan.affectedIds.has('r')).toBe(false)
+  })
+})
+
+describe('правка шага extrude (9.5.4): вид, отпечаток, проекция, каскад', () => {
+  const T0: TransformNR = { ...ID }
+  // a (0) → slab (1) → group a+slab → e, source extrude (2) → b (3) → union e+b → c (4)
+  const eops = (): TinkerCraftOperation[] => [
+    add('a'),
+    { type: 'add_shape', id: 's', shapeType: 'cube', params: { width: 10, height: 10, depth: 5 }, color: '#fff', transform: { ...T0, z: 7.5 } },
+    { ...group('a', 's', 'e'), source: { kind: 'extrude', baseId: 'a', slabId: 's', axis: 'Z', depth: 5 } },
+    add('b', 20),
+    group('e', 'b', 'c'),
+  ]
+  it('вид и отпечаток: только группа с source; цель — id плиты', () => {
+    const ops = eops()
+    expect(patchKindFor(ops[2])).toBe('extrude')
+    expect(patchKindFor(ops[4])).toBeNull()
+    expect(stepFingerprint(ops[2])).toEqual({ type: 'group', targetId: 's' })
+    expect(stepFingerprint(ops[4])).toBeNull()
+  })
+  it('applyStepPatch: эффективная глубина в source; сырой шаг не мутирован; не та группа → null', () => {
+    const ops = eops()
+    const p = applyStepPatch(ops[2], { kind: 'extrude', depth: 10 }) as GroupOperation
+    expect(p.source!.depth).toBe(10)
+    expect((ops[2] as GroupOperation).source!.depth).toBe(5)
+    expect(applyStepPatch(ops[4], { kind: 'extrude', depth: 10 })).toBeNull()
+    expect(applyStepPatch(ops[2], M(1))).toBeNull()
+  })
+  it('проекция: замена плиты (до группы) и самой группы N принимаются; add_shape — params/transform', () => {
+    const ops = eops()
+    const slabR: StepReplacement = { stepIndex: 1, kind: 'add_shape', params: { width: 10, height: 10, depth: 10 }, transform: { ...T0, z: 10 } }
+    const groupR: StepReplacement = { stepIndex: 2, kind: 'group', resultVertices: [9, 9, 9], resultIndices: [0, 0, 0] }
+    const e = edit(ops, 2, { kind: 'extrude', depth: 10 }, [slabR, groupR])
+    const res = projectHistoryDetailed([...ops, e])
+    expect(res.ignored).toEqual([])
+    const slab = res.ops[1] as { params: { depth: number }; transform: TransformNR }
+    expect(slab.params.depth).toBe(10)
+    expect(slab.transform.z).toBe(10)
+    expect((res.ops[2] as GroupOperation).resultVertices).toEqual([9, 9, 9])
+    expect((res.ops[2] as GroupOperation).source!.depth).toBe(10)
+    // самозамена группы — только у правки extrude: move-правка с заменой шага N отклоняется
+    const bad = { ...edit(ops, 2, { kind: 'extrude', depth: 10 }), patch: M(1) } as EditStepOperation
+    expect(projectHistoryDetailed([...ops, bad]).ignored[0].reason).toBe('kind')
+  })
+  it('computeCascade: сама группа N + CSG ниже; S — результат', () => {
+    const plan = computeCascade(eops(), 2)
+    expect(plan.frozen).toEqual([{ stepIndex: 2, kind: 'group' }, { stepIndex: 4, kind: 'group' }])
+    expect([...plan.affectedIds]).toEqual(['c'])
   })
 })

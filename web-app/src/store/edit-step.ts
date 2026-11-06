@@ -1,5 +1,5 @@
 // ============================================================
-// edit-step — правка прошлого шага с каскадом (Фаза 9.5.2: move, 9.5.3: mirror)
+// edit-step — правка прошлого шага с каскадом (Фаза 9.5.2: move, 9.5.3: mirror, 9.5.4: extrude)
 // ============================================================
 //
 // Строит операцию `edit_step` (docs/PHASE_9_5_DESIGN.md §3): история «как если бы
@@ -7,7 +7,10 @@
 // затем по порядку пересчитываются шаги ниже по течению (computeCascade):
 //   - group             → computeCsgResult над операндами из состояния ДО этого шага
 //                         (в конвенции шага: pivot = TRS A либо legacy с запечённым RS);
-//                         новый pivot = новый TRS операнда A (R8);
+//                         новый pivot = новый TRS операнда A (R8). Группа extrude
+//                         (`source`) сначала заново строит плиту по мировой рамке базы
+//                         на этом шаге (extrudeSlab) — замена её `add_shape`: правка
+//                         глубины и сдвиг базы правкой раньше (плита следует за базой);
 //   - edit_child_params → computeEditedChild (путь 9.3, с калибровкой) поверх новых
 //                         params узла: правка пользователя = разница params с исходными;
 //   - align             → re-solve (решение В2): deltas заново из axis/anchor/anchorId
@@ -21,7 +24,7 @@
 
 import type {
   TinkerCraftOperation, EditStepOperation, StepPatch, StepReplacement, SceneObject,
-  GroupOperation, EditChildParamsOperation, AlignOperation, ShapeParams, Vec3,
+  GroupOperation, EditChildParamsOperation, AlignOperation, AddShapeOperation, ShapeParams, Vec3,
 } from '../csg/types'
 import {
   projectHistory, effectiveToRawIndex, effectiveOpAt, computeCascade, cascadeSteps, applyReplacement,
@@ -30,7 +33,7 @@ import {
 import { rebuildFromHistory, rebuildBuildTree, buildRebuildMeta } from './rebuild'
 import { computeCsgResult, bakeResultRS, groupReplacementFromResult } from './csg-result'
 import { computeEditedChild, type EditChildFailure } from './edit-child'
-import { solveAlignDeltas, nextId } from './helpers'
+import { solveAlignDeltas, extrudeSlab, worldVerticesAABB, nextId } from './helpers'
 import { getNode } from '../csg/history-tree'
 
 /**
@@ -38,15 +41,18 @@ import { getNode } from '../csg/history-tree'
  * не хранит готовым — копии и `mirrored[]` (composeMirroredList) воспроизводятся из
  * исходного списка оригинала, поэтому правка ЗАМЕНЯЕТ вклад шага, а не наслаивается).
  */
-const SUPPORTED_KINDS: ReadonlySet<StepPatch['kind']> = new Set(['move', 'mirror'])
+const SUPPORTED_KINDS: ReadonlySet<StepPatch['kind']> = new Set(['move', 'mirror', 'extrude'])
+/** Глубина extrude: не нулевая (плита нулевой толщины — не объём) и в разумных пределах. */
+const EXTRUDE_MIN = 0.01
+const EXTRUDE_MAX = 10000
 const PLANES: ReadonlySet<string> = new Set(['XY', 'XZ', 'YZ'])
 
 /**
  * Правится ли шаг как прошлый шаг (edit_step с каскадом) — ✎ в Timeline и панель «Шаг N».
- * Единственный источник: расширение SUPPORTED_KINDS (extrude — 9.5.4) включает UI само.
+ * Единственный источник: SUPPORTED_KINDS (move, mirror, extrude); extrude — только группа с source.
  */
 export function isStepEditable(op: TinkerCraftOperation): boolean {
-  const kind = patchKindFor(op.type)
+  const kind = patchKindFor(op)
   return kind !== null && SUPPORTED_KINDS.has(kind)
 }
 
@@ -55,7 +61,7 @@ const SAME_EPS = 1e-9
 
 export type EditStepFailure =
   | 'not_found'        // шаг вне [0, historyIndex) или не того типа
-  | 'unsupported'      // вид правки ещё не поддержан (extrude — 9.5.4)
+  | 'unsupported'      // вид правки не поддержан
   | 'invalid'          // недопустимое значение
   | 'unchanged'        // значение не изменилось
   | 'too_many'         // каскад длиннее MAX_CASCADE_STEPS (R4)
@@ -76,6 +82,7 @@ const finiteVec = (v: Vec3 | undefined): boolean =>
 function patchValid(p: StepPatch): boolean {
   if (p.kind === 'move') return !!p.delta && finiteVec(p.delta) && finiteVec(p.rotDelta) && finiteVec(p.scaleDelta)
   if (p.kind === 'mirror') return PLANES.has(p.plane)
+  if (p.kind === 'extrude') return Number.isFinite(p.depth) && Math.abs(p.depth) >= EXTRUDE_MIN && Math.abs(p.depth) <= EXTRUDE_MAX
   return false
 }
 
@@ -90,6 +97,7 @@ function samePatch(op: TinkerCraftOperation, p: StepPatch): boolean {
     return sameVec(op.delta, p.delta) && sameVec(op.rotDelta, p.rotDelta) && sameVec(op.scaleDelta, p.scaleDelta)
   }
   if (p.kind === 'mirror' && op.type === 'mirror') return op.plane === p.plane
+  if (p.kind === 'extrude' && op.type === 'group' && op.source) return Math.abs(op.source.depth - p.depth) < SAME_EPS
   return false
 }
 
@@ -103,6 +111,7 @@ function beforeOf(op: TinkerCraftOperation): StepPatch | undefined {
     }
   }
   if (op.type === 'mirror') return { kind: 'mirror', plane: op.plane }
+  if (op.type === 'group' && op.source?.kind === 'extrude') return { kind: 'extrude', depth: op.source.depth }
   return undefined
 }
 
@@ -114,6 +123,14 @@ function userPatch(stored: ShapeParams, before: ShapeParams | undefined): ShapeP
     if (typeof v === 'number' && b[k] !== v) out[k] = v
   }
   return out as ShapeParams
+}
+
+/** Плита не изменилась (шум float при пересчёте рамки не создаёт замену). */
+function sameSlab(op: AddShapeOperation, slab: { params: ShapeParams; transform: { x: number; y: number; z: number } }): boolean {
+  const p = op.params as Record<string, number | undefined>, q = slab.params as Record<string, number | undefined>
+  const close = (u: number | undefined, v: number | undefined) => Math.abs((u ?? 0) - (v ?? 0)) < 1e-6
+  return close(p.width, q.width) && close(p.height, q.height) && close(p.depth, q.depth) &&
+    close(op.transform.x, slab.transform.x) && close(op.transform.y, slab.transform.y) && close(op.transform.z, slab.transform.z)
 }
 
 /**
@@ -147,7 +164,7 @@ export async function computeStepEdit(args: {
   const { operations, historyIndex, stepIndex, patch } = args
   const raw = operations.slice(0, historyIndex)
   const target = raw[stepIndex]
-  if (!target || target.type === 'edit_step' || patchKindFor(target.type) !== patch.kind) return { ok: false, reason: 'not_found' }
+  if (!target || target.type === 'edit_step' || patchKindFor(target) !== patch.kind) return { ok: false, reason: 'not_found' }
   if (!SUPPORTED_KINDS.has(patch.kind)) return { ok: false, reason: 'unsupported' }
   if (!patchValid(patch)) return { ok: false, reason: 'invalid' }
   const current = effectiveOpAt(raw, stepIndex)
@@ -171,9 +188,11 @@ export async function computeStepEdit(args: {
     const fail = (reason: EditStepFailure, childReason?: EditChildFailure): EditStepResult =>
       ({ ok: false, reason, failedStep: rawJ, childReason })
     const H = cur.slice(0, j)
+    let replayed: Record<string, SceneObject>
     let before: Record<string, SceneObject>
     try {
-      before = withExactTransforms(await rebuildFromHistory(H), H)
+      replayed = await rebuildFromHistory(H)
+      before = withExactTransforms(replayed, H)
     } catch (e) {
       console.error('[edit-step] replay failed:', e)
       return fail('failed')
@@ -183,8 +202,23 @@ export async function computeStepEdit(args: {
     if (kind === 'group') {
       const g = cur[j] as GroupOperation
       if (!g.resultCenter) return fail('legacy')
-      const a = before[g.ids[0]], b = before[g.ids[1]]
+      const a = before[g.ids[0]]
+      let b = before[g.ids[1]]
       if (!a || !b) return fail('missing_operand')
+      if (g.source?.kind === 'extrude') {
+        // Плита — по мировой рамке базы на этом шаге (как живое extrudeSelected); рамка —
+        // по согласованной паре вершины + pivot воспроизведения (до точных pivot примитивов)
+        const base = replayed[g.source.baseId]
+        const k = cur.findIndex((o, idx) => idx < j && o.type === 'add_shape' && o.id === g.source!.slabId)
+        if (!base || k < 0) return fail('missing_operand')
+        const slab = extrudeSlab(worldVerticesAABB(base.vertices, base.transform), g.source.axis, g.source.depth)
+        if (!sameSlab(cur[k] as AddShapeOperation, slab)) {
+          const rs: StepReplacement = { stepIndex: toRaw[k], kind: 'add_shape', params: slab.params, transform: slab.transform }
+          replacements.push(rs)
+          cur[k] = applyReplacement(cur[k], rs) ?? cur[k]
+        }
+        b = { ...b, params: slab.params, transform: slab.transform }
+      }
       let res
       try {
         res = await computeCsgResult(a, b, g.treeOperation ?? 'union', g.resultId ?? nextId('csg'))

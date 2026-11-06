@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { centerMassAtOrigin, computeCenter, computeWorldAABB, worldVerticesAABB, solveAlignDeltas, composeMirroredList } from './helpers'
+import { centerMassAtOrigin, computeCenter, computeWorldAABB, worldVerticesAABB, solveAlignDeltas, composeMirroredList, extrudeSlab } from './helpers'
 import type { SceneObject, TransformNR } from '../csg/types'
 
 // Helper: build a triangular mesh for a prism with given sides, height, z_offset.
@@ -296,5 +296,19 @@ describe('composeMirroredList (8.5.12; правка шага mirror — 9.5.3)',
     const list: Array<'XY' | 'XZ' | 'YZ'> = ['YZ']
     composeMirroredList(list, 'XZ')
     expect(list).toEqual(['YZ'])
+  })
+})
+
+describe('extrudeSlab (9.5.4)', () => {
+  const box = { min: { x: 20, y: -5, z: -5 }, max: { x: 30, y: 5, z: 5 } }
+  it('depth > 0 — от грани max; поперёк оси — во всю рамку', () => {
+    const s = extrudeSlab(box, 'Z', 6)
+    expect(s.params).toEqual({ width: 10, height: 10, depth: 6 })
+    expect(s.transform).toMatchObject({ x: 25, y: 0, z: 8, rotX: 0, scaleX: 1 })
+  })
+  it('depth < 0 — от грани min; ось X', () => {
+    const s = extrudeSlab(box, 'X', -4)
+    expect(s.params).toEqual({ width: 4, height: 10, depth: 10 })
+    expect(s.transform).toMatchObject({ x: 18, y: 0, z: 0 })
   })
 })
