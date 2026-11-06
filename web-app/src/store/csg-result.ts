@@ -22,6 +22,7 @@ import {
   workerCsgBoolean, workerCsgBooleanWithSync, workerSyncObjects, workerSyncMesh,
 } from '../csg/worker-client'
 import type { MeshResult } from '../csg/worker-handlers'
+import { NON_MANIFOLD_ERROR } from '../csg/worker-handlers'
 import { computeAABB, centerMassAtOrigin } from './helpers'
 import { computeInverseRSMatrix, transposeRSMatrix, computeRSMatrix } from '../csg/worker-matrix'
 import { devLogCsg } from '../utils/debug'
@@ -77,6 +78,15 @@ export async function syncObjectsForOperation(
   return regularEntries.map(e => e.objId)
 }
 
+/**
+ * IMPORT-MESH-CSG: CSG отклонена воркером, потому что операнд — незамкнутый
+ * (non-manifold) меш (обычно импортированный STL). Маркер — `NON_MANIFOLD_ERROR`.
+ */
+export function isNonManifoldError(e: unknown): boolean {
+  const msg = e instanceof Error ? e.message : String(e)
+  return msg.includes(NON_MANIFOLD_ERROR)
+}
+
 /** Результат CSG в конвенции единого источника (вершины в локальной системе A). */
 export interface CsgResult {
   vertices: Float32Array
@@ -120,8 +130,12 @@ export async function computeCsgResult(
   // (mirrored) тоже НЕ пересобирается из params — syncObjectsForOperation
   // уже синхронизировал его зеркальные vertices через workerSyncMesh,
   // а handleCsgBooleanSync при shapeA=undefined использует этот кэш.
-  const isPrimA = objA.shapeType !== 'csg' && !objA.mirrored
-  const isPrimB = objB.shapeType !== 'csg' && !objB.mirrored
+  // IMPORT-MESH-CSG: импорт — тоже меш из кэша (syncObjectsForOperation → workerSyncMesh),
+  // а не примитив: раньше shapeA = { shapeType: 'import_mesh', params: {} } заставлял воркер
+  // строить ЗАГЛУШКУ вместо меша STL (пока импорт отсекался по типу, это было не видно).
+  const isPrim = (o: SceneObject) => o.shapeType !== 'csg' && o.shapeType !== 'import_mesh' && !o.mirrored
+  const isPrimA = isPrim(objA)
+  const isPrimB = isPrim(objB)
   let mesh: MeshResult
   // FIX (CSG-BOOLEAN-CSG): When both operands are CSG results, workerCsgBooleanWithSync
   // cannot rebuild them (no shapeType/params). Use workerCsgBoolean instead —

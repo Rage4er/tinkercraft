@@ -387,9 +387,21 @@ export function rebuildBuildTree(
       transforms[op.id] = { ...op.transform }
 
     } else if (op.type === 'import_mesh') {
-      transforms[op.id] = { ...op.transform }
-      // Baked node created in registerBakedNodes() after mesh data is available
-      // (called at end of rebuildBuildTree when `objects` parameter is provided)
+      // IMPORT-MESH-CSG: импорт может стать операндом CSG дальше по истории — baked-узел
+      // нужен ДО шага group (иначе после загрузки CSG с импортом становился запечённым
+      // корнем, а его дети-примитивы — нередактируемыми). Узел — как при живом импорте:
+      // вершины в origin (COM), localTransform = pivot = transform шага + COM. pivot же —
+      // база для move/mirror ниже (живые move двигают pivot). registerBakedNodes в конце
+      // перезапишет узлы импортов, оставшихся в сцене, — тем же мешем.
+      const existing = getNode(op.id)
+      const { pivot, vertices, indices } = importBakedData(op.vertices, op.indices, op.transform, existing?.type !== 'baked')
+      transforms[op.id] = pivot
+      if (existing?.type === 'baked') {
+        // перемотка: вернуть позицию шага (move ниже воспроизведут остальное)
+        setNode(op.id, { ...existing, localTransform: { ...pivot } })
+      } else if (vertices && indices) {
+        createBakedNode(op.id, vertices, indices, null, pivot)
+      }
 
     } else if (op.type === 'move') {
       const d: Vec3 = op.delta
@@ -574,6 +586,42 @@ export function rebuildBuildTree(
   if (objects) {
     registerBakedNodes(objects, ops)
   }
+}
+
+/** COM вершин шага импорта (по массиву вершин операции — меш шага неизменен). */
+const importComCache = new WeakMap<object, { cx: number; cy: number; cz: number }>()
+
+/**
+ * Данные baked-узла импорта по шагу истории: pivot = transform + COM и — с `withMesh` —
+ * вершины в origin. Как живой importStl/addRawMesh (`centerMassAtOrigin`).
+ * Без `withMesh` (перемотка, узел уже есть) вершины не копируются: COM из кэша.
+ */
+function importBakedData(
+  rawVertices: ArrayLike<number> | undefined,
+  rawIndices: ArrayLike<number> | undefined,
+  transform: TransformNR,
+  withMesh: boolean,
+): { pivot: TransformNR; vertices: Float32Array | null; indices: Uint32Array | null } {
+  if (!rawVertices || !rawIndices || rawVertices.length < 9 || rawIndices.length < 3) {
+    return { pivot: { ...transform }, vertices: null, indices: null }
+  }
+  let com = importComCache.get(rawVertices as object)
+  let vertices: Float32Array | null = null
+  let indices: Uint32Array | null = null
+  if (withMesh || !com) {
+    vertices = new Float32Array(rawVertices)
+    indices = new Uint32Array(rawIndices)
+    if (com) {
+      for (let i = 0; i < vertices.length; i += 3) {
+        vertices[i] -= com.cx; vertices[i + 1] -= com.cy; vertices[i + 2] -= com.cz
+      }
+    } else {
+      com = centerMassAtOrigin(vertices, indices)
+      importComCache.set(rawVertices as object, com)
+    }
+  }
+  const pivot: TransformNR = { ...transform, x: transform.x + com!.cx, y: transform.y + com!.cy, z: transform.z + com!.cz }
+  return withMesh ? { pivot, vertices, indices } : { pivot, vertices: null, indices: null }
 }
 
 /**

@@ -18,8 +18,7 @@
     "subtract": "Subtract",
     "intersect": "Intersect",
     "result": "CSG result",
-    "operations": "CSG operations",
-    "nonManifold": "CSG operations are impossible on this object (non-manifold geometry)"
+    "operations": "CSG operations"
   },
   "mirror": {
     "title": "Mirror",
@@ -270,6 +269,7 @@
     "pasteFailed": "Paste failed",
     "deleteFailed": "Failed to delete objects",
     "csgFailed": "CSG operation failed",
+    "csgNonManifold": "Mesh is not closed (non-manifold), CSG is not possible. Check the STL.",
     "alignFailed": "Alignment failed",
     "resizeFailed": "Resize failed",
     "resizeCsgFailed": "Failed to resize CSG object",

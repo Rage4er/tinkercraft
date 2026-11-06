@@ -366,8 +366,9 @@ export default function App() {
   const canUndo = historyIndex > 0;
   const canRedo = historyIndex < operations.length;
   // CSG недоступен, если среди выбранных объектов есть non-manifold (import_mesh)
-  const hasNonManifoldSelected = selectedIds.some(id => objects[id]?.shapeType === 'import_mesh');
-  const canCsg = selectedIds.length === 2 && !busy && !hasNonManifoldSelected;
+  // IMPORT-MESH-CSG: импорт (STL, 3D-текст) не блокируется по типу — замкнутость проверяет
+  // воркер; незамкнутый меш → уведомление errors.csgNonManifold.
+  const canCsg = selectedIds.length === 2 && !busy;
   const canMirror = selectedIds.length > 0 && !busy;
   const canAlign = selectedIds.length >= 2 && !busy;
   const canResize =
@@ -490,7 +491,6 @@ export default function App() {
         canMirror={canMirror}
         canAlign={canAlign}
         canCsg={canCsg}
-        nonManifoldSelected={hasNonManifoldSelected}
         theme={theme}
         onOpen={openProject}
         onSave={saveProject}
@@ -628,7 +628,6 @@ export default function App() {
             canResize={canResize}
             canCsg={canCsg}
             canAlign={canAlign}
-            nonManifoldSelected={hasNonManifoldSelected}
             objectList={objectList}
             operationsLength={operations.length}
             fileName={fileName}

@@ -17,7 +17,8 @@
     "e2e:edit-step-move": "node e2e/edit-step-move.mjs",
     "e2e:edit-step-mirror": "node e2e/edit-step-mirror.mjs",
     "e2e:edit-step-extrude": "node e2e/edit-step-extrude.mjs",
-    "e2e:independent-copy": "node e2e/independent-copy.mjs"
+    "e2e:independent-copy": "node e2e/independent-copy.mjs",
+    "e2e:import-mesh-csg": "node e2e/import-mesh-csg.mjs"
   },
   "dependencies": {
     "i18next": "^26.3.6",
