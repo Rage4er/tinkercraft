@@ -121,6 +121,25 @@ export interface GroupOperation {
   // ── BuildTree: tree structure for this CSG operation ──
   /** Operation type for tree (union/subtract/intersect) */
   treeOperation?: 'union' | 'subtract' | 'intersect'
+  /**
+   * Фаза 9.5.4: группа — результат extrude (пара `add_shape` плиты + эта `group`).
+   * Пишет `extrudeSelected`; по нему шаг правится как extrude (глубина). `depth` —
+   * исходная глубина (сырая операция не меняется; эффективная — через edit_step).
+   * Старые extrude без `source` как extrude не редактируются (EXTRUDE-LEGACY).
+   */
+  source?: ExtrudeSource
+}
+
+/** Фаза 9.5.4: откуда взялась группа extrude. */
+export interface ExtrudeSource {
+  kind: 'extrude'
+  /** Объект, который выдавили (операнд A группы) */
+  baseId: string
+  /** Плита-куб (`add_shape` перед группой, операнд B) */
+  slabId: string
+  axis: 'X' | 'Y' | 'Z'
+  /** Глубина со знаком: > 0 — от грани max по оси, < 0 — от грани min */
+  depth: number
 }
 
 /**
@@ -146,11 +165,12 @@ export interface EditChildParamsOperation {
 
 /**
  * Фаза 9.5: новые значения прошлого шага N — по типу шага.
- * Extrude (`kind: 'extrude'`) добавится в 9.5.4 вместе с `GroupOperation.source`.
+ * extrude — только для `group` с `source.kind === 'extrude'` (9.5.4).
  */
 export type StepPatch =
   | { kind: 'move'; delta: Vec3; rotDelta?: Vec3; scaleDelta?: Vec3 }
   | { kind: 'mirror'; plane: MirrorPlane }
+  | { kind: 'extrude'; depth: number }
 
 /** Тип шага, к которому применим патч данного вида. */
 export type StepPatchKind = StepPatch['kind']
@@ -163,8 +183,12 @@ export type StepPatchKind = StepPatch['kind']
 export interface StepReplacement {
   /** Индекс заменяемого шага в сырой истории (меньше индекса самой edit_step) */
   stepIndex: number
-  /** Ожидаемый тип шага: несовпадение → замена пропускается */
-  kind: 'group' | 'edit_child_params' | 'align'
+  /**
+   * Ожидаемый тип шага: несовпадение → замена пропускается.
+   * `add_shape` — плита extrude, пересчитанная по рамке базы (9.5.4); может стоять
+   * ДО правленого шага (плита — часть extrude-пары), остальные — только ниже по течению.
+   */
+  kind: 'group' | 'edit_child_params' | 'align' | 'add_shape'
   resultVertices?: Float32Array | number[]
   resultIndices?: Uint32Array | number[]
   resultNormals?: Float32Array | number[]
@@ -175,6 +199,9 @@ export interface StepReplacement {
   originalBboxSize?: Vec3
   /** align: пересчитанные смещения (политика re-solve, решение В2) */
   deltas?: Record<string, number>
+  /** add_shape (плита extrude, 9.5.4): новые размеры и положение */
+  params?: ShapeParams
+  transform?: TransformNR
 }
 
 /**

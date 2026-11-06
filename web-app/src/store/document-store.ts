@@ -33,7 +33,7 @@ import { migrateLegacyFillet, type LegacyFilletMigration } from '../io/legacy-fi
 import i18n from '../i18n'
 
 export { computeAABB, extractAndCenterInPlace, extractAndCenterGetAABB, computeWorldAABB, extractCenteredAt } from './helpers'
-import { computeAABB, extractAndCenterInPlace, extractAndCenterGetAABB, centerMassAtOrigin, solveAlignDeltas, makeObject, nextId, colorForIndex } from './helpers'
+import { computeAABB, extractAndCenterInPlace, extractAndCenterGetAABB, centerMassAtOrigin, solveAlignDeltas, extrudeSlab, worldVerticesAABB, makeObject, nextId, colorForIndex } from './helpers'
 import type { ClipEntry } from './helpers'
 import type { DocumentStore } from './types'
 import { rebuildFromHistory, rebuildBuildTree } from './rebuild'
@@ -1126,36 +1126,19 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const obj = objects[id]
     if (!obj) return
 
-    const bbox = obj.aabb ?? computeAABB(obj.vertices)
-    const size = { x: bbox.max.x - bbox.min.x, y: bbox.max.y - bbox.min.y, z: bbox.max.z - bbox.min.z }
-
-    let slabW: number, slabH: number, slabD: number
-    let slabX: number, slabY: number, slabZ: number
-    const ad = Math.abs(depth)
-    if (axis === 'X') {
-      slabW = ad; slabH = size.y; slabD = size.z
-      slabX = depth > 0 ? bbox.max.x + ad / 2 : bbox.min.x - ad / 2
-      slabY = (bbox.min.y + bbox.max.y) / 2
-      slabZ = (bbox.min.z + bbox.max.z) / 2
-    } else if (axis === 'Y') {
-      slabW = size.x; slabH = ad; slabD = size.z
-      slabX = (bbox.min.x + bbox.max.x) / 2
-      slabY = depth > 0 ? bbox.max.y + ad / 2 : bbox.min.y - ad / 2
-      slabZ = (bbox.min.z + bbox.max.z) / 2
-    } else {
-      slabW = size.x; slabH = size.y; slabD = ad
-      slabX = (bbox.min.x + bbox.max.x) / 2
-      slabY = (bbox.min.y + bbox.max.y) / 2
-      slabZ = depth > 0 ? bbox.max.z + ad / 2 : bbox.min.z - ad / 2
-    }
+    // FIX (EXTRUDE-AABB, 9.5.4): рамка базы — мировая, по вершинам с полным TRS.
+    // Кэш obj.aabb у примитивов локальный (сдвигается только moveObject) — объект,
+    // появившийся не в начале координат (spawn x = 25, …), получал плиту у начала.
+    // Плита — общая функция с пересчётом при правке шага extrude (extrudeSlab).
+    const slab = extrudeSlab(worldVerticesAABB(obj.vertices, obj.transform), axis, depth)
 
     const slabId = nextId('slab')
     const resultId = nextId('ext')
     set({ busy: true })
     try {
       const t0 = performance.now()
-      const slabT: TransformNR = { x: slabX, y: slabY, z: slabZ, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
-      const slabP: ShapeParams = { width: slabW, height: slabH, depth: slabD }
+      const slabT: TransformNR = slab.transform
+      const slabP: ShapeParams = slab.params
       // Stage 6.5 (origin-cache convention): csgBooleanWithSync rebuilds the slab
       // from shapeB at origin and applies slabT ONE TIME. For the main object:
       // primitives are rebuilt from shapeA; CSG/import meshes are synced as-is
@@ -1185,7 +1168,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const aabb = computeAABB(resultMesh.vertices)
       const newObj: SceneObject = { id: resultId, shapeType: 'csg', params: {}, color: obj.color, transform: { x: obj.transform.x, y: obj.transform.y, z: obj.transform.z, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }, visible: true, locked: false, vertices: resultMesh.vertices, indices: resultMesh.indices, normals: resultMesh.normals, aabb }
       const addOp: AddShapeOperation = { type: 'add_shape', id: slabId, shapeType: 'cube', params: slabP, color: obj.color, transform: slabT }
-      const grpOp: GroupOperation = { type: 'group', ids: [id, slabId], resultId, resultVertices: resultMesh.vertices, resultIndices: resultMesh.indices, resultNormals: resultMesh.normals ?? undefined, resultCenter: { x: obj.transform.x, y: obj.transform.y, z: obj.transform.z } }
+      // Фаза 9.5.4: source — шаг правится как extrude (глубина) с каскадом
+      const grpOp: GroupOperation = { type: 'group', ids: [id, slabId], resultId, resultVertices: resultMesh.vertices, resultIndices: resultMesh.indices, resultNormals: resultMesh.normals ?? undefined, resultCenter: { x: obj.transform.x, y: obj.transform.y, z: obj.transform.z }, source: { kind: 'extrude', baseId: id, slabId, axis, depth } }
       const newObjects = { ...objects }; delete newObjects[id]; newObjects[resultId] = newObj
       const newOps = [...operations.slice(0, historyIndex), addOp, grpOp]
       set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, selectedIds: [resultId], modified: true, busy: false, lastCsgMs: ms })

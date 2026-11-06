@@ -215,6 +215,32 @@ describe('3dtc-io round-trip', () => {
     expect(e.replacements[0].resultCenter).toEqual({ x: 0, y: -5, z: 0 })
   })
 
+  it('extrude (9.5.4): GroupOperation.source и edit_step с заменой плиты переживают round-trip', async () => {
+    const T: TransformNR = { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
+    const ops: TinkerCraftOperation[] = [
+      { type: 'add_shape', id: 'a', shapeType: 'cube', params: { width: 10, height: 10, depth: 10 }, color: '#fff', transform: T },
+      { type: 'add_shape', id: 's', shapeType: 'cube', params: { width: 10, height: 10, depth: 5 }, color: '#fff', transform: { ...T, z: 7.5 } },
+      { type: 'group', ids: ['a', 's'], resultId: 'e', resultVertices: [0, 0, 0, 1, 0, 0, 0, 1, 0], resultIndices: [0, 1, 2], resultCenter: { x: 0, y: 0, z: 0 },
+        source: { kind: 'extrude', baseId: 'a', slabId: 's', axis: 'Z', depth: 5 } },
+      {
+        type: 'edit_step', stepIndex: 2, stepFingerprint: { type: 'group', targetId: 's' },
+        patch: { kind: 'extrude', depth: 10 }, before: { kind: 'extrude', depth: 5 },
+        replacements: [
+          { stepIndex: 1, kind: 'add_shape', params: { width: 10, height: 10, depth: 10 }, transform: { ...T, z: 10 } },
+          { stepIndex: 2, kind: 'group', resultVertices: new Float32Array([0, 0, 2, 1, 0, 0, 0, 1, 0]), resultIndices: new Uint32Array([0, 1, 2]) },
+        ],
+      },
+    ]
+    const parsed = await parse3dtc(await serialize3dtc({ objects: {}, operations: ops, operationsTrimmed: false }))
+    const g = parsed.operations[2]
+    expect(g.type === 'group' && g.source).toEqual({ kind: 'extrude', baseId: 'a', slabId: 's', axis: 'Z', depth: 5 })
+    const e = parsed.operations[3]
+    if (e.type !== 'edit_step') throw new Error('edit_step expected')
+    expect(e.patch).toEqual({ kind: 'extrude', depth: 10 })
+    expect(e.replacements[0]).toEqual({ stepIndex: 1, kind: 'add_shape', params: { width: 10, height: 10, depth: 10 }, transform: { ...T, z: 10 } })
+    expect(e.replacements[1].resultVertices).toEqual([0, 0, 2, 1, 0, 0, 0, 1, 0])
+  })
+
   it('rejects unsupported version', async () => {
     // Создаём ZIP с version "1.0.0" (старый .doodle)
     const zip = new JSZip()

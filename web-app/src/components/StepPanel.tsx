@@ -1,10 +1,11 @@
 // ============================================================
-// StepPanel — правка прошлого шага истории (Фаза 9.5.2: move, 9.5.3: mirror)
+// StepPanel — правка прошлого шага истории (Фаза 9.5.2: move, 9.5.3: mirror, 9.5.4: extrude)
 // ============================================================
 // Открывается кнопкой ✎ у шага в Timeline (ui-store.selectedStep — сырой индекс шага).
 // Показывается вместо PropertiesPanel/ChildPropertiesPanel (панель, не модалка —
 // PHASE_9_5_DESIGN §6). Move — значение коммитится по Enter / уходу из поля (NumInput);
-// mirror — плоскость коммитится сразу по выбору. Затем
+// mirror — плоскость коммитится сразу по выбору; extrude — глубина (Enter/blur, ось — только
+// просмотр). Затем
 // document-store.editStepParams записывает edit_step с каскадом пересчёта CSG и
 // align ниже по истории (store/edit-step.ts). Результат виден в 3D сразу; при
 // отказе store показывает уведомление с номером шага.
@@ -15,6 +16,7 @@ import NumInput from './NumInput'
 import { useDocumentStore } from '../store/document-store'
 import { useUiStore } from '../store/ui-store'
 import { effectiveOpAt, effectivePatches } from '../store/project-history'
+import { isStepEditable } from '../store/edit-step'
 import { buildRebuildMeta } from '../store/rebuild'
 import { displayName } from './ComponentTree'
 import type { MoveOperation, MirrorPlane, StepPatch, Vec3 } from '../csg/types'
@@ -33,11 +35,16 @@ const decimalsOf = (step: number) => (step < 1 ? Math.ceil(-Math.log10(step)) : 
 const nonZero = (v: Vec3 | undefined): boolean =>
   !!v && (Math.abs(v.x) > 1e-9 || Math.abs(v.y) > 1e-9 || Math.abs(v.z) > 1e-9)
 
+/** Число для подписи: до 0.001, без «-0». */
+export function fmtNum(n: number): string {
+  const r = Math.round(n * 1000) / 1000
+  return String(r === 0 ? 0 : r)
+}
+
 /** «(5, 0, −2.5)» — компактная запись вектора для подписи. */
 export function fmtVec(v: Vec3 | undefined): string {
-  const f = (n: number) => String(Math.round(n * 1000) / 1000)
   const u = v ?? { x: 0, y: 0, z: 0 }
-  return `(${f(u.x)}, ${f(u.y)}, ${f(u.z)})`
+  return `(${fmtNum(u.x)}, ${fmtNum(u.y)}, ${fmtNum(u.z)})`
 }
 
 /**
@@ -73,16 +80,19 @@ export default function StepPanel() {
     const prefix = operations.slice(0, historyIndex)
     const raw = prefix[stepIndex]
     const eff = effectiveOpAt(prefix, stepIndex)
-    if (!raw || (raw.type !== 'move' && raw.type !== 'mirror')) return null
-    if (!eff || (eff.type !== 'move' && eff.type !== 'mirror') || eff.type !== raw.type) return null
+    if (!raw || !isStepEditable(raw) || (raw.type !== 'move' && raw.type !== 'mirror' && raw.type !== 'group')) return null
+    if (!eff || eff.type !== raw.type || (eff.type !== 'move' && eff.type !== 'mirror' && eff.type !== 'group')) return null
     // имена объектов на момент шага — по эффективной истории до него
     // (mirror — объекты, которые зеркалятся: копии появляются этим шагом)
     const meta = buildRebuildMeta(prefix.slice(0, stepIndex)).meta
     const edit = effectivePatches(prefix).get(stepIndex)
-    const ids = raw.type === 'mirror' ? raw.originalIds : raw.ids
+    // mirror — что зеркалится; extrude — что выдавливается (база)
+    const ids = raw.type === 'mirror' ? raw.originalIds : raw.type === 'group' ? [raw.source!.baseId] : raw.ids
     return {
       names: ids.map((id) => (meta[id] ? displayName({ id, shapeType: meta[id].shapeType, name: meta[id].name }, t) : id)).join(', '),
-      original: raw.type === 'move' ? `Δ ${fmtVec(raw.delta)}` : raw.plane,
+      original: raw.type === 'move' ? `Δ ${fmtVec(raw.delta)}`
+        : raw.type === 'mirror' ? raw.plane
+          : `${fmtNum(raw.source!.depth)} (${raw.source!.axis})`,
       eff,
       editedBy: edit ? edit.editIndex + 1 : null,
     }
@@ -100,7 +110,7 @@ export default function StepPanel() {
         </button>
       </div>
       <div className="props-section-title">
-        {t('stepPanel.title', { step: stepIndex + 1, name: t(eff.type === 'mirror' ? 'stepPanel.mirror' : 'stepPanel.move') })}
+        {t('stepPanel.title', { step: stepIndex + 1, name: t(eff.type === 'mirror' ? 'stepPanel.mirror' : eff.type === 'group' ? 'stepPanel.extrude' : 'stepPanel.move') })}
       </div>
       <div className="props-row">
         <span className="props-label">{t('stepPanel.target')}</span>
@@ -117,7 +127,9 @@ export default function StepPanel() {
       )}
       {eff.type === 'move'
         ? <MoveForm stepIndex={stepIndex} op={eff} busy={busy} onPatch={edit} />
-        : <MirrorForm plane={eff.plane} busy={busy} onPatch={edit} />}
+        : eff.type === 'mirror'
+          ? <MirrorForm plane={eff.plane} busy={busy} onPatch={edit} />
+          : eff.source && <ExtrudeForm stepIndex={stepIndex} axis={eff.source.axis} depth={eff.source.depth} busy={busy} onPatch={edit} />}
       <div className="text-sm text-muted-xs" data-testid="step-status" style={{ padding: '4px 12px' }}>
         {busy ? t('stepPanel.recomputing') : t(eff.type === 'mirror' ? 'stepPanel.hintMirror' : 'stepPanel.hint')}
       </div>
@@ -185,6 +197,39 @@ function MirrorForm({ plane, busy, onPatch }: {
           </button>
         ))}
       </div>
+    </div>
+  )
+}
+
+/**
+ * Новая глубина extrude из поля: `null` — не изменилась с точностью показа (0.1) или ~0
+ * (плита нулевой толщины). Знак задаёт сторону: минус выдавливает от грани min.
+ */
+export function extrudePatchWith(depth: number, value: number): StepPatch | null {
+  if (Number(depth.toFixed(1)) === value || Math.abs(value) < 0.01) return null
+  return { kind: 'extrude', depth: value }
+}
+
+/** Глубина шага extrude (Enter/blur); ось — только просмотр (смена оси — новый extrude). */
+function ExtrudeForm({ stepIndex, axis, depth, busy, onPatch }: {
+  stepIndex: number; axis: 'X' | 'Y' | 'Z'; depth: number; busy: boolean; onPatch: (p: StepPatch | null) => void
+}) {
+  const { t } = useTranslation()
+  return (
+    <div className="csg-group" data-testid="step-extrude">
+      <div className="csg-group-title">{t('stepPanel.extrude')}</div>
+      <div className="props-row">
+        <span className="props-label">{t('stepPanel.axis')}</span>
+        <span className="props-value" data-testid="step-axis">{axis}</span>
+      </div>
+      <NumInput
+        key={`${stepIndex}:depth`}
+        label={t('stepPanel.depth')}
+        step={0.1}
+        value={depth}
+        disabled={busy}
+        onChange={(v) => onPatch(extrudePatchWith(depth, v))}
+      />
     </div>
   )
 }
