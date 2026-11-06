@@ -6,6 +6,7 @@ import type {
   SceneObject, ShapeType, ShapeParams, TransformNR, Vec3, MirrorPlane,
 } from '../csg/types'
 import { OBJECT_COLORS } from '../constants'
+import { computeRSMatrix } from '../csg/worker-matrix'
 
 // ---- Mirror list composition (FIX 8.5.12) ----
 
@@ -44,10 +45,8 @@ export function computeAABB(vertices: Float32Array): { min: Vec3; max: Vec3 } {
  * Вычисляет мировую ограничивающую рамку (AABB) объекта.
  *
  * Для примитивов — из params + transform.position (надёжно, не зависит от вершин).
- * Для CSG/import — из кэшированного aabb (вершины уже содержат translate).
- *
- * Важно: obj.aabb кэшируется при создании, но НЕ обновляется при moveObject.
- * Поэтому для примитивов считаем bbox заново из params.
+ * Для CSG/import/прочих — по вершинам с полным TRS (кэш obj.aabb не используется:
+ * он в локальной системе объекта).
  */
 export function computeWorldAABB(obj: SceneObject): { min: Vec3; max: Vec3 } {
   // 1. Примитивы — считаем из params + transform (надёжно)
@@ -70,8 +69,64 @@ export function computeWorldAABB(obj: SceneObject): { min: Vec3; max: Vec3 } {
       max: { x: p.x + r, y: p.y + r, z: p.z + r },
     }
   }
-  // 3. CSG / import — используем кэшированный aabb (вершины уже содержат translate)
-  return obj.aabb ?? computeAABB(obj.vertices)
+  // 3. CSG / import — по вершинам в мире (render = data: world = pos + R·S·v).
+  // FIX (ALIGN-CSG-AABB, 9.5.2): раньше брался кэш obj.aabb — он ЛОКАЛЬНЫЙ (вершины
+  // CSG лежат в системе операнда A, pivot = TRS A), поэтому выравнивание CSG было
+  // смещено на позицию A; после пересборки из истории кэш другой (живой moveObject
+  // сдвигает его на дельту) — re-solve align (В2) не совпадал бы с живым действием.
+  return worldVerticesAABB(obj.vertices, obj.transform)
+}
+
+/** AABB вершин объекта в мировых координатах (pos + R·S·v). */
+export function worldVerticesAABB(vertices: Float32Array, t: TransformNR): { min: Vec3; max: Vec3 } {
+  if (vertices.length === 0) return { min: { x: t.x, y: t.y, z: t.z }, max: { x: t.x, y: t.y, z: t.z } }
+  const [m00, m01, m02, m10, m11, m12, m20, m21, m22] = computeRSMatrix(
+    { rotX: t.rotX, rotY: t.rotY, rotZ: t.rotZ }, { scaleX: t.scaleX, scaleY: t.scaleY, scaleZ: t.scaleZ },
+  )
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity, minZ = Infinity, maxZ = -Infinity
+  for (let i = 0; i < vertices.length; i += 3) {
+    const x = vertices[i], y = vertices[i + 1], z = vertices[i + 2]
+    const wx = m00 * x + m01 * y + m02 * z + t.x
+    const wy = m10 * x + m11 * y + m12 * z + t.y
+    const wz = m20 * x + m21 * y + m22 * z + t.z
+    if (wx < minX) minX = wx; if (wx > maxX) maxX = wx
+    if (wy < minY) minY = wy; if (wy > maxY) maxY = wy
+    if (wz < minZ) minZ = wz; if (wz > maxZ) maxZ = wz
+  }
+  return { min: { x: minX, y: minY, z: minZ }, max: { x: maxX, y: maxY, z: maxZ } }
+}
+
+// ---- Align ----
+
+/** Координата рамки по оси для якоря выравнивания. */
+function alignCoord(b: { min: Vec3; max: Vec3 }, ax: 'x' | 'y' | 'z', anchor: 'min' | 'center' | 'max'): number {
+  return anchor === 'min' ? b.min[ax] : anchor === 'max' ? b.max[ax] : (b.min[ax] + b.max[ax]) / 2
+}
+
+/**
+ * Смещения выравнивания: каждая цель из `targetIds` двигается по оси так, чтобы её
+ * рамка (min / center / max) совпала с рамкой якоря `anchorId`. Общая для живого
+ * `alignSelected` и re-solve каскада правки шага (9.5.2, решение В2) — одна семантика.
+ * Объекты, которых нет в `objects`, пропускаются.
+ */
+export function solveAlignDeltas(
+  objects: Record<string, SceneObject>,
+  targetIds: string[],
+  axis: 'X' | 'Y' | 'Z',
+  anchor: 'min' | 'center' | 'max',
+  anchorId: string,
+): Record<string, number> {
+  const ax = axis.toLowerCase() as 'x' | 'y' | 'z'
+  const anchorObj = objects[anchorId]
+  if (!anchorObj) return {}
+  const target = alignCoord(computeWorldAABB(anchorObj), ax, anchor)
+  const deltas: Record<string, number> = {}
+  for (const id of targetIds) {
+    const obj = objects[id]
+    if (!obj || id === anchorId) continue
+    deltas[id] = target - alignCoord(computeWorldAABB(obj), ax, anchor)
+  }
+  return deltas
 }
 
 /** Returns bbox center for a vertex buffer (no mutation). */

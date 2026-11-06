@@ -42,7 +42,8 @@ interface Props {
 // FIX (LOW-18-30): Named constant instead of magic number
 const INPUT_SELECT_DELAY_MS = 30
 
-function displayName(obj: SceneObject, t: (key: string, opts?: Record<string, unknown>) => string): string {
+/** Имя объекта как в дереве (своё имя или «Фигура N»); также панель шага 9.5.2. */
+export function displayName(obj: Pick<SceneObject, 'id' | 'shapeType' | 'name'>, t: (key: string, opts?: Record<string, unknown>) => string): string {
   if (obj.name) return obj.name
   const num = obj.id.split('_')[1] ?? ''
   if (obj.shapeType === 'csg') return t('csg.result') + (num ? ` ${num}` : '')

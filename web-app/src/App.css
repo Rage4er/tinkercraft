@@ -635,6 +635,11 @@ body {
   padding-left: 8px;
 }
 
+.tl-edited {
+  color: var(--accent, #89b4fa);
+  font-size: 0.85em;
+}
+
 .tl-edit {
   background: none;
   border: none;

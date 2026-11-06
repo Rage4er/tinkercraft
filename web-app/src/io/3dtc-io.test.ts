@@ -148,6 +148,45 @@ describe('3dtc-io round-trip', () => {
     }
   })
 
+  it('edit_step move (9.5.2): patch, before, замены group и align переживают round-trip', async () => {
+    const T: TransformNR = { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
+    const ops: TinkerCraftOperation[] = [
+      { type: 'add_shape', id: 'a', shapeType: 'cube', params: { width: 10, height: 10, depth: 10 }, color: '#fff', transform: T },
+      { type: 'move', ids: ['a'], delta: { x: 2, y: 0, z: 0 }, rotDelta: { x: 0, y: 20, z: 0 }, scaleDelta: { x: 0, y: 0, z: 0 } },
+      { type: 'add_shape', id: 'b', shapeType: 'sphere', params: { radius: 6 }, color: '#fff', transform: T },
+      { type: 'group', ids: ['a', 'b'], resultId: 'c', resultVertices: [0, 0, 0, 1, 0, 0, 0, 1, 0], resultIndices: [0, 1, 2], resultCenter: { x: 2, y: 0, z: 0 } },
+      { type: 'add_shape', id: 'k', shapeType: 'cube', params: { width: 2, height: 2, depth: 2 }, color: '#fff', transform: T },
+      { type: 'align', ids: ['k'], axis: 'X', anchor: 'min', anchorId: 'c', deltas: { k: -3 } },
+      {
+        type: 'edit_step', stepIndex: 1, stepFingerprint: { type: 'move', targetId: 'a' },
+        patch: { kind: 'move', delta: { x: 5, y: 0, z: 0 }, rotDelta: { x: 0, y: 20, z: 0 }, scaleDelta: { x: 0, y: 0, z: 0 } },
+        before: { kind: 'move', delta: { x: 2, y: 0, z: 0 }, rotDelta: { x: 0, y: 20, z: 0 }, scaleDelta: { x: 0, y: 0, z: 0 } },
+        replacements: [
+          {
+            stepIndex: 3, kind: 'group',
+            resultVertices: new Float32Array([0.5, 0, 0, 1, 0, 0, 0, 1, 0]), resultIndices: new Uint32Array([0, 1, 2]),
+            resultCenter: { x: 5, y: 0, z: 0 }, resultRotation: { x: 0, y: 20, z: 0 }, resultScale: { x: 1, y: 1, z: 1 },
+            originalBboxSize: { x: 1, y: 1, z: 0 },
+          },
+          { stepIndex: 5, kind: 'align', deltas: { k: 0 } },
+        ],
+      },
+    ]
+    const parsed = await parse3dtc(await serialize3dtc({ objects: {}, operations: ops, operationsTrimmed: false }))
+    const e = parsed.operations[6]
+    expect(e.type).toBe('edit_step')
+    if (e.type !== 'edit_step') return
+    expect(e.patch).toEqual(ops[6].type === 'edit_step' ? ops[6].patch : null)
+    expect(e.before).toMatchObject({ kind: 'move', delta: { x: 2, y: 0, z: 0 } })
+    expect(e.stepFingerprint).toEqual({ type: 'move', targetId: 'a' })
+    const [g, al] = e.replacements
+    // как у group: массивы меша → number[] (совместимость с rebuildFromHistory)
+    expect(g.resultVertices).toEqual(Array.from(new Float32Array([0.5, 0, 0, 1, 0, 0, 0, 1, 0])))
+    expect(g.resultIndices).toEqual([0, 1, 2])
+    expect(g.resultCenter).toEqual({ x: 5, y: 0, z: 0 })
+    expect(al).toEqual({ stepIndex: 5, kind: 'align', deltas: { k: 0 } })
+  })
+
   it('rejects unsupported version', async () => {
     // Создаём ZIP с version "1.0.0" (старый .doodle)
     const zip = new JSZip()

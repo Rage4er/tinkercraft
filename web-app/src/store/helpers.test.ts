@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { centerMassAtOrigin, computeCenter } from './helpers'
+import { centerMassAtOrigin, computeCenter, computeWorldAABB, worldVerticesAABB, solveAlignDeltas } from './helpers'
+import type { SceneObject, TransformNR } from '../csg/types'
 
 // Helper: build a triangular mesh for a prism with given sides, height, z_offset.
 // Winding is OUTWARD (positive signed volume) so the mesh passes isClosedMesh()
@@ -223,5 +224,53 @@ describe('centerMassAtOrigin', () => {
     expect(triVerts[3]).toBeCloseTo(20 - 40 / 3, 5) // 20/3
     expect(triVerts[1]).toBeCloseTo(10 - 40 / 3, 5) // -10/3
     expect(triVerts[4]).toBeCloseTo(10 - 40 / 3, 5) // -10/3
+  })
+})
+
+// ---- ALIGN-CSG-AABB (9.5.2): мировая рамка и решатель выравнивания ----
+const T0: TransformNR = { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
+/** «CSG»: вершины — куб ±1 в локальной системе, pivot в `t`; кэш aabb — локальный (как у csgBoolean). */
+function csgObj(id: string, t: Partial<TransformNR>): SceneObject {
+  const v: number[] = []
+  for (const x of [-1, 1]) for (const y of [-1, 1]) for (const z of [-1, 1]) v.push(x, y, z)
+  return {
+    id, shapeType: 'csg', params: {}, color: '#fff', transform: { ...T0, ...t }, visible: true, locked: false,
+    vertices: new Float32Array(v), indices: new Uint32Array([0, 1, 2]),
+    aabb: { min: { x: -1, y: -1, z: -1 }, max: { x: 1, y: 1, z: 1 } },
+  }
+}
+const cubeObj = (id: string, x: number, w = 2): SceneObject => ({
+  id, shapeType: 'cube', params: { width: w, height: w, depth: w }, color: '#fff', transform: { ...T0, x },
+  visible: true, locked: false, vertices: new Float32Array(), indices: new Uint32Array(),
+})
+
+describe('computeWorldAABB / worldVerticesAABB', () => {
+  it('CSG: рамка в мире (pivot + R·S·v), а не локальный кэш aabb', () => {
+    const b = computeWorldAABB(csgObj('c', { x: 10, scaleX: 3 }))
+    expect(b.min.x).toBeCloseTo(7, 6)
+    expect(b.max.x).toBeCloseTo(13, 6)
+    expect(b.min.y).toBeCloseTo(-1, 6)
+  })
+  it('поворот учитывается: 90° вокруг Z меняет оси местами', () => {
+    const b = worldVerticesAABB(new Float32Array([-2, -1, 0, 2, 1, 0]), { ...T0, rotZ: 90 })
+    expect(b.min.x).toBeCloseTo(-1, 6)
+    expect(b.max.y).toBeCloseTo(2, 6)
+  })
+  it('примитив с params — по params + позиции (как раньше)', () => {
+    expect(computeWorldAABB(cubeObj('k', 5, 4)).min.x).toBe(3)
+  })
+})
+
+describe('solveAlignDeltas', () => {
+  it('якорь — CSG: цели выравниваются по его мировой рамке (min / center / max)', () => {
+    const objects = { c: csgObj('c', { x: 10 }), k: cubeObj('k', 0) }
+    expect(solveAlignDeltas(objects, ['k'], 'X', 'min', 'c')).toEqual({ k: 9 - (-1) })
+    expect(solveAlignDeltas(objects, ['k'], 'X', 'center', 'c')).toEqual({ k: 10 })
+    expect(solveAlignDeltas(objects, ['k'], 'X', 'max', 'c')).toEqual({ k: 11 - 1 })
+  })
+  it('якорь и отсутствующие объекты пропускаются; нет якоря — пусто', () => {
+    const objects = { a: cubeObj('a', 0), b: cubeObj('b', 4) }
+    expect(solveAlignDeltas(objects, ['a', 'b', 'ghost'], 'X', 'min', 'b')).toEqual({ a: 4 })
+    expect(solveAlignDeltas(objects, ['a'], 'X', 'min', 'ghost')).toEqual({})
   })
 })

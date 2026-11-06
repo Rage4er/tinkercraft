@@ -1,7 +1,7 @@
 # PHASE_9_5_DESIGN.md — правка шагов fillet / extrude / mirror / move
 
 > Ветка `phase-9`, база `0c70fbf` (511 тестов). Статус: **решения §10 утверждены (2026-11-05)**;
-> **9.5.0 реализован** (§11); **9.5.1 (fillet) отменён** — fillet удалён из приложения (§12); 9.5.2–9.5.4 — впереди. Контекст 9.1–9.9 — `docs/PHASE_9_DESIGN.md`.
+> **9.5.0 реализован** (§11); **9.5.1 (fillet) отменён** — fillet удалён из приложения (§12); **9.5.2 (move) реализован** (§13); 9.5.3–9.5.4 — впереди. Контекст 9.1–9.9 — `docs/PHASE_9_DESIGN.md`.
 
 ## 1. Проблема
 
@@ -364,3 +364,44 @@ r=3 со сферой даёт одинаковый меш. До каскада 
   добавляет COM-шум float32 ~1e-6), legacy-группы extrude — в своей конвенции (запечённый RS),
   `edit_child_params` — путём 9.3 с правкой пользователя как разницей params; атомарный отказ
   с восстановлением кэша воркера и дерева; панель «Шаг N» (`ui-store.selectedStep`).
+
+## 13. Статус 9.5.2 (move) — реализовано
+
+Ветка `phase-9.5.2` от `phase-9`. Движок 9.5.1 (`ecb035a`, ветка удалена, объект доступен) перенесён без
+fillet-кода: `store/edit-step.ts`, `components/StepPanel.tsx`, `hooks/useSelectedStepGuard.ts`, правки
+`useTimelineEdit`/Timeline, тест-образцы.
+
+**Движок** (`computeStepEdit`, вызывается `document-store.editStepParams`):
+- `cur = projectHistory(raw, { stepIndex, patch })`; план — `computeCascade(cur, N)`; шаги к пересчёту —
+  `cascadeSteps(plan)`: замороженные и `align` вперемешку по порядку истории.
+- Состояние до шага j — `rebuildFromHistory(cur[0..j))` + точные pivot примитивов из `buildRebuildMeta`
+  (шум COM float32 ~1e-6 иначе попадал бы в pivot CSG).
+- `group` → `computeCsgResult` (pivot = новый TRS операнда A — R8; без `resultRotation/Scale` — legacy-конвенция
+  extrude через `bakeResultRS`); `edit_child_params` → `computeEditedChild` с правкой пользователя как разницей
+  params; `align` → re-solve (§3.3, В2).
+- Отказ (пустой результат, предел `MAX_CASCADE_STEPS`, сбой воркера) — атомарный: история не меняется, кэш
+  воркера и дерево восстанавливаются, уведомление с номером проблемного шага. «Не изменилось» — молча.
+- Поддерживаемые виды — `SUPPORTED_KINDS` (`move`); `isStepEditable(op)` — единый источник для ✎ в Timeline и
+  сторожа панели (9.5.3 добавит `mirror` одной строкой).
+
+**Re-solve align.** `CascadePlan.alignResolve[j]` — какие цели пересчитывать: все, если якорь из S; иначе только
+цели из S (у остальных рамка и якорь прежние — записанная delta верна, без шума пересчёта). Решатель
+`helpers.solveAlignDeltas` — общий с живым `alignSelected`. Попутно исправлен **ALIGN-CSG-AABB**:
+`computeWorldAABB` для CSG/импорта брал локальный кэш `obj.aabb` (рамка смещалась на позицию операнда A, а после
+пересборки из истории отличалась от живой) — теперь рамка по вершинам с полным TRS (`worldVerticesAABB`).
+Остаётся **ALIGN-PRIMITIVE-AABB** (рамка примитивов по params без поворота; цилиндр — как сфера) — общий для живого
+действия и re-solve, вне объёма 9.5.2.
+
+**Отпечаток шага** — как в 9.5.0: `{ type: 'move', targetId: ids.join(',') }` (для одного объекта — его id).
+
+**UI.** Панель «Шаг N: Перемещение» (не модалка): ΔX/ΔY/ΔZ; поворот/масштаб — только если шаг их меняет
+(`moveObject` пишет их всегда, обычно нулями), в патч уходят целиком. Коммит по Enter/blur; значение, не
+изменившееся с точностью показа поля, шаг не создаёт (`movePatchWith → null`). «Пересчёт CSG…» при `busy`.
+Timeline: ✎ у move (≤ `historyIndex`), метка «✎M», подпись правки «сдвиг (8, 0, 0) → (12, 0, 0)».
+
+**Проверка.** Unit: `effectivePatches`/`effectiveOpAt`, `cascadeSteps`, `alignResolve`, `solveAlignDeltas`,
+`worldVerticesAABB`. WASM (`__tests__/edit-step-move.test.ts`, 14): свежий сценарий (diff < 1e-6), pivot R8 с
+поворотом, align с якорем-CSG и с целью-CSG, undo/redo со снимками и без, K>1 и повторная правка, mirror ниже,
+`edit_child_params` + калибровка 9.9, legacy extrude, отказ subtract → пусто, без CSG, отказы без изменения
+истории, `.3dtc`, 10 CSG < 3 с. UI: `step-panel-ui.test.tsx`. E2E: `pnpm e2e:edit-step-move`.
+

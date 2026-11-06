@@ -33,12 +33,13 @@ import { migrateLegacyFillet, type LegacyFilletMigration } from '../io/legacy-fi
 import i18n from '../i18n'
 
 export { computeAABB, extractAndCenterInPlace, extractAndCenterGetAABB, computeWorldAABB, extractCenteredAt } from './helpers'
-import { computeAABB, extractAndCenterInPlace, extractAndCenterGetAABB, computeWorldAABB, centerMassAtOrigin, makeObject, nextId, colorForIndex } from './helpers'
+import { computeAABB, extractAndCenterInPlace, extractAndCenterGetAABB, centerMassAtOrigin, solveAlignDeltas, makeObject, nextId, colorForIndex } from './helpers'
 import type { ClipEntry } from './helpers'
 import type { DocumentStore } from './types'
 import { rebuildFromHistory, rebuildBuildTree } from './rebuild'
 import { computeCsgResult, groupOperationFromResult } from './csg-result'
 import { computeEditedChild, editFailureKey } from './edit-child'
+import { computeStepEdit, editStepFailureKey } from './edit-step'
 import { cacheSnapshot, getCachedSnapshot, clearSnapshots, cacheTreeSnapshot, getCachedTreeSnapshot } from './snapshots'
 import { OBJECT_SPACING, PASTE_OFFSET } from '../constants'
 import {
@@ -735,48 +736,9 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const targetIds = ids.filter(id => id !== anchorId)
     devLog('ALIGN:anchor', { anchorId, targetIds })
 
-    const ax = axis.toLowerCase() as 'x' | 'y' | 'z'
-    const anchorObj = objects[anchorId]
-    const anchorWorldAabb = computeWorldAABB(anchorObj)
-
-    // Target value from anchor object only (world space)
-    let targetValue: number
-    switch (anchor) {
-      case 'min': targetValue = anchorWorldAabb.min[ax]; break
-      case 'max': targetValue = anchorWorldAabb.max[ax]; break
-      default: targetValue = (anchorWorldAabb.min[ax] + anchorWorldAabb.max[ax]) / 2; break
-    }
-    devLog('ALIGN:bboxes', {
-      ax,
-      targetValue,
-      anchorId,
-      anchorWorldAabb,
-    })
-
-    // Compute deltas for all OTHER objects (move them toward the anchor)
-    const deltas: Record<string, number> = {}
-    for (const id of targetIds) {
-      const obj = objects[id]
-      const worldAabb = computeWorldAABB(obj)
-
-      // World-space current coordinate
-      const curMin = worldAabb.min[ax]
-      const curMax = worldAabb.max[ax]
-      const cur = anchor === 'min' ? curMin : anchor === 'max' ? curMax : (curMin + curMax) / 2
-
-      const delta = targetValue - cur
-      deltas[id] = delta
-
-      devLog('ALIGN:bboxes', {
-        ax,
-        targetValue,
-        anchorId,
-        anchorWorldAabb,
-        targetAabb: worldAabb,
-        cur,
-        delta,
-      })
-    }
+    // Deltas for all OTHER objects (move them toward the anchor), world space.
+    // Общий решатель с re-solve каскада правки шага (9.5.2, В2) — одна семантика.
+    const deltas = solveAlignDeltas(objects, targetIds, axis, anchor, anchorId)
     devLog('ALIGN:deltas', { deltas })
     set({ busy: true })
     try {
@@ -1108,6 +1070,50 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       invalidateMirrorCache()
       devLog('editChildParams', { rootId, nodeId, params })
     } catch (e) { set({ busy: false }); console.error('editChildParams:', e); notify(i18n.t('errors.editChild.failed'), 'error') }
+  },
+
+  // ── Правка прошлого шага с каскадом (Фаза 9.5.2: move) ──
+  editStepParams: async (stepIndex, patch) => {
+    if (get().busy) return false
+    const { objects, operations, historyIndex, selectedIds } = get()
+    set({ busy: true })
+    const t0 = performance.now()
+    const prefix = operations.slice(0, historyIndex)
+    try {
+      const res = await computeStepEdit({ operations, historyIndex, stepIndex, patch })
+      if (!res.ok) {
+        // Каскад переиграл историю в воркере и дереве — вернуть текущее состояние
+        if (res.reason !== 'unchanged') {
+          await rebuildFromHistory(prefix).catch(e => console.warn('[editStepParams] restore failed:', e))
+          rebuildBuildTree(prefix, objects)
+          notify(i18n.t(`errors.editStep.${editStepFailureKey(res.reason)}`, { step: (res.failedStep ?? stepIndex) + 1 }),
+            res.reason === 'failed' ? 'error' : 'warning')
+        }
+        set({ busy: false })
+        return false
+      }
+      const newOps = [...prefix, res.op]
+      const newObjects = await rebuildFromHistory(newOps)
+      rebuildBuildTree(newOps, newObjects)
+      // Выделение сохраняем (id шагов не меняются) — тот же массив, если все живы
+      const alive = selectedIds.filter((id) => newObjects[id])
+      set({
+        operations: newOps, historyIndex: newOps.length, objects: newObjects,
+        selectedIds: alive.length === selectedIds.length ? selectedIds : alive,
+        modified: true, busy: false, lastCsgMs: performance.now() - t0,
+      })
+      cacheSnapshotWithTree(newOps.length, newObjects)
+      invalidateMirrorCache()
+      devLog('editStepParams', { stepIndex, patch, recomputed: res.recomputed })
+      return true
+    } catch (e) {
+      await rebuildFromHistory(prefix).catch(() => { /* восстановление — best effort */ })
+      rebuildBuildTree(prefix, objects)
+      set({ busy: false })
+      console.error('editStepParams:', e)
+      notify(i18n.t('errors.editStep.failed', { step: stepIndex + 1 }), 'error')
+      return false
+    }
   },
 
   // ── Extrude ──

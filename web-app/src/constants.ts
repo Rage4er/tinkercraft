@@ -51,6 +51,7 @@ export const OP_FILTER_LABELS: Record<string, string> = {
   align: "filters.align",
   group: "filters.group",
   edit_child_params: "filters.edit_child_params",
+  edit_step: "filters.edit_step",
   delete: "filters.delete",
   visibility: "filters.visibility",
   color: "filters.color",

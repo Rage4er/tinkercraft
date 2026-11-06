@@ -14,7 +14,7 @@
 - **manifold-3d** (WASM) — CSG операции в Web Worker
 - **Zustand 5** — стейт-менеджмент
 - **Vite 6** — сборка
-- **Vitest 4** — тесты (543 теста, 44 файла — ветка `phase-9`)
+- **Vitest 4** — тесты (570 тестов, 46 файлов — ветка `phase-9.5.2`)
 - **pnpm** — пакетный менеджер
 
 ## Команды
@@ -23,11 +23,12 @@
 cd web-app
 pnpm dev          # dev-сервер (порт 5000)
 pnpm build        # production-сборка
-pnpm test         # запуск тестов (543 теста, 44 файла)
+pnpm test         # запуск тестов (570 тестов, 46 файлов)
 pnpm typecheck    # tsc --noEmit
 pnpm e2e:smoke    # дымовой тест в браузере (Playwright; нужен запущенный pnpm dev; см. web-app/e2e/helpers.mjs)
 pnpm e2e:tree     # Фаза 9.1: раскрытие CSG в дереве, выбор ребёнка
 pnpm e2e:edit-child  # Фаза 9.2/9.3: правка параметра ребёнка CSG, undo
+pnpm e2e:edit-step-move  # Фаза 9.5.2: ✎ у шага move → ΔX → CSG пересчитан, undo/redo
 ```
 
 ## Текущий статус
@@ -37,7 +38,7 @@ pnpm e2e:edit-child  # Фаза 9.2/9.3: правка параметра реб�
 | 0–7.6 | Ядро CAD, CSG, UI, Mirror, Timeline | ✅ Завершены |
 | **8** | **Единая модель трансформов** | ✅ Завершена (v1.1.0) |
 | **8.5** | **Унификация отрисовки и данных** | ✅ Завершена (v1.2.3) |
-| **9** | **Параметрическая история** — 9.1–9.4, 9.6–9.9 ✅; 9.5.0 (эффективная история) ✅; 9.5.1 (fillet) ❌ отменена; 9.5.2 move — следующая, затем 9.5.3 mirror, 9.5.4 extrude | 🔄 Идёт (ветка `phase-9`) |
+| **9** | **Параметрическая история** — 9.1–9.4, 9.6–9.9 ✅; 9.5.0 (эффективная история) ✅; 9.5.1 (fillet) ❌ отменена; 9.5.2 move ✅; следующая — 9.5.3 mirror, затем 9.5.4 extrude | 🔄 Идёт (ветка `phase-9`) |
 | 10 | Яндекс.Игры — монетизация (ветка `yandex-games`) | 🔄 Отдельная ветка (Y.1–Y.5 ✅) |
 | 11 | Будущее (SVG, 3MF, STEP, B-Rep fillet, Rapier) | 🔲 Запланирована |
 
@@ -51,10 +52,10 @@ pnpm e2e:edit-child  # Фаза 9.2/9.3: правка параметра реб�
 |-------|------------|
 | `main` | Чистый CAD (Open Source, GPL-3.0) |
 | `phase-9` | Фаза 9 (от `main`); `phase-9.5.0` и `remove-fillet` в неё смержены (PR #1–#3) |
-| `phase-9.5.2` | Следующая: правка шага move (от `phase-9`) |
+| `phase-9.5.2` | Правка шага move (от `phase-9`), PR в `phase-9`; следующая — `phase-9.5.3` (mirror) |
 | `yandex-games` | Версия для Яндекс.Игр (экономика, реклама, токены); Фазу 9 ещё не содержит |
 
-Цепочка: `main` → `phase-9` → `phase-9.5.2`.
+Цепочка: `main` → `phase-9` → `phase-9.5.2` → `phase-9.5.3`.
 
 ## Архитектура (data flow)
 
@@ -77,7 +78,7 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 | **Store** | |
 | `src/store/document-store.ts` | Zustand store — действия (create), 500 строк |
 | `src/store/ui-store.ts` | Zustand store — UI state (gizmo, theme, camera, modals, etc.) |
-| `src/store/helpers.ts` | Утилиты store (extractAndCenter, extractAndCenterGetAABB, computeAABB, makeObject, nextId, colorForIndex) |
+| `src/store/helpers.ts` | Утилиты store (extractAndCenter, extractAndCenterGetAABB, computeAABB, makeObject, nextId, colorForIndex; `computeWorldAABB`/`worldVerticesAABB` — мировая рамка, `solveAlignDeltas` — решатель выравнивания, общий для `alignSelected` и re-solve 9.5.2) |
 | `src/store/types.ts` | DocumentStore interface |
 | `src/store/rebuild.ts` | rebuildFromHistory — восстановление объектов из истории операций |
 | `src/store/snapshots.ts` | Snapshot cache для мгновенного undo/redo (PERF-1) |
@@ -92,6 +93,9 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 | `src/store/edit-child.ts` | Пересчёт CSG после смены params ребёнка: калибровка дерева ↔ меш, un-bake в локальную систему корня (`computeEditedChild`, `unbakeToLocal`, `findCreationTransform`) — Фаза 9.3 |
 | `src/store/project-history.ts` | **Эффективная история** (Фаза 9.5.0): `projectHistory` подставляет `edit_step` (патч шага N + `replacements` замороженных шагов) и выбрасывает их; идемпотентна, вызывается на входе `rebuild.ts` и `findCreationTransform`. `computeCascade` — замыкание зависимостей правки |
 | `src/store/csg-result.ts` | Общее ядро CSG `computeCsgResult` (sync → boolean → pivot = transformA → un-bake RS) для `csgBoolean` и каскада 9.5; `syncObjectsForOperation`, `groupOperationFromResult`, `groupReplacementFromResult` |
+| `src/store/edit-step.ts` | **Правка прошлого шага** (Фаза 9.5.2): `computeStepEdit` — гипотетическая проекция + каскад (`group` через `computeCsgResult`, `edit_child_params` путём 9.3, `align` re-solve); атомарный отказ; `isStepEditable` / `SUPPORTED_KINDS` — какие шаги правятся (move; mirror — 9.5.3) |
+| `src/components/StepPanel.tsx` | Панель «Шаг N» (вместо `PropertiesPanel`, пока `ui-store.selectedStep` задан): ΔX/ΔY/ΔZ шага move, коммит по Enter/blur → `editStepParams` — Фаза 9.5.2 |
+| `src/hooks/useSelectedStepGuard.ts` | Сброс выбора шага (undo до шага, выделение в сцене, выбор ребёнка CSG) — Фаза 9.5.2 |
 | `src/components/ChildPropertiesPanel.tsx` | Панель свойств выбранного ребёнка CSG (вместо `PropertiesPanel`, пока `ui-store.selectedChild` задан) — Фаза 9.2 |
 | `src/components/ComponentTree.tsx` | Дерево объектов сцены; CSG-результат раскрывается в детей из Build Tree, выбор ребёнка → `ui-store.selectedChild` — Фаза 9.1 |
 | `src/csg/rebuildOps.ts` | `applyMoveDelta`, `applyMirrorToTransform`, `applyAlignToTransform` |

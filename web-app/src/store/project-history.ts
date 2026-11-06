@@ -232,6 +232,37 @@ export function effectiveToRawIndex(ops: TinkerCraftOperation[]): number[] {
   return map
 }
 
+/** Действующая правка шага (Фаза 9.5.2): патч и сырой индекс edit_step, которая его задала. */
+export interface EffectivePatch {
+  patch: StepPatch
+  /** Сырой индекс edit_step (последняя валидная правка шага побеждает) */
+  editIndex: number
+  /** Значения до этой правки (для подписи «было → стало») */
+  before?: StepPatch
+}
+
+/**
+ * Действующие правки шагов: сырой индекс шага → последняя валидная edit_step.
+ * Для подписи в Timeline («изменён шагом M») и формы «Шаг N».
+ */
+export function effectivePatches(ops: TinkerCraftOperation[]): Map<number, EffectivePatch> {
+  const out = new Map<number, EffectivePatch>()
+  for (let i = 0; i < ops.length; i++) {
+    const op = ops[i]
+    if (op.type !== 'edit_step' || validateEdit(ops, i, op)) continue
+    out.set(op.stepIndex, { patch: op.patch, editIndex: i, before: op.before })
+  }
+  return out
+}
+
+/** Эффективный вид шага с сырым индексом `rawIndex` (null — это edit_step или вне истории). */
+export function effectiveOpAt(ops: TinkerCraftOperation[], rawIndex: number): TinkerCraftOperation | null {
+  const op = ops[rawIndex]
+  if (!op || op.type === 'edit_step') return null
+  const p = effectivePatches(ops).get(rawIndex)
+  return p ? applyStepPatch(op, p.patch) ?? op : op
+}
+
 // ---------------------------------------------------------------------------
 // Каскад: какие шаги ниже по течению надо пересчитать
 // ---------------------------------------------------------------------------
@@ -241,8 +272,33 @@ export interface CascadePlan {
   frozen: Array<{ stepIndex: number; kind: 'group' | 'edit_child_params' }>
   /** Шаги align, затронутые правкой (deltas пересчитываются — политика re-solve, В2) */
   align: number[]
+  /**
+   * Цели align, чьи deltas пересчитываются на шаге j: все цели, если якорь из S
+   * (сдвинулась опорная рамка), иначе только цели из S (у прочих рамка прежняя —
+   * записанная delta верна).
+   */
+  alignResolve: Record<number, string[]>
   /** id объектов, геометрия или положение которых меняется правкой (после последнего шага) */
   affectedIds: Set<string>
+}
+
+/** Шаг, который каскад пересчитывает (эффективный индекс). */
+export interface CascadeStep {
+  stepIndex: number
+  kind: 'group' | 'edit_child_params' | 'align'
+}
+
+/**
+ * Все пересчитываемые шаги плана по порядку истории: замороженные (`group`,
+ * `edit_child_params`) и `align` (re-solve) вперемешку — каждый считается по
+ * состоянию, в котором уже учтены все предыдущие.
+ */
+export function cascadeSteps(plan: CascadePlan): CascadeStep[] {
+  const steps: CascadeStep[] = [
+    ...plan.frozen,
+    ...plan.align.map((stepIndex) => ({ stepIndex, kind: 'align' as const })),
+  ]
+  return steps.sort((a, b) => a.stepIndex - b.stepIndex)
 }
 
 /** Объекты, которые шаг N затрагивает непосредственно. */
@@ -266,7 +322,7 @@ function seedIds(op: TinkerCraftOperation): string[] {
  * Остальные шаги воспроизводятся сами и S не меняют.
  */
 export function computeCascade(effective: TinkerCraftOperation[], stepIndex: number): CascadePlan {
-  const plan: CascadePlan = { frozen: [], align: [], affectedIds: new Set() }
+  const plan: CascadePlan = { frozen: [], align: [], alignResolve: {}, affectedIds: new Set() }
   const target = effective[stepIndex]
   if (!target || target.type === 'edit_step') return plan
   const S = plan.affectedIds
@@ -292,6 +348,7 @@ export function computeCascade(effective: TinkerCraftOperation[], stepIndex: num
       const anchorHit = S.has(op.anchorId)
       if (anchorHit || op.ids.some((id) => S.has(id))) {
         plan.align.push(j)
+        plan.alignResolve[j] = anchorHit ? [...op.ids] : op.ids.filter((id) => S.has(id))
         if (anchorHit) for (const id of op.ids) S.add(id)
       }
     } else if (op.type === 'delete') {
