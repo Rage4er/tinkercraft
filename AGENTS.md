@@ -247,7 +247,7 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 
 ## Известные ограничения (не баги)
 
-- Импортированные меши (STL) не параметризуются — только CSG и трансформации (IMPORT-MESH-PARAMETRIC: не требуется); старые extrude без `group.source` не редактируются как extrude (EXTRUDE-LEGACY: не мигрируем)
+- Импортированные меши (STL) не параметризуются (IMPORT-MESH-PARAMETRIC: не требуется); трансформации работают, CSG с `import_mesh` сейчас отклоняется по типу объекта — включение для замкнутых STL запланировано (IMPORT-MESH-CSG); старые extrude без `group.source` не редактируются как extrude (EXTRUDE-LEGACY: не мигрируем)
 - Скругления (fillet) нет: прежний параметр куба удалён (remove-fillet) до инструмента на B-Rep; старые шаги `fillet` вырезаются при загрузке (`io/legacy-fillet.ts`) — новых не создавать
 
 ## Node.js — Настройка и проверка
