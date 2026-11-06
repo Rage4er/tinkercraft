@@ -64,7 +64,7 @@ try {
   await page.waitForTimeout(800)
   const [cube, sphere] = await ids()
   await row(sphere).click()
-  const posX = right.locator('#num-input-X').first()
+  const posX = right.locator('#num-input-pos-X')
   await posX.fill('12'); await posX.press('Enter')
   await page.locator('.tl-item', { hasText: 'Переместить' }).waitFor({ timeout: 10000 })
 

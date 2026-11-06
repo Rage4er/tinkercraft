@@ -20,8 +20,8 @@ const row = (id) => page.locator(`.ct-item[data-object-id="${id}"]`)
 const ids = async () => objRows.evaluateAll((els) => els.map((e) => e.getAttribute('data-object-id')))
 const steps = () => page.locator('.tl-item').count()
 const waitSteps = (n) => page.waitForFunction((k) => document.querySelectorAll('.tl-item').length === k, n, { timeout: 15000 })
-/** Первое поле X/Y/Z панели — позиция (у масштаба те же id). */
-const pos = (axis) => right.locator(`#num-input-${axis}`).first()
+/** Поле позиции X/Y/Z панели свойств. */
+const pos = (axis) => right.locator(`#num-input-pos-${axis}`)
 const num = async (axis) => Number(await pos(axis).inputValue())
 /** Выделить один объект и дождаться, что панель показывает именно его. */
 async function pick(id) {
@@ -41,10 +41,11 @@ async function add(label) {
   await page.waitForFunction((n) => document.querySelectorAll('.ct-item[data-object-id]').length === n, before.size + 1, { timeout: 15000 })
   return (await ids()).find((id) => !before.has(id))
 }
-/** Поле панели свойств (`#num-input-<label>`, первое) → значение, коммит по Enter → новый шаг. */
+/** Поле панели свойств (позиция «X»/«Y»/«Z», поворот «rotX»…) → значение, коммит по Enter → новый шаг. */
+const fieldId = (label) => (label.startsWith('rot') ? `num-input-rot-${label.slice(3)}` : `num-input-pos-${label}`)
 async function setField(id, label, value) {
   await pick(id)
-  const f = right.locator(`#num-input-${label}`).first()
+  const f = right.locator(`#${fieldId(label)}`)
   const n = await steps()
   await f.fill(String(value)); await f.press('Enter')
   await waitSteps(n + 1)

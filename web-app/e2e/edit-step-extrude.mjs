@@ -16,7 +16,7 @@ const { browser, page, errors } = await openApp()
 const fail = (msg) => { throw new Error(msg) }
 const right = page.locator('.panel-right')
 const objRows = page.locator('.ct-item[data-object-id]')
-const propX = () => right.locator('#num-input-X').first().inputValue()  // первое X — позиция
+const propX = () => right.locator('#num-input-pos-X').inputValue()  // поле позиции X
 try {
   await page.locator('button.tab-btn', { hasText: 'Дерево' }).click()
 

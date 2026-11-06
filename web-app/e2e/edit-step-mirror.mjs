@@ -11,8 +11,8 @@ const { browser, page, errors } = await openApp()
 const fail = (msg) => { throw new Error(msg) }
 const right = page.locator('.panel-right')
 const objRows = page.locator('.ct-item[data-object-id]')
-// у позиции и поворота одинаковые id (num-input-X) — первое поле — позиция
-const prop = (axis) => right.locator(`#num-input-${axis}`).first()
+// поле позиции (UX-NUMINPUT: у позиции/поворота/масштаба свои id)
+const prop = (axis) => right.locator(`#num-input-pos-${axis}`)
 const pos = async () => [await prop('X').inputValue(), await prop('Y').inputValue()].join(',')
 try {
   await page.locator('button.tab-btn', { hasText: 'Дерево' }).click()

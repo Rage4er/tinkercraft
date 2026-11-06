@@ -213,18 +213,21 @@ export default function PropertiesPanel({
 
       <div className="props-section-title">{t("properties.position")}</div>
       <NumInput
+        id="num-input-pos-X"
         label="X"
         value={firstSelected.transform.x}
         disabled={busy}
         onChange={(v) => onMoveAxis("x", v)}
       />
       <NumInput
+        id="num-input-pos-Y"
         label="Y"
         value={firstSelected.transform.y}
         disabled={busy}
         onChange={(v) => onMoveAxis("y", v)}
       />
       <NumInput
+        id="num-input-pos-Z"
         label="Z"
         value={firstSelected.transform.z}
         disabled={busy}
@@ -233,6 +236,7 @@ export default function PropertiesPanel({
 
       <div className="props-section-title">{t("properties.rotation")}</div>
       <NumInput
+        id="num-input-rot-X"
         label="rotX"
         unit="°"
         value={firstSelected.transform.rotX}
@@ -240,6 +244,7 @@ export default function PropertiesPanel({
         onChange={(v) => onRotAxis("rotX", v)}
       />
       <NumInput
+        id="num-input-rot-Y"
         label="rotY"
         unit="°"
         value={firstSelected.transform.rotY}
@@ -247,6 +252,7 @@ export default function PropertiesPanel({
         onChange={(v) => onRotAxis("rotY", v)}
       />
       <NumInput
+        id="num-input-rot-Z"
         label="rotZ"
         unit="°"
         value={firstSelected.transform.rotZ}
@@ -256,6 +262,7 @@ export default function PropertiesPanel({
 
       <div className="props-section-title">{t("properties.scale")}</div>
       <NumInput
+        id="num-input-scale-X"
         label="X"
         unit="×"
         min={0.01}
@@ -265,6 +272,7 @@ export default function PropertiesPanel({
         onChange={(v) => onScaleAxis("scaleX", v)}
       />
       <NumInput
+        id="num-input-scale-Y"
         label="Y"
         unit="×"
         min={0.01}
@@ -274,6 +282,7 @@ export default function PropertiesPanel({
         onChange={(v) => onScaleAxis("scaleY", v)}
       />
       <NumInput
+        id="num-input-scale-Z"
         label="Z"
         unit="×"
         min={0.01}
