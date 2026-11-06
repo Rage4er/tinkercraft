@@ -1,7 +1,7 @@
 # PHASE_9_5_DESIGN.md — правка шагов fillet / extrude / mirror / move
 
-> Ветка `phase-9`, база `0c70fbf` (511 тестов). Статус: **дизайн, код не начат**. Требуется утверждение
-> решений из §10 до реализации. Контекст 9.1–9.9 — `docs/PHASE_9_DESIGN.md`.
+> Ветка `phase-9`, база `0c70fbf` (511 тестов). Статус: **решения §10 утверждены (2026-11-05)**;
+> **9.5.0 реализован** (§11), 9.5.1–9.5.4 — впереди. Контекст 9.1–9.9 — `docs/PHASE_9_DESIGN.md`.
 
 ## 1. Проблема
 
@@ -305,3 +305,41 @@ doodle), `restoreOperationMeshArrays` (массивы в `replacements`), Timeli
 - **В4.** UI: **панель «Шаг N»** (рекомендация) или модалка.
 - **В5.** Нарезка 9.5.0 → 9.5.1 (fillet) → 9.5.2 → 9.5.3 → 9.5.4 — утвердить порядок.
 - **В6.** Рост `.3dtc`: принять в v1; «Сжать историю» — отдельной задачей позже.
+
+**Утверждено (2026-11-05):** В1 — B′; В2 — re-solve; В3 — `source` у новых extrude, старые не
+редактируются как extrude; В4 — панель «Шаг N»; В5 — порядок 9.5.0 → 9.5.4; В6 — рост `.3dtc` принят.
+
+## 11. Статус 9.5.0 (реализовано)
+
+| Что | Где |
+|---|---|
+| Типы `EditStepOperation`, `StepPatch` (fillet/move/mirror), `StepReplacement` | `csg/types.ts` |
+| `projectHistory(ops, hypothetical?)`, `projectHistoryDetailed` (диагностика `ignored`), `effectiveOps`, `effectiveToRawIndex`, `stepFingerprint`, `applyStepPatch`, `applyReplacement` | `store/project-history.ts` |
+| Замыкание зависимостей `computeCascade` (§3.1), `MAX_CASCADE_STEPS = 50` (R4) | `store/project-history.ts` |
+| Проекция на входе потребителей: `buildRebuildMeta`, `rebuildFromHistory` (→ воркер), `rebuildBuildTree`, `registerBakedNodes`, `findCreationTransform` | `store/rebuild.ts`, `store/edit-child.ts` |
+| `computeCsgResult` + `syncObjectsForOperation`, `groupOperationFromResult`, `groupReplacementFromResult`; `csgBoolean` переведён на них | `store/csg-result.ts`, `store/document-store.ts` |
+| `.3dtc`/`.doodle`: `edit_step` в `VALID_OP_TYPES`, массивы мешей `replacements` | `io/3dtc-io.ts`, `io/doodle-io.ts` |
+
+Уточнения относительно §2–§5:
+- **Где проецировать (R5).** Проекция стоит не на местах вызова, а на входе функций-потребителей.
+  Она идемпотентна (без `edit_step` возвращает тот же массив, O(n) проверка), поэтому сырая
+  история физически не доходит до воспроизведения, даже если новое место вызова забудет её
+  спроецировать. Стор (`jumpToHistoryInner`, загрузка, автосейв) не менялся.
+- **Сигнатура.** `projectHistory(ops, { stepIndex, patch }?)`: второй аргумент — гипотетическая
+  (ещё не записанная) правка, вход для каскада 9.5.1 («история, как если бы шаг N сразу был с
+  новыми значениями»; замороженные шаги ниже — старые, их пересчитывает каскад).
+- **`StepReplacement.params`** (для `edit_child_params`): правка fillet/resize ребёнка, позже
+  отредактированного через 9.3, должна обновить и params в дереве, а не только меш.
+- **Атомарность в проекции:** любая неверная замена (не тот тип шага, индекс вне `(N, i)`)
+  отбрасывает всю правку — частичный каскад несогласован.
+- **Extrude** (`patch.kind = 'extrude'`, `GroupOperation.source`) — в 9.5.4, вместе с записью `source`.
+- **Порядок в `computeCascade` для `align`:** цель из S → шаг пересчитывается; якорь из S → все цели
+  сдвигаются и входят в S.
+
+**Находка (блокер 9.5.1) — FILLET-LOST-IN-CSG.** CSG с кубом после fillet теряет скругление:
+`handleCsgBooleanSync`/`handleSyncObjects`/`rebuildTreeNode` воркера строят примитив через
+`buildPrimitive` без `params.filletRadius`; дерево fillet тоже не воспроизводит. Union куба r=2 и
+r=3 со сферой даёт одинаковый меш. До каскада fillet нужно: (1) строить примитив через
+`buildPrimitiveWithFillet(…, params.filletRadius)` во всех трёх местах; (2) воспроизводить `fillet`
+в `rebuildBuildTree` (params узла), иначе калибровка 9.9 заблокирует такие CSG. Это меняет
+геометрию НОВЫХ CSG с филлет-кубами (сохранённые меши не трогаются — они заморожены).

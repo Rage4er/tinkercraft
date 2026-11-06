@@ -19,6 +19,7 @@ export type TinkerCraftOperation =
   | AlignOperation
   | GroupOperation
   | EditChildParamsOperation
+  | EditStepOperation
   | DeleteOperation
   | HideShowOperation
   | ColorOperation
@@ -136,6 +137,61 @@ export interface EditChildParamsOperation {
   resultIndices: Uint32Array | number[]
   resultNormals?: Float32Array | number[]
   originalBboxSize?: { x: number; y: number; z: number }
+}
+
+/**
+ * Фаза 9.5: новые значения прошлого шага N — по типу шага.
+ * Extrude (`kind: 'extrude'`) добавится в 9.5.4 вместе с `GroupOperation.source`.
+ */
+export type StepPatch =
+  | { kind: 'fillet'; radius: number }
+  | { kind: 'move'; delta: Vec3; rotDelta?: Vec3; scaleDelta?: Vec3 }
+  | { kind: 'mirror'; plane: MirrorPlane }
+
+/** Тип шага, к которому применим патч данного вида. */
+export type StepPatchKind = StepPatch['kind']
+
+/**
+ * Фаза 9.5: пересчитанный «замороженный» шаг ниже по течению от правки
+ * (готовый результат — воспроизведение без CSG при загрузке, решение 1 Фазы 9).
+ * Поля, которых нет, остаются как в исходной операции.
+ */
+export interface StepReplacement {
+  /** Индекс заменяемого шага в сырой истории (меньше индекса самой edit_step) */
+  stepIndex: number
+  /** Ожидаемый тип шага: несовпадение → замена пропускается */
+  kind: 'group' | 'edit_child_params' | 'align'
+  resultVertices?: Float32Array | number[]
+  resultIndices?: Uint32Array | number[]
+  resultNormals?: Float32Array | number[]
+  /** group: pivot результата (= TRS операнда A на момент объединения) */
+  resultCenter?: Vec3
+  resultRotation?: Vec3
+  resultScale?: Vec3
+  originalBboxSize?: Vec3
+  /** edit_child_params: полные params ребёнка (если правка затронула и их, напр. fillet) */
+  params?: ShapeParams
+  /** align: пересчитанные смещения (политика re-solve, решение В2) */
+  deltas?: Record<string, number>
+}
+
+/**
+ * Фаза 9.5: правка параметров прошлого шага N. Append-only: `operations[N]` не
+ * трогается, эффективная история строится чистой функцией `projectHistory`
+ * (store/project-history.ts). Undo/redo — по индексу, как у любой операции.
+ */
+export interface EditStepOperation {
+  type: 'edit_step'
+  /** Индекс шага N в сырой истории (префикс неизменен — индекс стабилен) */
+  stepIndex: number
+  /** Отпечаток шага N (тип + id цели): не совпал → правка игнорируется (R7) */
+  stepFingerprint: { type: TinkerCraftOperation['type']; targetId: string }
+  /** Новые значения шага N */
+  patch: StepPatch
+  /** Прежние значения — только для подписи в Timeline / диффа (undo их не использует) */
+  before?: StepPatch
+  /** ОБЯЗАТЕЛЬНО (может быть пустым): пересчитанные замороженные шаги ниже по течению */
+  replacements: StepReplacement[]
 }
 
 export interface ResizeDimsOperation { type: 'resize_dims'; id: string; params: ShapeParams }
