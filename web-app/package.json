@@ -21,7 +21,8 @@
     "e2e:import-mesh-csg": "node e2e/import-mesh-csg.mjs",
     "e2e:align-obb": "node e2e/align-obb.mjs",
     "e2e:align-ui-revit": "node e2e/align-ui-revit.mjs",
-    "e2e:nested-moved-edit": "node e2e/nested-moved-edit.mjs"
+    "e2e:nested-moved-edit": "node e2e/nested-moved-edit.mjs",
+    "e2e:ux-audit": "node e2e/ux-audit.mjs"
   },
   "dependencies": {
     "i18next": "^26.3.6",
