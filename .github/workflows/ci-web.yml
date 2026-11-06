@@ -1,16 +1,14 @@
 name: CI (web-app)
 
+# Единственный CI-workflow (CI-DEDUP): раньше параллельно гонялся build.yml
+# («Test package») — те же install + typecheck + test. Фильтра путей нет: PR только
+# с документацией тоже получает зелёную проверку. push — только main (ветки задач
+# проверяются через pull_request, без двойного прогона push + PR).
 on:
   push:
-    branches: ['**']
-    paths:
-      - 'web-app/**'
-      - '.github/workflows/ci-web.yml'
+    branches: [main]
   pull_request:
     branches: ['**']
-    paths:
-      - 'web-app/**'
-      - '.github/workflows/ci-web.yml'
 
 defaults:
   run:

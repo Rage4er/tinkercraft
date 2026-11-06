@@ -258,7 +258,7 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 
 - Импортированные меши (STL) не параметризуются (IMPORT-MESH-PARAMETRIC: не требуется); трансформации и CSG работают — CSG допускает замкнутый STL (проверка по manifold в воркере, IMPORT-MESH-CSG), незамкнутый → уведомление `errors.csgNonManifold`; «починка» незамкнутого меша не делается; старые extrude без `group.source` не редактируются как extrude (EXTRUDE-LEGACY: не мигрируем); `extrudeSelected` — движок правки 9.5.4, не UI-инструмент: это «растянуть по оси», а не extrude 2D→3D, кнопку не возвращать (EXTRUDE-3D-SCALE; настоящий extrude — Фаза 11)
 - Скругления (fillet) нет: прежний параметр куба удалён (remove-fillet) до инструмента на B-Rep; старые шаги `fillet` вырезаются при загрузке (`io/legacy-fillet.ts`) — новых не создавать
-- После v1.3.0 открыто: NESTED-MOVED-EDIT (вложенный CSG, сдвинутый до объединения — 🔒 `nested_moved`); связанное зеркало (linked mirror) не делали — копия CSG всегда независимая; «починка» незамкнутого STL; CI-DEDUP (`ci-web.yml` + `build.yml` дублируют), CI-E2E (e2e не в CI)
+- После v1.3.0 открыто: NESTED-MOVED-EDIT (вложенный CSG, сдвинутый до объединения — 🔒 `nested_moved`); связанное зеркало (linked mirror) не делали — копия CSG всегда независимая; «починка» незамкнутого STL; CI-E2E (e2e не в CI; CI — один workflow `ci-web.yml`, CI-DEDUP ✅)
 - Выравнивание режимом «Выровнять» (ALIGN-UI-REVIT) пишется шагом move: при правке прошлого шага объект не перевыравнивается по плоскости (ALIGN-PLANE-RESOLVE); шаги `align` старых проектов — с re-solve, как раньше
 - `.doodle` (legacy) в UI не открывается: `parseDoodle` не вызывается
 
