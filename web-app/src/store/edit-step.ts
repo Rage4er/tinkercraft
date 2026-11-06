@@ -1,5 +1,5 @@
 // ============================================================
-// edit-step — правка прошлого шага с каскадом (Фаза 9.5.2: move)
+// edit-step — правка прошлого шага с каскадом (Фаза 9.5.2: move, 9.5.3: mirror)
 // ============================================================
 //
 // Строит операцию `edit_step` (docs/PHASE_9_5_DESIGN.md §3): история «как если бы
@@ -33,12 +33,17 @@ import { computeEditedChild, type EditChildFailure } from './edit-child'
 import { solveAlignDeltas, nextId } from './helpers'
 import { getNode } from '../csg/history-tree'
 
-/** Виды патчей, которые уже поддерживает движок (9.5.2 — move; mirror — 9.5.3). */
-const SUPPORTED_KINDS: ReadonlySet<StepPatch['kind']> = new Set(['move'])
+/**
+ * Виды патчей, которые поддерживает движок: move (9.5.2), mirror (9.5.3; шаг mirror ничего
+ * не хранит готовым — копии и `mirrored[]` (composeMirroredList) воспроизводятся из
+ * исходного списка оригинала, поэтому правка ЗАМЕНЯЕТ вклад шага, а не наслаивается).
+ */
+const SUPPORTED_KINDS: ReadonlySet<StepPatch['kind']> = new Set(['move', 'mirror'])
+const PLANES: ReadonlySet<string> = new Set(['XY', 'XZ', 'YZ'])
 
 /**
  * Правится ли шаг как прошлый шаг (edit_step с каскадом) — ✎ в Timeline и панель «Шаг N».
- * Единственный источник: расширение SUPPORTED_KINDS (mirror — 9.5.3) включает UI само.
+ * Единственный источник: расширение SUPPORTED_KINDS (extrude — 9.5.4) включает UI само.
  */
 export function isStepEditable(op: TinkerCraftOperation): boolean {
   const kind = patchKindFor(op.type)
@@ -50,7 +55,7 @@ const SAME_EPS = 1e-9
 
 export type EditStepFailure =
   | 'not_found'        // шаг вне [0, historyIndex) или не того типа
-  | 'unsupported'      // вид правки ещё не поддержан (mirror — 9.5.3)
+  | 'unsupported'      // вид правки ещё не поддержан (extrude — 9.5.4)
   | 'invalid'          // недопустимое значение
   | 'unchanged'        // значение не изменилось
   | 'too_many'         // каскад длиннее MAX_CASCADE_STEPS (R4)
@@ -70,6 +75,7 @@ const finiteVec = (v: Vec3 | undefined): boolean =>
 /** Допустимо ли значение патча (без знания геометрии — масштаб клампит applyMoveDelta). */
 function patchValid(p: StepPatch): boolean {
   if (p.kind === 'move') return !!p.delta && finiteVec(p.delta) && finiteVec(p.rotDelta) && finiteVec(p.scaleDelta)
+  if (p.kind === 'mirror') return PLANES.has(p.plane)
   return false
 }
 
@@ -83,6 +89,7 @@ function samePatch(op: TinkerCraftOperation, p: StepPatch): boolean {
   if (p.kind === 'move' && op.type === 'move') {
     return sameVec(op.delta, p.delta) && sameVec(op.rotDelta, p.rotDelta) && sameVec(op.scaleDelta, p.scaleDelta)
   }
+  if (p.kind === 'mirror' && op.type === 'mirror') return op.plane === p.plane
   return false
 }
 
@@ -95,6 +102,7 @@ function beforeOf(op: TinkerCraftOperation): StepPatch | undefined {
       ...(op.scaleDelta ? { scaleDelta: { ...op.scaleDelta } } : {}),
     }
   }
+  if (op.type === 'mirror') return { kind: 'mirror', plane: op.plane }
   return undefined
 }
 

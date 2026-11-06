@@ -317,3 +317,36 @@ describe('effectivePatches / effectiveOpAt (9.5.2)', () => {
     expect(dx(effectiveOpAt(all.slice(0, 6), 1)!)).toBe(4)      // префикс (undo второй правки)
   })
 })
+
+describe('правка шага mirror (9.5.3): проекция и каскад', () => {
+  // a (0) → mirror a→a2 YZ (1) → mirror a2→a3 XZ (2) → b (3) → union a3+b → c (4)
+  const mops = (): TinkerCraftOperation[] => [
+    add('a', 5),
+    { type: 'mirror', originalIds: ['a'], ids: ['a2'], plane: 'YZ' },
+    { type: 'mirror', originalIds: ['a2'], ids: ['a3'], plane: 'XZ' },
+    add('b', 20),
+    group('a3', 'b', 'c'),
+  ]
+  it('правка ЗАМЕНЯЕТ вклад шага: копия [XY], а не [YZ, XY]; ниже — перекомпозиция', () => {
+    const ops = mops()
+    const before = buildRebuildMeta(ops.slice(0, 3)).meta
+    expect(before.a2.mirrored).toEqual(['YZ'])
+    expect(before.a3.mirrored).toEqual(['YZ', 'XZ'])
+    const e = edit(ops, 1, { kind: 'mirror', plane: 'XY' })
+    const after = buildRebuildMeta([...ops.slice(0, 3), e]).meta
+    expect(after.a2.mirrored).toEqual(['XY'])
+    expect(after.a3.mirrored).toEqual(['XY', 'XZ'])
+    // правка на ту же плоскость, что у следующего шага: XZ∘XZ = тождество у a3
+    const e2 = edit(ops, 1, { kind: 'mirror', plane: 'XZ' })
+    expect(buildRebuildMeta([...ops.slice(0, 3), e2]).meta.a3.mirrored).toBeUndefined()
+    // ids копий не меняются — меняется только плоскость
+    expect((applyStepPatch(ops[1], { kind: 'mirror', plane: 'XY' }) as { ids: string[] }).ids).toEqual(['a2'])
+  })
+  it('computeCascade: S = копии шага; через mirror копии → CSG пересчитывается', () => {
+    const ops = [...mops(), add('q', 40), group('a', 'q', 'r')]   // CSG с ОРИГИНАЛОМ не зависит от правки
+    const plan = computeCascade(ops, 1)
+    expect(plan.frozen).toEqual([{ stepIndex: 4, kind: 'group' }])
+    expect(plan.affectedIds.has('c')).toBe(true)
+    expect(plan.affectedIds.has('r')).toBe(false)
+  })
+})

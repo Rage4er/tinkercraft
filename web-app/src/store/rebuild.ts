@@ -114,6 +114,18 @@ export function buildRebuildMeta(rawOps: TinkerCraftOperation[]): {
             ? composeMirroredList(om.mirrored, op.plane)
             : om.mirrored
           meta[newId] = { ...om, transform: nt, mirrored: mirroredOut }
+          // FIX (MIRROR-CSG-REPLAY, 9.5.3): копия CSG — CSG с ОТРАЖЁННЫМ локальным мешем
+          // оригинала (как живое mirrorSelected: mirrorVerticesInPlace + winding), а не
+          // мировой кэш воркера (его вершины в мире → двойная трансляция и RS у копии).
+          if (om.shapeType === 'csg' && om.resultVertices && om.resultIndices) {
+            const v = new Float32Array(om.resultVertices)
+            const n = om.resultNormals ? new Float32Array(om.resultNormals) : null
+            mirrorVerticesInPlace(v, n, op.plane)
+            const idx = new Uint32Array(om.resultIndices)
+            for (let k = 0; k < idx.length; k += 3) { const tmp = idx[k + 1]; idx[k + 1] = idx[k + 2]; idx[k + 2] = tmp }
+            meta[newId] = { ...meta[newId], resultVertices: v, resultIndices: idx, resultNormals: n ?? undefined }
+            csgResultIds.add(newId)
+          }
         }
       }
 

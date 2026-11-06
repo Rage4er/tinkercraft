@@ -170,7 +170,8 @@
     "editGone": "The object of this step no longer exists in the scene",
     "editStepOp": "Edit step {{step}}: {{detail}}",
     "edited": "edited (step {{step}})",
-    "editMoveStep": "Edit this step's offset (CSG below is recomputed)"
+    "editMoveStep": "Edit this step's offset (CSG below is recomputed)",
+    "editMirrorStep": "Edit this mirror's plane (CSG below is recomputed)"
   },
   "filters": {
     "add_shape": "Add",
@@ -370,6 +371,9 @@
     "rotation": "Rotation",
     "scale": "Scale",
     "hint": "The value is applied on Enter or when leaving the field; CSG further down the history is recomputed",
-    "recomputing": "Recomputing CSG…"
+    "recomputing": "Recomputing CSG…",
+    "mirror": "Mirror",
+    "plane": "Plane",
+    "hintMirror": "The plane is applied immediately; CSG further down the history is recomputed"
   }
 }

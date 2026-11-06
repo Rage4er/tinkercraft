@@ -1072,7 +1072,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     } catch (e) { set({ busy: false }); console.error('editChildParams:', e); notify(i18n.t('errors.editChild.failed'), 'error') }
   },
 
-  // ── Правка прошлого шага с каскадом (Фаза 9.5.2: move) ──
+  // ── Правка прошлого шага с каскадом (Фаза 9.5.2: move, 9.5.3: mirror) ──
   editStepParams: async (stepIndex, patch) => {
     if (get().busy) return false
     const { objects, operations, historyIndex, selectedIds } = get()

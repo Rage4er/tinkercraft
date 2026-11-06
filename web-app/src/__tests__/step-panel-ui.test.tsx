@@ -1,5 +1,5 @@
 // ============================================================
-// step-panel-ui.test.tsx — Фаза 9.5.2: Timeline ✎ у move → панель «Шаг N» → ΔX
+// step-panel-ui.test.tsx — Фаза 9.5.2/9.5.3: Timeline ✎ у move/mirror → панель «Шаг N»
 // ============================================================
 // Настоящий WASM через worker-bridge: коммит поля запускает реальный каскад CSG.
 
@@ -192,3 +192,63 @@ describe('StepPanel (9.5.2)', () => {
     await until(() => useUiStore.getState().selectedStep === null)
   })
 })
+
+/** призма → зеркало YZ → копия ∪ сфера. Возвращает сырой индекс шага mirror и id копии. */
+async function mirroredCsg(): Promise<{ idx: number; copy: string; rootId: string }> {
+  await st().addShape('prism', { radius: 10, height: 20, sides: 5 })
+  const prism = Object.keys(st().objects)[0]
+  await st().moveObject(prism, { ...ID, x: 30, y: 3 })
+  st().selectObjects([prism], false)
+  await st().mirrorSelected('YZ')
+  const copy = Object.keys(st().objects).find((k) => k !== prism)!
+  await st().addShape('sphere', { radius: 9, segments: 32 })
+  const sphere = Object.keys(st().objects).find((k) => k !== prism && k !== copy)!
+  await st().moveObject(sphere, { ...ID, x: -24 })
+  st().selectObjects([copy, sphere], false)
+  await st().csgBoolean('union')
+  const rootId = st().selectedIds[0]
+  useDocumentStore.setState({ selectedIds: [] })
+  return { idx: st().operations.findIndex((o) => o.type === 'mirror'), copy, rootId }
+}
+
+describe('StepPanel (9.5.3, mirror)', () => {
+  it('✎ у шага mirror → панель с плоскостью; выбор XZ сразу пишет edit_step; та же плоскость — ничего', async () => {
+    const { idx, rootId } = await mirroredCsg()
+    act(() => root.render(<Harness />))
+    const rows = Array.from(host.querySelectorAll<HTMLElement>('.tl-item'))
+    expect(rows[idx].querySelector('.tl-edit')?.getAttribute('title')).toBe(i18n.t('timeline.editMirrorStep'))
+    act(() => { rows[idx].querySelector<HTMLButtonElement>('.tl-edit')!.click() })
+
+    const panel = () => host.querySelector<HTMLElement>('[data-testid=step-panel]')!
+    expect(panel().textContent).toContain(i18n.t('stepPanel.title', { step: idx + 1, name: i18n.t('stepPanel.mirror') }))
+    expect(panel().textContent).toContain(i18n.t('shapes.prism'))     // зеркалится призма
+    expect(host.querySelector('[data-testid=step-original]')?.textContent).toBe('YZ')
+    expect(host.querySelector('[data-testid=step-delta]')).toBeNull()  // полей сдвига нет
+    const btn = (p: string) => host.querySelector<HTMLButtonElement>(`[data-testid=step-plane-${p}]`)!
+    expect(btn('YZ').getAttribute('aria-checked')).toBe('true')
+    expect(btn('XZ').getAttribute('aria-checked')).toBe('false')
+
+    const n = st().operations.length
+    act(() => { btn('YZ').click() })                                 // текущая — без шага истории
+    await act(async () => { await new Promise((r) => setTimeout(r, 50)) })
+    expect(st().operations).toHaveLength(n)
+
+    const x0 = st().objects[rootId].transform.x
+    act(() => { btn('XZ').click() })
+    await until(() => st().operations.length === n + 1 && !st().busy)
+    expect(st().operations[n].type).toBe('edit_step')
+    expect(useNotifications.getState().notifications.filter((x) => x.type !== 'info')).toHaveLength(0)
+    // pivot CSG = новая копия: YZ давал x = −30, XZ даёт x = 30 (y = −3)
+    expect(x0).toBeCloseTo(-30, 6)
+    expect(st().objects[rootId].transform.x).toBeCloseTo(30, 6)
+    expect(st().objects[rootId].transform.y).toBeCloseTo(-3, 6)
+
+    expect(btn('XZ').getAttribute('aria-checked')).toBe('true')
+    expect(host.querySelector('[data-testid=step-edited]')).not.toBeNull()
+    const rows2 = Array.from(host.querySelectorAll<HTMLElement>('.tl-item'))
+    expect(rows2[idx].querySelector('[data-testid=tl-edited]')).not.toBeNull()
+    expect(rows2[idx].textContent).toContain('XZ')                      // эффективная плоскость в подписи шага
+    expect(rows2[n].textContent).toContain(`${i18n.t('stepPanel.mirror').toLowerCase()} YZ → XZ`)
+  })
+})
+

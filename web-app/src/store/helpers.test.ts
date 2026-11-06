@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { centerMassAtOrigin, computeCenter, computeWorldAABB, worldVerticesAABB, solveAlignDeltas } from './helpers'
+import { centerMassAtOrigin, computeCenter, computeWorldAABB, worldVerticesAABB, solveAlignDeltas, composeMirroredList } from './helpers'
 import type { SceneObject, TransformNR } from '../csg/types'
 
 // Helper: build a triangular mesh for a prism with given sides, height, z_offset.
@@ -281,5 +281,20 @@ describe('solveAlignDeltas', () => {
     const objects = { a: cubeObj('a', 0), b: cubeObj('b', 4) }
     expect(solveAlignDeltas(objects, ['a', 'b', 'ghost'], 'X', 'min', 'b')).toEqual({ a: 4 })
     expect(solveAlignDeltas(objects, ['a'], 'X', 'min', 'ghost')).toEqual({})
+  })
+})
+
+describe('composeMirroredList (8.5.12; правка шага mirror — 9.5.3)', () => {
+  it('композиция: разные плоскости добавляются, одинаковая соседняя отменяет', () => {
+    expect(composeMirroredList(undefined, 'YZ')).toEqual(['YZ'])
+    expect(composeMirroredList(['YZ'], 'XZ')).toEqual(['YZ', 'XZ'])          // зеркало зеркала — оба
+    expect(composeMirroredList(['YZ', 'XZ'], 'XY')).toEqual(['YZ', 'XZ', 'XY'])
+    expect(composeMirroredList(['YZ'], 'YZ')).toBeUndefined()               // YZ∘YZ = тождество
+    expect(composeMirroredList(['YZ', 'XZ'], 'XZ')).toEqual(['YZ'])
+  })
+  it('вход не мутируется', () => {
+    const list: Array<'XY' | 'XZ' | 'YZ'> = ['YZ']
+    composeMirroredList(list, 'XZ')
+    expect(list).toEqual(['YZ'])
   })
 })
