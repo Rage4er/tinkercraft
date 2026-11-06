@@ -1,7 +1,7 @@
 // e2e/tree.mjs — Фаза 9.1: CSG раскрывается в дереве, ребёнок выбирается.
 // Запуск: `pnpm dev` в одном терминале, `pnpm e2e:tree` в другом.
 // Необязательный аргумент — путь для скриншота: `node e2e/tree.mjs /tmp/tree.png`.
-import { openApp } from './helpers.mjs'
+import { openApp, panelButton } from './helpers.mjs'
 
 const shot = process.argv[2]
 const { browser, page, errors } = await openApp()
@@ -23,7 +23,7 @@ try {
   await rows.nth(0).click()
   await rows.nth(1).click({ modifiers: ['Shift'] })
   // порядок кнопок в группе «CSG операции»: объединение, вычитание, пересечение
-  await page.locator('.panel-right .csg-group', { hasText: 'CSG операции' }).locator('button').first().click()
+  await panelButton(page, 'Объединение').click()
   await page.waitForFunction(() => document.querySelectorAll('.ct-item[data-object-id]').length === 1, null, { timeout: 15000 })
 
   // CSG-результат: шеврон есть, дети скрыты
@@ -74,7 +74,7 @@ try {
   if ((await rows2.count()) !== 2) fail('ожидалось 2 объекта перед вторым CSG, получено ' + (await rows2.count()))
   await rows2.nth(0).click()
   await rows2.nth(1).click({ modifiers: ['Shift'] })
-  await page.locator('.panel-right .csg-group', { hasText: 'CSG операции' }).locator('button').first().click()
+  await panelButton(page, 'Объединение').click()
   await page.waitForFunction(() => document.querySelectorAll('.ct-item[data-object-id]').length === 1, null, { timeout: 15000 })
   await page.locator('.ct-item[data-object-id] .ct-chevron').click()
 

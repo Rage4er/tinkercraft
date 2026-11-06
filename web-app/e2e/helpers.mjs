@@ -21,3 +21,12 @@ export async function openApp({ width = 1400, height = 850 } = {}) {
   await page.waitForFunction(() => !document.body.innerText.includes('Загрузка CSG'), null, { timeout: 30000 })
   return { browser, page, errors }
 }
+
+// ALIGN-REVIT: кнопки — по доступному имени (aria-label = подпись тултипа), а не по
+// индексу: перестановка кнопок тулбара больше не ломает e2e. Имена — ru (язык по умолчанию).
+/** Кнопка тулбара по aria-label (точное совпадение), напр. 'Зеркало YZ', 'Импорт', 'X мин'. */
+export const toolbarButton = (page, name) =>
+  page.getByRole('toolbar').getByRole('button', { name, exact: true })
+/** Кнопка правой панели свойств по aria-label, напр. 'Объединение' (RegExp — для ru/en). */
+export const panelButton = (page, name) =>
+  page.locator('.panel-right').getByRole('button', { name, exact: true })

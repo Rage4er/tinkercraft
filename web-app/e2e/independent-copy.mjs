@@ -10,7 +10,7 @@
 // старая вставка (запечённый меш, не раскрывается) падают с понятной причиной.
 // Запуск: `pnpm dev` в одном терминале, `pnpm e2e:independent-copy` в другом.
 // Необязательный аргумент — путь для скриншота: `node e2e/independent-copy.mjs /tmp/copy.png`.
-import { openApp } from './helpers.mjs'
+import { openApp, toolbarButton, panelButton } from './helpers.mjs'
 
 const shot = process.argv[2]
 const { browser, page, errors } = await openApp()
@@ -71,13 +71,13 @@ try {
   // объединение
   await row(cube).click()
   await row(sphere).click({ modifiers: ['Shift'] })
-  await right.locator('.csg-group', { hasText: 'CSG операции' }).locator('button').first().click()
+  await panelButton(page, 'Объединение').click()
   await rowCount(1)
   const [root] = await ids()
 
   // ── 1. Зеркало YZ → независимая копия ──
   await row(root).click()
-  await page.locator('button.btn-compact').nth(17).click() // 17-я кнопка тулбара — зеркало YZ
+  await toolbarButton(page, 'Зеркало YZ').click()
   await rowCount(2)
   const mirror = (await ids()).find((id) => id !== root)
   await expand(mirror, 'Зеркальная копия')
