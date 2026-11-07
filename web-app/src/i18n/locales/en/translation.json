@@ -148,6 +148,7 @@
   },
   "timeline": {
     "addShape": "Add {{shape}}",
+    "addText": "Add Text: {{text}}",
     "importMesh": "Import {{name}}",
     "move": "Move",
     "scale": "Scale",

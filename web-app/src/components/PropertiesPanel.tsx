@@ -4,6 +4,7 @@ import NumInput from "./NumInput";
 import CsgButtons from "./CsgButtons";
 import type { ShapeParams, SceneObject } from "../csg/types";
 import { EyeIcon, EyeOffIcon, FolderIcon, SaveIcon } from "./icons";
+import { isTextObject } from '../store/text-object'
 
 export default function PropertiesPanel({
   firstSelected,
@@ -166,6 +167,7 @@ export default function PropertiesPanel({
         <span className="props-label">{t("properties.type")}</span>
         <span className="props-value">
           {firstSelected.shapeType === 'csg' ? t("csg.result") :
+            isTextObject(firstSelected) ? t("shapes.text") :             /* UX-AUDIT-31 */
             firstSelected.shapeType === 'import_mesh' ? t("actions.import") :
               t(`shapes.${firstSelected.shapeType}`)}
         </span>

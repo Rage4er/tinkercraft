@@ -389,6 +389,9 @@ export interface ClipEntry {
   // For import_mesh:
   importVertices?: Float32Array
   importIndices?: Uint32Array
+  /** UX-AUDIT-31: копия 3D-текста — исходная строка и имя («Текст: …») */
+  text?: string
+  name?: string
   // For CSG results (pasted as baked mesh):
   csgVertices?: Float32Array
   csgIndices?: Uint32Array

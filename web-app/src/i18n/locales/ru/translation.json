@@ -148,6 +148,7 @@
   },
   "timeline": {
     "addShape": "Добавить {{shape}}",
+    "addText": "Добавить текст: {{text}}",
     "importMesh": "Импорт {{name}}",
     "move": "Переместить",
     "scale": "Масштаб",

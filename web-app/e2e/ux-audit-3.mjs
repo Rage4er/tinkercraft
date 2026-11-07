@@ -145,6 +145,13 @@ try {
       if (await s.toasts()) fail(`O: «${text}» — уведомления: ${await s.toasts()}`)
     }
     await s.blur(); await page.keyboard.press('KeyF'); await page.waitForTimeout(600); await s.shot('o-text.png')
+    // ✅ UX-AUDIT-31: в истории — «Добавить текст: Привет» (не «Импорт …»), в свойствах — «Тип: Текст»
+    const textSteps = (await page.locator('.tl-label').allInnerTexts()).map((x) => x.trim())
+    if (textSteps.join() !== 'Добавить текст: Привет,Добавить текст: Дом,Добавить текст: Федя,Добавить текст: Hello') fail('UX-AUDIT-31: шаги текста — ' + textSteps.join(' / '))
+    await s.pick((await s.ids())[0])
+    const type = (await page.locator('.panel-right .props-row', { hasText: 'Тип' }).first().innerText()).replace(/\s+/g, ' ')
+    if (!type.includes('Текст')) fail('UX-AUDIT-31: в свойствах — ' + type)
+    ok.push('O: шаги текста — «Добавить текст: Привет» …, в свойствах «Тип: Текст» (UX-AUDIT-31)')
     // O. куб − «ДдФ» → CSG без уведомлений
     await s.confirmClear()
     const cube = await s.add('Куб'); await s.setF(cube, 'num-input-pos-X', 0)

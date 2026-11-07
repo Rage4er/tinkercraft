@@ -4,10 +4,10 @@
 // ✅ — сценарии O–T (текст, затенение, история), которые оправдались: регрессия фиксов
 //      UX-AUDIT-18 (кириллица запасным шрифтом, предупреждение о символах вне шрифтов) и
 //      UX-AUDIT-20 (CSG и импорт затенены гладко по излому);
-// 🐞 — новые баги UX-AUDIT-21, 22, 25–29, 31 (логика): `it.fails` «ожидание» — тест проверяет ожидание
-//      пользователя и сейчас падает (баг воспроизводится; каждый проверен — падает на своей
-//      проверке). После фикса (fix-all-3): `it.fails` → `it`.
-// Браузерная часть (вёрстка: поле, линейка, тост на 768) — e2e/ux-audit-3.mjs (`knownBug`).
+// 🐞 — баги UX-AUDIT-21, 22, 25–29, 31 (логика): заведены `it.fails` «ожидание» (каждый проверен —
+//      падал на своей проверке), исправлены в fix-all-3 → `it` (регрессия) + проверки фиксов.
+// Браузерная часть (вёрстка: поле, линейка, тост на 768; долгие задачи при импорте 100k) — e2e/ux-audit-3.mjs
+// (были `knownBug`, после fix-all-3 — обычные проверки).
 // Описание и шаги — DEVELOPMENT_PLAN.md › «UX-AUDIT-3».
 
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest'
@@ -38,9 +38,11 @@ import { findNearestSnap } from '../components/snap-utils'
 import ComponentTree, { displayName } from '../components/ComponentTree'
 import LeftPanel from '../components/LeftPanel'
 import TextModal from '../components/TextModal'
-import Timeline, { opLabel, filterKeyOf } from '../components/Timeline'
+import Timeline, { opLabel, opIcon, filterKeyOf } from '../components/Timeline'
+import { isTextObject } from '../store/text-object'
+import { serialize3dtc, parse3dtc } from '../io/3dtc-io'
 import { OP_FILTER_LABELS } from '../constants'
-import { SubtractIcon, IntersectIcon, UnionIcon } from '../components/icons'
+import { SubtractIcon, IntersectIcon, UnionIcon, TextIcon } from '../components/icons'
 import { rebuildFromHistory, rebuildBuildTree } from '../store/rebuild'
 import type { SceneObject, ShapeParams, ShapeType, TransformNR, TinkerCraftOperation } from '../csg/types'
 
@@ -502,13 +504,54 @@ describe('UX-AUDIT-29 — фильтр истории: категория = сл
   })
 })
 
-describe('UX-AUDIT-31 — 3D-текст в истории — «Импорт Текст: …»', () => {
-  // Текст добавляется как импорт (addRawMesh → шаг import_mesh): в истории «Импорт Текст: Привет»
-  // с иконкой импорта, в свойствах «Тип: Импорт», в фильтре — «Импорт». Палитра обещает
-  // «Добавить текст» (подсказка, shapesAcc.text), шаги фигур — «Добавить куб / сферу …».
-  it.fails('ожидание: шаг истории текста «Привет» — «Добавить текст …», а не «Импорт …»', async () => {
+describe('UX-AUDIT-31 — 3D-текст в истории — «Добавить текст: …», в свойствах — «Текст»', () => {
+  // Было: текст добавляется импортом (addRawMesh → шаг import_mesh): в истории «Импорт Текст: Привет»
+  // с иконкой импорта, в свойствах «Тип: Импорт», в фильтре — «Импорт». Исправлено в fix-all-3: у шага
+  // и объекта — исходная строка `text` (store/text-object.ts); старые проекты — по id `txt_N`.
+  it('шаг истории текста «Привет» — «Добавить текст: Привет», иконка текста, фильтр «Добавить»; объект — текст', async () => {
     expect(await addTextObject('Привет', { size: 10, depth: 2 })).toBe(true)
-    const label = opLabel(st().operations[st().historyIndex - 1], t)
-    expect(label).toMatch(/^Добавить текст/)
+    const op = st().operations[st().historyIndex - 1]
+    expect(opLabel(op, t)).toBe('Добавить текст: Привет')
+    expect(renderToStaticMarkup(<>{opIcon(op)}</>)).toBe(renderToStaticMarkup(<TextIcon size={32} />))
+    expect(filterKeyOf(op)).toBe('add_shape')
+    const obj = Object.values(st().objects)[0]
+    expect(obj.text).toBe('Привет')
+    expect(isTextObject(obj)).toBe(true)
+    // дерево — иконка текста
+    const h = mount(<ComponentTree objects={[obj]} selectedIds={new Set()} onSelect={noop} onRename={noop} onToggleVis={noop} onDelete={noop} />)
+    expect(h.querySelector('.ct-item[data-object-id] .ct-icon')!.innerHTML).toBe(renderToStaticMarkup(<TextIcon size={32} />))
+    await i18n.changeLanguage('en')
+    expect(opLabel(op, t)).toBe('Add Text: Привет')
+  })
+  it('живое = rebuild и .3dtc: строка текста у объекта; копия — «Вставить текст», тоже текст', async () => {
+    await addTextObject('Дом', { size: 10, depth: 2 })
+    const id = Object.keys(st().objects)[0]
+    // копия
+    st().selectObjects([id], false); st().copySelected(); await st().pasteClipboard()
+    const pasteOp = st().operations[st().historyIndex - 1]
+    expect(opLabel(pasteOp, t)).toBe('Вставить текст')
+    expect(filterKeyOf(pasteOp)).toBe('paste')
+    const copy = Object.values(st().objects).find((o) => o.id !== id)!
+    expect([copy.text, copy.name, isTextObject(copy)]).toEqual(['Дом', 'Текст: Дом', true])
+    // перестроение из истории и файл
+    const ops = st().operations.slice(0, st().historyIndex)
+    const live = st().objects
+    clearSnapshots(); clearTree()
+    const rebuilt = await rebuildFromHistory(ops)
+    for (const k of Object.keys(live)) expect([rebuilt[k].text, rebuilt[k].name], k).toEqual([live[k].text, live[k].name])
+    const doc = await parse3dtc(await serialize3dtc({ objects: live, operations: ops, operationsTrimmed: false }))
+    expect(doc.operations.map((o) => (o.type === 'import_mesh' ? o.text : null))).toEqual(['Дом', 'Дом'])
+  })
+  it('импорт STL — по-прежнему «Импорт …» и тип «Импорт»; старый проект (без поля, id txt_N) — текст', async () => {
+    const stl = { type: 'import_mesh', id: 'stl_3', name: 'a.stl', color: '#fff', transform: ID, vertices: [], indices: [] } as unknown as TinkerCraftOperation
+    expect(opLabel(stl, t)).toBe('Импорт a.stl')
+    expect(filterKeyOf(stl)).toBe('import_mesh')
+    expect(isTextObject({ id: 'stl_3', shapeType: 'import_mesh' })).toBe(false)
+    const legacy = { type: 'import_mesh', id: 'txt_5', name: 'Текст: Дом', color: '#fff', transform: ID, vertices: [], indices: [] } as unknown as TinkerCraftOperation
+    expect(opLabel(legacy, t)).toBe('Добавить текст: Дом')
+    const legacyEn = { ...legacy, name: 'Text: Hi' } as TinkerCraftOperation
+    expect(opLabel(legacyEn, t)).toBe('Добавить текст: Hi')
+    expect(isTextObject({ id: 'txt_5', shapeType: 'import_mesh' })).toBe(true)
+    expect(isTextObject({ id: 'csg_5', shapeType: 'csg' })).toBe(false)
   })
 })

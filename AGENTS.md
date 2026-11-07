@@ -14,7 +14,7 @@
 - **manifold-3d** (WASM) — CSG операции в Web Worker
 - **Zustand 5** — стейт-менеджмент
 - **Vite 6** — сборка
-- **Vitest 4** — тесты (789 тестов, 64 файла; UX-AUDIT-1…10 исправлены в `fix-all`, 11…20 — в `fix-all-2`; 8 известных багов UX-прогона 3 — под `it.fails` в `__tests__/ux-audit-3.test.tsx`, ещё 3 — `knownBug` в `e2e/ux-audit-3.mjs`: UX-AUDIT-21…31, чинить в `fix-all-3`)
+- **Vitest 4** — тесты (796 тестов, 64 файла; известных багов под `it.fails` нет — UX-AUDIT-1…10 исправлены в `fix-all`, 11…20 — в `fix-all-2`, 21…31 — в `fix-all-3`)
 - **pnpm** — пакетный менеджер
 
 ## Команды
@@ -23,7 +23,7 @@
 cd web-app
 pnpm dev          # dev-сервер (порт 5000)
 pnpm build        # production-сборка
-pnpm test         # запуск тестов (789 тестов, 64 файла: 781 + 8 expected fail — UX-AUDIT-21…31)
+pnpm test         # запуск тестов (796 тестов, 64 файла)
 pnpm typecheck    # tsc --noEmit
 pnpm e2e:smoke    # дымовой тест в браузере (Playwright; нужен запущенный pnpm dev; см. web-app/e2e/helpers.mjs)
 pnpm e2e:tree     # Фаза 9.1: раскрытие CSG в дереве, выбор ребёнка
@@ -36,7 +36,7 @@ pnpm e2e:import-mesh-csg  # IMPORT-MESH-CSG: замкнутый STL (e2e/fixture
 pnpm e2e:nested-moved-edit  # NESTED-MOVED-EDIT: G сдвинут и повёрнут до ∪ цилиндр → правка сферы во вложенном G без замка; undo/redo
 pnpm e2e:ux-audit  # UX-AUDIT: ✅-сценарии без покрытия (примитивы, интерфейс, .3dtc/STL, 100k) + исправленные UX-AUDIT-1…10 (fix-all)
 pnpm e2e:ux-audit-2  # UX-прогон 2 (H–N): CSG 3 уровней и копия копии в UI, 100k → экспорт, стресс, 1024/768, темы
-pnpm e2e:ux-audit-3  # UX-прогон 3 (H–N повторно + O–T): текст (кириллица, CSG, 漢字/emoji), CSG со сферой, импорт ∪ импорт → .3dtc, выравнивание повёрнутого CSG, стресс 52/104, 1366, тосты, поле, история; knownBug UX-AUDIT-23/24/30
+pnpm e2e:ux-audit-3  # UX-прогон 3 (H–N повторно + O–T): текст (кириллица, CSG, 漢字/emoji), CSG со сферой, импорт ∪ импорт → .3dtc, выравнивание повёрнутого CSG, стресс 52/104, 1366, тосты, поле, история + исправленные UX-AUDIT-21/23/24/27/29/30/31 (импорт 100k без долгих задач, стрелки поля, плашка линейки, тост на 768)
 pnpm e2e:align-ui-revit  # ALIGN-UI-REVIT: «Выровнять» → Z → верх B в 0; грань A → B; «Множественное»; Esc; правый клик
 pnpm e2e:align-obb  # ALIGN-REVIT: режимом «Выровнять» — повёрнутый цилиндр к грани куба, повёрнутый куб к плоскости XY (реальная геометрия)
 ```
@@ -97,6 +97,7 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 | `src/store/snapshots.ts` | Snapshot cache для мгновенного undo/redo (PERF-1) |
 | `src/store/notifications.ts` | Toast-уведомления (замена alert) |
 | `src/store/add-text.ts` | 3D-текст в сцену (`addTextObject`): меш `io/text-mesh.ts`, имя «Текст: …», ошибка → уведомление (UX-AUDIT-3/6/10) |
+| `src/store/text-object.ts` | 3D-текст как объект (UX-AUDIT-31): `textOfOp` (строка текста шага `import_mesh`: поле `text`, у старых — по id `txt_N` и имени), `isTextObject` — история «Добавить текст: …», «Тип: Текст», иконка текста |
 | `src/store/add-shape-queue.ts` | Клик по фигуре палитры (UX-AUDIT-9): повтор той же фигуры <200 мс отбрасывается, позже — ждёт освобождения стора (`createAddShapeGate`, `addShapeWhenIdle`) |
 | `src/store/mirror-store.ts` | Store для зеркальных операций; зеркало CSG — независимая копия дерева (`copySubtree` с плоскостью) |
 | **CSG / Build Tree** | |
@@ -114,7 +115,7 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 | `src/components/align-picking.ts` | Raycast по треугольнику (`pickFace` — мировые нормаль и точка) и плоская грань для подсветки (`planarFaceTriangles`) |
 | `src/hooks/useAlignModeKeys.ts` | Esc → выход из режима выравнивания (capture, раньше общего обработчика App) |
 | `src/hooks/useAutosave.ts` | Автосохранение (таймер) и восстановление прошлой сессии при старте, когда воркер готов (UX-AUDIT-1) |
-| `src/components/object-geometry.ts` | Геометрия Three.js объекта (`buildObjectGeometry`, UX-AUDIT-20) — одна для создания и обновления меша: куб/призма/пирамида — плоско, CSG/импорт — по углу излома 30° (`toCreasedNormals`), прочие примитивы — гладко |
+| `src/components/object-geometry.ts` | Геометрия Three.js объекта (`buildObjectGeometry`, UX-AUDIT-20) — одна для создания и обновления меша: куб/призма/пирамида — плоско, CSG/импорт/цилиндр/конус — по углу излома 30° (`toCreasedNormals`, без индекса; UX-AUDIT-26 — острая кромка торца), сфера/тор — гладко. `useMeshSync` пересобирает геометрию только при изменении источника (`rememberGeometrySource`: длины и хэш вершин в `userData`, UX-AUDIT-21) |
 | `src/components/ConfirmModal.tsx` | Подтверждение разрушительного действия («Очистить сцену», UX-AUDIT-2): фокус на «Отмена», Esc/фон — отмена, клавиши не уходят в глобальные сочетания |
 | `src/components/StepPanel.tsx` | Панель «Шаг N» (вместо `PropertiesPanel`, пока `ui-store.selectedStep` задан): ΔX/ΔY/ΔZ шага move (коммит по Enter/blur), плоскость шага mirror (сразу по выбору), глубина шага extrude (ось — просмотр) → `editStepParams` — Фаза 9.5.2–9.5.4 |
 | `src/hooks/useSelectedStepGuard.ts` | Сброс выбора шага (undo до шага, выделение в сцене, выбор ребёнка CSG) — Фаза 9.5.2 |
@@ -129,7 +130,7 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 | `src/csg/BUILD_TREE_SPEC.md` | Спецификация Build Tree (1410 строк) |
 | **Components** | |
 | `src/components/Viewport3D.tsx` | Three.js вьюпорт, гизмо, raycaster, ruler, snap-to-geometry |
-| `src/components/snap-utils.ts` | Привязка (snap) к геометрии: vertex, edge, face, circle |
+| `src/components/snap-utils.ts` | Привязка (snap) к геометрии: vertex, edge, face, circle; рёбра — и у геометрии без индекса (по позициям), кэш пар рёбер на геометрию (UX-AUDIT-22) |
 | `src/components/Toolbar.tsx` | Тулбар (файл, undo, view, gizmo, CSG, тема); у каждой кнопки `aria-label` = подпись тултипа (`IconButton`), e2e ищут кнопки по нему (`toolbarButton`/`panelButton` в `e2e/helpers.mjs`), не по индексу |
 | `src/components/LeftPanel.tsx` | Палитра фигур + список объектов + история |
 | `src/components/PropertiesPanel.tsx` | Панель свойств (трансформ, resize, CSG; extrude в UI нет — EXTRUDE-3D-SCALE) |
@@ -137,7 +138,7 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 | `src/components/StatusBar.tsx` | Статус-бар |
 | `src/components/NumInput.tsx` | Numeric input с draft-редактированием; единица по умолчанию — «мм»/«mm» по языку; `integer` — целое поле (UX-AUDIT-7/8) |
 | `src/components/Section.tsx` | Collapsible section |
-| `src/components/Timeline.tsx` | История операций + opIcon/opLabel |
+| `src/components/Timeline.tsx` | История операций + opIcon/opLabel; `filterKeyOf` — категория шага для фильтра («Вставить», «Повернуть», «Масштаб» — UX-AUDIT-29) |
 | **IO** | |
 | `src/io/stl-import.ts` | Импорт STL (бинарный + ASCII) |
 | `src/io/stl-export.ts` | Экспорт в бинарный STL |

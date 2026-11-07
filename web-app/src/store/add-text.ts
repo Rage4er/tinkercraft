@@ -39,7 +39,7 @@ export async function addTextObject(
   const store = useDocumentStore.getState()
   const before = Object.keys(store.objects).length
   // ошибки построения в воркере addRawMesh сообщает сам (errors.importMeshFailed)
-  await store.addRawMesh(i18n.t('textModal.objectName', { text }), mesh.vertices, mesh.indices)
+  await store.addRawMesh(i18n.t('textModal.objectName', { text }), mesh.vertices, mesh.indices, text)
   const added = Object.keys(useDocumentStore.getState().objects).length > before
   // UX-AUDIT-18: символы не из шрифта шрифт рисует «?» — раньше молча
   if (added && mesh.missing.length > 0) notify(i18n.t('errors.textMissingGlyphs', { chars: mesh.missing.join('') }), 'warning')
