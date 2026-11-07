@@ -129,7 +129,7 @@ export default function ComponentTree({ objects, selectedIds, onSelect, onRename
     if (node.type === 'baked') {
       return node.mirrored ? `${shape} (${t('componentTree.mirroredShort')})` : shape
     }
-    const summary = formatParams(node.params)
+    const summary = formatParams(node.params, node.shapeType)
     const base = summary ? `${shape} · ${summary}` : shape
     // Фаза 9.8: зеркальный примитив редактируем — помечаем только как «зеркало»
     return node.mirrored ? `${base} (${t('componentTree.mirroredShort')})` : base

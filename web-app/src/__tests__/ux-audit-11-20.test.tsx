@@ -125,11 +125,36 @@ describe('UX-AUDIT-13 — вставка CSG в истории — «Встав�
 })
 
 describe('UX-AUDIT-14 — цилиндр: параметры цилиндра, сводка «R10 H20»', () => {
-  it.fails('новый цилиндр — радиус и высота (а не ширина/высота/глубина куба), сводка дерева «R10 H20»', async () => {
+  it('новый цилиндр — радиус и высота (а не ширина/высота/глубина куба), сводка дерева «R10 H20»', async () => {
     const c = await shape('cylinder', undefined, at(0))
     expect(st().objects[c].params).toMatchObject({ radius: 10, height: 20 })
     expect(st().objects[c].params.width).toBeUndefined()
-    expect(formatParams(st().objects[c].params)).toBe('R10 H20')
+    expect(formatParams(st().objects[c].params, 'cylinder')).toBe('R10 H20')
+  })
+})
+
+describe('UX-AUDIT-14 — геометрия та же, старые цилиндры и дерево', () => {
+  it('новые параметры по умолчанию дают ту же геометрию, что старые (width/height/depth)', async () => {
+    const oldC = await shape('cylinder', { width: 20, height: 20, depth: 20 }, at(0))
+    const newC = await shape('cylinder', undefined, at(0))
+    const a = st().objects[oldC], b = st().objects[newC]
+    expect(b.indices.length).toBe(a.indices.length)
+    expect(Array.from(b.vertices)).toEqual(Array.from(a.vertices))
+  })
+  it('сводка — по параметрам фигуры: старый цилиндр (W/H/D) — «R10 H20», куб — «W20 H20 D20», призма — «R12 H20 n6»', () => {
+    expect(formatParams({ width: 20, height: 20, depth: 20 }, 'cylinder')).toBe('R10 H20')
+    expect(formatParams({ width: 20, height: 20, depth: 20 }, 'cube')).toBe('W20 H20 D20')
+    expect(formatParams({ radius: 12, height: 20, sides: 6 }, 'prism')).toBe('R12 H20 n6')
+    expect(formatParams({ torusRadius: 15, tubeRadius: 4 }, 'torus')).toBe('R15 r4')
+  })
+  it('строка дерева CSG с цилиндром — «Цилиндр · R10 H20»', async () => {
+    const a = await shape('cube', { width: 20, height: 20, depth: 20 }, at(0))
+    const c = await shape('cylinder', undefined, at(8))
+    st().selectObjects([a, c], false); await st().csgBoolean('union')
+    const root = st().selectedIds[0]
+    const view = (await import('../csg/tree-view')).getTreeView(root)!
+    const cyl = view.children.find((ch) => ch.shapeType === 'cylinder')!
+    expect(formatParams(cyl.params, cyl.shapeType)).toBe('R10 H20')
   })
 })
 

@@ -208,8 +208,11 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const id = nextId('obj')
     const transform: TransformNR = { x: idx * OBJECT_SPACING, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
     const color = colorForIndex(idx)
+    // UX-AUDIT-14: у цилиндра — свои параметры (раньше падал в ветку куба: width/height/depth;
+    // геометрия та же — радиус 10 и 48 сегментов по умолчанию воркера, высота 20)
     const defaultParams: ShapeParams =
       shapeType === 'sphere' ? { radius: 12, segments: 32 }
+      : shapeType === 'cylinder' ? { radius: 10, height: 20 }
         : shapeType === 'cone' ? { radius: 10, height: 24, segments: 32 }
           : shapeType === 'torus' ? { torusRadius: 15, tubeRadius: 4, segments: 32, tubeSegments: 16 }
             : shapeType === 'prism' ? { radius: 12, height: 20, sides: 6 }
