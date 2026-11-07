@@ -14,7 +14,7 @@
 - **manifold-3d** (WASM) — CSG операции в Web Worker
 - **Zustand 5** — стейт-менеджмент
 - **Vite 6** — сборка
-- **Vitest 4** — тесты (801 тест, 65 файлов; UX-AUDIT-1…10 исправлены в `fix-all`, 11…20 — в `fix-all-2`, 21…31 — в `fix-all-3`; 3 известных бага UX-прогона 4 — под `it.fails` в `__tests__/ux-audit-4.test.tsx`, ещё 2 — `knownBug` в `e2e/ux-audit-4.mjs`: UX-AUDIT-32…35, чинить в `fix-all-4`)
+- **Vitest 4** — тесты (810 тестов, 65 файлов; известных багов под `it.fails` нет — UX-AUDIT-1…10 исправлены в `fix-all`, 11…20 — в `fix-all-2`, 21…31 — в `fix-all-3`, 32…35 — в `fix-all-4`)
 - **pnpm** — пакетный менеджер
 
 ## Команды
@@ -23,7 +23,7 @@
 cd web-app
 pnpm dev          # dev-сервер (порт 5000)
 pnpm build        # production-сборка
-pnpm test         # запуск тестов (801 тест, 65 файлов: 798 + 3 expected fail — UX-AUDIT-32…35)
+pnpm test         # запуск тестов (810 тестов, 65 файлов)
 pnpm typecheck    # tsc --noEmit
 pnpm e2e:smoke    # дымовой тест в браузере (Playwright; нужен запущенный pnpm dev; см. web-app/e2e/helpers.mjs)
 pnpm e2e:tree     # Фаза 9.1: раскрытие CSG в дереве, выбор ребёнка
@@ -37,7 +37,7 @@ pnpm e2e:nested-moved-edit  # NESTED-MOVED-EDIT: G сдвинут и повёр�
 pnpm e2e:ux-audit  # UX-AUDIT: ✅-сценарии без покрытия (примитивы, интерфейс, .3dtc/STL, 100k) + исправленные UX-AUDIT-1…10 (fix-all)
 pnpm e2e:ux-audit-2  # UX-прогон 2 (H–N): CSG 3 уровней и копия копии в UI, 100k → экспорт, стресс, 1024/768, темы
 pnpm e2e:ux-audit-3  # UX-прогон 3 (H–N повторно + O–T): текст (кириллица, CSG, 漢字/emoji), CSG со сферой, импорт ∪ импорт → .3dtc, выравнивание повёрнутого CSG, стресс 52/104, 1366, тосты, поле, история + исправленные UX-AUDIT-21/23/24/27/29/30/31 (импорт 100k без долгих задач, стрелки поля, плашка линейки, тост на 768)
-pnpm e2e:ux-audit-4  # UX-прогон 4 (U–Y): текст новый/старый .3dtc/копия, цилиндр/конус/CSG, линейка по CSG, «Повернуть»/«Масштаб» и фильтры, 1280; knownBug UX-AUDIT-32 (выравнивание не поворачивает), -35 (линейка над 100k)
+pnpm e2e:ux-audit-4  # UX-прогон 4 (U–Y): текст новый/старый .3dtc/копия, цилиндр/конус/CSG, линейка по CSG, «Повернуть»/«Масштаб» и фильтры, 1280 + исправленные UX-AUDIT-32 (выравнивание с поворотом), -35 (линейка над 100k без долгих задач)
 pnpm e2e:align-ui-revit  # ALIGN-UI-REVIT: «Выровнять» → Z → верх B в 0; грань A → B; «Множественное»; Esc; правый клик
 pnpm e2e:align-obb  # ALIGN-REVIT: режимом «Выровнять» — повёрнутый цилиндр боковой (гладкой) гранью к грани куба — касание по реальной геометрии; повёрнутый куб плоской гранью к плоскости XY — поворот (UX-AUDIT-32)
 ```
@@ -131,7 +131,7 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 | `src/csg/BUILD_TREE_SPEC.md` | Спецификация Build Tree (1410 строк) |
 | **Components** | |
 | `src/components/Viewport3D.tsx` | Three.js вьюпорт, гизмо, raycaster, ruler, snap-to-geometry |
-| `src/components/snap-utils.ts` | Привязка (snap) к геометрии: vertex, edge, face, circle; рёбра — и у геометрии без индекса (по позициям), кэш пар рёбер на геометрию (UX-AUDIT-22) |
+| `src/components/snap-utils.ts` | Привязка (snap) к геометрии: vertex, edge, face, circle; кандидаты — треугольники рядом с точкой попадания (сетка треугольников геометрии в локальных координатах, кэш на геометрию — UX-AUDIT-35: 100k — ~6 мс на запрос); рёбра — и у геометрии без индекса (по позициям, UX-AUDIT-22) |
 | `src/components/Toolbar.tsx` | Тулбар (файл, undo, view, gizmo, CSG, тема); у каждой кнопки `aria-label` = подпись тултипа (`IconButton`), e2e ищут кнопки по нему (`toolbarButton`/`panelButton` в `e2e/helpers.mjs`), не по индексу |
 | `src/components/LeftPanel.tsx` | Палитра фигур + список объектов + история |
 | `src/components/PropertiesPanel.tsx` | Панель свойств (трансформ, resize, CSG; extrude в UI нет — EXTRUDE-3D-SCALE) |

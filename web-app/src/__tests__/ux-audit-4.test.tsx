@@ -29,6 +29,9 @@ import { clearSnapshots } from '../store/snapshots'
 import { clearTree } from '../csg/history-tree'
 import { computeRSMatrix } from '../csg/worker-matrix'
 import { worldProjectionRange } from '../store/helpers'
+import { buildObjectGeometry } from '../components/object-geometry'
+import { findNearestSnap, closestVertex, closestEdge } from '../components/snap-utils'
+import { applyTransformToPivot } from '../components/viewport-hooks'
 import { addTextObject } from '../store/add-text'
 import { isTextObject } from '../store/text-object'
 import { rebuildFromHistory, rebuildBuildTree } from '../store/rebuild'
@@ -332,5 +335,68 @@ describe('UX-AUDIT-34 — дерево: 3D-текст внутри CSG — «Т�
     const stl = { type: 'import_mesh', id: 'stl_5', name: 'a.stl', color: '#fff', transform: ID, vertices: [], indices: [] } as unknown as TinkerCraftOperation
     expect(textOfNode('stl_5', textsByObjectId([stl]))).toBeUndefined()
     expect(textOfNode(`csg_9:${txt}`, textsByObjectId(st().operations))).toBe('Дом')
+  })
+})
+
+describe('UX-AUDIT-35 — линейка: привязка ищется только рядом с курсором (тот же результат)', () => {
+  // Было: на каждое движение мыши все вершины и рёбра меша переводились в мир и перебирались (импорт
+  // 100k — 60–110 мс на движение). Исправлено в fix-all-4: сетка треугольников геометрии (кэш),
+  // кандидаты — треугольники рядом с точкой попадания. Здесь — что результат совпадает с полным
+  // перебором (время — e2e/ux-audit-4.mjs, браузер).
+  /** Полный перебор (как было): ближайшая вершина ≤ 2, иначе ближайшее ребро ≤ 2. */
+  function reference(mesh: THREE.Mesh, hit: THREE.Vector3): { type: string; point: THREE.Vector3 } | null {
+    const g = mesh.geometry, pos = g.getAttribute('position'), idx = g.getIndex()
+    const tris = (idx ? idx.count : pos.count) / 3
+    const w = (i: number) => new THREE.Vector3(pos.getX(i), pos.getY(i), pos.getZ(i)).applyMatrix4(mesh.matrixWorld)
+    const verts: THREE.Vector3[] = [], edges: { from: THREE.Vector3; to: THREE.Vector3 }[] = []
+    for (let t = 0; t < tris; t++) {
+      const c = [0, 1, 2].map((k) => w(idx ? idx.getX(t * 3 + k) : t * 3 + k))
+      verts.push(...c)
+      edges.push({ from: c[0], to: c[1] }, { from: c[1], to: c[2] }, { from: c[2], to: c[0] })
+    }
+    const v = closestVertex(verts, hit)
+    if (v) return { type: 'vertex', point: v.point }
+    const e = closestEdge(edges, hit)
+    return e ? { type: 'edge', point: e.point } : null
+  }
+  async function check(obj: SceneObject, pivotT: TransformNR, rays: number) {
+    const mesh = new THREE.Mesh(buildObjectGeometry(obj), new THREE.MeshBasicMaterial())
+    mesh.userData.objectId = obj.id
+    const pivot = new THREE.Object3D()
+    applyTransformToPivot(pivot, pivotT)
+    pivot.add(mesh); pivot.updateMatrixWorld(true)
+    const box = new THREE.Box3().setFromObject(mesh)
+    const centre = box.getCenter(new THREE.Vector3()), size = box.getSize(new THREE.Vector3())
+    let rng = 7
+    const rnd = () => { rng = (rng * 16807) % 2147483647; return rng / 2147483647 }
+    let compared = 0
+    for (let k = 0; k < rays; k++) {
+      const target = new THREE.Vector3(centre.x + (rnd() - 0.5) * size.x, centre.y + (rnd() - 0.5) * size.y, centre.z + (rnd() - 0.5) * size.z)
+      const from = target.clone().add(new THREE.Vector3(rnd() - 0.5, rnd() - 0.5, 1).normalize().multiplyScalar(200))
+      const cam = new THREE.PerspectiveCamera(50, 1, 0.1, 1000); cam.position.copy(from); cam.lookAt(target); cam.updateMatrixWorld()
+      const rc = new THREE.Raycaster(); rc.set(from, target.clone().sub(from).normalize())
+      const hit = rc.intersectObject(mesh, false)[0]
+      if (!hit) continue
+      const got = findNearestSnap(rc, { current: new Map([[obj.id, { mesh, pivot }]]) }, cam, new THREE.Vector2(0, 0))
+      const ref = reference(mesh, hit.point)
+      if (ref) {
+        expect(got?.type, `луч ${k}`).toBe(ref.type)
+        expect(got!.point.distanceTo(ref.point), `луч ${k}`).toBeLessThan(1e-6)
+      } else {
+        expect(['vertex', 'edge']).not.toContain(got?.type)
+      }
+      compared++
+    }
+    expect(compared).toBeGreaterThan(rays / 3)
+  }
+  it('CSG куб ∪ сфера (без индекса), повёрнутый и растянутый; куб (с индексом); 120 лучей — как полный перебор', async () => {
+    const a = await shape('cube', { width: 20, height: 20, depth: 20 }, at(0))
+    const b = await shape('sphere', { radius: 10, segments: 32 }, at(12))
+    st().selectObjects([a, b], false); await st().csgBoolean('union')
+    const g = st().objects[Object.keys(st().objects)[0]]
+    await check(g, { ...g.transform, rotX: 25, rotZ: 40, scaleX: 1.7, scaleZ: 0.6 }, 120)
+    const cid = await shape('cube', { width: 20, height: 20, depth: 20 }, at(50))
+    const c = st().objects[cid]
+    await check(c, { ...c.transform, rotY: 30 }, 60)
   })
 })
