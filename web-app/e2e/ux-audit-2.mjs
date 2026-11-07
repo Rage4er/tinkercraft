@@ -282,7 +282,8 @@ try {
       await page.locator('.text-modal-backdrop').getByRole('button', { name: 'Отмена', exact: true }).click()
       await toolbarButton(page, 'Менеджер проектов').click(); await page.locator('.modal-backdrop').waitFor()
       res.pm = await read('.modal-backdrop > *')
-      await page.locator('.modal-backdrop').click({ position: { x: 5, y: 5 } })
+      await page.keyboard.press('Escape')                   // UX-AUDIT-15: Esc закрывает менеджер проектов
+      await page.locator('.modal-backdrop').waitFor({ state: 'detached', timeout: 3000 }).catch(() => fail('UX-AUDIT-15: менеджер проектов не закрылся по Esc'))
       return res
     }
     const dark = await sample()
@@ -299,7 +300,7 @@ try {
       }
     }
     if (s.errors.length) fail('N: ошибки консоли ' + s.errors.join(' | '))
-    ok.push('N: тёмная/светлая — панель, тулбар, тост, подтверждение, модалка текста, проекты: фон меняется, контраст ≥ 3')
+    ok.push('N: тёмная/светлая — панель, тулбар, тост, подтверждение, модалка текста, проекты (закрываются по Esc, UX-AUDIT-15): фон меняется, контраст ≥ 3')
     await s.browser.close()
   }
 

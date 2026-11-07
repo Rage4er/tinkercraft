@@ -159,7 +159,7 @@ describe('UX-AUDIT-14 — геометрия та же, старые цилин�
 })
 
 describe('UX-AUDIT-15 — менеджер проектов закрывается по Esc', () => {
-  it.fails('Esc (фокус вне модалки и внутри) → onClose', async () => {
+  it('Esc (фокус вне модалки и внутри) → onClose', async () => {
     const onClose = vi.fn()
     const h = mount(<ProjectManagerModal onClose={onClose} onLoad={() => {}} onSave={async () => {}} setCurrentProjectId={() => {}} />)
     await act(async () => { await new Promise((r) => setTimeout(r, 20)) })     // список проектов
