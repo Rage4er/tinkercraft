@@ -209,24 +209,50 @@ try {
     await page.locator('.toast').first().click().catch(() => {})   // закрыть уведомление (клик)
   }
 
-  // UX-AUDIT-5: горячие клавиши из подсказок не работают (Tab, L, U, M; по коду — ещё N, B, X, I)
+  // ── ✅ UX-AUDIT-5: сочетания из подсказок — Tab, L, M/N/B, U/X/I ──
   const a5 = await add('Куб'); const b5 = await add('Сфера')
-  await knownBug('UX-AUDIT-5', 'сочетания из подсказок', async () => {
-    await pick(a5); await page.locator(`.ct-item[data-object-id="${b5}"]`).click({ modifiers: ['Shift'] })
+  {
+    const sel2 = async () => {
+      await pick(a5); await page.locator(`.ct-item[data-object-id="${b5}"]`).click({ modifiers: ['Shift'] })
+      await page.evaluate(() => document.activeElement?.blur())
+    }
+    const cls = (name) => toolbarButton(page, name).getAttribute('class')
+    const press = async (key, wait = 300) => { await page.keyboard.press(key); await page.waitForTimeout(wait) }
+    await sel2()
+    // Tab — камера (фокус не на кнопке); Tab на кнопке — навигация, камера не меняется
+    const cam = 'Перспектива ↔ Ортография'
+    const c0 = await cls(cam); await press('Tab')
+    if ((await cls(cam)) === c0) fail('UX-AUDIT-5: Tab не переключил камеру')
+    await press('Tab'); if ((await cls(cam)) !== c0) fail('UX-AUDIT-5: второй Tab не вернул камеру')
+    await toolbarButton(page, 'Линейка').focus(); await press('Tab')
+    if ((await cls(cam)) !== c0) fail('UX-AUDIT-5: Tab на кнопке переключил камеру (должен двигать фокус)')
     await page.evaluate(() => document.activeElement?.blur())
-    const dead = []
-    const cam = toolbarButton(page, 'Перспектива ↔ Ортография')
-    const c0 = await cam.getAttribute('class'); await page.keyboard.press('Tab'); await page.waitForTimeout(300)
-    if ((await cam.getAttribute('class')) === c0) dead.push('Tab')
-    await page.evaluate(() => document.activeElement?.blur())
-    const r0 = await toolbarButton(page, 'Линейка').getAttribute('class'); await page.keyboard.press('KeyL'); await page.waitForTimeout(300)
-    if ((await toolbarButton(page, 'Линейка').getAttribute('class')) === r0) dead.push('L')
-    const n0 = await steps(); await page.keyboard.press('KeyU'); await page.waitForTimeout(800)
-    if ((await steps()) === n0) dead.push('U')
-    const n1 = await steps(); await page.keyboard.press('KeyM'); await page.waitForTimeout(800)
-    if ((await steps()) === n1) dead.push('M')
-    if (dead.length) throw new Error('не работают: ' + dead.join(', '))
-  })
+    // L — линейка вкл/выкл
+    const r0 = await cls('Линейка'); await press('KeyL')
+    if ((await cls('Линейка')) === r0) fail('UX-AUDIT-5: L не включил линейку')
+    await press('KeyL'); if ((await cls('Линейка')) !== r0) fail('UX-AUDIT-5: второй L не выключил линейку')
+    // U / X — CSG выбранной пары (шаг истории, 2 → 1 объект), Ctrl+Z — назад
+    const nObj = await rows.count()
+    const waitObj = (k) => page.waitForFunction((m) => document.querySelectorAll('.ct-item[data-object-id]').length === m, k, { timeout: 10000 })
+    // (число шагов не годится: после Ctrl+Z отменённый шаг остаётся в Timeline для redo)
+    for (const key of ['KeyU', 'KeyX']) {
+      await sel2(); await page.keyboard.press(key)
+      await waitObj(nObj - 1).catch(async () => fail(`UX-AUDIT-5: ${key} не выполнил CSG (объектов ${await rows.count()}, было ${nObj})`))
+      await page.keyboard.press('Control+z'); await waitObj(nObj)
+    }
+    // I — пересечение (куб и сфера не пересекаются → уведомление о пустом результате, UX-AUDIT-4)
+    await sel2(); await page.keyboard.press('KeyI')
+    await page.locator('.toast-msg', { hasText: 'Результат CSG пуст' }).waitFor({ timeout: 10000 })
+      .catch(() => fail('UX-AUDIT-5: I не запустил пересечение'))
+    await page.locator('.toast').first().click().catch(() => {})
+    // M / N / B — зеркало выбранных (копии: +2 объекта, шаг истории), Ctrl+Z — назад
+    for (const key of ['KeyM', 'KeyN', 'KeyB']) {
+      await sel2(); await page.keyboard.press(key)
+      await waitObj(nObj + 2).catch(async () => fail(`UX-AUDIT-5: ${key} не выполнил зеркало (объектов ${await rows.count()}, было ${nObj})`))
+      await page.keyboard.press('Control+z'); await waitObj(nObj)
+    }
+    ok.push('UX-AUDIT-5: Tab (камера; на кнопке — фокус), L (линейка), U/X/I (CSG), M/N/B (зеркала)')
+  }
 
   // UX-AUDIT-3: куб − 3D-текст → отказ «меш не замкнут… Проверьте STL»
   await clearScene()

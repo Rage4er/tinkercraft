@@ -24,6 +24,7 @@ import { isWorkerReady } from "./csg/worker-client";
 import { SNAP_VALUES } from "./constants";
 import { useAutosave } from "./hooks/useAutosave";
 import { buildTextMesh } from "./io/text-mesh";
+import { resolveHotkey, NO_REPEAT, mirrorPlaneOf, csgOpOf, isTextEntry, tabTogglesCamera } from "./hotkeys";
 import { useSelectedChildGuard } from "./hooks/useSelectedChildGuard";
 import { useSelectedStepGuard } from "./hooks/useSelectedStepGuard";
 import { useTimelineEdit } from "./hooks/useTimelineEdit";
@@ -197,87 +198,66 @@ export default function App() {
 
   // Keyboard shortcuts — stable listener via ref (WARN-1 fix).
   // ref обновляется каждый рендер, но сам listener не переподключается.
-  const kbRef = useRef({
-    objects, deleteSelected, undo, redo, selectObjects,
+  // UX-AUDIT-5: клавиша → действие — `resolveHotkey` (hotkeys.ts, сверяется с подсказками
+  // TOOLTIP_DATA тестом); здесь — только исполнение. Под модалкой сочетания не работают.
+  const kbState = {
+    objects, selectedIds, busy, deleteSelected, undo, redo, selectObjects,
     saveProject, openProject, clearSelection, copySelected, pasteClipboard,
-    showTextModal, showPM,
-  });
-  kbRef.current = {
-    objects, deleteSelected, undo, redo, selectObjects,
-    saveProject, openProject, clearSelection, copySelected, pasteClipboard,
-    showTextModal, showPM,
+    csgBoolean, mirrorSelected,
+    modalOpen: showTextModal || showPM || showClearConfirm,
   };
+  const kbRef = useRef(kbState);
+  kbRef.current = kbState;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const ctrl = e.ctrlKey || e.metaKey;
-      if ((e.target as HTMLElement).tagName === "INPUT") return;
+      if (isTextEntry(e.target as Element | null)) return;
       const kb = kbRef.current;
-
-      // e.code — physical key position, works regardless of keyboard layout
-      // e.key — character value, depends on layout (use only for non-letter keys)
-      const code = e.code
-
-      if (code === "Backspace" || code === "Delete") {
+      // FIX (MED-18-39): под модалкой — ни Esc, ни Delete, ни Ctrl+Z по сцене
+      if (kb.modalOpen) return;
+      const action = resolveHotkey(e);
+      if (!action) return;
+      if (action === "toggleCamera" && !tabTogglesCamera(document.activeElement)) return; // Tab — навигация фокусом
+      if (e.repeat && NO_REPEAT.has(action)) {
         e.preventDefault();
-        kb.deleteSelected();
+        return;
       }
-      if (ctrl && code === "KeyZ" && !e.shiftKey) {
-        e.preventDefault();
-        kb.undo();
+      if (action !== "escape") e.preventDefault();
+      const plane = mirrorPlaneOf(action);
+      if (plane) {
+        if (kb.selectedIds.length > 0 && !kb.busy) void kb.mirrorSelected(plane);
+        return;
       }
-      if (ctrl && (code === "KeyY" || (code === "KeyZ" && e.shiftKey))) {
-        e.preventDefault();
-        kb.redo();
+      const csgOp = csgOpOf(action);
+      if (csgOp) {
+        if (kb.selectedIds.length === 2 && !kb.busy) void kb.csgBoolean(csgOp);
+        return;
       }
-      if (ctrl && code === "KeyA") {
-        e.preventDefault();
-        kb.selectObjects(Object.keys(kb.objects), false);
-      }
-      if (ctrl && code === "KeyS") {
-        e.preventDefault()
-        // FIX (HIGH-18-18): Allow Ctrl+S to save even when gizmo is active
-        // The gizmo handles `s` key for toggle (without ctrl), but Ctrl+S should always save
-        kb.saveProject()
-      }
-      if (ctrl && code === "KeyO") {
-        e.preventDefault();
-        kb.openProject();
-      }
-      if (ctrl && code === "KeyC") {
-        e.preventDefault();
-        kb.copySelected();
-      }
-      if (ctrl && code === "KeyV") {
-        e.preventDefault();
-        kb.pasteClipboard();
-      }
-      if (!ctrl && code === "KeyF") {
-        e.preventDefault();
-        fitViewRef.current?.();
-      }
-      if (!ctrl && code === "KeyH") {
-        e.preventDefault();
-        resetViewRef.current?.();
-      }
-      if (!ctrl && code === "KeyG") {
-        e.preventDefault();
-        setGizmoMode((m) => (m === "translate" ? "none" : "translate"));
-      }
-      if (!ctrl && code === "KeyR") {
-        e.preventDefault();
-        setGizmoMode((m) => (m === "rotate" ? "none" : "rotate"));
-      }
-      if (!ctrl && code === "KeyS") {
-        e.preventDefault();
-        setGizmoMode((m) => (m === "scale" ? "none" : "scale"));
-      }
-      if (code === "Escape") {
-        // FIX (MED-18-39): Don't clear selection / gizmo if a modal is open
-        if (showTextModal || showPM) return
-        setGizmoMode("none");
-        kb.clearSelection();
-        setRulerActive(false);
+      switch (action) {
+        case "delete": void kb.deleteSelected(); break;
+        case "undo": void kb.undo(); break;
+        case "redo": void kb.redo(); break;
+        case "selectAll": kb.selectObjects(Object.keys(kb.objects), false); break;
+        // FIX (HIGH-18-18): Ctrl+S сохраняет и при активном гизмо (S без Ctrl — гизмо масштаба)
+        case "save": void kb.saveProject(); break;
+        case "open": void kb.openProject(); break;
+        case "copy": kb.copySelected(); break;
+        case "paste": void kb.pasteClipboard(); break;
+        case "fitView": fitViewRef.current?.(); break;
+        case "homeView": resetViewRef.current?.(); break;
+        case "toggleCamera": setCameraMode((m) => (m === "perspective" ? "orthographic" : "perspective")); break;
+        case "gizmoTranslate": setGizmoMode((m) => (m === "translate" ? "none" : "translate")); break;
+        case "gizmoRotate": setGizmoMode((m) => (m === "rotate" ? "none" : "rotate")); break;
+        case "gizmoScale": setGizmoMode((m) => (m === "scale" ? "none" : "scale")); break;
+        case "ruler":
+          setRulerActive((r) => !r);
+          setRulerDist(null);
+          break;
+        case "escape":
+          setGizmoMode("none");
+          kb.clearSelection();
+          setRulerActive(false);
+          break;
       }
     };
     window.addEventListener("keydown", onKey);
