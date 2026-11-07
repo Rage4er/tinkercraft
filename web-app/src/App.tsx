@@ -24,6 +24,7 @@ import { isWorkerReady } from "./csg/worker-client";
 import { SNAP_VALUES } from "./constants";
 import { useAutosave } from "./hooks/useAutosave";
 import { buildTextMesh } from "./io/text-mesh";
+import { createAddShapeGate, addShapeWhenIdle } from "./store/add-shape-queue";
 import { resolveHotkey, NO_REPEAT, mirrorPlaneOf, csgOpOf, isTextEntry, tabTogglesCamera } from "./hotkeys";
 import { useSelectedChildGuard } from "./hooks/useSelectedChildGuard";
 import { useSelectedStepGuard } from "./hooks/useSelectedStepGuard";
@@ -31,6 +32,7 @@ import { useTimelineEdit } from "./hooks/useTimelineEdit";
 import type {
   TransformNR,
   ShapeParams,
+  ShapeType,
 } from "./csg/types";
 
 // ---- App ----
@@ -103,7 +105,6 @@ export default function App() {
       clipboard: s.clipboard,
       currentProjectId: s.currentProjectId,
       currentProjectName: s.currentProjectName,
-      addShape: s.addShape,
       addRawMesh: s.addRawMesh,
       importStl: s.importStl,
       deleteSelected: s.deleteSelected,
@@ -144,7 +145,6 @@ export default function App() {
     clipboard,
     currentProjectId,
     currentProjectName,
-    addShape,
     addRawMesh,
     importStl,
     deleteSelected,
@@ -300,6 +300,16 @@ export default function App() {
       console.error("Ошибка генерации текста:", err);
     }
   }, [textInput, textSize, textDepth, addRawMesh, t]);
+
+  // UX-AUDIT-9: клик по фигуре — двойной клик (<200 мс) даёт одну фигуру, позже — ещё одну
+  // (клик во время занятого стора ждёт очереди, а не теряется)
+  const addShapeGate = useMemo(() => createAddShapeGate(), []);
+  const handleAddShape = useCallback(
+    (type: ShapeType) => {
+      if (addShapeGate(type)) void addShapeWhenIdle(type);
+    },
+    [addShapeGate],
+  );
 
   // Фаза 9.1: сброс выбора ребёнка CSG, если узел/выделение исчезли
   useSelectedChildGuard();
@@ -513,7 +523,7 @@ export default function App() {
           onShapeSearchChange={setShapeSearch}
           workerOk={workerOk}
           busy={busy}
-          onAddShape={addShape}
+          onAddShape={handleAddShape}
           onShowTextModal={() => setShowTextModal(true)}
           objectList={objectList}
           selSet={selSet}

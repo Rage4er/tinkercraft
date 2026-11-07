@@ -50,6 +50,8 @@ import { clearTree } from '../csg/history-tree'
 import { useAutosave } from '../hooks/useAutosave'
 import { restoreSession } from '../io/autosave'
 import { buildTextMesh } from '../io/text-mesh'
+import { createAddShapeGate, addShapeWhenIdle } from '../store/add-shape-queue'
+import { ADD_SHAPE_DEBOUNCE_MS } from '../constants'
 import type { SceneObject, ShapeParams, ShapeType, TransformNR } from '../csg/types'
 
 const st = () => useDocumentStore.getState()
@@ -429,5 +431,37 @@ describe('UX-AUDIT-8 — целое поле «Граней» без «.0»', ()
     unmountNow()
     const h2 = mount(<NumInput label="X" value={6} onChange={() => {}} />)
     expect(h2.querySelector('input')!.value).toBe('6.0')
+  })
+})
+
+describe('UX-AUDIT-9 — двойной клик по фигуре: <200 мс — одна, позже — две', () => {
+  it('фильтр: повтор той же фигуры через 100 мс отброшен, через 300 мс — принят; разные фигуры независимы', () => {
+    expect(ADD_SHAPE_DEBOUNCE_MS).toBe(200)
+    let now = 0
+    const gate = createAddShapeGate(() => now)
+    expect(gate('cube')).toBe(true)
+    now = 100; expect(gate('cube')).toBe(false)            // случайный двойной клик
+    now = 110; expect(gate('sphere')).toBe(true)           // другая фигура — не мешает
+    now = 300; expect(gate('cube')).toBe(true)             // осознанный второй клик
+    now = 450; expect(gate('cube')).toBe(false)            // тройной 300/450/600: отсчёт от принятого
+    now = 600; expect(gate('cube')).toBe(true)
+  })
+  it('клик во время занятого стора не теряется: фигуры добавляются по очереди, когда стор свободен', async () => {
+    useDocumentStore.setState({ busy: true })              // идёт долгая операция (CSG)
+    const p1 = addShapeWhenIdle('cube')
+    const p2 = addShapeWhenIdle('sphere')
+    await new Promise((r) => setTimeout(r, 50))
+    expect(Object.keys(st().objects)).toHaveLength(0)       // ждут
+    useDocumentStore.setState({ busy: false })
+    expect(await p1).toBe(true)
+    expect(await p2).toBe(true)
+    expect(Object.values(st().objects).map((o) => o.shapeType)).toEqual(['cube', 'sphere'])
+    expect(notes()).toEqual([])                             // без уведомлений
+  })
+  it('стор занят дольше срока ожидания — клик отменяется без фигуры', async () => {
+    useDocumentStore.setState({ busy: true })
+    expect(await addShapeWhenIdle('cube', 60)).toBe(false)
+    useDocumentStore.setState({ busy: false })
+    expect(Object.keys(st().objects)).toHaveLength(0)
   })
 })

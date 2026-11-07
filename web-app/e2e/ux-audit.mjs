@@ -13,7 +13,7 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { openApp, panelButton, toolbarButton } from './helpers.mjs'
+import { openApp, panelButton, toolbarButton, spaceShapeClick } from './helpers.mjs'
 
 const shotDir = process.argv[2]
 const VERSION = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version
@@ -32,6 +32,7 @@ const known = []
 
 async function add(label) {
   const before = new Set(await ids())
+  await spaceShapeClick(page, label)                       // UX-AUDIT-9: подряд та же фигура — не «двойной клик»
   await page.getByText(label, { exact: true }).first().click()
   await page.waitForFunction((k) => document.querySelectorAll('.ct-item[data-object-id]').length === k, before.size + 1, { timeout: 15000 })
   return (await ids()).find((i) => !before.has(i))
@@ -103,6 +104,23 @@ try {
   }
   ok.push('A: 7 примитивов, поля трансформа и размеров; «Граней 6 / 4» без «.0» (UX-AUDIT-8)')
   await shot('ux-a-shapes.png')
+
+  // ── ✅ UX-AUDIT-9: двойной клик по фигуре (~100 мс) — одна; второй клик через 300 мс — ещё одна ──
+  {
+    const b = await page.locator('.shape-btn', { hasText: 'Куб' }).first().boundingBox()
+    const [x, y] = [b.x + b.width / 2, b.y + b.height / 2]
+    const n0 = await rows.count()
+    await page.mouse.click(x, y); await page.waitForTimeout(100); await page.mouse.click(x, y)
+    await page.waitForTimeout(1000)
+    if ((await rows.count()) !== n0 + 1) fail(`UX-AUDIT-9: двойной клик (100 мс) добавил ${(await rows.count()) - n0} фигур(ы)`)
+    await page.mouse.click(x, y); await page.waitForTimeout(300); await page.mouse.click(x, y)
+    await page.waitForFunction((k) => document.querySelectorAll('.ct-item[data-object-id]').length === k, n0 + 3, { timeout: 10000 })
+      .catch(async () => fail(`UX-AUDIT-9: два клика через 300 мс добавили ${(await rows.count()) - n0 - 1} фигур(ы)`))
+    await page.waitForTimeout(500)
+    if ((await rows.count()) !== n0 + 3) fail('UX-AUDIT-9: лишняя фигура: ' + ((await rows.count()) - n0))
+    if (await toasts()) fail('UX-AUDIT-9: уведомления ' + (await toasts()))
+    ok.push('UX-AUDIT-9: двойной клик (100 мс) — 1 фигура, клики через 300 мс — 2, без уведомлений')
+  }
 
   // ── ✅ E. Интерфейс: левая панель 320px, 3 столбца, версия, тема, фильтр Timeline ──
   const lp = await page.locator('.panel-left').boundingBox()

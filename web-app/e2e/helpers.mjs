@@ -69,3 +69,16 @@ export async function findAlignFace(page, id, accept) {
   }
   throw new Error(`грань объекта ${id} не найдена на экране (точек объекта: ${onObject.length})`)
 }
+
+/**
+ * UX-AUDIT-9: повторный клик по той же фигуре палитры раньше 200 мс — «двойной клик», он
+ * отбрасывается. Ждёт, чтобы с прошлого клика по `label` прошло ≥ 250 мс (для e2e, которые
+ * добавляют одну и ту же фигуру подряд).
+ */
+const lastShapeClick = new Map()
+export async function spaceShapeClick(page, label) {
+  const wait = (lastShapeClick.get(label) ?? 0) + 250 - Date.now()
+  if (wait > 0) await page.waitForTimeout(wait)
+  lastShapeClick.set(label, Date.now())
+}
+
