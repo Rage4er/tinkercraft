@@ -885,7 +885,7 @@ body {
 }
 
 .props-input {
-  width: 65px;
+  width: 70px;  /* UX-AUDIT-16: запас под «−12345.6» */
   background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -907,8 +907,22 @@ body {
   cursor: not-allowed;
 }
 
+/* UX-AUDIT-16: стрелки-счётчики занимали ~15 px внутри поля 65 px и закрывали последние цифры
+   («−1234.5» → «−1234.»). В покое — скрыты (значение целиком), при наведении/фокусе — видны;
+   ↑/↓ с клавиатуры работают всегда. */
+.props-input {
+  -moz-appearance: textfield;
+}
+
 .props-input::-webkit-inner-spin-button,
 .props-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.props-input:hover::-webkit-inner-spin-button,
+.props-input:focus::-webkit-inner-spin-button {
+  -webkit-appearance: inner-spin-button;
   opacity: 0.4;
 }
 

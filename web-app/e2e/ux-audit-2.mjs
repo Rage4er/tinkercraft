@@ -232,16 +232,15 @@ try {
       const bad = [...(r.cut.length ? [`за краем: ${r.cut.join(', ')}`] : []), ...(r.snap ? [] : ['«Привязка» обрезана']), ...(r.hint ? [] : ['подсказка обрезана']), ...(r.statusH > 30 ? [`статус-бар ${r.statusH}px`] : [])]
       if (bad.length) fail(`UX-AUDIT-12 ${width}×${height}: ${bad.join('; ')}`)
     }
-    // UX-AUDIT-16: значение поля видно целиком (−1234.5)
+    // ✅ UX-AUDIT-16: значение поля видно целиком (−1234.5) — в покое (без наведения и фокуса)
     if (width === 1024) {
-      await knownBug('UX-AUDIT-16', 'поле «−1234.5»', async () => {
-        await s.pick(a)
-        const f = page.locator('.panel-right #num-input-pos-X'); await f.fill('-1234.5'); await f.press('Enter')
-        await page.waitForFunction(() => document.querySelector('.panel-right #num-input-pos-X')?.value === '-1234.5', null, { timeout: 5000 })
-        await page.evaluate(() => document.activeElement?.blur()); await page.mouse.move(0, 300)
-        const m = await f.evaluate((e) => ({ sw: e.scrollWidth, cw: e.clientWidth }))
-        if (m.sw > m.cw) throw new Error(`обрезано: scrollWidth ${m.sw} > clientWidth ${m.cw}`)
-      })
+      await s.pick(a)
+      const f = page.locator('.panel-right #num-input-pos-X'); await f.fill('-1234.5'); await f.press('Enter')
+      await page.waitForFunction(() => document.querySelector('.panel-right #num-input-pos-X')?.value === '-1234.5', null, { timeout: 5000 })
+      await page.evaluate(() => document.activeElement?.blur()); await page.mouse.move(0, 300)
+      const m = await f.evaluate((e) => ({ sw: e.scrollWidth, cw: e.clientWidth }))
+      if (m.sw > m.cw) fail(`UX-AUDIT-16: «−1234.5» обрезано: scrollWidth ${m.sw} > clientWidth ${m.cw}`)
+      ok.push(`M: поле «−1234.5» видно целиком (${m.sw} ≤ ${m.cw} px, UX-AUDIT-16)`)
     }
     if (s.errors.length) fail(`M ${width}: ошибки консоли ` + s.errors.join(' | '))
     ok.push(`M: ${width}×${height} — без горизонтальной прокрутки страницы, палитра 320px/3 столбца, CSG-кнопки панели видны; все кнопки тулбара в окне, «Привязка» не обрезана, статус-бар в 1 строку (UX-AUDIT-12)`)
