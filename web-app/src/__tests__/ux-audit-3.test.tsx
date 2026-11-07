@@ -369,11 +369,11 @@ describe('UX-AUDIT-25 — дерево: корень CSG — с иконкой �
   })
 })
 
-describe('UX-AUDIT-26 — цилиндр и конус: край торца затенён как скруглённый', () => {
-  // Примитивы «гладкие»: воркер не отдаёт нормалей → computeVertexNormals по общим вершинам —
-  // на кромке нормаль усреднена между торцом и боковой (до ≈ 90°: боковые треугольники крупнее), торец выглядит выпуклым.
-  // Тот же цилиндр в CSG (по излому) — с острой кромкой.
-  it.fails('ожидание: у треугольников торца нормаль = нормаль торца (< 1°), как у цилиндра в CSG', async () => {
+describe('UX-AUDIT-26 — цилиндр и конус: острая кромка торца, гладкий бок', () => {
+  // Было: примитивы «гладкие» — воркер не отдаёт нормалей → computeVertexNormals по общим вершинам:
+  // на кромке нормаль усреднена между торцом и боковой (до ≈ 90°), торец выглядел выпуклым; тот же
+  // цилиндр в CSG (по излому) — с острой кромкой. Исправлено в fix-all-3: цилиндр и конус — по излому.
+  it('у треугольников торца нормаль = нормаль торца (< 1°), как у цилиндра в CSG', async () => {
     for (const type of ['cylinder', 'cone'] as const) {
       const id = await shape(type, undefined, at(0))
       const obj = st().objects[id]
@@ -385,6 +385,22 @@ describe('UX-AUDIT-26 — цилиндр и конус: край торца за
       const worst = Math.max(...base.map((n) => THREE.MathUtils.radToDeg(n.angleTo(new THREE.Vector3(0, 0, -1)))))
       expect(worst, type).toBeLessThan(1)
     }
+  })
+  it('бок цилиндра — гладкий (нормаль ≈ радиальная), а не гранёный; сфера — по-прежнему гладкая по вершинам', async () => {
+    const id = await shape('cylinder', undefined, at(0))
+    const geo = buildObjectGeometry(st().objects[id])
+    const pos = geo.getAttribute('position'), nor = geo.getAttribute('normal')
+    let worst = 0, cnt = 0
+    for (let i = 0; i < pos.count; i++) {
+      const n = new THREE.Vector3().fromBufferAttribute(nor, i)
+      if (Math.abs(n.z) > 0.5) continue                                   // торцы
+      const radial = new THREE.Vector3(pos.getX(i), pos.getY(i), 0).normalize()
+      worst = Math.max(worst, THREE.MathUtils.radToDeg(n.normalize().angleTo(radial))); cnt++
+    }
+    expect(cnt).toBeGreaterThan(0)
+    expect(worst).toBeLessThan(2)                                        // гранёный бок — до 5,6° (32 сегмента)
+    const { shadingOf } = await import('../components/object-geometry')
+    expect(shadingOf({ shapeType: 'sphere', params: { radius: 10 } })).toBe('smooth')
   })
 })
 
