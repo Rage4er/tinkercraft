@@ -9,6 +9,16 @@
     "pyramid": "Pyramid",
     "text": "Text"
   },
+  "shapesAcc": {
+    "cube": "Cube",
+    "sphere": "Sphere",
+    "cylinder": "Cylinder",
+    "cone": "Cone",
+    "torus": "Torus",
+    "prism": "Prism",
+    "pyramid": "Pyramid",
+    "text": "Text"
+  },
   "shapesCategory": {
     "basic": "Basic",
     "special": "Special"

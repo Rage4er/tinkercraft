@@ -124,9 +124,10 @@ export function opIcon(op: TinkerCraftOperation): React.ReactNode {
 export function opLabel(op: TinkerCraftOperation, t: (key: string, opts?: Record<string, unknown>) => string): string {
   switch (op.type) {
     case "add_shape":
-      if (op.pasted) return t('timeline.paste', { what: t(`shapes.${op.shapeType}`) });
+      // UX-AUDIT-17: фигура — в винительном падеже («Добавить сферу», ru)
+      if (op.pasted) return t('timeline.paste', { what: t(`shapesAcc.${op.shapeType}`) });
       if (op.shapeType === 'csg') return t('timeline.csgResult')
-      return t('timeline.addShape', { shape: t(`shapes.${op.shapeType}`) });
+      return t('timeline.addShape', { shape: t(`shapesAcc.${op.shapeType}`) });
     case "import_mesh":
       if (op.pasted) return t('timeline.paste', { what: t('timeline.pastedImport') });
       return t('timeline.importMesh', { name: (op as { name?: string }).name ?? "STL" });

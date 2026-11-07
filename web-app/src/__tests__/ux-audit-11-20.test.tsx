@@ -172,11 +172,24 @@ describe('UX-AUDIT-15 — менеджер проектов закрываетс
 })
 
 describe('UX-AUDIT-17 — история (ru): «Добавить сферу» (винительный падеж)', () => {
-  it.fails('«Добавить куб / сферу / цилиндр / конус / тор / призму / пирамиду»', () => {
+  it('«Добавить куб / сферу / цилиндр / конус / тор / призму / пирамиду»', () => {
     const op = (shapeType: ShapeType): TinkerCraftOperation => ({ type: 'add_shape', id: 'x', shapeType, params: {}, color: '#fff', transform: ID })
     expect(['cube', 'sphere', 'cylinder', 'cone', 'torus', 'prism', 'pyramid'].map((s) => opLabel(op(s as ShapeType), t))).toEqual([
       'Добавить куб', 'Добавить сферу', 'Добавить цилиндр', 'Добавить конус', 'Добавить тор', 'Добавить призму', 'Добавить пирамиду',
     ])
+  })
+})
+
+describe('UX-AUDIT-17 — вставка, подсказка палитры, en', () => {
+  it('вставка — «Вставить сферу»; en — «Add Sphere»; у каждой фигуры палитры есть форма', async () => {
+    const op = (shapeType: ShapeType, pasted?: boolean): TinkerCraftOperation => ({ type: 'add_shape', id: 'x', shapeType, params: {}, color: '#fff', transform: ID, pasted })
+    expect(opLabel(op('sphere', true), t)).toBe('Вставить сферу')
+    expect(t('leftPanel.addShape', { label: t('shapesAcc.pyramid') })).toBe('Добавить пирамиду')
+    for (const s of ['cube', 'sphere', 'cylinder', 'cone', 'torus', 'prism', 'pyramid', 'text']) {
+      expect(i18n.exists(`shapesAcc.${s}`, { lng: 'ru' }) && i18n.exists(`shapesAcc.${s}`, { lng: 'en' })).toBe(true)
+    }
+    await i18n.changeLanguage('en')
+    expect(opLabel(op('sphere'), t)).toBe('Add Sphere')
   })
 })
 

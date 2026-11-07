@@ -107,6 +107,8 @@ try {
     const s = await session()
     const { page } = s
     const a = await s.add('Куб'); const sp = await s.add('Сфера'); await s.setF(sp, 'num-input-pos-X', 12)
+    const added = (await page.locator('.tl-item').allInnerTexts()).slice(0, 2).map((x) => x.replace(/\s+/g, ' '))
+    if (!added[0].includes('Добавить куб') || !added[1].includes('Добавить сферу')) fail('UX-AUDIT-17: шаги истории — ' + added.join(' / '))
     const g1 = await s.union(a, sp); await s.setF(g1, 'num-input-pos-X', 5); await s.setF(g1, 'num-input-rot-Z', 20)
     const c = await s.add('Цилиндр'); await s.setF(c, 'num-input-pos-X', -8)
     const g2 = await s.union(g1, c); await s.setF(g2, 'num-input-pos-Y', 7)
@@ -118,7 +120,7 @@ try {
     const cylRow = (await page.locator('.ct-child', { hasText: 'Цилиндр' }).first().innerText()).replace(/\s+/g, ' ')
     if (!cylRow.includes('R10 H20')) fail('UX-AUDIT-14: строка цилиндра в дереве — ' + cylRow)
     await editSphere(s, 15, 'H')
-    ok.push('H: CSG 3 уровней (сдвиги/поворот между уровнями) — без замков, «Цилиндр · R10 H20» (UX-AUDIT-14), правка сферы R12 → R15')
+    ok.push('H: CSG 3 уровней (сдвиги/поворот между уровнями) — без замков, «Добавить сферу» (UX-AUDIT-17), «Цилиндр · R10 H20» (UX-AUDIT-14), правка сферы R12 → R15')
     await s.pick(g3); await page.evaluate(() => document.activeElement?.blur())
     await page.keyboard.press('Control+c'); await page.keyboard.press('Control+v'); await s.waitRows(2)
     const cp1 = (await s.ids()).find((i) => i !== g3)

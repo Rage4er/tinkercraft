@@ -9,6 +9,16 @@
     "pyramid": "Пирамида",
     "text": "Текст"
   },
+  "shapesAcc": {
+    "cube": "куб",
+    "sphere": "сферу",
+    "cylinder": "цилиндр",
+    "cone": "конус",
+    "torus": "тор",
+    "prism": "призму",
+    "pyramid": "пирамиду",
+    "text": "текст"
+  },
   "shapesCategory": {
     "basic": "Основные",
     "special": "Особые"
