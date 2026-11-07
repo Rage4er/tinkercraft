@@ -15,6 +15,7 @@
 // одном шрифте, возвращаются в `missing` — вызывающий предупреждает.
 
 import { ExtrudeGeometry } from 'three'
+import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js'   // уже в основном чанке (object-geometry)
 
 /** Допуск сварки вершин (мм): глифы шрифта — сотни единиц, совпадающие точки — точные копии. */
 export const TEXT_WELD_TOLERANCE = 1e-4
@@ -54,9 +55,8 @@ export class TextMeshError extends Error {
 export async function buildTextMesh(text: string, { size, depth }: TextMeshOptions): Promise<TextMesh> {
   if (!(size > 0) || !(depth > 0)) throw new TextMeshError('errors.textBadSize', `size ${size}, depth ${depth}`)
   // шрифт (~60 КБ) и генераторы — отдельным чанком, только когда текст действительно нужен
-  const [{ FontLoader }, { mergeVertices }, fontModule] = await Promise.all([
+  const [{ FontLoader }, fontModule] = await Promise.all([
     import('three/examples/jsm/loaders/FontLoader.js'),
-    import('three/examples/jsm/utils/BufferGeometryUtils.js'),
     import('three/examples/fonts/helvetiker_regular.typeface.json'),
   ])
   type FontData = Parameters<InstanceType<typeof FontLoader>['parse']>[0]

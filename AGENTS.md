@@ -14,7 +14,7 @@
 - **manifold-3d** (WASM) — CSG операции в Web Worker
 - **Zustand 5** — стейт-менеджмент
 - **Vite 6** — сборка
-- **Vitest 4** — тесты (755 тестов, 62 файла; известных багов под `it.fails` нет — все UX-AUDIT-1…10 исправлены в `fix-all`)
+- **Vitest 4** — тесты (775 тестов, 63 файла; известных багов под `it.fails` нет — UX-AUDIT-1…10 исправлены в `fix-all`, 11…20 — в `fix-all-2`)
 - **pnpm** — пакетный менеджер
 
 ## Команды
@@ -23,7 +23,7 @@
 cd web-app
 pnpm dev          # dev-сервер (порт 5000)
 pnpm build        # production-сборка
-pnpm test         # запуск тестов (755 тестов, 62 файла)
+pnpm test         # запуск тестов (775 тестов, 63 файла)
 pnpm typecheck    # tsc --noEmit
 pnpm e2e:smoke    # дымовой тест в браузере (Playwright; нужен запущенный pnpm dev; см. web-app/e2e/helpers.mjs)
 pnpm e2e:tree     # Фаза 9.1: раскрытие CSG в дереве, выбор ребёнка
@@ -113,6 +113,7 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 | `src/components/align-picking.ts` | Raycast по треугольнику (`pickFace` — мировые нормаль и точка) и плоская грань для подсветки (`planarFaceTriangles`) |
 | `src/hooks/useAlignModeKeys.ts` | Esc → выход из режима выравнивания (capture, раньше общего обработчика App) |
 | `src/hooks/useAutosave.ts` | Автосохранение (таймер) и восстановление прошлой сессии при старте, когда воркер готов (UX-AUDIT-1) |
+| `src/components/object-geometry.ts` | Геометрия Three.js объекта (`buildObjectGeometry`, UX-AUDIT-20) — одна для создания и обновления меша: куб/призма/пирамида — плоско, CSG/импорт — по углу излома 30° (`toCreasedNormals`), прочие примитивы — гладко |
 | `src/components/ConfirmModal.tsx` | Подтверждение разрушительного действия («Очистить сцену», UX-AUDIT-2): фокус на «Отмена», Esc/фон — отмена, клавиши не уходят в глобальные сочетания |
 | `src/components/StepPanel.tsx` | Панель «Шаг N» (вместо `PropertiesPanel`, пока `ui-store.selectedStep` задан): ΔX/ΔY/ΔZ шага move (коммит по Enter/blur), плоскость шага mirror (сразу по выбору), глубина шага extrude (ось — просмотр) → `editStepParams` — Фаза 9.5.2–9.5.4 |
 | `src/hooks/useSelectedStepGuard.ts` | Сброс выбора шага (undo до шага, выделение в сцене, выбор ребёнка CSG) — Фаза 9.5.2 |
@@ -142,7 +143,7 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 | `src/io/doodle-io.ts` | **УСТАРЕЛО**: формат .doodle (legacy, не поддерживается) |
 | `src/io/3dtc-io.ts` | Формат .3dtc (ZIP + JSON) — основной формат проекта (v1.2.0+) |
 | `src/io/autosave.ts` | Автосохранение в IndexedDB (запись с `modified`); `clearScene` чистит запись |
-| `src/io/text-mesh.ts` | Меш 3D-текста (`buildTextMesh`): сварка вершин `TextGeometry` → замкнутый меш для CSG; `TextMeshError` (UX-AUDIT-3/10) |
+| `src/io/text-mesh.ts` | Меш 3D-текста (`buildTextMesh`): контуры выдавливаются и свариваются по отдельности → замкнутый меш для CSG; запасной шрифт Droid Sans (кириллица), `missing` — символы не из шрифтов, `repairTJunctions`; `TextMeshError` (UX-AUDIT-3/10/18) |
 | `src/io/legacy-fillet.ts` | Миграция старых проектов со скруглением: вырезает шаги `fillet`, снимает `filletRadius`, перенумеровывает `edit_step` (вызывается при всех загрузках в сторе) |
 | **Platform (yandex-games ветка)** | |
 | `src/platform/index.ts` | Абстракция платформы (clean / yandex) |
@@ -277,7 +278,8 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 - Дерево живой сессии, начатой до v1.3.2 (boolean-узлы без `originTransform`), для вложенного CSG, сдвинутого до объединения, остаётся под замком `nested_moved` (предохранитель); после перезагрузки/загрузки проекта дерево перестраивается из истории с TRS₀ — правка работает
 - `.doodle` (legacy) в UI не открывается: `parseDoodle` не вызывается
 - 3D-текст, созданный до `fix-all` (в истории — несшитый меш), в CSG не участвует — пересоздать (UX-AUDIT-3 не мигрирует старые шаги); «Отменить» после «Очистить сцену» работает только сразу после очистки (до нового действия)
-- Открытые UX-баги прогона 2 (UX-AUDIT-11…20: подписи вычитания/пересечения и вставки в истории, узкий экран ≤1024 и др.) — `DEVELOPMENT_PLAN.md` › «UX-AUDIT-2», следующий цикл `fix-*`
+- 3D-текст: латиница — шрифт helvetiker, строки с кириллицей/диакритикой — запасной Droid Sans (`io/text-mesh.ts`); символов, которых нет ни в одном (иероглифы, emoji), — «?» с предупреждением
+- Узкое окно (≤1024): тулбар в 2–3 строки, подсказка вьюпорта скрыта; панели 320 + 200 px фиксированы (на 768 вьюпорт ~250 px)
 
 ## Node.js — Настройка и проверка
 
