@@ -249,11 +249,11 @@ describe('UX-AUDIT-32 — «Выровнять»: непараллельная �
   })
 })
 
-describe('UX-AUDIT-33 — зеркальная копия 3D-текста — «Импорт» (а после перезагрузки — «Текст»)', () => {
-  // mirror-store (mirrorObject) переносит в копию `name`, но не `text` (UX-AUDIT-31): живая копия —
-  // «Тип: Импорт», иконка импорта. rebuild копирует метаданные источника целиком (с `text`) —
-  // после перезагрузки/перемотки та же копия — «Текст»: живое ≠ rebuild.
-  it.fails('ожидание: зеркальная копия текста «Дом» — тоже текст, и живая, и после перестроения из истории', async () => {
+describe('UX-AUDIT-33 — зеркальная копия 3D-текста — тоже текст (живое = rebuild)', () => {
+  // Было: mirrorObject (mirror-store) переносил в копию `name`, но не `text` (UX-AUDIT-31): живая копия —
+  // «Тип: Импорт», после перезагрузки (rebuild копирует метаданные источника целиком) — «Текст».
+  // Исправлено в fix-all-4: копия текста получает `text` (у старого текста — из имени).
+  it('зеркальная копия текста «Дом» — тоже текст, и живая, и после перестроения из истории', async () => {
     await addTextObject('Дом', { size: 10, depth: 2 })
     const id = Object.keys(st().objects)[0]
     st().selectObjects([id], false)
@@ -264,7 +264,20 @@ describe('UX-AUDIT-33 — зеркальная копия 3D-текста — «
     clearSnapshots(); clearTree()
     const rebuilt = await rebuildFromHistory(ops)
     expect(isTextObject(rebuilt[copy.id])).toBe(true)                                  // rebuild — текст
-    expect([copy.text, isTextObject(copy)]).toEqual(['Дом', true])                      // живая — импорт (баг)
+    expect([copy.text, isTextObject(copy)]).toEqual(['Дом', true])                      // живая — тоже
+    expect(rebuilt[copy.id].text).toBe(copy.text)
+  })
+  it('старый текст (txt_N без поля `text`) — копия тоже текст, строка — из имени', async () => {
+    await addTextObject('Hi', { size: 10, depth: 2 })
+    const id = Object.keys(st().objects)[0]
+    const { text: _drop, ...legacy } = st().objects[id]
+    void _drop
+    useDocumentStore.setState({ objects: { [id]: legacy } })
+    expect(isTextObject(st().objects[id])).toBe(true)                                   // по id txt_N
+    st().selectObjects([id], false)
+    await st().mirrorSelected('XZ')
+    const copy = Object.values(st().objects).find((o) => o.id !== id)!
+    expect([copy.text, isTextObject(copy)]).toEqual(['Hi', true])
   })
 })
 
