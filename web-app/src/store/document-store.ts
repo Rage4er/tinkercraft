@@ -362,7 +362,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         if (clip.shapeType === 'import_mesh' && clip.importVertices && clip.importIndices) {
           const result = await workerBuildImportedMesh(id, clip.importVertices, clip.importIndices)
           const obj: SceneObject = makeObject({ id, shapeType: 'import_mesh', params: {}, color: clip.color, transform, visible: true, locked: false, vertices: result.vertices, indices: result.indices })
-          const op: ImportMeshOperation = { type: 'import_mesh', id, name: 'pasted', color: clip.color, transform, vertices: clip.importVertices, indices: clip.importIndices }
+          const op: ImportMeshOperation = { type: 'import_mesh', id, name: 'pasted', color: clip.color, transform, vertices: clip.importVertices, indices: clip.importIndices, pasted: true }
           newObjects = { ...newObjects, [id]: obj }
           newOps.push(op)
           // Register baked node in build tree for CSG/mirror/align support
@@ -386,6 +386,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
             resultScale: { x: transform.scaleX, y: transform.scaleY, z: transform.scaleZ },
             originalBboxSize: clip.csgOriginalBboxSize,
             treeOperation: 'union', shapeType: 'csg', color: clip.color,
+            pasted: true,   // UX-AUDIT-13: в истории «Вставить CSG»
           }
           if (clip.csgTree) histOp.copyTree = clip.csgTree
           newObjects = { ...newObjects, [id]: obj }
@@ -406,7 +407,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
             vertices: clip.mirrorVertices, indices: clip.mirrorIndices,
             normals: clip.mirrorNormals, mirrored: clip.mirrored,
           })
-          const op: AddShapeOperation = { type: 'add_shape', id, shapeType: clip.shapeType, params: clip.params, color: clip.color, transform }
+          const op: AddShapeOperation = { type: 'add_shape', id, shapeType: clip.shapeType, params: clip.params, color: clip.color, transform, pasted: true }
           newObjects = { ...newObjects, [id]: obj }
           newOps.push(op)
           // Фаза 9.8: зеркальный примитив — primitive + mirrored (params редактируемы)
@@ -414,7 +415,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         } else {
           const mesh = await workerBuildShape(id, clip.shapeType, clip.params, transform)
           const obj: SceneObject = makeObject({ id, shapeType: clip.shapeType, params: clip.params, color: clip.color, transform, visible: true, locked: false, vertices: mesh.vertices, indices: mesh.indices, normals: mesh.normals })
-          const op: AddShapeOperation = { type: 'add_shape', id, shapeType: clip.shapeType, params: clip.params, color: clip.color, transform }
+          const op: AddShapeOperation = { type: 'add_shape', id, shapeType: clip.shapeType, params: clip.params, color: clip.color, transform, pasted: true }
           newObjects = { ...newObjects, [id]: obj }
           newOps.push(op)
           // Register primitive node in build tree for CSG/mirror/align support

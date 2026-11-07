@@ -152,6 +152,8 @@
     "visibility": "Visibility",
     "color": "Color",
     "rename": "Rename",
+    "paste": "Paste {{what}}",
+    "pastedImport": "import",
     "csgResult": "CSG result",
     "goToStep": "Go to step {{step}}",
     "empty": "Empty",

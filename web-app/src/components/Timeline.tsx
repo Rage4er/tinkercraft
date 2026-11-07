@@ -13,6 +13,7 @@ import {
   PrismIcon,
   PyramidIcon,
   ImportIcon,
+  PasteIcon,
   MoveIcon,
   ScaleIcon,
   RotateIcon,
@@ -51,6 +52,14 @@ const ALIGN_ICON_MAP: Record<AlignAxis, Record<AlignAnchor, React.ComponentType<
  * читал флаги `isIntersect`/`subtractOp`, которых никто не пишет (остались от старого формата —
  * читаются запасным путём), и вычитание/пересечение показывались «Объединением».
  */
+/**
+ * UX-AUDIT-13: вставка CSG (Ctrl+V) пишется операцией `group` без операндов — раньше в истории
+ * «Объединение». Признак `pasted`; старые вставки — по `ids: []` (так пишет только вставка).
+ */
+export function isPastedGroup(op: TinkerCraftOperation & { type: "group" }): boolean {
+  return op.pasted === true || (op.ids.length === 0 && !op.source);
+}
+
 export function groupOpKind(op: TinkerCraftOperation & { type: "group" }): "union" | "subtract" | "intersect" {
   if (op.treeOperation) return op.treeOperation;
   const legacy = op as { isIntersect?: boolean; subtractOp?: boolean };
@@ -73,7 +82,7 @@ export function opIcon(op: TinkerCraftOperation): React.ReactNode {
         default: return <CubeIcon size={32} />;
       }
     case "import_mesh":
-      return <ImportIcon size={32} />;
+      return op.pasted ? <PasteIcon size={32} /> : <ImportIcon size={32} />;
     case "move": {
       const k = (op as { kind?: string }).kind;
       return k === "scale" ? <ScaleIcon size={32} /> : k === "rotate" ? <RotateIcon size={32} /> : <MoveIcon size={32} />;
@@ -90,6 +99,7 @@ export function opIcon(op: TinkerCraftOperation): React.ReactNode {
       return <Icon size={32} />;
     }
     case "group": {
+      if (isPastedGroup(op)) return <PasteIcon size={32} />;
       const g = groupOpKind(op);
       return g === "intersect" ? <IntersectIcon size={32} /> : g === "subtract" ? <SubtractIcon size={32} /> : <UnionIcon size={32} />;
     }
@@ -114,9 +124,11 @@ export function opIcon(op: TinkerCraftOperation): React.ReactNode {
 export function opLabel(op: TinkerCraftOperation, t: (key: string, opts?: Record<string, unknown>) => string): string {
   switch (op.type) {
     case "add_shape":
+      if (op.pasted) return t('timeline.paste', { what: t(`shapes.${op.shapeType}`) });
       if (op.shapeType === 'csg') return t('timeline.csgResult')
       return t('timeline.addShape', { shape: t(`shapes.${op.shapeType}`) });
     case "import_mesh":
+      if (op.pasted) return t('timeline.paste', { what: t('timeline.pastedImport') });
       return t('timeline.importMesh', { name: (op as { name?: string }).name ?? "STL" });
     case "move": {
       const k = (op as { kind?: string }).kind;
@@ -131,6 +143,7 @@ export function opLabel(op: TinkerCraftOperation, t: (key: string, opts?: Record
     case "group":
       // Фаза 9.5.4: группа extrude (source) подписана как выдавливание (эффективная глубина)
       if (op.source?.kind === "extrude") return t("timeline.extrude", { axis: op.source.axis, depth: fmtNum(op.source.depth) });
+      if (isPastedGroup(op)) return t("timeline.paste", { what: "CSG" });
       {
         const g = groupOpKind(op);
         return g === "intersect" ? t("timeline.groupIntersect") : g === "subtract" ? t("timeline.groupSubtract") : t("timeline.groupUnion");

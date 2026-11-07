@@ -152,6 +152,8 @@
     "visibility": "Видимость",
     "color": "Цвет",
     "rename": "Переименовать",
+    "paste": "Вставить {{what}}",
+    "pastedImport": "импорт",
     "csgResult": "CSG результат",
     "goToStep": "Перейти к шагу {{step}}",
     "empty": "Пусто",

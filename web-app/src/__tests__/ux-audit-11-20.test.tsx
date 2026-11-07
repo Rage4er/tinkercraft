@@ -24,7 +24,7 @@ import { useNotifications } from '../store/notifications'
 import { clearSnapshots } from '../store/snapshots'
 import { clearTree } from '../csg/history-tree'
 import { opLabel, opIcon } from '../components/Timeline'
-import { SubtractIcon, IntersectIcon } from '../components/icons'
+import { SubtractIcon, IntersectIcon, PasteIcon } from '../components/icons'
 import { formatParams } from '../csg/tree-view'
 import ProjectManagerModal from '../components/ProjectManagerModal'
 import { addTextObject } from '../store/add-text'
@@ -102,10 +102,25 @@ describe('UX-AUDIT-11 — запасной путь и объединение', 
 })
 
 describe('UX-AUDIT-13 — вставка CSG в истории — «Вставить», а не «Объединение»', () => {
-  it.fails('Ctrl+C / Ctrl+V CSG → шаг истории «Вставить …»', async () => {
+  it('Ctrl+C / Ctrl+V CSG → шаг истории «Вставить …» с иконкой вставки', async () => {
     const g = await csg('union')
     st().selectObjects([g], false); st().copySelected(); await st().pasteClipboard()
     expect(opLabel(lastOp(), t)).toMatch(/^Вставить/)
+    expect(opLabel(lastOp(), t)).toBe('Вставить CSG')
+    expect((opIcon(lastOp()) as React.ReactElement).type).toBe(PasteIcon)
+  })
+  it('вставка примитива — «Вставить …», а не «Добавить …»; en — «Paste CSG»', async () => {
+    const c = await shape('cube', { width: 20, height: 20, depth: 20 }, at(0))
+    st().selectObjects([c], false); st().copySelected(); await st().pasteClipboard()
+    expect(lastOp()).toMatchObject({ type: 'add_shape', pasted: true })
+    expect(opLabel(lastOp(), t)).toMatch(/^Вставить /)
+    await i18n.changeLanguage('en')
+    expect(opLabel({ type: 'group', ids: [], pasted: true } as TinkerCraftOperation, t)).toBe('Paste CSG')
+  })
+  it('старая вставка CSG (без признака, `ids: []`) — тоже «Вставить»; CSG и extrude — нет', () => {
+    expect(opLabel({ type: 'group', ids: [] } as TinkerCraftOperation, t)).toBe('Вставить CSG')
+    expect(opLabel({ type: 'group', ids: ['a', 'b'], treeOperation: 'union' } as TinkerCraftOperation, t)).toBe('Объединение')
+    expect(opLabel({ type: 'group', ids: ['a', 'b'], source: { kind: 'extrude', baseId: 'a', slabId: 'b', axis: 'Z', depth: 5 } } as TinkerCraftOperation, t)).not.toMatch(/Вставить/)
   })
 })
 
