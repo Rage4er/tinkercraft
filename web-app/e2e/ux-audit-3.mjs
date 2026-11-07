@@ -15,8 +15,9 @@
 //     куб / CSG / импорт»; фильтр «CSG» прячет операции CSG.
 //  🐞 known — новые баги прогона 3 (вёрстка, только браузер), `knownBug`: ожидание обязано
 //     сейчас НЕ выполняться; выполнилось — баг исправлен, перенести проверку в ✅:
-//     UX-AUDIT-23 стрелки поля не появляются при наведении; UX-AUDIT-24 плашка линейки поверх
-//     тулбара (≤ 1280); UX-AUDIT-30 тост на 768 закрывает «Привязку».
+//     UX-AUDIT-24 плашка линейки поверх тулбара (≤ 1280); UX-AUDIT-30 тост на 768 закрывает
+//     «Привязку». Исправлены (fix-all-3) — обычные проверки: UX-AUDIT-21 (долгие задачи при
+//     импорте 100k), UX-AUDIT-23 (стрелки поля при наведении и в фокусе).
 // Ошибок консоли нет (все сценарии). Логика — __tests__/ux-audit-3.test.tsx (`it.fails`).
 // Запуск: `pnpm dev` в одном терминале, `pnpm e2e:ux-audit-3` в другом.
 // Необязательный аргумент — каталог для скриншотов: `node e2e/ux-audit-3.mjs /tmp/ux3`.
@@ -365,17 +366,23 @@ try {
     await s.blur()
     ok.push(`S: «−1234.5» видно целиком (${w.sw} ≤ ${w.cw} px); ↑ с клавиатуры → −1233.5, Enter → шаг истории`)
 
-    // 🐞 UX-AUDIT-23: стрелки поля при наведении не появляются (у обычного числового поля — есть)
-    await knownBug('UX-AUDIT-23', 'стрелки поля при наведении', async () => {
+    // ✅ UX-AUDIT-23: стрелки поля появляются при наведении и в фокусе (в покое — нет: «−1234.5» целиком)
+    {
       const box = await f.boundingBox()
       const clip = { x: box.x + box.width - 16, y: box.y + 2, width: 14, height: box.height - 4 }
-      await page.mouse.move(5, 400); await page.waitForTimeout(200)
+      await s.blur(); await page.mouse.move(5, 400); await page.waitForTimeout(200)
       const rest = await page.screenshot({ clip })
       await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2); await page.waitForTimeout(400)
       const hover = await page.screenshot({ clip })
-      await page.mouse.move(5, 400)
-      if (Buffer.compare(rest, hover) === 0) throw new Error('при наведении поле не изменилось — стрелок нет')
-    })
+      await page.mouse.move(5, 400); await f.focus(); await page.waitForTimeout(300)
+      const focus = await page.screenshot({ clip, path: shotDir ? path.join(shotDir, 'field-focus.png') : undefined })
+      await s.blur(); await page.waitForTimeout(200)
+      const rest2 = await page.screenshot({ clip })
+      if (Buffer.compare(rest, hover) === 0) fail('UX-AUDIT-23: при наведении стрелок нет')
+      if (Buffer.compare(rest, focus) === 0) fail('UX-AUDIT-23: в фокусе стрелок нет')
+      if (Buffer.compare(rest, rest2) !== 0) fail('UX-AUDIT-23: после ухода фокуса стрелки остались')
+      ok.push('S: стрелки поля — при наведении и в фокусе, в покое скрыты (UX-AUDIT-23)')
+    }
 
     // N. предупреждение (тост «нет символов») читается в тёмной и светлой темах
     for (const theme of ['тёмная', 'светлая']) {
