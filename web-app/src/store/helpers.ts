@@ -266,6 +266,116 @@ export function solvePlaneAlignDelta(
   return { x: -s * n.x, y: -s * n.y, z: -s * n.z }
 }
 
+/** Матрица поворота 3×3 (по строкам) на угол `angle` вокруг единичной оси `k` (Родригес). */
+function axisAngleMatrix(k: Vec3, angle: number): number[] {
+  const c = Math.cos(angle), s = Math.sin(angle), v = 1 - c
+  return [
+    c + k.x * k.x * v, k.x * k.y * v - k.z * s, k.x * k.z * v + k.y * s,
+    k.y * k.x * v + k.z * s, c + k.y * k.y * v, k.y * k.z * v - k.x * s,
+    k.z * k.x * v - k.y * s, k.z * k.y * v + k.x * s, c + k.z * k.z * v,
+  ]
+}
+
+/** Произведение матриц 3×3 (по строкам). */
+function mul3(a: number[], b: number[]): number[] {
+  const r = new Array<number>(9)
+  for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) {
+    r[i * 3 + j] = a[i * 3] * b[j] + a[i * 3 + 1] * b[3 + j] + a[i * 3 + 2] * b[6 + j]
+  }
+  return r
+}
+
+/** Углы Эйлера XYZ (градусы) из матрицы поворота R = Rx·Ry·Rz — как `computeRSMatrix` и Three.js 'XYZ'. */
+export function eulerXYZFromMatrix(m: number[]): { rotX: number; rotY: number; rotZ: number } {
+  const deg = 180 / Math.PI
+  const ry = Math.asin(Math.max(-1, Math.min(1, m[2])))
+  if (Math.abs(m[2]) < 0.9999999) {
+    return { rotX: Math.atan2(-m[5], m[8]) * deg, rotY: ry * deg, rotZ: Math.atan2(-m[1], m[0]) * deg }
+  }
+  return { rotX: Math.atan2(m[7], m[4]) * deg, rotY: ry * deg, rotZ: 0 }
+}
+
+/** Порог «гладкая поверхность» для выравнивания (°) — тот же, что у затенения по излому
+ *  (`components/object-geometry` CREASE_ANGLE_DEG): что выглядит гладким, то и считается кривым. */
+export const ALIGN_SMOOTH_DEG = 30
+
+/**
+ * UX-AUDIT-32: треугольник `tri` — грань ГЛАДКОЙ поверхности (цилиндр, сфера, скругление CSG):
+ * у соседа по ребру нормаль отличается на 0,5°…ALIGN_SMOOTH_DEG. Нормаль такой грани — артефакт
+ * разбиения на треугольники: выравнивание по ней не поворачивает объект (касание крайней точкой,
+ * как ALIGN-REVIT). Плоская грань (соседи — в той же плоскости или за острым ребром) — поворачивает.
+ * Соседи — по общим индексам вершин (меши воркера индексированы с общими вершинами).
+ */
+export function isSmoothSurfaceAt(obj: Pick<SceneObject, 'vertices' | 'indices'>, tri: number): boolean {
+  const v = obj.vertices, idx = obj.indices
+  const count = idx.length / 3
+  if (!(tri >= 0 && tri < count)) return false
+  const normal = (k: number): Vec3 => {
+    const a = idx[k * 3] * 3, b = idx[k * 3 + 1] * 3, c = idx[k * 3 + 2] * 3
+    const e1x = v[b] - v[a], e1y = v[b + 1] - v[a + 1], e1z = v[b + 2] - v[a + 2]
+    const e2x = v[c] - v[a], e2y = v[c + 1] - v[a + 1], e2z = v[c + 2] - v[a + 2]
+    return unit({ x: e1y * e2z - e1z * e2y, y: e1z * e2x - e1x * e2z, z: e1x * e2y - e1y * e2x })
+  }
+  const n0 = normal(tri)
+  const own = [idx[tri * 3], idx[tri * 3 + 1], idx[tri * 3 + 2]]
+  const cosSmooth = Math.cos((ALIGN_SMOOTH_DEG * Math.PI) / 180)
+  const cosFlat = Math.cos((0.5 * Math.PI) / 180)
+  for (let k = 0; k < count; k++) {
+    if (k === tri) continue
+    let shared = 0
+    for (let j = 0; j < 3; j++) { const w = idx[k * 3 + j]; if (w === own[0] || w === own[1] || w === own[2]) shared++ }
+    if (shared < 2) continue
+    const c = dot3(n0, normal(k))
+    if (c > cosSmooth && c < cosFlat) return true
+  }
+  return false
+}
+
+/**
+ * UX-AUDIT-32: новый трансформ объекта B — его грань B ложится в плоскость A («Align to face»,
+ * как в Revit/Fusion; режим выравнивания ALIGN-UI-REVIT).
+ * - Грань B параллельна плоскости (нормали ∥ или встречны, |cos| ≥ cos 1°), клика нет или кликнута
+ *   грань гладкой поверхности (`isSmoothSurfaceAt`: цилиндр, сфера — нормаль грани — артефакт
+ *   разбиения) — как раньше, только сдвиг (`solvePlaneAlignDelta`: касание крайней точкой).
+ * - Не параллельна — сначала ПОВОРОТ по кратчайшей дуге: мировая нормаль грани B → нормаль
+ *   плоскости A (в ту же сторону, dot > 0), вокруг точки клика на грани B; затем сдвиг вдоль
+ *   нормали A, чтобы грань легла в плоскость. Раньше поворота не было: объект сдвигался до
+ *   касания крайней точкой, а если она уже в плоскости — не происходило ничего.
+ * Поворот — слева к текущему (R' = ΔR·R): масштаб остаётся в локальных осях. Результат — обычный
+ * шаг move (сдвиг + дельта углов), он воспроизводится из истории.
+ */
+export function solvePlaneAlignTransform(
+  obj: SceneObject,
+  plane: WorldPlane,
+  pick?: { normal: Vec3; point: Vec3; triangleIndex?: number },
+): TransformNR {
+  const t = obj.transform
+  const n = unit(plane.normal)
+  const c = pick ? dot3(unit(pick.normal), n) : 1
+  if (!pick || Math.abs(c) >= ALIGN_PARALLEL_COS || (pick.triangleIndex !== undefined && isSmoothSurfaceAt(obj, pick.triangleIndex))) {
+    const d = solvePlaneAlignDelta(obj, plane, pick)
+    return { ...t, x: t.x + d.x, y: t.y + d.y, z: t.z + d.z }
+  }
+  const nb = unit(pick.normal)
+  // ось поворота nb × n (не ноль: грань не параллельна), угол — между нормалями
+  const ax = { x: nb.y * n.z - nb.z * n.y, y: nb.z * n.x - nb.x * n.z, z: nb.x * n.y - nb.y * n.x }
+  const k = unit(ax)
+  const rd = axisAngleMatrix(k, Math.acos(Math.max(-1, Math.min(1, c))))
+  const r0 = computeRSMatrix({ rotX: t.rotX, rotY: t.rotY, rotZ: t.rotZ }, { scaleX: 1, scaleY: 1, scaleZ: 1 })
+  const rot = eulerXYZFromMatrix(mul3(rd, r0))
+  // pivot вокруг точки клика: p' = q + ΔR·(p − q)
+  const q = pick.point
+  const px = t.x - q.x, py = t.y - q.y, pz = t.z - q.z
+  const p1 = {
+    x: q.x + rd[0] * px + rd[1] * py + rd[2] * pz,
+    y: q.y + rd[3] * px + rd[4] * py + rd[5] * pz,
+    z: q.z + rd[6] * px + rd[7] * py + rd[8] * pz,
+  }
+  // грань B (через q, нормаль n) — в плоскость A
+  const s = dot3(n, q) - dot3(n, plane.point)
+  return { ...t, ...rot, x: p1.x - s * n.x, y: p1.y - s * n.y, z: p1.z - s * n.z }
+}
+
 /** Returns bbox center for a vertex buffer (no mutation). */
 export function computeCenter(vertices: Float32Array): Vec3 {
   const { min, max } = computeAABB(vertices)

@@ -1,11 +1,13 @@
 // e2e/align-obb.mjs — ALIGN-REVIT: выравнивание по реальной геометрии с учётом поворота.
 // С ALIGN-UI-REVIT — через режим «Выровнять» (9 кнопок min/center/max убраны):
 //  1) куб A 20³ + цилиндр (r 10, h 20), повёрнутый на rotY 45 → режим → плоскость = правая
-//     грань A (+X, x = 10) → клик по грани цилиндра, смотрящей в +X → X max реальной
+//     грань A (+X, x = 10) → клик по БОКОВОЙ (гладкой) грани цилиндра, смотрящей в +X → X max реальной
 //     геометрии цилиндра = 10: pivot = 10 − 14.1 (r·cos45 + h/2·sin45), а не 10 − 10
 //     (рамка без поворота);
 //  2) второй куб, повёрнутый rotX 45 → режим → Z (плоскость XY) → клик по грани, смотрящей
-//     вверх → верхнее ребро в z = 0: pivot Z = −14.1 (половина диагонали), а не −10;
+//     вверх (плоская, под 45°) → UX-AUDIT-32: куб поворачивается — грань ложится в z = 0
+//     (rotX 0 или ±90, pivot Z = −10). До UX-AUDIT-32 — только сдвиг: верхнее ребро в z = 0
+//     (Z = −14.1). Касание крайней точкой без поворота осталось у гладких поверхностей (1);
 //  3) уведомлений нет; undo (кнопка «Отменить») возвращает куб на место.
 // Кнопки — по aria-label (`toolbarButton`), грани — сканированием подсветки (`findAlignFace`).
 // Запуск: `pnpm dev` в одном терминале, `pnpm e2e:align-obb` в другом.
@@ -80,7 +82,8 @@ try {
   const faceA = await findAlignFace(page, cube, (v) => v[0] > 0.95)
   await page.mouse.click(faceA.x, faceA.y)
   await page.waitForFunction(() => document.querySelector('[data-testid=align-plane]')?.textContent?.includes('грань'), null, { timeout: 5000 })
-  await clickStep(await findAlignFace(page, cyl, (v) => v[0] > 0.1 && v[0] < 0.95))
+  // боковая (гладкая) грань: ⟂ оси цилиндра (rotY 45 → ось (√½, 0, √½)); торец — плоский, его UX-AUDIT-32 поворачивает
+  await clickStep(await findAlignFace(page, cyl, (v) => v[0] > 0.1 && v[0] < 0.95 && Math.abs(v[0] + v[2]) * Math.SQRT1_2 < 0.05))
   await panel.waitFor({ state: 'detached', timeout: 5000 })
   await pick(cyl)
   const cylX = await num('X')
@@ -102,8 +105,10 @@ try {
   await panel.waitFor({ state: 'detached', timeout: 5000 })
   await pick(k2)
   const kz = await num('Z')
-  const expectZ = -10 * Math.SQRT2                                        // верхнее ребро в z = 0
-  if (!near(kz, expectZ)) fail(`куб Z: ${kz}, ожидалось ≈ ${expectZ.toFixed(1)} (без поворота было бы −10)`)
+  const krx = Number(await right.locator('#num-input-rot-X').inputValue())
+  const expectZ = -10                                                     // UX-AUDIT-32: грань (повёрнута) — в z = 0
+  if (!near(kz, expectZ)) fail(`куб Z: ${kz}, ожидалось ≈ ${expectZ.toFixed(1)} (без поворота было бы −14.1)`)
+  if (![0, 90, -90].some((a) => Math.abs(krx - a) < 0.1)) fail(`куб rotX: ${krx}, ожидалось 0 или ±90 (грань повёрнута в плоскость)`)
 
   // 3) уведомлений нет; undo → куб на месте
   const toasts = await page.locator('.toast-msg').allTextContents()
@@ -115,7 +120,7 @@ try {
   if (shot) await page.screenshot({ path: shot })
   const real = errors.filter((e) => !/favicon|DevTools/.test(e))
   if (real.length) fail('ошибки страницы: ' + real.join(' | '))
-  console.log(`E2E ALIGN-OBB: OK — цилиндр rotY45 → грань +X куба: X ${cylX} (≈ ${expectX.toFixed(2)}); куб rotX45 → плоскость XY: Z ${kz} (≈ ${expectZ.toFixed(2)}); режим «Выровнять»; undo ✓`)
+  console.log(`E2E ALIGN-OBB: OK — цилиндр rotY45 → грань +X куба: X ${cylX} (≈ ${expectX.toFixed(2)}); куб rotX45 → плоскость XY: повёрнут (rotX ${krx}), Z ${kz} (UX-AUDIT-32); режим «Выровнять»; undo ✓`)
 } catch (e) {
   console.error('E2E ALIGN-OBB: FAIL —', e.message)
   process.exitCode = 1
