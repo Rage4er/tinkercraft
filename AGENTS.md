@@ -98,7 +98,7 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 | `src/store/snapshots.ts` | Snapshot cache для мгновенного undo/redo (PERF-1) |
 | `src/store/notifications.ts` | Toast-уведомления (замена alert) |
 | `src/store/add-text.ts` | 3D-текст в сцену (`addTextObject`): меш `io/text-mesh.ts`, имя «Текст: …», ошибка → уведомление (UX-AUDIT-3/6/10) |
-| `src/store/text-object.ts` | 3D-текст как объект (UX-AUDIT-31): `textOfOp` (строка текста шага `import_mesh`: поле `text`, у старых — по id `txt_N` и имени), `isTextObject` — история «Добавить текст: …», «Тип: Текст», иконка текста |
+| `src/store/text-object.ts` | 3D-текст как объект (UX-AUDIT-31): `textOfOp` (строка текста шага `import_mesh`: поле `text`, у старых — по id `txt_N` и имени), `isTextObject` — история «Добавить текст: …», «Тип: Текст», иконка текста; `textsByObjectId`/`textOfNode` — текст запечённых узлов дерева CSG по истории (import_mesh с текстом, зеркальные копии, узлы копий CSG — UX-AUDIT-34) |
 | `src/store/add-shape-queue.ts` | Клик по фигуре палитры (UX-AUDIT-9): повтор той же фигуры <200 мс отбрасывается, позже — ждёт освобождения стора (`createAddShapeGate`, `addShapeWhenIdle`) |
 | `src/store/mirror-store.ts` | Store для зеркальных операций; зеркало CSG — независимая копия дерева (`copySubtree` с плоскостью) |
 | **CSG / Build Tree** | |

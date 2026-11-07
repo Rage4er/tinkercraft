@@ -30,7 +30,8 @@ import {
   IntersectIcon,
   TextIcon,
 } from './icons'
-import { isTextObject } from '../store/text-object'
+import { isTextObject, textsByObjectId, textOfNode } from '../store/text-object'
+import { useDocumentStore } from '../store/document-store'
 
 interface Props {
   objects: SceneObject[]
@@ -87,6 +88,10 @@ export default function ComponentTree({ objects, selectedIds, onSelect, onRename
   const toggleExpanded = useUiStore((s) => s.toggleTreeExpanded)
   const selectedChild = useUiStore((s) => s.selectedChild)
   const setSelectedChild = useUiStore((s) => s.setSelectedChild)
+  // UX-AUDIT-34: какие запечённые дети CSG — 3D-текст (по истории; объект-текст поглощён CSG)
+  const operations = useDocumentStore((s) => s.operations)
+  const historyIndex = useDocumentStore((s) => s.historyIndex)
+  const texts = useMemo(() => textsByObjectId(operations.slice(0, historyIndex)), [operations, historyIndex])
 
   // Снимки поддеревьев CSG. treeStore не реактивен — пересчёт при смене objects
   // (дерево мутируется до set() в сторе, поэтому к рендеру оно актуально).
@@ -135,7 +140,10 @@ export default function ComponentTree({ objects, selectedIds, onSelect, onRename
     }
     const shape = node.shapeType ? t(`shapes.${node.shapeType}`) : t('componentTree.import')
     if (node.type === 'baked') {
-      return node.mirrored ? `${shape} (${t('componentTree.mirroredShort')})` : shape
+      // UX-AUDIT-34: текст внутри CSG — «Текст: Дом», а не «Импорт»
+      const text = node.shapeType ? undefined : textOfNode(node.id, texts)
+      const label = text !== undefined ? t('textModal.objectName', { text }) : shape
+      return node.mirrored ? `${label} (${t('componentTree.mirroredShort')})` : label
     }
     const summary = formatParams(node.params, node.shapeType)
     const base = summary ? `${shape} · ${summary}` : shape
@@ -176,7 +184,7 @@ export default function ComponentTree({ objects, selectedIds, onSelect, onRename
             ) : (
               <span className="ct-chevron-spacer" />
             )}
-            <span className="ct-icon"><Glyph shapeType={child.shapeType} operation={child.operation} /></span>
+            <span className="ct-icon"><Glyph shapeType={child.shapeType} operation={child.operation} text={child.type === 'baked' && !child.shapeType && textOfNode(child.id, texts) !== undefined} /></span>
             <span className="ct-name">{childLabel(child)}</span>
             {locked && (
               <span className="ct-lock" data-testid="ct-lock" data-reason={reason} title={lockTitle} aria-label={lockTitle}>🔒</span>

@@ -8,8 +8,9 @@
 // фильтр «Добавить»; свойства — «Тип: Текст». Старые проекты (поля нет): текст узнаётся по id
 // `txt_N` — `addRawMesh` всегда давал тексту такой id, — строка — из имени «Текст: …» / «Text: …».
 
-import type { ImportMeshOperation, SceneObject } from '../csg/types'
+import type { ImportMeshOperation, SceneObject, TinkerCraftOperation } from '../csg/types'
 import i18n from '../i18n'
+import { projectHistory } from './project-history'
 
 const LEGACY_TEXT_ID = /^txt_\d+$/
 
@@ -34,4 +35,31 @@ export function textOfOp(op: Pick<ImportMeshOperation, 'id' | 'name' | 'text'>):
 /** Объект — 3D-текст (а не импортированный STL). */
 export function isTextObject(obj: Pick<SceneObject, 'id' | 'shapeType' | 'text'>): boolean {
   return obj.shapeType === 'import_mesh' && (obj.text !== undefined || LEGACY_TEXT_ID.test(obj.id))
+}
+
+/**
+ * UX-AUDIT-34: строка 3D-текста по id объекта — из истории (эффективной, `projectHistory`): шаги
+ * `import_mesh` с текстом (`textOfOp`), зеркальные копии (`mirror`: originalIds → ids) наследуют.
+ * Нужна узлам Build Tree внутри CSG: объект-текст поглощён операцией, а запечённый узел дерева не
+ * знает, что он текст. Из истории — значит одинаково для живого дерева и перестроенного.
+ */
+export function textsByObjectId(ops: TinkerCraftOperation[]): Map<string, string> {
+  const map = new Map<string, string>()
+  for (const op of projectHistory(ops)) {
+    if (op.type === 'import_mesh') {
+      const text = textOfOp(op)
+      if (text !== undefined) map.set(op.id, text)
+    } else if (op.type === 'mirror') {
+      op.originalIds.forEach((orig, i) => {
+        const text = map.get(orig)
+        if (text !== undefined && op.ids[i]) map.set(op.ids[i], text)
+      })
+    }
+  }
+  return map
+}
+
+/** Строка текста узла дерева: id объекта или узла копии CSG (`копия:источник` — по источнику). */
+export function textOfNode(nodeId: string, texts: Map<string, string>): string | undefined {
+  return texts.get(nodeId) ?? texts.get(nodeId.slice(nodeId.lastIndexOf(':') + 1))
 }

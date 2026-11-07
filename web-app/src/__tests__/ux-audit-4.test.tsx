@@ -34,6 +34,8 @@ import { isTextObject } from '../store/text-object'
 import { rebuildFromHistory, rebuildBuildTree } from '../store/rebuild'
 import ComponentTree from '../components/ComponentTree'
 import { opLabel, filterKeyOf } from '../components/Timeline'
+import { TextIcon } from '../components/icons'
+import { renderToStaticMarkup } from 'react-dom/server'
 import type { SceneObject, ShapeParams, ShapeType, TransformNR, TinkerCraftOperation } from '../csg/types'
 
 const st = () => useDocumentStore.getState()
@@ -281,10 +283,11 @@ describe('UX-AUDIT-33 — зеркальная копия 3D-текста — т
   })
 })
 
-describe('UX-AUDIT-34 — дерево: 3D-текст внутри CSG подписан «Импорт»', () => {
-  // ComponentTree.childLabel: запечённый ребёнок без shapeType — «Импорт» (componentTree.import);
-  // текст в CSG (куб − «Дом») — тоже «Импорт», хотя сам объект до CSG был «Текст: Дом» (UX-AUDIT-31).
-  it.fails('ожидание: куб − текст «Дом» → в раскрытом дереве ребёнок — «Текст …», с иконкой текста', async () => {
+describe('UX-AUDIT-34 — дерево: 3D-текст внутри CSG — «Текст: …»', () => {
+  // Было: ComponentTree.childLabel — запечённый ребёнок без shapeType — «Импорт» (текст в CSG тоже).
+  // Исправлено в fix-all-4: строка текста узла — из истории (store/text-object `textsByObjectId`:
+  // шаги import_mesh с текстом, зеркальные копии; узлы копий CSG — по источнику).
+  it('куб − текст «Дом» → в раскрытом дереве ребёнок — «Текст: Дом», с иконкой текста; после перестроения — так же', async () => {
     const cube = await shape('cube', { width: 60, height: 60, depth: 20 }, at(0))
     await addTextObject('Дом', { size: 10, depth: 15 })
     const txt = Object.keys(st().objects).find((k) => k !== cube)!
@@ -296,13 +299,38 @@ describe('UX-AUDIT-34 — дерево: 3D-текст внутри CSG подп�
     const children = [...h.querySelectorAll('.ct-child .ct-name')].map((e) => e.textContent ?? '')
     expect(children).toHaveLength(2)
     expect(children[0]).toMatch(/^Куб/)
-    expect(children[1]).toMatch(/^Текст/)
+    expect(children[1]).toBe('Текст: Дом')
+    const icons = [...h.querySelectorAll('.ct-child .ct-icon')].map((e) => e.innerHTML)
+    expect(icons[1]).toBe(renderToStaticMarkup(<TextIcon size={32} />))
     // после перестроения из истории (загрузка .3dtc) — так же
     const ops = st().operations.slice(0, st().historyIndex)
     clearSnapshots(); clearTree()
     const rebuilt = await rebuildFromHistory(ops)
     rebuildBuildTree(ops, rebuilt)
     act(() => root!.render(<ComponentTree objects={Object.values(rebuilt)} selectedIds={new Set()} onSelect={noop} onRename={noop} onToggleVis={noop} onDelete={noop} />))
-    expect([...h.querySelectorAll('.ct-child .ct-name')].map((e) => e.textContent ?? '')[1]).toMatch(/^Текст/)
+    expect([...h.querySelectorAll('.ct-child .ct-name')].map((e) => e.textContent ?? '')[1]).toBe('Текст: Дом')
+  })
+  it('копия CSG с текстом (Ctrl+C/V) и зеркальная копия текста в CSG — тоже «Текст: …»; STL в CSG — «Импорт»', async () => {
+    const cube = await shape('cube', { width: 60, height: 60, depth: 20 }, at(0))
+    await addTextObject('Дом', { size: 10, depth: 15 })
+    const txt = Object.keys(st().objects).find((k) => k !== cube)!
+    st().selectObjects([txt], false)
+    await st().mirrorSelected('YZ')
+    const mir = Object.keys(st().objects).find((k) => k !== cube && k !== txt)!
+    st().selectObjects([cube, mir], false)
+    await st().csgBoolean('subtract')
+    const g = Object.keys(st().objects).find((k) => st().objects[k].shapeType === 'csg')!
+    st().selectObjects([g], false); st().copySelected(); await st().pasteClipboard()
+    const copy = Object.keys(st().objects).find((k) => st().objects[k].shapeType === 'csg' && k !== g)!
+    useUiStore.setState({ expandedTreeIds: { [g]: true, [copy]: true } })
+    const h = mount(<ComponentTree objects={Object.values(st().objects)} selectedIds={new Set()} onSelect={noop} onRename={noop} onToggleVis={noop} onDelete={noop} />)
+    const names = [...h.querySelectorAll('.ct-child .ct-name')].map((e) => e.textContent ?? '')
+    expect(names.filter((n) => n.startsWith('Текст: Дом'))).toHaveLength(2)          // в оригинале и в копии CSG
+    expect(names.some((n) => n.startsWith('Импорт'))).toBe(false)
+    // не текст — «Импорт» по-прежнему
+    const { textOfNode, textsByObjectId } = await import('../store/text-object')
+    const stl = { type: 'import_mesh', id: 'stl_5', name: 'a.stl', color: '#fff', transform: ID, vertices: [], indices: [] } as unknown as TinkerCraftOperation
+    expect(textOfNode('stl_5', textsByObjectId([stl]))).toBeUndefined()
+    expect(textOfNode(`csg_9:${txt}`, textsByObjectId(st().operations))).toBe('Дом')
   })
 })
