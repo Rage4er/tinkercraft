@@ -14,7 +14,7 @@
 - **manifold-3d** (WASM) — CSG операции в Web Worker
 - **Zustand 5** — стейт-менеджмент
 - **Vite 6** — сборка
-- **Vitest 4** — тесты (775 тестов, 63 файла; известных багов под `it.fails` нет — UX-AUDIT-1…10 исправлены в `fix-all`, 11…20 — в `fix-all-2`)
+- **Vitest 4** — тесты (789 тестов, 64 файла; UX-AUDIT-1…10 исправлены в `fix-all`, 11…20 — в `fix-all-2`; 8 известных багов UX-прогона 3 — под `it.fails` в `__tests__/ux-audit-3.test.tsx`, ещё 3 — `knownBug` в `e2e/ux-audit-3.mjs`: UX-AUDIT-21…31, чинить в `fix-all-3`)
 - **pnpm** — пакетный менеджер
 
 ## Команды
@@ -23,7 +23,7 @@
 cd web-app
 pnpm dev          # dev-сервер (порт 5000)
 pnpm build        # production-сборка
-pnpm test         # запуск тестов (775 тестов, 63 файла)
+pnpm test         # запуск тестов (789 тестов, 64 файла: 781 + 8 expected fail — UX-AUDIT-21…31)
 pnpm typecheck    # tsc --noEmit
 pnpm e2e:smoke    # дымовой тест в браузере (Playwright; нужен запущенный pnpm dev; см. web-app/e2e/helpers.mjs)
 pnpm e2e:tree     # Фаза 9.1: раскрытие CSG в дереве, выбор ребёнка
@@ -36,6 +36,7 @@ pnpm e2e:import-mesh-csg  # IMPORT-MESH-CSG: замкнутый STL (e2e/fixture
 pnpm e2e:nested-moved-edit  # NESTED-MOVED-EDIT: G сдвинут и повёрнут до ∪ цилиндр → правка сферы во вложенном G без замка; undo/redo
 pnpm e2e:ux-audit  # UX-AUDIT: ✅-сценарии без покрытия (примитивы, интерфейс, .3dtc/STL, 100k) + исправленные UX-AUDIT-1…10 (fix-all)
 pnpm e2e:ux-audit-2  # UX-прогон 2 (H–N): CSG 3 уровней и копия копии в UI, 100k → экспорт, стресс, 1024/768, темы
+pnpm e2e:ux-audit-3  # UX-прогон 3 (H–N повторно + O–T): текст (кириллица, CSG, 漢字/emoji), CSG со сферой, импорт ∪ импорт → .3dtc, выравнивание повёрнутого CSG, стресс 52/104, 1366, тосты, поле, история; knownBug UX-AUDIT-23/24/30
 pnpm e2e:align-ui-revit  # ALIGN-UI-REVIT: «Выровнять» → Z → верх B в 0; грань A → B; «Множественное»; Esc; правый клик
 pnpm e2e:align-obb  # ALIGN-REVIT: режимом «Выровнять» — повёрнутый цилиндр к грани куба, повёрнутый куб к плоскости XY (реальная геометрия)
 ```
@@ -194,7 +195,7 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 - Мок IndexedDB: `src/__mocks__/indexeddb.ts` (in-memory IDB для jsdom)
 - Среда: jsdom (через vite.config.ts)
 - Имена: `describe('FunctionName')` → `it('описание')`
-- Известный, но ещё не исправленный баг: `it.fails('ID ожидание: …')` + `it('ID реальность: …')` (а не `skip`): тест подтверждает баг на каждом прогоне и краснеет после фикса; в e2e — `knownBug(...)` (см. `e2e/ux-audit.mjs`). После фикса: `it.fails` → `it`, «реальность» удалить, `knownBug` → обычная проверка. Реестр — `DEVELOPMENT_PLAN.md` › «UX-AUDIT», «UX-AUDIT-2»
+- Известный, но ещё не исправленный баг: `it.fails('ID ожидание: …')` + `it('ID реальность: …')` (а не `skip`): тест подтверждает баг на каждом прогоне и краснеет после фикса; в e2e — `knownBug(...)` (см. `e2e/ux-audit.mjs`). После фикса: `it.fails` → `it`, «реальность» удалить, `knownBug` → обычная проверка. Реестр — `DEVELOPMENT_PLAN.md` › «UX-AUDIT», «UX-AUDIT-2», «UX-AUDIT-3»
 - Строки интерфейса — только через i18n (`t('…')`, ru и en): `i18n/i18n-coverage.test.ts` (AST-скан) падает на кириллице в литералах/JSX вне `console`/`devLog` и на расхождении ключей ru/en
 - e2e, добавляющие одну и ту же фигуру подряд, — через `spaceShapeClick` (`e2e/helpers.mjs`): повтор той же фигуры <200 мс — «двойной клик» (UX-AUDIT-9)
 
