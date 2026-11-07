@@ -323,6 +323,7 @@ body {
   display: flex;
   flex: 1;
   overflow: hidden;
+  position: relative;   /* UX-AUDIT-19: опора для .toast-container */
 }
 
 /* ---- Left panel ---- */
@@ -1391,15 +1392,19 @@ body {
 
 /* ---- Toast notifications (SEC-2) ---- */
 .toast-container {
-  position: fixed;
-  top: 48px;
-  right: 12px;
+  /* UX-AUDIT-19: был fixed в правом верхнем углу окна — поверх тулбара и верха правой панели
+     (заголовок, подсказка режима выравнивания). Теперь — правый верхний угол вьюпорта:
+     левее правой панели (200 px), не шире вьюпорта (окно − 320 − 200). Над модалками
+     (z-index 999) — по-прежнему: .main не создаёт контекст наложения. */
+  position: absolute;
+  top: 8px;
+  right: 212px;
+  max-width: min(360px, calc(100% - 544px));
   z-index: 3000;
   display: flex;
   flex-direction: column;
   gap: 6px;
   pointer-events: auto;
-  max-width: 360px;
 }
 
 .toast {

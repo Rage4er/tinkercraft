@@ -265,14 +265,14 @@ try {
       await s.pick(p); await page.locator(`.ct-item[data-object-id="${q}"]`).click({ modifiers: ['Shift'] })
       await panelButton(page, 'Пересечение').click(); await page.locator('.toast').first().waitFor({ timeout: 5000 })
       res.toast = await read('.toast'); res.toastText = await read('.toast-msg')
-      // UX-AUDIT-19: тост не закрывает правую панель и тулбар (проверка — один раз, в тёмной теме)
+      // ✅ UX-AUDIT-19: тост не закрывает правую панель и тулбар — в правом верхнем углу вьюпорта
       if (!toastChecked) {
         toastChecked = true
-        await knownBug('UX-AUDIT-19', 'тост поверх панели', async () => {
-          const r = await page.evaluate(() => ['.toast', '.panel-right', '[role=toolbar]'].map((q) => { const b = document.querySelector(q).getBoundingClientRect(); return { left: b.left, right: b.right, top: b.top, bottom: b.bottom } }))
-          const bad = [...(overlap(r[0], r[1]) ? ['правую панель'] : []), ...(overlap(r[0], r[2]) ? ['тулбар'] : [])]
-          if (bad.length) throw new Error('тост перекрывает ' + bad.join(' и '))
-        })
+        await page.waitForTimeout(400)                       // анимация появления (translateX) закончилась
+        const r = await page.evaluate(() => ['.toast', '.panel-right', '[role=toolbar]', '.main > .viewport'].map((q) => { const b = document.querySelector(q).getBoundingClientRect(); return { left: b.left, right: b.right, top: b.top, bottom: b.bottom } }))
+        const bad = [...(overlap(r[0], r[1]) ? ['правую панель'] : []), ...(overlap(r[0], r[2]) ? ['тулбар'] : [])]
+        if (bad.length) fail('UX-AUDIT-19: тост перекрывает ' + bad.join(' и '))
+        if (r[0].left < r[3].left || r[0].right > r[3].right) fail('UX-AUDIT-19: тост выходит за вьюпорт')
       }
       await page.locator('.toast').first().click()
       await toolbarButton(page, 'Очистить сцену').click(); await page.locator('[data-testid=confirm-modal]').waitFor()
@@ -301,7 +301,7 @@ try {
       }
     }
     if (s.errors.length) fail('N: ошибки консоли ' + s.errors.join(' | '))
-    ok.push('N: тёмная/светлая — панель, тулбар, тост, подтверждение, модалка текста, проекты (закрываются по Esc, UX-AUDIT-15): фон меняется, контраст ≥ 3')
+    ok.push('N: тёмная/светлая — панель, тулбар, тост (во вьюпорте, не поверх панели — UX-AUDIT-19), подтверждение, модалка текста, проекты (Esc, UX-AUDIT-15): фон меняется, контраст ≥ 3')
     await s.browser.close()
   }
 

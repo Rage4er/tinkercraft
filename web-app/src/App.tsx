@@ -403,7 +403,6 @@ export default function App() {
 
   return (
     <div className="app">
-      <ToastContainer />
 
       {/* ── Ruler distance display ── */}
       {rulerDist !== null && (
@@ -507,6 +506,8 @@ export default function App() {
 
       {/* ── MAIN ── */}
       <div className="main">
+        {/* UX-AUDIT-19: уведомления — в правом верхнем углу вьюпорта, не поверх тулбара и панели */}
+        <ToastContainer />
         {/* ── Левая панель ── */}
         <LeftPanel
           shapeSearch={shapeSearch}
