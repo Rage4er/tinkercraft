@@ -23,6 +23,7 @@ import { useShallow } from "zustand/shallow";
 import { isWorkerReady } from "./csg/worker-client";
 import { SNAP_VALUES } from "./constants";
 import { useAutosave } from "./hooks/useAutosave";
+import { buildTextMesh } from "./io/text-mesh";
 import { useSelectedChildGuard } from "./hooks/useSelectedChildGuard";
 import { useSelectedStepGuard } from "./hooks/useSelectedStepGuard";
 import { useTimelineEdit } from "./hooks/useTimelineEdit";
@@ -309,30 +310,8 @@ export default function App() {
 
   const handleAddText = useCallback(async () => {
     try {
-      const [{ FontLoader }, { TextGeometry }] = await Promise.all([
-        import("three/examples/jsm/loaders/FontLoader.js"),
-        import("three/examples/jsm/geometries/TextGeometry.js"),
-      ]);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const fontData = (await import("three/examples/fonts/helvetiker_regular.typeface.json")) as any;
-      const loader = new FontLoader();
-      const font = loader.parse(fontData.default ?? fontData);
-      const geo = new TextGeometry(textInput.trim() || "Text", {
-        font,
-        size: textSize,
-        depth: textDepth,
-        curveSegments: 4,
-        bevelEnabled: false,
-      });
-      geo.computeBoundingBox();
-      const posAttr = geo.attributes.position;
-      const vertices = Array.from(posAttr.array as Float32Array);
-      let indices: number[];
-      if (geo.index) {
-        indices = Array.from(geo.index.array).map(Number);
-      } else {
-        indices = Array.from({ length: posAttr.count }, (_, i) => i);
-      }
+      // UX-AUDIT-3: замкнутый меш (сварка вершин TextGeometry) — текст участвует в CSG
+      const { vertices, indices } = await buildTextMesh(textInput.trim() || "Text", { size: textSize, depth: textDepth });
       await addRawMesh(`Текст: ${textInput}`, vertices, indices);
       setShowTextModal(false);
     } catch (err) {

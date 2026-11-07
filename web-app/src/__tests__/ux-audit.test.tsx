@@ -36,9 +36,6 @@ import { _resetMockIndexedDB } from '../__mocks__/indexeddb'
 import React from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { act } from 'react-dom/test-utils'
-import { FontLoader } from 'three/examples/jsm/loaders/FontLoader.js'
-import { TextGeometry } from 'three/examples/jsm/geometries/TextGeometry.js'
-import fontData from 'three/examples/fonts/helvetiker_regular.typeface.json'
 import i18n from '../i18n'
 import NumInput from '../components/NumInput'
 import PropertiesPanel from '../components/PropertiesPanel'
@@ -49,6 +46,7 @@ import { clearSnapshots } from '../store/snapshots'
 import { clearTree } from '../csg/history-tree'
 import { useAutosave } from '../hooks/useAutosave'
 import { restoreSession } from '../io/autosave'
+import { buildTextMesh } from '../io/text-mesh'
 import type { SceneObject, ShapeParams, ShapeType, TransformNR } from '../csg/types'
 
 const st = () => useDocumentStore.getState()
@@ -103,20 +101,24 @@ async function shape(type: ShapeType, params: ShapeParams, t: TransformNR): Prom
   return id
 }
 
-/**
- * 3D-текст ровно как в App.handleAddText: TextGeometry (без фаски) → позиции как есть,
- * индексы — `geo.index` или 0..n-1 → addRawMesh(`Текст: …`). Конвертация живёт в App
- * (не экспортируется), поэтому повторена здесь — при её изменении обновить.
- */
+/** 3D-текст как в App.handleAddText: `buildTextMesh` (сварка вершин) → addRawMesh(`Текст: …`). */
 async function addText(text: string): Promise<string> {
-  const font = new FontLoader().parse(fontData as unknown as Parameters<FontLoader['parse']>[0])
-  const geo = new TextGeometry(text, { font, size: 10, depth: 5, curveSegments: 4, bevelEnabled: false })
-  const pos = geo.attributes.position
-  const vertices = Array.from(pos.array as Float32Array)
-  const indices = geo.index ? Array.from(geo.index.array).map(Number) : Array.from({ length: pos.count }, (_, i) => i)
+  const { vertices, indices } = await buildTextMesh(text, { size: 10, depth: 5 })
   const before = new Set(Object.keys(st().objects))
   await st().addRawMesh(`Текст: ${text}`, vertices, indices)
   return Object.keys(st().objects).find((k) => !before.has(k))!
+}
+
+/** Объём замкнутого меша (сумма знаковых тетраэдров), мм³. */
+function meshVolume(v: ArrayLike<number>, idx: ArrayLike<number>): number {
+  let vol = 0
+  for (let i = 0; i < idx.length; i += 3) {
+    const a = idx[i] * 3, b = idx[i + 1] * 3, c = idx[i + 2] * 3
+    vol += (v[a] * (v[b + 1] * v[c + 2] - v[b + 2] * v[c + 1])
+      - v[a + 1] * (v[b] * v[c + 2] - v[b + 2] * v[c])
+      + v[a + 2] * (v[b] * v[c + 1] - v[b + 1] * v[c])) / 6
+  }
+  return vol
 }
 
 describe('UX-AUDIT-1 — автосохранение восстанавливается при старте', () => {
@@ -239,27 +241,53 @@ describe('UX-AUDIT-2 — «Очистить сцену»: подтвержден
   })
 })
 
-describe('UX-AUDIT-3 — 3D-текст нельзя использовать в CSG', () => {
-  it.fails('ожидание: куб − текст «A» (гравировка) — CSG выполняется', async () => {
+describe('UX-AUDIT-3 — 3D-текст участвует в CSG', () => {
+  it('куб − текст «A» (гравировка): CSG выполняется, объём уменьшился, уведомлений нет', async () => {
     const cube = await shape('cube', { width: 20, height: 20, depth: 20 }, at(0))
     const txt = await addText('A')
     await st().moveObject(txt, { ...st().objects[txt].transform, x: 0, y: 0, z: 8 })
     st().selectObjects([cube, txt], false)
     await st().csgBoolean('subtract')
-    expect(Object.keys(st().objects)).toHaveLength(1)
+    const objs = Object.values(st().objects)
+    expect(objs).toHaveLength(1)
+    expect(objs[0].shapeType).toBe('csg')
+    const vol = meshVolume(objs[0].vertices, objs[0].indices)
+    expect(vol).toBeGreaterThan(7000)
+    expect(vol).toBeLessThan(8000 - 50)                    // буква вырезана
     expect(notes().filter((n) => n.type !== 'info')).toEqual([])
   })
-  it('реальность: меш текста — «суп» треугольников без общих вершин → отказ «меш не замкнут… Проверьте STL»', async () => {
-    const font = new FontLoader().parse(fontData as unknown as Parameters<FontLoader['parse']>[0])
-    const geo = new TextGeometry('A', { font, size: 10, depth: 5, curveSegments: 4, bevelEnabled: false })
-    expect(geo.index).toBeNull()                           // неиндексированная геометрия → индексы 0..n-1, без сварки
-    const cube = await shape('cube', { width: 20, height: 20, depth: 20 }, at(0))
-    const txt = await addText('A')
-    st().selectObjects([cube, txt], false)
-    await st().csgBoolean('subtract')
-    expect(Object.keys(st().objects)).toHaveLength(2)
-    expect(notes().at(-1)?.message).toBe(i18n.t('errors.csgNonManifold'))
-    expect(i18n.t('errors.csgNonManifold')).toContain('STL')   // подсказка про STL, хотя это текст
+  it('меш текста замкнут: каждое ребро — ровно у двух треугольников (встречно), вырожденных нет', async () => {
+    for (const text of ['A', 'Hi 8', 'Привет']) {
+      const { vertices, indices } = await buildTextMesh(text, { size: 10, depth: 5 })
+      expect(vertices.length / 3).toBeLessThan(indices.length)           // вершины общие (не 3 на треугольник)
+      const edges = new Map<string, number>()
+      for (let i = 0; i < indices.length; i += 3) {
+        const t = [indices[i], indices[i + 1], indices[i + 2]]
+        expect(new Set(t).size).toBe(3)
+        for (let k = 0; k < 3; k++) {
+          const key = `${t[k]}>${t[(k + 1) % 3]}`
+          edges.set(key, (edges.get(key) ?? 0) + 1)
+        }
+      }
+      for (const [key, n] of edges) {
+        expect(n).toBe(1)                                                // ориентированное ребро — один раз
+        const [a, b] = key.split('>')
+        expect(edges.get(`${b}>${a}`)).toBe(1)                           // и есть встречное
+      }
+      expect(meshVolume(vertices, indices)).toBeGreaterThan(0)          // наружу смотрят нормали
+    }
+  })
+  it('текст с цифрами и кириллицей ∪ куб и куб ∩ текст — CSG выполняется', async () => {
+    for (const op of ['union', 'intersect'] as const) {
+      freshDocument()
+      const cube = await shape('cube', { width: 60, height: 20, depth: 20 }, at(0))
+      const txt = await addText('Ёж 42')
+      await st().moveObject(txt, { ...st().objects[txt].transform, x: 0, y: 0, z: 0 })
+      st().selectObjects([cube, txt], false)
+      await st().csgBoolean(op)
+      expect(Object.keys(st().objects)).toHaveLength(1)
+      expect(notes().filter((n) => n.type !== 'info')).toEqual([])
+    }
   })
 })
 

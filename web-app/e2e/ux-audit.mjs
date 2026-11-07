@@ -230,11 +230,13 @@ try {
     if (!name.includes('Текст')) throw new Error('строка дерева: ' + name.replace(/\s+/g, ' '))
   })
   await setPos(txt, 'X', 0); await setPos(txt, 'Z', 8)
-  await knownBug('UX-AUDIT-3', 'куб − 3D-текст', async () => {
-    await pick(c3); await page.locator(`.ct-item[data-object-id="${txt}"]`).click({ modifiers: ['Shift'] })
-    await panelButton(page, 'Вычитание').click(); await page.waitForTimeout(1500)
-    if ((await rows.count()) !== 1) throw new Error('CSG не выполнен; уведомление: ' + (await toasts()))
-  })
+  // ── ✅ UX-AUDIT-3: куб − 3D-текст (гравировка) — CSG выполняется, без уведомлений ──
+  await pick(c3); await page.locator(`.ct-item[data-object-id="${txt}"]`).click({ modifiers: ['Shift'] })
+  await panelButton(page, 'Вычитание').click()
+  await page.waitForFunction(() => document.querySelectorAll('.ct-item[data-object-id]').length === 1, null, { timeout: 15000 })
+    .catch(async () => fail('UX-AUDIT-3: куб − текст не выполнен; уведомление: ' + (await toasts())))
+  if (await toasts()) fail('UX-AUDIT-3: уведомления после куб − текст: ' + (await toasts()))
+  ok.push('UX-AUDIT-3: куб − 3D-текст «A» → CSG-результат, без уведомлений')
   await shot('ux-text-csg.png')
 
   // ── ✅ UX-AUDIT-1: автосохранение → перезагрузка → работа и история на месте, уведомление ──
