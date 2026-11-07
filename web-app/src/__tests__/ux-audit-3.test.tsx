@@ -434,10 +434,10 @@ describe('UX-AUDIT-27 — модалка «3D-текст»: Esc закрывае
   })
 })
 
-describe('UX-AUDIT-28 — вкладка «Список»: объекты без номеров, одинаковые имена', () => {
-  // LeftPanel.getShapeLabel — «Куб», «Куб», «CSG результат» (без номера); вкладка «Дерево» —
-  // displayName: «Куб 1», «Куб 2», «CSG результат 3». Объекты списка не различить.
-  it.fails('ожидание: имена в «Списке» различимы и совпадают с «Деревом»', async () => {
+describe('UX-AUDIT-28 — вкладка «Список»: имена с номерами, как в «Дереве»', () => {
+  // Было: LeftPanel.getShapeLabel — «Куб», «Куб», «CSG результат» (без номера); вкладка «Дерево» —
+  // displayName: «Куб 1», «Куб 2», «CSG результат 3». Исправлено в fix-all-3: «Список» — displayName.
+  it('имена в «Списке» различимы и совпадают с «Деревом»', async () => {
     await shape('cube', { width: 20, height: 20, depth: 20 }, at(0))
     await shape('cube', { width: 20, height: 20, depth: 20 }, at(40))
     await cubeSphere('union')
@@ -450,6 +450,8 @@ describe('UX-AUDIT-28 — вкладка «Список»: объекты без
     const labels = [...h.querySelectorAll('.object-list-label')].map((e) => e.textContent)
     expect(labels).toHaveLength(3)
     expect(labels).toEqual(objects.map((o) => displayName(o, t)))
+    expect(new Set(labels).size).toBe(3)
+    expect(labels[0]).toMatch(/^Куб \d+$/)
   })
 })
 

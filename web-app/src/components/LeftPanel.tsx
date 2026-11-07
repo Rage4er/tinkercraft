@@ -2,19 +2,11 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import Section from "./Section";
 import Timeline from "./Timeline";
-import ComponentTree from "./ComponentTree";
+import ComponentTree, { displayName } from "./ComponentTree";
 import { OP_FILTER_LABELS } from "../constants";
 import { ALL_SHAPES } from "../constants.tsx";
 import type { ShapeType, TinkerCraftOperation, SceneObject } from "../csg/types";
 import { ChevronUpIcon, ChevronDownIcon } from "./icons";
-
-// Отображаемое имя фигуры для списка объектов
-function getShapeLabel(obj: SceneObject, t: (key: string) => string): string {
-  if (obj.name) return obj.name
-  if (obj.shapeType === 'csg') return t('csg.result')
-  if (obj.shapeType === 'import_mesh') return t('actions.import')
-  return t(`shapes.${obj.shapeType}`)
-}
 
 export default function LeftPanel({
   shapeSearch,
@@ -148,8 +140,9 @@ export default function LeftPanel({
                     opacity: obj.visible ? 1 : 0.35,
                   }}
                 />
+                {/* UX-AUDIT-28: имя — как в «Дереве» («Куб 1», «CSG результат 3»), а не «Куб», «Куб» */}
                 <span className="object-list-label">
-                  {getShapeLabel(obj, t)}
+                  {displayName(obj, t)}
                 </span>
                 {!obj.visible && <span className="obj-hidden">{t("leftPanel.hidden")}</span>}
               </div>
