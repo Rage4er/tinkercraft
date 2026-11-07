@@ -1437,6 +1437,15 @@ body {
   pointer-events: auto;
 }
 
+/* UX-AUDIT-30: узкий вьюпорт (окно ≤ 940 px = вьюпорт ≤ 420 px) — вверху вьюпорта «Привязка»
+   (8–33 px) и плашка линейки (40–67 px, UX-AUDIT-24): тост ниже них, а не поверх «Привязки».
+   Контейнерный запрос сюда не достаёт (тосты — в .main, не во вьюпорте) — запрос по окну. */
+@media (max-width: 940px) {
+  .toast-container {
+    top: 72px;
+  }
+}
+
 .toast {
   display: flex;
   align-items: center;

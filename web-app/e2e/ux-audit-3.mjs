@@ -13,11 +13,10 @@
 //  S. Поле: «−1234.5» целиком на 1366, ↑ с клавиатуры меняет значение, Enter — шаг истории.
 //  T. История: объединение / вычитание / пересечение — свои подписи и иконки; вставка — «Вставить
 //     куб / CSG / импорт»; фильтр «CSG» прячет операции CSG.
-//  🐞 known — новые баги прогона 3 (вёрстка, только браузер), `knownBug`: ожидание обязано
-//     сейчас НЕ выполняться; выполнилось — баг исправлен, перенести проверку в ✅:
-//     UX-AUDIT-30 тост на 768 закрывает «Привязку». Исправлены (fix-all-3) — обычные проверки:
+//  Баги прогона 3 в браузере (были `knownBug`), исправлены в fix-all-3 — обычные проверки:
 //     UX-AUDIT-21 (долгие задачи при импорте 100k), UX-AUDIT-23 (стрелки поля при наведении и
-//     в фокусе), UX-AUDIT-24 (плашка линейки — во вьюпорте, не на тулбаре и «Привязке»).
+//     в фокусе), UX-AUDIT-24 (плашка линейки — во вьюпорте, не на тулбаре и «Привязке»),
+//     UX-AUDIT-30 (на 768 тост — под «Привязкой» и плашкой линейки). `knownBug` сейчас нет.
 // Ошибок консоли нет (все сценарии). Логика — __tests__/ux-audit-3.test.tsx (`it.fails`).
 // Запуск: `pnpm dev` в одном терминале, `pnpm e2e:ux-audit-3` в другом.
 // Необязательный аргумент — каталог для скриншотов: `node e2e/ux-audit-3.mjs /tmp/ux3`.
@@ -418,19 +417,29 @@ try {
     ok.push(`Q: ${width}×${height} — плашка «Расстояние» во вьюпорте, не на тулбаре${width <= 940 ? ' и не на «Привязке»' : ''} (UX-AUDIT-24)`)
     await s.browser.close()
   }
+  // ── ✅ UX-AUDIT-30: на 768 тост не закрывает «Привязку» и плашку линейки; не на панели и тулбаре (19) ──
   {
     const s = await session({ width: 768, height: 1024 })
     const { page } = s
     const a = await s.add('Куб'); const b = await s.add('Сфера')
-    await s.pair(a, b); await panelButton(page, 'Пересечение').click()
+    await s.blur(); await page.keyboard.press('Escape'); await page.keyboard.press('KeyL')
+    const vp = await s.rect('.main > .viewport')
+    await page.mouse.click(vp.left + (vp.right - vp.left) * 0.3, vp.top + (vp.bottom - vp.top) * 0.8)
+    await page.mouse.click(vp.left + (vp.right - vp.left) * 0.7, vp.top + (vp.bottom - vp.top) * 0.85)
+    await page.locator('.ruler-display').waitFor({ timeout: 5000 })
+    await s.pair(a, b); await panelButton(page, 'Пересечение').click()     // линейка включена — плашка видна
     await page.locator('.toast').first().waitFor({ timeout: 5000 }); await page.waitForTimeout(400)
     await s.shot('toast-768.png')
-    // 🐞 UX-AUDIT-30: на 768 тост (верх вьюпорта) закрывает «Привязку» (тоже вверху, ≤ 420 px)
-    await knownBug('UX-AUDIT-30', 'тост закрывает «Привязку» (768)', async () => {
-      const [t, snap] = [await s.rect('.toast'), await s.rect('.snap-selector')]
-      if (overlap(t, snap)) throw new Error('тост поверх «Привязки» — 5 с привязку не переключить')
-    })
+    const [t, snap, ruler, right, tb] = [await s.rect('.toast'), await s.rect('.snap-selector'), await s.rect('.ruler-display'), await s.rect('.panel-right'), await s.rect('[role=toolbar]')]
+    if (!ruler) fail('UX-AUDIT-30 (768): плашки линейки нет')
+    const bad = [...(overlap(t, snap) ? ['«Привязку»'] : []), ...(overlap(t, ruler) ? ['плашку линейки'] : []), ...(overlap(t, right) ? ['правую панель'] : []), ...(overlap(t, tb) ? ['тулбар'] : [])]
+    if (bad.length) fail('UX-AUDIT-30 (768): тост перекрывает ' + bad.join(', '))
+    if (t.left < vp.left || t.right > vp.right) fail('UX-AUDIT-30 (768): тост за пределами вьюпорта')
+    // «Привязка» кликабельна, пока виден тост
+    await page.locator('.snap-btn', { hasText: /^5$/ }).click({ timeout: 2000 })
+    if (!(await page.locator('.snap-btn.active', { hasText: /^5$/ }).count())) fail('UX-AUDIT-30 (768): «Привязка» не переключилась при тосте')
     if (s.errors.length) fail('UX-AUDIT-30: ошибки консоли ' + s.errors.join(' | '))
+    ok.push('R: 768 — тост под «Привязкой» и плашкой линейки, не на панели и тулбаре; «Привязка» переключается при тосте (UX-AUDIT-30)')
     await s.browser.close()
   }
 
