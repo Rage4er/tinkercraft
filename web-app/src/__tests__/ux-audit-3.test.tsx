@@ -39,7 +39,8 @@ import ComponentTree, { displayName } from '../components/ComponentTree'
 import LeftPanel from '../components/LeftPanel'
 import TextModal from '../components/TextModal'
 import Timeline, { opLabel } from '../components/Timeline'
-import { SubtractIcon, IntersectIcon } from '../components/icons'
+import { SubtractIcon, IntersectIcon, UnionIcon } from '../components/icons'
+import { rebuildFromHistory, rebuildBuildTree } from '../store/rebuild'
 import type { SceneObject, ShapeParams, ShapeType, TransformNR, TinkerCraftOperation } from '../csg/types'
 
 const st = () => useDocumentStore.getState()
@@ -343,16 +344,28 @@ describe('UX-AUDIT-22 — привязка линейки к ребру CSG и �
   })
 })
 
-describe('UX-AUDIT-25 — дерево: корень CSG-вычитания и пересечения — с иконкой объединения', () => {
-  // ComponentTree рисует корень CSG `<Glyph shapeType="csg" />` без операции → всегда значок
-  // объединения (история после UX-AUDIT-11 — уже своя иконка; дети-CSG в дереве — тоже).
-  it.fails('ожидание: строка корня вычитания — иконка вычитания, пересечения — пересечения', async () => {
+describe('UX-AUDIT-25 — дерево: корень CSG — с иконкой своей операции', () => {
+  // Было: ComponentTree рисовал корень CSG `<Glyph shapeType="csg" />` без операции → всегда значок
+  // объединения. Исправлено в fix-all-3: операция корня — из Build Tree (иначе — из объекта).
+  it('строка корня вычитания — иконка вычитания, пересечения — пересечения, объединения — объединения', async () => {
+    const u = await cubeSphere('union')
     const s = await cubeSphere('subtract')
     const i = await cubeSphere('intersect')
     const h = mount(<ComponentTree objects={Object.values(st().objects)} selectedIds={new Set()} onSelect={noop} onRename={noop} onToggleVis={noop} onDelete={noop} />)
     const icon = (id: string) => h.querySelector(`.ct-item[data-object-id="${id}"] .ct-icon`)!.innerHTML
     expect(icon(s)).toBe(renderToStaticMarkup(<SubtractIcon size={32} />))
     expect(icon(i)).toBe(renderToStaticMarkup(<IntersectIcon size={32} />))
+    expect(icon(u)).toBe(renderToStaticMarkup(<UnionIcon size={32} />))
+  })
+  it('после перестроения из истории (загрузка, перемотка) — та же иконка', async () => {
+    const s = await cubeSphere('subtract')
+    clearSnapshots(); clearTree()
+    const ops = st().operations.slice(0, st().historyIndex)
+    const rebuilt = await rebuildFromHistory(ops)
+    rebuildBuildTree(ops, rebuilt)                                   // как стор при загрузке/перемотке
+    expect(rebuilt[s].operation).toBeUndefined()                     // у объекта операции нет — она из дерева
+    const h = mount(<ComponentTree objects={Object.values(rebuilt)} selectedIds={new Set()} onSelect={noop} onRename={noop} onToggleVis={noop} onDelete={noop} />)
+    expect(h.querySelector(`.ct-item[data-object-id="${s}"] .ct-icon`)!.innerHTML).toBe(renderToStaticMarkup(<SubtractIcon size={32} />))
   })
 })
 

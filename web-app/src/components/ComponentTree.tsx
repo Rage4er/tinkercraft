@@ -68,6 +68,11 @@ function Glyph({ shapeType, operation }: { shapeType?: ShapeType | 'csg'; operat
   }
 }
 
+/** UX-AUDIT-25: операция корня CSG — из Build Tree (корень — boolean-узел), иначе — из объекта. */
+function rootOperation(obj: SceneObject, view: TreeViewNode | undefined): 'union' | 'subtract' | 'intersect' | undefined {
+  return view?.operation ?? obj.operation
+}
+
 export default function ComponentTree({ objects, selectedIds, onSelect, onRename, onToggleVis, onDelete }: Props) {
   const { t } = useTranslation()
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -218,8 +223,9 @@ export default function ComponentTree({ objects, selectedIds, onSelect, onRename
               {/* Цветовая метка */}
               <div className="ct-swatch" style={{ background: obj.color, opacity: obj.visible ? 1 : 0.4 }} />
 
-              {/* Иконка фигуры */}
-              <span className="ct-icon"><Glyph shapeType={obj.shapeType} /></span>
+              {/* Иконка фигуры; UX-AUDIT-25: у корня CSG — иконка его операции (вычитание,
+                  пересечение), как у вложенных CSG и в истории, а не всегда объединения */}
+              <span className="ct-icon"><Glyph shapeType={obj.shapeType} operation={obj.shapeType === 'csg' ? rootOperation(obj, view) : undefined} /></span>
 
               {/* Имя (двойной клик = редактирование) */}
               {isEd ? (
