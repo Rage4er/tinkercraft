@@ -14,7 +14,7 @@
 - **manifold-3d** (WASM) — CSG операции в Web Worker
 - **Zustand 5** — стейт-менеджмент
 - **Vite 6** — сборка
-- **Vitest 4** — тесты (715 тестов + 6 `it.fails` (известные баги UX-AUDIT), 59 файлов — `main` после v1.3.1)
+- **Vitest 4** — тесты (755 тестов, 62 файла; известных багов под `it.fails` нет — все UX-AUDIT-1…10 исправлены в `fix-all`)
 - **pnpm** — пакетный менеджер
 
 ## Команды
@@ -23,7 +23,7 @@
 cd web-app
 pnpm dev          # dev-сервер (порт 5000)
 pnpm build        # production-сборка
-pnpm test         # запуск тестов (715 тестов + 6 `it.fails` (известные баги UX-AUDIT), 59 файлов)
+pnpm test         # запуск тестов (755 тестов, 62 файла)
 pnpm typecheck    # tsc --noEmit
 pnpm e2e:smoke    # дымовой тест в браузере (Playwright; нужен запущенный pnpm dev; см. web-app/e2e/helpers.mjs)
 pnpm e2e:tree     # Фаза 9.1: раскрытие CSG в дереве, выбор ребёнка
@@ -34,7 +34,8 @@ pnpm e2e:edit-step-extrude  # Фаза 9.5.4: проект из e2e/fixtures/ext
 pnpm e2e:independent-copy  # CSG-INDEPENDENT-COPY: зеркало и Ctrl+C/V CSG → правка ребёнка копии не трогает оригинал и наоборот
 pnpm e2e:import-mesh-csg  # IMPORT-MESH-CSG: замкнутый STL (e2e/fixtures/closed-cube.stl) ∪ куб → CSG; незамкнутый → уведомление ru/en
 pnpm e2e:nested-moved-edit  # NESTED-MOVED-EDIT: G сдвинут и повёрнут до ∪ цилиндр → правка сферы во вложенном G без замка; undo/redo
-pnpm e2e:ux-audit  # UX-AUDIT: ✅-сценарии без покрытия (примитивы, интерфейс, .3dtc/STL, 100k) + известные баги (обязаны воспроизводиться)
+pnpm e2e:ux-audit  # UX-AUDIT: ✅-сценарии без покрытия (примитивы, интерфейс, .3dtc/STL, 100k) + исправленные UX-AUDIT-1…10 (fix-all)
+pnpm e2e:ux-audit-2  # UX-прогон 2 (H–N): CSG 3 уровней и копия копии в UI, 100k → экспорт, стресс, 1024/768, темы
 pnpm e2e:align-ui-revit  # ALIGN-UI-REVIT: «Выровнять» → Z → верх B в 0; грань A → B; «Множественное»; Esc; правый клик
 pnpm e2e:align-obb  # ALIGN-REVIT: режимом «Выровнять» — повёрнутый цилиндр к грани куба, повёрнутый куб к плоскости XY (реальная геометрия)
 ```
@@ -84,7 +85,8 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 | Файл | Ответственность |
 |---|---|
 | `src/App.tsx` | Layout, keyboard shortcuts, text modal form state |
-| `src/constants.ts` | Общие константы (ALL_SHAPES, SNAP_VALUES, OP_FILTER_LABELS, spacing, epsilon) |
+| `src/constants.ts` | Общие константы (ALL_SHAPES, SNAP_VALUES, OP_FILTER_LABELS, spacing, epsilon, `TOOLTIP_DATA` — подсказки с сочетаниями, `ADD_SHAPE_DEBOUNCE_MS`) |
+| `src/hotkeys.ts` | Клавиша → действие (`resolveHotkey`, UX-AUDIT-5): все сочетания из `TOOLTIP_DATA`; App только исполняет. `hotkeys.test.ts` сверяет каждое сочетание подсказки с действием её инструмента |
 | **Store** | |
 | `src/store/document-store.ts` | Zustand store — действия (create), 500 строк |
 | `src/store/ui-store.ts` | Zustand store — UI state (gizmo, theme, camera, modals, etc.) |
@@ -93,6 +95,8 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 | `src/store/rebuild.ts` | rebuildFromHistory — восстановление объектов из истории операций |
 | `src/store/snapshots.ts` | Snapshot cache для мгновенного undo/redo (PERF-1) |
 | `src/store/notifications.ts` | Toast-уведомления (замена alert) |
+| `src/store/add-text.ts` | 3D-текст в сцену (`addTextObject`): меш `io/text-mesh.ts`, имя «Текст: …», ошибка → уведомление (UX-AUDIT-3/6/10) |
+| `src/store/add-shape-queue.ts` | Клик по фигуре палитры (UX-AUDIT-9): повтор той же фигуры <200 мс отбрасывается, позже — ждёт освобождения стора (`createAddShapeGate`, `addShapeWhenIdle`) |
 | `src/store/mirror-store.ts` | Store для зеркальных операций; зеркало CSG — независимая копия дерева (`copySubtree` с плоскостью) |
 | **CSG / Build Tree** | |
 | `src/csg/history-tree.ts` | **Build Tree** — параметрическое дерево (primitive/boolean/baked), `rebuildNode`, `mirrorNodeRecursive`, `cloneSubtree`; независимая копия CSG (`copySubtree`, `snapshotSubtree`, `instantiateSubtree`, id узлов `${idКопии}:${idИсточника}`); у boolean-узла `originTransform` (TRS₀ — система листьев; вложенный boolean воркер переносит на `Mat(localTransform)·Mat(originTransform)⁻¹`, NESTED-MOVED-EDIT) |
@@ -108,6 +112,8 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 | `src/components/AlignPanel.tsx` | Панель режима выравнивания (вместо свойств): подсказка, X/Y/Z, текущая плоскость, «Множественное», «Готово» |
 | `src/components/align-picking.ts` | Raycast по треугольнику (`pickFace` — мировые нормаль и точка) и плоская грань для подсветки (`planarFaceTriangles`) |
 | `src/hooks/useAlignModeKeys.ts` | Esc → выход из режима выравнивания (capture, раньше общего обработчика App) |
+| `src/hooks/useAutosave.ts` | Автосохранение (таймер) и восстановление прошлой сессии при старте, когда воркер готов (UX-AUDIT-1) |
+| `src/components/ConfirmModal.tsx` | Подтверждение разрушительного действия («Очистить сцену», UX-AUDIT-2): фокус на «Отмена», Esc/фон — отмена, клавиши не уходят в глобальные сочетания |
 | `src/components/StepPanel.tsx` | Панель «Шаг N» (вместо `PropertiesPanel`, пока `ui-store.selectedStep` задан): ΔX/ΔY/ΔZ шага move (коммит по Enter/blur), плоскость шага mirror (сразу по выбору), глубина шага extrude (ось — просмотр) → `editStepParams` — Фаза 9.5.2–9.5.4 |
 | `src/hooks/useSelectedStepGuard.ts` | Сброс выбора шага (undo до шага, выделение в сцене, выбор ребёнка CSG) — Фаза 9.5.2 |
 | `src/components/ChildPropertiesPanel.tsx` | Панель свойств выбранного ребёнка CSG (вместо `PropertiesPanel`, пока `ui-store.selectedChild` задан) — Фаза 9.2 |
@@ -127,7 +133,7 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 | `src/components/PropertiesPanel.tsx` | Панель свойств (трансформ, resize, CSG; extrude в UI нет — EXTRUDE-3D-SCALE) |
 | `src/components/TextModal.tsx` | Модалка 3D текста |
 | `src/components/StatusBar.tsx` | Статус-бар |
-| `src/components/NumInput.tsx` | Numeric input с draft-редактированием |
+| `src/components/NumInput.tsx` | Numeric input с draft-редактированием; единица по умолчанию — «мм»/«mm» по языку; `integer` — целое поле (UX-AUDIT-7/8) |
 | `src/components/Section.tsx` | Collapsible section |
 | `src/components/Timeline.tsx` | История операций + opIcon/opLabel |
 | **IO** | |
@@ -135,7 +141,8 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 | `src/io/stl-export.ts` | Экспорт в бинарный STL |
 | `src/io/doodle-io.ts` | **УСТАРЕЛО**: формат .doodle (legacy, не поддерживается) |
 | `src/io/3dtc-io.ts` | Формат .3dtc (ZIP + JSON) — основной формат проекта (v1.2.0+) |
-| `src/io/autosave.ts` | Автосохранение в IndexedDB |
+| `src/io/autosave.ts` | Автосохранение в IndexedDB (запись с `modified`); `clearScene` чистит запись |
+| `src/io/text-mesh.ts` | Меш 3D-текста (`buildTextMesh`): сварка вершин `TextGeometry` → замкнутый меш для CSG; `TextMeshError` (UX-AUDIT-3/10) |
 | `src/io/legacy-fillet.ts` | Миграция старых проектов со скруглением: вырезает шаги `fillet`, снимает `filletRadius`, перенумеровывает `edit_step` (вызывается при всех загрузках в сторе) |
 | **Platform (yandex-games ветка)** | |
 | `src/platform/index.ts` | Абстракция платформы (clean / yandex) |
@@ -186,7 +193,9 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 - Мок IndexedDB: `src/__mocks__/indexeddb.ts` (in-memory IDB для jsdom)
 - Среда: jsdom (через vite.config.ts)
 - Имена: `describe('FunctionName')` → `it('описание')`
-- Известный, но ещё не исправленный баг: `it.fails('ID ожидание: …')` + `it('ID реальность: …')` (а не `skip`): тест подтверждает баг на каждом прогоне и краснеет после фикса; в e2e — `known(...)` (см. `e2e/ux-audit.mjs`). Реестр — `DEVELOPMENT_PLAN.md` › «UX-AUDIT»
+- Известный, но ещё не исправленный баг: `it.fails('ID ожидание: …')` + `it('ID реальность: …')` (а не `skip`): тест подтверждает баг на каждом прогоне и краснеет после фикса; в e2e — `knownBug(...)` (см. `e2e/ux-audit.mjs`). После фикса: `it.fails` → `it`, «реальность» удалить, `knownBug` → обычная проверка. Реестр — `DEVELOPMENT_PLAN.md` › «UX-AUDIT», «UX-AUDIT-2»
+- Строки интерфейса — только через i18n (`t('…')`, ru и en): `i18n/i18n-coverage.test.ts` (AST-скан) падает на кириллице в литералах/JSX вне `console`/`devLog` и на расхождении ключей ru/en
+- e2e, добавляющие одну и ту же фигуру подряд, — через `spaceShapeClick` (`e2e/helpers.mjs`): повтор той же фигуры <200 мс — «двойной клик» (UX-AUDIT-9)
 
 ### CSS
 - Тёмная/светлая темы через CSS-переменные в `App.css`
@@ -245,7 +254,7 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 - **`relativeToParent` в `TreeNode`** — источник истины для rebuild (Фаза 8)
 
 ### Toast вместо alert
-Используйте `notify(message, type)` из `store/notifications.ts` для показа ошибок/предупреждений. Не используйте `alert()`.
+Используйте `notify(message, type)` из `store/notifications.ts` для показа ошибок/предупреждений. Не используйте `alert()`. Подтверждение разрушительного действия — `ConfirmModal` (не `confirm()`).
 
 ### Валидация ввода
 Используйте `clamp(v, min, max)` и `sanitizeParams(params)` из `worker.ts` для валидации пользовательских параметров перед отправкой в воркер.
@@ -267,6 +276,8 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 - Выравнивание режимом «Выровнять» (ALIGN-UI-REVIT) пишется шагом move: при правке прошлого шага объект не перевыравнивается по плоскости (ALIGN-PLANE-RESOLVE); шаги `align` старых проектов — с re-solve, как раньше
 - Дерево живой сессии, начатой до v1.3.2 (boolean-узлы без `originTransform`), для вложенного CSG, сдвинутого до объединения, остаётся под замком `nested_moved` (предохранитель); после перезагрузки/загрузки проекта дерево перестраивается из истории с TRS₀ — правка работает
 - `.doodle` (legacy) в UI не открывается: `parseDoodle` не вызывается
+- 3D-текст, созданный до `fix-all` (в истории — несшитый меш), в CSG не участвует — пересоздать (UX-AUDIT-3 не мигрирует старые шаги); «Отменить» после «Очистить сцену» работает только сразу после очистки (до нового действия)
+- Открытые UX-баги прогона 2 (UX-AUDIT-11…20: подписи вычитания/пересечения и вставки в истории, узкий экран ≤1024 и др.) — `DEVELOPMENT_PLAN.md` › «UX-AUDIT-2», следующий цикл `fix-*`
 
 ## Node.js — Настройка и проверка
 
