@@ -121,6 +121,22 @@ export function opIcon(op: TinkerCraftOperation): React.ReactNode {
 }
 
 // ---- Operation label ----
+/**
+ * UX-AUDIT-29: категория шага для фильтра истории — по тому, что написано в шаге, а не по типу
+ * операции: «Повернуть» и «Масштаб» (move с kind) — свои категории, а не «Переместить»; любая
+ * вставка («Вставить куб / CSG / импорт») — одна категория «Вставить», а не «Добавить» / «CSG» /
+ * «Импорт». Ключи — `OP_FILTER_LABELS`.
+ */
+export function filterKeyOf(op: TinkerCraftOperation): string {
+  if ((op.type === "add_shape" || op.type === "import_mesh") && op.pasted) return "paste";
+  if (op.type === "group" && op.source?.kind !== "extrude" && isPastedGroup(op)) return "paste";
+  if (op.type === "move") {
+    const k = (op as { kind?: string }).kind;
+    if (k === "rotate" || k === "scale") return k;
+  }
+  return op.type;
+}
+
 export function opLabel(op: TinkerCraftOperation, t: (key: string, opts?: Record<string, unknown>) => string): string {
   switch (op.type) {
     case "add_shape":
@@ -210,7 +226,7 @@ export default function Timeline({
   const visible = useMemo(
     () => operations
       .map((op, i) => ({ op, i }))
-      .filter(({ op }) => filters[op.type] !== false),
+      .filter(({ op }) => filters[filterKeyOf(op)] !== false),
     [operations, filters]
   );
   // Фаза 9.5: действующие правки шагов (по префиксу до historyIndex) — эффективные значения в подписи

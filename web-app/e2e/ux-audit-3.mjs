@@ -198,8 +198,15 @@ try {
     const shown = (await page.locator('.tl-label').allInnerTexts()).map((x) => x.trim())
     if (shown.some((x) => ['Объединение', 'Вычитание', 'Пересечение'].includes(x))) fail('T: фильтр «CSG» не прячет операции CSG')
     if (!shown.some((x) => x.startsWith('Добавить'))) fail('T: фильтр «CSG» спрятал и «Добавить …»')
-    await csgFilter.check(); await page.locator('.tl-filter-toggle').click()
-    ok.push('T: вставка — «Вставить куб», «Вставить CSG», «Вставить импорт» (UX-AUDIT-13); фильтр «CSG» прячет объединение/вычитание/пересечение')
+    await csgFilter.check()
+    // ✅ UX-AUDIT-29: фильтр «Вставить» прячет все три вставки — и только их
+    const pasteFilter = page.locator('.tl-filter-row', { hasText: /^Вставить$/ }).locator('input')
+    await pasteFilter.uncheck()
+    const shown2 = (await page.locator('.tl-label').allInnerTexts()).map((x) => x.trim())
+    if (shown2.some((x) => x.startsWith('Вставить'))) fail('UX-AUDIT-29: фильтр «Вставить» не прячет вставку — ' + shown2.filter((x) => x.startsWith('Вставить')).join(', '))
+    if (!shown2.includes('Добавить куб') || !shown2.includes('Объединение')) fail('UX-AUDIT-29: фильтр «Вставить» спрятал лишнее')
+    await pasteFilter.check(); await page.locator('.tl-filter-toggle').click()
+    ok.push('T: вставка — «Вставить куб», «Вставить CSG», «Вставить импорт» (UX-AUDIT-13); фильтр «CSG» прячет объединение/вычитание/пересечение, «Вставить» — все три вставки и только их (UX-AUDIT-29)')
     if (s.errors.length) fail('O/P/T: ошибки консоли ' + s.errors.join(' | '))
     await s.browser.close()
   }

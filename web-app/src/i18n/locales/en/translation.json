@@ -179,8 +179,11 @@
   },
   "filters": {
     "add_shape": "Add",
+    "paste": "Paste",
     "import_mesh": "Import",
     "move": "Move",
+    "rotate": "Rotate",
+    "scale": "Scale",
     "resize_dims": "Resize",
     "mirror": "Mirror",
     "align": "Align",

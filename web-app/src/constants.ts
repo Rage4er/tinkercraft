@@ -42,10 +42,15 @@ export const SNAP_VALUES: { labelKey: string; value: number }[] = [
 
 // ---- Timeline filter labels ----
 // i18n: labels resolved at render time via t('filters.add_shape'), etc.
+// Ключ — категория шага (`filterKeyOf` в Timeline), а не тип операции: UX-AUDIT-29 — фильтр прячет
+// то, что на нём написано («Повернуть», «Масштаб» — не «Переместить»; все «Вставить …» — одна категория).
 export const OP_FILTER_LABELS: Record<string, string> = {
   add_shape: "filters.add_shape",
+  paste: "filters.paste",
   import_mesh: "filters.import_mesh",
   move: "filters.move",
+  rotate: "filters.rotate",
+  scale: "filters.scale",
   resize_dims: "filters.resize_dims",
   mirror: "filters.mirror",
   align: "filters.align",

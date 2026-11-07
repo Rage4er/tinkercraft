@@ -38,7 +38,8 @@ import { findNearestSnap } from '../components/snap-utils'
 import ComponentTree, { displayName } from '../components/ComponentTree'
 import LeftPanel from '../components/LeftPanel'
 import TextModal from '../components/TextModal'
-import Timeline, { opLabel } from '../components/Timeline'
+import Timeline, { opLabel, filterKeyOf } from '../components/Timeline'
+import { OP_FILTER_LABELS } from '../constants'
 import { SubtractIcon, IntersectIcon, UnionIcon } from '../components/icons'
 import { rebuildFromHistory, rebuildBuildTree } from '../store/rebuild'
 import type { SceneObject, ShapeParams, ShapeType, TransformNR, TinkerCraftOperation } from '../csg/types'
@@ -455,24 +456,25 @@ describe('UX-AUDIT-28 — вкладка «Список»: имена с ном�
   })
 })
 
-describe('UX-AUDIT-29 — фильтр истории: категории не совпадают с подписями шагов', () => {
-  // Фильтр — по op.type: «Повернуть» и «Масштаб» скрывает фильтр «Переместить»; «Вставить куб» —
-  // «Добавить», «Вставить CSG» — «CSG», «Вставить импорт» — «Импорт» (после UX-AUDIT-13
-  // подпись одна — «Вставить …», а категории три).
-  it.fails('ожидание: «Повернуть» не скрывается фильтром «Переместить»; все «Вставить …» — одним фильтром', () => {
+describe('UX-AUDIT-29 — фильтр истории: категория = слово шага', () => {
+  // Было: фильтр — по op.type: «Повернуть» и «Масштаб» скрывал фильтр «Переместить»; «Вставить куб» —
+  // «Добавить», «Вставить CSG» — «CSG», «Вставить импорт» — «Импорт». Исправлено в fix-all-3:
+  // категория шага — `filterKeyOf` (фильтры «Вставить», «Повернуть», «Масштаб»).
+  it('«Повернуть» не скрывается фильтром «Переместить»; все «Вставить …» — одним фильтром', () => {
     const ops = [
       { type: 'add_shape', id: 'obj_1', shapeType: 'cube', params: {}, color: '#fff', transform: ID },
       { type: 'move', ids: ['obj_1'], delta: { x: 5, y: 0, z: 0 }, kind: 'translate' },
       { type: 'move', ids: ['obj_1'], delta: { x: 0, y: 0, z: 0 }, rotDelta: { x: 0, y: 0, z: 30 }, kind: 'rotate' },
+      { type: 'move', ids: ['obj_1'], delta: { x: 0, y: 0, z: 0 }, scaleDelta: { x: 1, y: 0, z: 0 }, kind: 'scale' },
       { type: 'add_shape', id: 'obj_2', shapeType: 'cube', params: {}, color: '#fff', transform: ID, pasted: true },
       { type: 'group', ids: [], resultId: 'obj_3', pasted: true },
       { type: 'import_mesh', id: 'obj_4', name: 'a.stl', color: '#fff', transform: ID, vertices: [], indices: [], pasted: true },
     ] as unknown as TinkerCraftOperation[]
     const labels = ops.map((op) => opLabel(op, t))
-    expect(labels).toEqual(['Добавить куб', 'Переместить', 'Повернуть', 'Вставить куб', 'Вставить CSG', 'Вставить импорт'])
+    expect(labels).toEqual(['Добавить куб', 'Переместить', 'Повернуть', 'Масштаб', 'Вставить куб', 'Вставить CSG', 'Вставить импорт'])
     // какой фильтр (подпись) скрывает шаг
     const hiddenBy = new Map<string, string[]>()
-    for (const key of Object.keys({ add_shape: 1, import_mesh: 1, move: 1, group: 1 })) {
+    for (const key of Object.keys(OP_FILTER_LABELS)) {
       const h = mount(<Timeline operations={ops} historyIndex={ops.length} busy={false} onJump={noop} filters={{ [key]: false }} />)
       const shown = new Set([...h.querySelectorAll('.tl-label')].map((e) => e.textContent))
       for (const l of labels) if (!shown.has(l)) hiddenBy.set(l, [...(hiddenBy.get(l) ?? []), t(`filters.${key}`)])
@@ -481,6 +483,22 @@ describe('UX-AUDIT-29 — фильтр истории: категории не �
     expect(hiddenBy.get('Повернуть')).not.toContain(t('filters.move'))
     const paste = labels.filter((l) => l.startsWith('Вставить')).map((l) => (hiddenBy.get(l) ?? []).join())
     expect(new Set(paste).size).toBe(1)
+    // каждый шаг прячет ровно один фильтр — тот, что назван его словом
+    expect(Object.fromEntries(labels.map((l) => [l, hiddenBy.get(l)]))).toEqual({
+      'Добавить куб': ['Добавить'], 'Переместить': ['Переместить'], 'Повернуть': ['Повернуть'], 'Масштаб': ['Масштаб'],
+      'Вставить куб': ['Вставить'], 'Вставить CSG': ['Вставить'], 'Вставить импорт': ['Вставить'],
+    })
+  })
+  it('CSG и выдавливание (старые проекты) — «CSG»; старая вставка CSG (`ids: []` без признака) — «Вставить»', () => {
+    const ops = [
+      { type: 'group', ids: ['a', 'b'], resultId: 'c', treeOperation: 'subtract' },
+      { type: 'group', ids: [], resultId: 'd' },
+      { type: 'group', ids: ['a', 's'], resultId: 'e', source: { kind: 'extrude', baseId: 'a', slabId: 's', axis: 'z', depth: 5 } },
+      { type: 'move', ids: ['a'], delta: { x: 1, y: 0, z: 0 } },
+    ] as unknown as TinkerCraftOperation[]
+    expect(ops.map(filterKeyOf)).toEqual(['group', 'paste', 'group', 'move'])
+    expect(Object.keys(OP_FILTER_LABELS)).toEqual(expect.arrayContaining(['paste', 'rotate', 'scale']))
+    expect(i18n.getResource('en', 'translation', 'filters.paste')).toBe('Paste')
   })
 })
 
