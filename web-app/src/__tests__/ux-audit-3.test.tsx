@@ -319,10 +319,11 @@ describe('UX-AUDIT-21 — CSG и импорт: геометрия вьюпорт
   })
 })
 
-describe('UX-AUDIT-22 — привязка линейки к ребру не работает на CSG и импорте', () => {
-  // snap-utils.collectWorldEdges берёт рёбра только из geometry.index; у CSG/импорта после
-  // UX-AUDIT-20 индекса нет → рёбер нет. Куб-примитив в той же точке — «ребро».
-  it.fails('ожидание: курсор в 0,5 мм от ребра верхней грани CSG (куб ∪ куб) и импорта → привязка «ребро»', async () => {
+describe('UX-AUDIT-22 — привязка линейки к ребру CSG и импорта', () => {
+  // Было: snap-utils.collectWorldEdges брал рёбра только из geometry.index; у CSG/импорта после
+  // UX-AUDIT-20 индекса нет → рёбер не было. Исправлено в fix-all-3: без индекса вершина ребра —
+  // позиция (общее ребро соседних треугольников — один раз). Куб-примитив — как раньше.
+  it('курсор в 0,5 мм от ребра верхней грани CSG (куб ∪ куб) и импорта → привязка «ребро»', async () => {
     const a = await shape('cube', { width: 20, height: 20, depth: 20 }, at(0))
     const cubeSnap = snapAt(st().objects[a], new THREE.Vector3(0, -9.5, 10))
     expect(cubeSnap?.type).toBe('edge')
@@ -330,8 +331,15 @@ describe('UX-AUDIT-22 — привязка линейки к ребру не р�
     const gid = await csg(a, b, 'union')
     const impId = await rawMesh('box.stl', 20, at(60))
     const g = st().objects[gid], imp = st().objects[impId]
-    expect(snapAt(g, new THREE.Vector3(0, -9.5, 10))?.type).toBe('edge')
-    expect(snapAt(imp, new THREE.Vector3(60, -9.5, 10))?.type).toBe('edge')
+    const sg = snapAt(g, new THREE.Vector3(0, -9.5, 10))
+    expect(sg?.type).toBe('edge')
+    expect(sg!.point.y).toBeCloseTo(-10, 4)                 // точка — на ребре
+    const si = snapAt(imp, new THREE.Vector3(60, -9.5, 10))
+    expect(si?.type).toBe('edge')
+    expect(si!.point.y).toBeCloseTo(-10, 4)
+    // у вершины — «вершина», как у куба; геометрия CSG по-прежнему без индекса (затенение UX-AUDIT-20)
+    expect(snapAt(g, new THREE.Vector3(-9.6, -9.6, 10))?.type).toBe('vertex')
+    expect(buildObjectGeometry(g).getIndex()).toBeNull()
   })
 })
 
