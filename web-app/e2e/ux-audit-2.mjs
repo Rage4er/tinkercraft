@@ -16,7 +16,16 @@ import { openApp, panelButton, toolbarButton, spaceShapeClick } from './helpers.
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ux-audit-2-'))
 const ok = []
+const known = []
 const fail = (msg) => { throw new Error(msg) }
+/** Известный баг (UX-AUDIT-11…20): `expectation` бросает — баг на месте; выполнилась — перенести в ✅. */
+async function knownBug(id, title, expectation) {
+  let reproduced = false
+  try { await expectation() } catch (e) { reproduced = true; known.push(`${id} ${title} — ${e.message}`) }
+  if (!reproduced) fail(`${id} (${title}): ожидание выполнилось — баг исправлен? Перенести проверку в ✅ и обновить DEVELOPMENT_PLAN`)
+}
+/** Пересекаются ли прямоугольники (DOMRect-подобные). */
+const overlap = (a, b) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom
 
 /** Сессия браузера с общими хелперами. */
 async function session(size) {
@@ -199,6 +208,30 @@ try {
     if (m.left !== 320 || m.cols !== 3) fail(`M ${width}: палитра ${m.left}px, ${m.cols} столбца`)
     if (!m.right) fail(`M ${width}: правая панель за краем`)
     for (const name of ['Объединение', 'Вычитание', 'Пересечение']) if (!(await panelButton(page, name).isVisible())) fail(`M ${width}: не видна кнопка панели «${name}»`)
+    // UX-AUDIT-12: все кнопки тулбара — в окне (без прокрутки), «Привязка» и подсказка вьюпорта не обрезаны
+    await knownBug('UX-AUDIT-12', `${width}×${height}: тулбар и подсказки вьюпорта`, async () => {
+      const r = await page.evaluate(() => {
+        const vp = document.querySelector('.viewport').getBoundingClientRect()
+        const inside = (e) => { if (!e || getComputedStyle(e).display === 'none') return true; const b = e.getBoundingClientRect(); return b.left >= vp.left - 0.5 && b.right <= vp.right + 0.5 }
+        return {
+          cut: [...document.querySelectorAll('[role=toolbar] button')].filter((b) => { const q = b.getBoundingClientRect(); return q.width === 0 || q.left < 0 || q.right > window.innerWidth + 0.5 }).map((b) => b.getAttribute('aria-label')),
+          snap: inside(document.querySelector('.snap-selector')), hint: inside(document.querySelector('.viewport-hint')),
+        }
+      })
+      const bad = [...(r.cut.length ? [`за краем: ${r.cut.join(', ')}`] : []), ...(r.snap ? [] : ['«Привязка» обрезана']), ...(r.hint ? [] : ['подсказка обрезана'])]
+      if (bad.length) throw new Error(bad.join('; '))
+    })
+    // UX-AUDIT-16: значение поля видно целиком (−1234.5)
+    if (width === 1024) {
+      await knownBug('UX-AUDIT-16', 'поле «−1234.5»', async () => {
+        await s.pick(a)
+        const f = page.locator('.panel-right #num-input-pos-X'); await f.fill('-1234.5'); await f.press('Enter')
+        await page.waitForFunction(() => document.querySelector('.panel-right #num-input-pos-X')?.value === '-1234.5', null, { timeout: 5000 })
+        await page.evaluate(() => document.activeElement?.blur()); await page.mouse.move(0, 300)
+        const m = await f.evaluate((e) => ({ sw: e.scrollWidth, cw: e.clientWidth }))
+        if (m.sw > m.cw) throw new Error(`обрезано: scrollWidth ${m.sw} > clientWidth ${m.cw}`)
+      })
+    }
     if (s.errors.length) fail(`M ${width}: ошибки консоли ` + s.errors.join(' | '))
     ok.push(`M: ${width}×${height} — без горизонтальной прокрутки страницы, палитра 320px/3 столбца, CSG-кнопки панели видны`)
     await s.browser.close()
@@ -209,6 +242,7 @@ try {
     const s = await session()
     const { page } = s
     await s.add('Куб'); await s.add('Сфера')
+    let toastChecked = false
     const sample = async () => {
       const read = (sel) => page.evaluate((q) => { const e = document.querySelector(q); if (!e) return null; const cs = getComputedStyle(e); return { bg: cs.backgroundColor, fg: cs.color } }, sel)
       const res = {}
@@ -219,6 +253,15 @@ try {
       await s.pick(p); await page.locator(`.ct-item[data-object-id="${q}"]`).click({ modifiers: ['Shift'] })
       await panelButton(page, 'Пересечение').click(); await page.locator('.toast').first().waitFor({ timeout: 5000 })
       res.toast = await read('.toast'); res.toastText = await read('.toast-msg')
+      // UX-AUDIT-19: тост не закрывает правую панель и тулбар (проверка — один раз, в тёмной теме)
+      if (!toastChecked) {
+        toastChecked = true
+        await knownBug('UX-AUDIT-19', 'тост поверх панели', async () => {
+          const r = await page.evaluate(() => ['.toast', '.panel-right', '[role=toolbar]'].map((q) => { const b = document.querySelector(q).getBoundingClientRect(); return { left: b.left, right: b.right, top: b.top, bottom: b.bottom } }))
+          const bad = [...(overlap(r[0], r[1]) ? ['правую панель'] : []), ...(overlap(r[0], r[2]) ? ['тулбар'] : [])]
+          if (bad.length) throw new Error('тост перекрывает ' + bad.join(' и '))
+        })
+      }
       await page.locator('.toast').first().click()
       await toolbarButton(page, 'Очистить сцену').click(); await page.locator('[data-testid=confirm-modal]').waitFor()
       res.confirm = await read('[data-testid=confirm-modal]'); res.confirmText = await read('#confirm-modal-message')
@@ -251,6 +294,7 @@ try {
 
   console.log('e2e ux-audit-2 OK')
   for (const x of ok) console.log('  ✅ ' + x)
+  for (const x of known) console.log('  🐞 known: ' + x)
 } catch (e) {
   console.error('e2e ux-audit-2 FAIL —', e.message)
   for (const x of ok) console.error('  ✅ ' + x)
