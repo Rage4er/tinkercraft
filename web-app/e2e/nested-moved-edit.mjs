@@ -6,7 +6,7 @@
 //  об отказе нет; undo → R12, redo → R16.
 // Запуск: `pnpm dev` в одном терминале, `pnpm e2e:nested-moved-edit` в другом.
 // Необязательный аргумент — путь для скриншота: `node e2e/nested-moved-edit.mjs /tmp/nested.png`.
-import { openApp, panelButton, toolbarButton } from './helpers.mjs'
+import { openApp, panelButton, toolbarButton, spaceShapeClick } from './helpers.mjs'
 
 const shot = process.argv[2]
 const { browser, page, errors } = await openApp()
@@ -21,6 +21,7 @@ const waitRows = (n) => page.waitForFunction((k) => document.querySelectorAll('.
 
 async function add(label) {
   const before = new Set(await ids())
+  await spaceShapeClick(page, label)                       // UX-AUDIT-9: подряд та же фигура — не «двойной клик»
   await page.getByText(label, { exact: true }).first().click()
   await waitRows(before.size + 1)
   return (await ids()).find((id) => !before.has(id))

@@ -10,7 +10,7 @@
 // Кнопки — по aria-label (`toolbarButton`), грани — сканированием подсветки (`findAlignFace`).
 // Запуск: `pnpm dev` в одном терминале, `pnpm e2e:align-obb` в другом.
 // Необязательный аргумент — путь для скриншота: `node e2e/align-obb.mjs /tmp/align.png`.
-import { openApp, toolbarButton, findAlignFace } from './helpers.mjs'
+import { openApp, toolbarButton, findAlignFace, spaceShapeClick } from './helpers.mjs'
 
 const shot = process.argv[2]
 const { browser, page, errors } = await openApp()
@@ -38,6 +38,7 @@ const near = (a, b, eps = 0.051) => Math.abs(a - b) <= eps
 /** Фигура из палитры; возвращает id нового объекта. */
 async function add(label) {
   const before = new Set(await ids())
+  await spaceShapeClick(page, label)                       // UX-AUDIT-9: подряд та же фигура — не «двойной клик»
   await page.getByText(label, { exact: true }).first().click()
   await page.waitForFunction((n) => document.querySelectorAll('.ct-item[data-object-id]').length === n, before.size + 1, { timeout: 15000 })
   return (await ids()).find((id) => !before.has(id))

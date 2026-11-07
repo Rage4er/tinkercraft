@@ -5,6 +5,7 @@ import Viewport3D, { type GizmoMode } from "./components/Viewport3D";
 import ErrorBoundary from "./components/ErrorBoundary";
 import WebGLFallback from "./components/WebGLFallback";
 import ProjectManagerModal from "./components/ProjectManagerModal";
+import ConfirmModal from "./components/ConfirmModal";
 import ToastContainer from "./components/ToastContainer";
 import Toolbar from "./components/Toolbar";
 import TextModal from "./components/TextModal";
@@ -16,17 +17,22 @@ import StepPanel from "./components/StepPanel";
 import AlignPanel from "./components/AlignPanel";
 import { useAlignModeStore } from "./store/align-mode";
 import { useAlignModeKeys } from "./hooks/useAlignModeKeys";
-import { useDocumentStore } from "./store/document-store";
+import { useDocumentStore, canUndoClear } from "./store/document-store";
 import { useUiStore } from "./store/ui-store";
 import { useShallow } from "zustand/shallow";
 import { isWorkerReady } from "./csg/worker-client";
-import { SNAP_VALUES, AUTOSAVE_DELAY_MS } from "./constants";
+import { SNAP_VALUES } from "./constants";
+import { useAutosave } from "./hooks/useAutosave";
+import { addTextObject } from "./store/add-text";
+import { createAddShapeGate, addShapeWhenIdle } from "./store/add-shape-queue";
+import { resolveHotkey, NO_REPEAT, mirrorPlaneOf, csgOpOf, isTextEntry, tabTogglesCamera } from "./hotkeys";
 import { useSelectedChildGuard } from "./hooks/useSelectedChildGuard";
 import { useSelectedStepGuard } from "./hooks/useSelectedStepGuard";
 import { useTimelineEdit } from "./hooks/useTimelineEdit";
 import type {
   TransformNR,
   ShapeParams,
+  ShapeType,
 } from "./csg/types";
 
 // ---- App ----
@@ -78,10 +84,11 @@ export default function App() {
   const [textInput, setTextInput] = useState("Text");
   const [textSize, setTextSize] = useState(10);
   const [textDepth, setTextDepth] = useState(5);
+  // UX-AUDIT-2: «Очистить сцену» — с подтверждением
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   const fitViewRef = useRef<(() => void) | null>(null);
   const resetViewRef = useRef<(() => void) | null>(null);
-  const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // FIX (PERF-R16-3): Use useShallow wrapper to prevent re-renders when
   // only the store's internal reference changes but values are the same.
@@ -98,8 +105,6 @@ export default function App() {
       clipboard: s.clipboard,
       currentProjectId: s.currentProjectId,
       currentProjectName: s.currentProjectName,
-      addShape: s.addShape,
-      addRawMesh: s.addRawMesh,
       importStl: s.importStl,
       deleteSelected: s.deleteSelected,
       selectObjects: s.selectObjects,
@@ -122,8 +127,6 @@ export default function App() {
       previewMirror: s.previewMirror,
       copySelected: s.copySelected,
       pasteClipboard: s.pasteClipboard,
-      triggerAutosave: s.triggerAutosave,
-      restoreAutosave: s.restoreAutosave,
       saveToProject: s.saveToProject,
       loadFromProject: s.loadFromProject,
       setCurrentProject: s.setCurrentProject,
@@ -141,8 +144,6 @@ export default function App() {
     clipboard,
     currentProjectId,
     currentProjectName,
-    addShape,
-    addRawMesh,
     importStl,
     deleteSelected,
     selectObjects,
@@ -165,8 +166,6 @@ export default function App() {
     previewMirror,
     copySelected,
     pasteClipboard,
-    triggerAutosave,
-    restoreAutosave,
     saveToProject,
     loadFromProject,
     setCurrentProject,
@@ -192,100 +191,71 @@ export default function App() {
 
 
 
-  useEffect(() => {
-    if (operations.length === 0) return;
-    if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
-    autosaveTimer.current = setTimeout(() => {
-      triggerAutosave();
-    }, AUTOSAVE_DELAY_MS);
-    return () => {
-      if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
-    };
-  }, [operations, historyIndex, triggerAutosave]);
+  // UX-AUDIT-1: автосохранение + восстановление прошлой сессии при старте
+  useAutosave(workerOk);
 
   // Keyboard shortcuts — stable listener via ref (WARN-1 fix).
   // ref обновляется каждый рендер, но сам listener не переподключается.
-  const kbRef = useRef({
-    objects, deleteSelected, undo, redo, selectObjects,
+  // UX-AUDIT-5: клавиша → действие — `resolveHotkey` (hotkeys.ts, сверяется с подсказками
+  // TOOLTIP_DATA тестом); здесь — только исполнение. Под модалкой сочетания не работают.
+  const kbState = {
+    objects, selectedIds, busy, deleteSelected, undo, redo, selectObjects,
     saveProject, openProject, clearSelection, copySelected, pasteClipboard,
-    showTextModal, showPM,
-  });
-  kbRef.current = {
-    objects, deleteSelected, undo, redo, selectObjects,
-    saveProject, openProject, clearSelection, copySelected, pasteClipboard,
-    showTextModal, showPM,
+    csgBoolean, mirrorSelected,
+    modalOpen: showTextModal || showPM || showClearConfirm,
   };
+  const kbRef = useRef(kbState);
+  kbRef.current = kbState;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const ctrl = e.ctrlKey || e.metaKey;
-      if ((e.target as HTMLElement).tagName === "INPUT") return;
+      if (isTextEntry(e.target as Element | null)) return;
       const kb = kbRef.current;
-
-      // e.code — physical key position, works regardless of keyboard layout
-      // e.key — character value, depends on layout (use only for non-letter keys)
-      const code = e.code
-
-      if (code === "Backspace" || code === "Delete") {
+      // FIX (MED-18-39): под модалкой — ни Esc, ни Delete, ни Ctrl+Z по сцене
+      if (kb.modalOpen) return;
+      const action = resolveHotkey(e);
+      if (!action) return;
+      if (action === "toggleCamera" && !tabTogglesCamera(document.activeElement)) return; // Tab — навигация фокусом
+      if (e.repeat && NO_REPEAT.has(action)) {
         e.preventDefault();
-        kb.deleteSelected();
+        return;
       }
-      if (ctrl && code === "KeyZ" && !e.shiftKey) {
-        e.preventDefault();
-        kb.undo();
+      if (action !== "escape") e.preventDefault();
+      const plane = mirrorPlaneOf(action);
+      if (plane) {
+        if (kb.selectedIds.length > 0 && !kb.busy) void kb.mirrorSelected(plane);
+        return;
       }
-      if (ctrl && (code === "KeyY" || (code === "KeyZ" && e.shiftKey))) {
-        e.preventDefault();
-        kb.redo();
+      const csgOp = csgOpOf(action);
+      if (csgOp) {
+        if (kb.selectedIds.length === 2 && !kb.busy) void kb.csgBoolean(csgOp);
+        return;
       }
-      if (ctrl && code === "KeyA") {
-        e.preventDefault();
-        kb.selectObjects(Object.keys(kb.objects), false);
-      }
-      if (ctrl && code === "KeyS") {
-        e.preventDefault()
-        // FIX (HIGH-18-18): Allow Ctrl+S to save even when gizmo is active
-        // The gizmo handles `s` key for toggle (without ctrl), but Ctrl+S should always save
-        kb.saveProject()
-      }
-      if (ctrl && code === "KeyO") {
-        e.preventDefault();
-        kb.openProject();
-      }
-      if (ctrl && code === "KeyC") {
-        e.preventDefault();
-        kb.copySelected();
-      }
-      if (ctrl && code === "KeyV") {
-        e.preventDefault();
-        kb.pasteClipboard();
-      }
-      if (!ctrl && code === "KeyF") {
-        e.preventDefault();
-        fitViewRef.current?.();
-      }
-      if (!ctrl && code === "KeyH") {
-        e.preventDefault();
-        resetViewRef.current?.();
-      }
-      if (!ctrl && code === "KeyG") {
-        e.preventDefault();
-        setGizmoMode((m) => (m === "translate" ? "none" : "translate"));
-      }
-      if (!ctrl && code === "KeyR") {
-        e.preventDefault();
-        setGizmoMode((m) => (m === "rotate" ? "none" : "rotate"));
-      }
-      if (!ctrl && code === "KeyS") {
-        e.preventDefault();
-        setGizmoMode((m) => (m === "scale" ? "none" : "scale"));
-      }
-      if (code === "Escape") {
-        // FIX (MED-18-39): Don't clear selection / gizmo if a modal is open
-        if (showTextModal || showPM) return
-        setGizmoMode("none");
-        kb.clearSelection();
-        setRulerActive(false);
+      switch (action) {
+        case "delete": void kb.deleteSelected(); break;
+        case "undo": void kb.undo(); break;
+        case "redo": void kb.redo(); break;
+        case "selectAll": kb.selectObjects(Object.keys(kb.objects), false); break;
+        // FIX (HIGH-18-18): Ctrl+S сохраняет и при активном гизмо (S без Ctrl — гизмо масштаба)
+        case "save": void kb.saveProject(); break;
+        case "open": void kb.openProject(); break;
+        case "copy": kb.copySelected(); break;
+        case "paste": void kb.pasteClipboard(); break;
+        case "fitView": fitViewRef.current?.(); break;
+        case "homeView": resetViewRef.current?.(); break;
+        case "toggleCamera": setCameraMode((m) => (m === "perspective" ? "orthographic" : "perspective")); break;
+        case "gizmoTranslate": setGizmoMode((m) => (m === "translate" ? "none" : "translate")); break;
+        case "gizmoRotate": setGizmoMode((m) => (m === "rotate" ? "none" : "rotate")); break;
+        case "gizmoScale": setGizmoMode((m) => (m === "scale" ? "none" : "scale")); break;
+        case "ruler":
+          setRulerActive((r) => !r);
+          setRulerDist(null);
+          break;
+        case "escape":
+          setGizmoMode("none");
+          kb.clearSelection();
+          setRulerActive(false);
+          break;
       }
     };
     window.addEventListener("keydown", onKey);
@@ -316,38 +286,20 @@ export default function App() {
     setTimeout(() => setRulerDist(null), 4500);
   }, []);
 
+  // UX-AUDIT-3/6/10: замкнутый меш, имя «Текст: …», ошибка → уведомление (store/add-text.ts)
   const handleAddText = useCallback(async () => {
-    try {
-      const [{ FontLoader }, { TextGeometry }] = await Promise.all([
-        import("three/examples/jsm/loaders/FontLoader.js"),
-        import("three/examples/jsm/geometries/TextGeometry.js"),
-      ]);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const fontData = (await import("three/examples/fonts/helvetiker_regular.typeface.json")) as any;
-      const loader = new FontLoader();
-      const font = loader.parse(fontData.default ?? fontData);
-      const geo = new TextGeometry(textInput.trim() || "Text", {
-        font,
-        size: textSize,
-        depth: textDepth,
-        curveSegments: 4,
-        bevelEnabled: false,
-      });
-      geo.computeBoundingBox();
-      const posAttr = geo.attributes.position;
-      const vertices = Array.from(posAttr.array as Float32Array);
-      let indices: number[];
-      if (geo.index) {
-        indices = Array.from(geo.index.array).map(Number);
-      } else {
-        indices = Array.from({ length: posAttr.count }, (_, i) => i);
-      }
-      await addRawMesh(`Текст: ${textInput}`, vertices, indices);
-      setShowTextModal(false);
-    } catch (err) {
-      console.error("Ошибка генерации текста:", err);
-    }
-  }, [textInput, textSize, textDepth, addRawMesh]);
+    if (await addTextObject(textInput, { size: textSize, depth: textDepth })) setShowTextModal(false);
+  }, [textInput, textSize, textDepth]);
+
+  // UX-AUDIT-9: клик по фигуре — двойной клик (<200 мс) даёт одну фигуру, позже — ещё одну
+  // (клик во время занятого стора ждёт очереди, а не теряется)
+  const addShapeGate = useMemo(() => createAddShapeGate(), []);
+  const handleAddShape = useCallback(
+    (type: ShapeType) => {
+      if (addShapeGate(type)) void addShapeWhenIdle(type);
+    },
+    [addShapeGate],
+  );
 
   // Фаза 9.1: сброс выбора ребёнка CSG, если узел/выделение исчезли
   useSelectedChildGuard();
@@ -373,7 +325,9 @@ export default function App() {
     () => objectList.reduce((s, o) => s + o.indices.length / 3, 0),
     [objectList],
   );
-  const canUndo = historyIndex > 0;
+  // UX-AUDIT-2: сразу после «Очистить сцену» отмена возвращает документ
+  const undoClear = useDocumentStore(canUndoClear);
+  const canUndo = historyIndex > 0 || undoClear;
   const canRedo = historyIndex < operations.length;
   // CSG недоступен, если среди выбранных объектов есть non-manifold (import_mesh)
   // IMPORT-MESH-CSG: импорт (STL, 3D-текст) не блокируется по типу — замкнутость проверяет
@@ -454,7 +408,7 @@ export default function App() {
       {/* ── Ruler distance display ── */}
       {rulerDist !== null && (
         <div className="ruler-display">
-          📏 Расстояние: <strong>{rulerDist.toFixed(2)} мм</strong>
+          📏 {t("ruler.distance")}: <strong>{rulerDist.toFixed(2)} {t("units.mm")}</strong>
         </div>
       )}
 
@@ -471,6 +425,20 @@ export default function App() {
           onDepthChange={setTextDepth}
           onAdd={handleAddText}
           onClose={() => setShowTextModal(false)}
+        />
+      )}
+
+      {/* ── Подтверждение очистки сцены (UX-AUDIT-2) ── */}
+      {showClearConfirm && (
+        <ConfirmModal
+          title={t("confirmClear.title")}
+          message={t("confirmClear.message")}
+          confirmLabel={t("confirmClear.confirm")}
+          onConfirm={() => {
+            setShowClearConfirm(false);
+            void clearScene();
+          }}
+          onCancel={() => setShowClearConfirm(false)}
         />
       )}
 
@@ -532,7 +500,9 @@ export default function App() {
         onAlignMode={() => (alignActive ? exitAlignMode() : startAlignMode())}
         onCsg={csgBoolean}
         onToggleTheme={() => setTheme(theme === "dark" ? "light" : "dark")}
-        onClearScene={clearScene}
+        onClearScene={() => {
+          if (objectList.length > 0 || operations.length > 0) setShowClearConfirm(true);
+        }}
       />
 
       {/* ── MAIN ── */}
@@ -543,7 +513,7 @@ export default function App() {
           onShapeSearchChange={setShapeSearch}
           workerOk={workerOk}
           busy={busy}
-          onAddShape={addShape}
+          onAddShape={handleAddShape}
           onShowTextModal={() => setShowTextModal(true)}
           objectList={objectList}
           selSet={selSet}
@@ -574,14 +544,14 @@ export default function App() {
                 className="spinner"
                 style={{ width: 14, height: 14, borderWidth: 2 }}
               />
-              Вычисление…
+              {t("viewportStatus.computing")}
             </div>
           )}
           {!workerOk && (
             <div className="viewport-loading">
               <div className="spinner" />
               <span style={{ color: "var(--text-muted)", fontSize: 13 }}>
-                Загрузка CSG (WASM)…
+                {t("viewportStatus.loadingCsg")}
               </span>
             </div>
           )}

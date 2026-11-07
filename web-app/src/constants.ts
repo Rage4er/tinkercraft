@@ -73,6 +73,14 @@ export const PASTE_OFFSET = 15;
 /** Delay before autosave triggers after last change (ms). */
 export const AUTOSAVE_DELAY_MS = 3000;
 
+/**
+ * UX-AUDIT-9: повторный клик по той же фигуре раньше этого срока (мс) — случайный двойной
+ * клик, отбрасывается; позже — добавляет ещё одну фигуру (ждёт, пока занятый стор освободится).
+ */
+export const ADD_SHAPE_DEBOUNCE_MS = 200;
+/** UX-AUDIT-9: сколько клик по фигуре ждёт освобождения стора (долгий CSG), мс. */
+export const ADD_SHAPE_WAIT_MS = 30000;
+
 // ---- Numeric epsilon ----
 /** Epsilon for detecting meaningful position/rotation/scale changes in move operations. */
 export const MOVE_DELTA_EPSILON = 1e-6;

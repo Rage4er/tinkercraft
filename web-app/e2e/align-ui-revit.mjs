@@ -12,7 +12,7 @@
 // data-align-hover / data-align-hover-normal (подсветка под курсором).
 // Запуск: `pnpm dev` в одном терминале, `pnpm e2e:align-ui-revit` в другом.
 // Необязательный аргумент — путь для скриншота: `node e2e/align-ui-revit.mjs /tmp/align-ui.png`.
-import { openApp, toolbarButton, findAlignFace } from './helpers.mjs'
+import { openApp, toolbarButton, findAlignFace, spaceShapeClick } from './helpers.mjs'
 
 const shot = process.argv[2]
 const { browser, page, errors } = await openApp()
@@ -30,6 +30,7 @@ const panel = page.locator('[data-testid=align-panel]')
 
 async function add(label) {
   const before = new Set(await ids())
+  await spaceShapeClick(page, label)                       // UX-AUDIT-9: подряд та же фигура — не «двойной клик»
   await page.getByText(label, { exact: true }).first().click()
   await page.waitForFunction((n) => document.querySelectorAll('.ct-item[data-object-id]').length === n, before.size + 1, { timeout: 15000 })
   return (await ids()).find((id) => !before.has(id))

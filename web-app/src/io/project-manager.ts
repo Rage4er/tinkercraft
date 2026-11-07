@@ -4,6 +4,7 @@
 // ============================================================
 
 import type { TinkerCraftOperation } from '../csg/types'
+import i18n from '../i18n'
 
 const DB_NAME = 'tinkercraft-projects'
 const DB_VERSION = 1
@@ -103,7 +104,7 @@ export async function saveProject(
   const db = await getDb()
   const existing = await dbGetAll<ProjectRecord>(db)
   if (existing.some(p => p.name === name)) {
-    throw new Error(`Проект с именем "${name}" уже существует`)
+    throw new Error(i18n.t('errors.projectNameExists', { name }))
   }
   const id = `proj_${crypto.randomUUID()}`
   const record: ProjectRecord = { id, name, savedAt: Date.now(), operations, thumbnail, objectCount }
@@ -122,7 +123,7 @@ export async function updateProject(
   // FIX (MED-18-51): Check if project exists before updating — don't silently create new
   const existing = await dbGet<ProjectRecord>(db, id)
   if (!existing) {
-    throw new Error(`Проект с id "${id}" не найден — используйте saveProject для создания`)
+    throw new Error(i18n.t('errors.projectNotFound', { id }))
   }
   const record: ProjectRecord = { id, name, savedAt: Date.now(), operations, thumbnail, objectCount }
   await dbPut(db, record)

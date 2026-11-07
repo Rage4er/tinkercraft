@@ -14,6 +14,8 @@ interface AutosaveEntry {
   operations: TinkerCraftOperation[]
   historyIndex: number
   fileName: string | null
+  /** UX-AUDIT-1: были ли несохранённые изменения (в файл/проект). Старые записи — без поля */
+  modified?: boolean
   savedAt: number
 }
 
@@ -39,12 +41,15 @@ export async function autosaveSession(
   operations: TinkerCraftOperation[],
   historyIndex: number,
   fileName: string | null,
+  modified?: boolean,
 ): Promise<void> {
   try {
     const db = await openDB()
     await new Promise<void>((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, 'readwrite')
-      const req = tx.objectStore(STORE_NAME).put({ operations, historyIndex, fileName, savedAt: Date.now() }, KEY)
+      const entry: AutosaveEntry = { operations, historyIndex, fileName, savedAt: Date.now() }
+      if (modified !== undefined) entry.modified = modified
+      const req = tx.objectStore(STORE_NAME).put(entry, KEY)
       req.onsuccess = () => resolve()
       req.onerror = () => reject(req.error)
       // FIX (MED-18-48): Handle transaction abort — Promise would hang forever without this

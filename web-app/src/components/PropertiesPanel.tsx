@@ -430,6 +430,7 @@ export default function PropertiesPanel({
                 <NumInput
                   label={t("properties.sides")}
                   unit=""
+                  integer
                   min={3}
                   value={firstSelected.params.sides ?? (firstSelected.shapeType === "prism" ? 6 : 4)}
                   disabled={busy}

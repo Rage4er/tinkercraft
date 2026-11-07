@@ -26,8 +26,8 @@ type Axis = 'x' | 'y' | 'z'
 const AXES: Axis[] = ['x', 'y', 'z']
 
 /** Шаг поля и единицы — по группе (точность показа NumInput следует из шага). */
-const FIELD: Record<Group, { step: number; unit: string }> = {
-  delta: { step: 0.1, unit: 'мм' },
+const FIELD: Record<Group, { step: number; unit?: string }> = {
+  delta: { step: 0.1 },                 // единица — «мм» NumInput на языке интерфейса (UX-AUDIT-7)
   rotDelta: { step: 1, unit: '°' },
   scaleDelta: { step: 0.01, unit: '' },
 }

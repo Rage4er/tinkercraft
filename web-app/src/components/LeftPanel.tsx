@@ -95,7 +95,8 @@ export default function LeftPanel({
               key={s.type}
               className="shape-btn"
               title={t('leftPanel.addShape', { label: t(s.labelKey) })}
-              disabled={!workerOk || busy}
+              // UX-AUDIT-9: не блокируется на время busy — клик ждёт очереди (add-shape-queue)
+              disabled={!workerOk}
               onClick={() =>
                 s.type === "text"
                   ? onShowTextModal()

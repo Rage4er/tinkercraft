@@ -7,6 +7,7 @@ import {
 import * as THREE from "three";
 import type { SceneObject, TransformNR } from "../csg/types";
 import ViewCube from "./ViewCube";
+import { useTranslation } from "react-i18next";
 import {
   useThreeInit,
   useMeshSync,
@@ -115,6 +116,7 @@ export default function Viewport3D({
   busy = false,
   theme = 'dark',
 }: Props) {
+  const { t } = useTranslation();
   const [webglOk] = useState<boolean>(() => checkWebGL());
 
   // ---- Хук 1: Инициализация Three.js ----
@@ -534,7 +536,7 @@ export default function Viewport3D({
         <div className="viewport-loading">
           <div className="spinner" />
           <span className="viewport-origin-label">
-            Загрузка CSG (WASM)…
+            {t("viewportStatus.loadingCsg")}
           </span>
         </div>
       )}

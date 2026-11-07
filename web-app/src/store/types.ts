@@ -8,6 +8,19 @@ import type {
 } from '../csg/types'
 import type { ClipEntry } from './helpers'
 
+/**
+ * UX-AUDIT-2: документ до «Очистить сцену» — первая отмена после очистки возвращает его.
+ * Действует, пока после очистки ничего не сделано (история пуста).
+ */
+export interface ClearedDocument {
+  operations: TinkerCraftOperation[]
+  historyIndex: number
+  fileName: string | null
+  modified: boolean
+  currentProjectId: string | null
+  currentProjectName: string | null
+}
+
 export interface DocumentStore {
   operations: TinkerCraftOperation[]
   historyIndex: number
@@ -21,6 +34,8 @@ export interface DocumentStore {
 
   currentProjectId: string | null
   currentProjectName: string | null
+  /** UX-AUDIT-2: что вернёт отмена очистки сцены (null — очистки не было / уже неактуально) */
+  clearedDocument: ClearedDocument | null
 
   // Actions
   addShape: (shapeType: ShapeType, params?: ShapeParams) => Promise<void>

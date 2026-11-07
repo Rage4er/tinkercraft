@@ -28,7 +28,7 @@ import { notify } from './notifications'
 import { saveProject as pmSave, updateProject as pmUpdate, loadProject as pmLoad, listProjects as pmList } from '../io/project-manager'
 import { exportToStl, downloadStlBlob, StlTooLargeError } from '../io/stl-export'
 import { openStlFilePicker, parseStlFile } from '../io/stl-import'
-import { autosaveSession, restoreSession } from '../io/autosave'
+import { autosaveSession, restoreSession, clearAutosave } from '../io/autosave'
 import { migrateLegacyFillet, type LegacyFilletMigration } from '../io/legacy-fillet'
 import i18n from '../i18n'
 
@@ -67,7 +67,7 @@ import { devLog, devWarn, devLogCsg, devLogStore } from '../utils/debug'
 // ── Shared undo/redo/jumpToHistory helper — FIX (MED-18-1): eliminates ~90 lines of duplication ──
 
 /** Internal helper: rebuilds scene from history up to the given index. */
-async function jumpToHistoryInner(newIdx: number, actionName: string): Promise<void> {
+async function jumpToHistoryInner(newIdx: number, action: 'undo' | 'redo' | 'jump'): Promise<void> {
   const getState = useDocumentStore.getState
   const setState = useDocumentStore.setState
   setState({ busy: true })
@@ -85,7 +85,40 @@ async function jumpToHistoryInner(newIdx: number, actionName: string): Promise<v
     }
     setState({ historyIndex: newIdx, objects: newObjects, selectedIds: [], busy: false, lastCsgMs: performance.now() - t0 })
     invalidateMirrorCache()
-  } catch (e) { setState({ busy: false }); console.error(actionName + ':', e); notify(i18n.t('errors.operationFailed', { name: actionName.toLowerCase() }), 'error') }
+  } catch (e) { setState({ busy: false }); console.error(`jumpToHistory (${action}):`, e); notify(i18n.t('errors.operationFailed', { name: i18n.t(`errors.historyAction.${action}`) }), 'error') }
+}
+
+// ── UX-AUDIT-2: отмена «Очистить сцену» ──
+
+/**
+ * Можно ли отменить очистку сцены: снимок есть и после очистки ничего не сделано
+ * (история пуста). «Отменить» в UI активна при `historyIndex > 0 || canUndoClear(s)`.
+ */
+export function canUndoClear(s: Pick<DocumentStore, 'clearedDocument' | 'operations' | 'historyIndex'>): boolean {
+  return s.clearedDocument !== null && s.operations.length === 0 && s.historyIndex === 0
+}
+
+/** Вернуть документ до очистки: история (с redo), объекты, дерево, файл/проект, «не сохранено». */
+async function restoreClearedDocument(): Promise<void> {
+  const getState = useDocumentStore.getState
+  const setState = useDocumentStore.setState
+  const doc = getState().clearedDocument
+  if (!doc) return
+  setState({ busy: true })
+  try {
+    const t0 = performance.now()
+    await workerClearAll()
+    clearSnapshots()
+    const newObjects = await rebuildFromHistory(doc.operations.slice(0, doc.historyIndex))
+    rebuildBuildTree(doc.operations.slice(0, doc.historyIndex), newObjects)
+    setState({
+      operations: doc.operations, historyIndex: doc.historyIndex, objects: newObjects, selectedIds: [],
+      fileName: doc.fileName, modified: doc.modified, currentProjectId: doc.currentProjectId, currentProjectName: doc.currentProjectName,
+      clearedDocument: null, busy: false, lastCsgMs: performance.now() - t0,
+    })
+    cacheSnapshotWithTree(doc.historyIndex, newObjects)
+    invalidateMirrorCache()
+  } catch (e) { setState({ busy: false }); console.error('undo clearScene:', e); notify(i18n.t('errors.operationFailed', { name: i18n.t('errors.historyAction.undo') }), 'error') }
 }
 
 // ── Загрузка старых проектов: скругление удалено (remove-fillet) ──
@@ -165,6 +198,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   lastCsgMs: null,
   currentProjectId: null,
   currentProjectName: null,
+  clearedDocument: null,
 
   // ── Добавить фигуру ──
   addShape: async (shapeType, params) => {
@@ -219,7 +253,9 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       // делает то же центрирование, поэтому live == rebuild.
       const com = centerMassAtOrigin(result.vertices, result.indices)
       const pivot: TransformNR = { ...transform, x: transform.x + com.cx, y: transform.y + com.cy, z: transform.z + com.cz }
-      const obj: SceneObject = makeObject({ id, shapeType: 'import_mesh', params: {}, color, transform: pivot, visible: true, locked: false, vertices: result.vertices, indices: result.indices, normals: result.normals })
+      // UX-AUDIT-6: имя («Текст: Hi») — и у объекта, а не только в операции (дерево показывало
+      // «Импорт N»; после перемотки/загрузки rebuild брал имя из операции — живое ≠ rebuild)
+      const obj: SceneObject = makeObject({ id, shapeType: 'import_mesh', params: {}, color, transform: pivot, visible: true, locked: false, vertices: result.vertices, indices: result.indices, normals: result.normals, name })
       const op: ImportMeshOperation = { type: 'import_mesh', id, name, color, transform, vertices, indices }
       const newOps = [...operations.slice(0, historyIndex), op]
       const newObjects = { ...objects, [id]: obj }
@@ -258,7 +294,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const pivot: TransformNR = { ...baseT, x: baseT.x + com.cx, y: baseT.y + com.cy, z: baseT.z + com.cz }
 
       // BUG-R8-1: Передаём normals в makeObject для корректного рендеринга
-      const obj: SceneObject = makeObject({ id, shapeType: 'import_mesh', params: {}, color, transform: pivot, visible: true, locked: false, vertices: workerResult.vertices, indices: workerResult.indices, normals: workerResult.normals })
+      // UX-AUDIT-6: имя файла — у объекта, как после перемотки/загрузки (rebuild: name операции)
+      const obj: SceneObject = makeObject({ id, shapeType: 'import_mesh', params: {}, color, transform: pivot, visible: true, locked: false, vertices: workerResult.vertices, indices: workerResult.indices, normals: workerResult.normals, name: result.name })
       const op: ImportMeshOperation = { type: 'import_mesh', id, name: result.name, color, transform: baseT, vertices: result.vertices, indices: result.indices }
       const newOps = [...operations.slice(0, historyIndex), op]
       const newObjects = { ...objects, [id]: obj }
@@ -462,6 +499,14 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       syncNodeTransform(idB, objects[idB].transform)
       const res = await computeCsgResult(objects[idA], objects[idB], op, resultId)
       const ms = performance.now() - t0
+      // UX-AUDIT-4: пустой результат (пересечение непересекающихся, вычитание «всего») —
+      // невидимый объект и шаг истории не создаём: объекты не трогаем, сообщаем.
+      if (res.indices.length === 0) {
+        set({ busy: false, lastCsgMs: ms })
+        workerDeleteObjects([resultId]).catch(() => { /* кэш воркера — best effort */ })
+        notify(i18n.t('errors.csgEmpty'), 'warning')
+        return
+      }
       const resultTransform = res.transform
 
       // DIAG: CSG children — relative positions within the boolean result
@@ -813,8 +858,12 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   undo: async () => {
     if (get().busy) return
     const { historyIndex } = get()
-    if (historyIndex === 0) return
-    await jumpToHistoryInner(historyIndex - 1, 'Отмена')
+    if (historyIndex === 0) {
+      // UX-AUDIT-2: отмена «Очистить сцену» — вернуть документ целиком (история, redo, файл)
+      if (canUndoClear(get())) await restoreClearedDocument()
+      return
+    }
+    await jumpToHistoryInner(historyIndex - 1, 'undo')
   },
 
   // ── Redo ──
@@ -822,7 +871,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     if (get().busy) return
     const { historyIndex, operations } = get()
     if (historyIndex >= operations.length) return
-    await jumpToHistoryInner(historyIndex + 1, 'Повтор')
+    await jumpToHistoryInner(historyIndex + 1, 'redo')
   },
 
   // ── Jump to history ──
@@ -831,17 +880,26 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const { historyIndex, operations } = get()
     const newIdx = Math.max(0, Math.min(index, operations.length))
     if (newIdx === historyIndex) return
-    await jumpToHistoryInner(newIdx, 'Переход в истории')
+    await jumpToHistoryInner(newIdx, 'jump')
   },
 
   // ── Clear ──
+  // UX-AUDIT-2: UI спрашивает подтверждение (ConfirmModal); документ до очистки запоминается —
+  // Ctrl+Z / «Отменить» сразу после очистки возвращает его (restoreClearedDocument).
   clearScene: async () => {
     if (get().busy) return
+    const { operations, historyIndex, objects, fileName, modified, currentProjectId, currentProjectName } = get()
+    // пустой документ: очищать нечего — прежний снимок очистки (если есть) сохраняется
+    if (operations.length === 0 && Object.keys(objects).length === 0) return
+    const clearedDocument = { operations, historyIndex, fileName, modified, currentProjectId, currentProjectName }
     await workerClearAll()
     clearSnapshots()
     clearTree()
-    set({ operations: [], historyIndex: 0, objects: {}, selectedIds: [], modified: false, fileName: null, lastCsgMs: null, currentProjectId: null, currentProjectName: null })
+    set({ operations: [], historyIndex: 0, objects: {}, selectedIds: [], modified: false, fileName: null, lastCsgMs: null, currentProjectId: null, currentProjectName: null, clearedDocument })
     invalidateMirrorCache()
+    // UX-AUDIT-1: иначе при следующем старте восстановилась бы очищенная сессия
+    // (эффект автосохранения пустую историю не пишет)
+    await clearAutosave()
   },
 
   // ── Open .3dtc ──
@@ -878,7 +936,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const ops = mig.operations
       const loadedObjects = mig.changed ? await rebuildFromHistory(ops) : newObjects
       rebuildBuildTree(ops, loadedObjects)
-      set({ operations: ops, historyIndex: ops.length, objects: loadedObjects, selectedIds: [], fileName: picked.file.name, modified: false, busy: false, lastCsgMs: performance.now() - t0, currentProjectId: null, currentProjectName: null })
+      set({ operations: ops, historyIndex: ops.length, objects: loadedObjects, selectedIds: [], fileName: picked.file.name, modified: false, busy: false, lastCsgMs: performance.now() - t0, currentProjectId: null, currentProjectName: null, clearedDocument: null })
       cacheSnapshotWithTree(ops.length, loadedObjects)
       invalidateMirrorCache()
     } catch (e) { set({ busy: false }); notify(i18n.t('errors.openFailed', { error: e }), 'error') }
@@ -1218,15 +1276,18 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   // ── Autosave ──
   triggerAutosave: async () => {
     if (get().busy) return
-    const { operations, historyIndex, fileName } = get()
-    await autosaveSession(operations.slice(0, historyIndex), historyIndex, fileName)
+    const { operations, historyIndex, fileName, modified } = get()
+    await autosaveSession(operations.slice(0, historyIndex), historyIndex, fileName, modified)
   },
 
   // ── Restore autosave ──
+  // UX-AUDIT-1: вызывается при старте (hooks/useAutosave.ts). Текущую работу не затирает:
+  // восстанавливает, только пока сцена и история пусты.
   restoreAutosave: async () => {
     if (get().busy) return false
     const entry = await restoreSession()
     if (!entry || entry.operations.length === 0) return false
+    if (get().busy || get().operations.length > 0 || Object.keys(get().objects).length > 0) return false
     await workerClearAll()
     clearSnapshots()
     set({ busy: true })
@@ -1237,7 +1298,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const idx = mig.remapIndex(entry.historyIndex)
       const newObjects = await rebuildFromHistory(ops)
       rebuildBuildTree(ops, newObjects)
-      set({ operations: ops, historyIndex: idx, objects: newObjects, selectedIds: [], fileName: entry.fileName, modified: false, busy: false, lastCsgMs: performance.now() - t0 })
+      // несохранённость — из записи (старые записи без поля: работа не в файле → «не сохранено»)
+      set({ operations: ops, historyIndex: idx, objects: newObjects, selectedIds: [], fileName: entry.fileName, modified: entry.modified ?? true, busy: false, lastCsgMs: performance.now() - t0, clearedDocument: null })
       cacheSnapshotWithTree(idx, newObjects)
       return true
     } catch (e) { set({ busy: false }); return false }
@@ -1249,7 +1311,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const ops = operations.slice(0, historyIndex)
     const count = Object.keys(objects).length
     // If project already has an ID, update it. Use existing name if name is empty.
-    const effectiveName = name || currentProjectName || 'Без названия'
+    const effectiveName = name || currentProjectName || i18n.t('projectManager.untitled')
     try {
       // Check for name conflicts with other projects
       const all = await pmList()
@@ -1283,7 +1345,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const ops = migrateLoaded(record.operations).operations
       const newObjects = await rebuildFromHistory(ops)
       rebuildBuildTree(ops, newObjects)
-      set({ operations: ops, historyIndex: ops.length, objects: newObjects, selectedIds: [], fileName: null, modified: false, busy: false, lastCsgMs: performance.now() - t0, currentProjectId: id, currentProjectName: record.name })
+      set({ operations: ops, historyIndex: ops.length, objects: newObjects, selectedIds: [], fileName: null, modified: false, busy: false, lastCsgMs: performance.now() - t0, currentProjectId: id, currentProjectName: record.name, clearedDocument: null })
       cacheSnapshotWithTree(ops.length, newObjects)
     } catch (e) { set({ busy: false }); console.error('loadFromProject:', e); notify(i18n.t('errors.loadProjectFailed'), 'error') }
   },
