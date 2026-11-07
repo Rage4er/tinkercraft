@@ -23,7 +23,7 @@ import { useShallow } from "zustand/shallow";
 import { isWorkerReady } from "./csg/worker-client";
 import { SNAP_VALUES } from "./constants";
 import { useAutosave } from "./hooks/useAutosave";
-import { buildTextMesh } from "./io/text-mesh";
+import { addTextObject } from "./store/add-text";
 import { createAddShapeGate, addShapeWhenIdle } from "./store/add-shape-queue";
 import { resolveHotkey, NO_REPEAT, mirrorPlaneOf, csgOpOf, isTextEntry, tabTogglesCamera } from "./hotkeys";
 import { useSelectedChildGuard } from "./hooks/useSelectedChildGuard";
@@ -105,7 +105,6 @@ export default function App() {
       clipboard: s.clipboard,
       currentProjectId: s.currentProjectId,
       currentProjectName: s.currentProjectName,
-      addRawMesh: s.addRawMesh,
       importStl: s.importStl,
       deleteSelected: s.deleteSelected,
       selectObjects: s.selectObjects,
@@ -145,7 +144,6 @@ export default function App() {
     clipboard,
     currentProjectId,
     currentProjectName,
-    addRawMesh,
     importStl,
     deleteSelected,
     selectObjects,
@@ -288,18 +286,10 @@ export default function App() {
     setTimeout(() => setRulerDist(null), 4500);
   }, []);
 
+  // UX-AUDIT-3/6/10: замкнутый меш, имя «Текст: …», ошибка → уведомление (store/add-text.ts)
   const handleAddText = useCallback(async () => {
-    try {
-      // UX-AUDIT-3: замкнутый меш (сварка вершин TextGeometry) — текст участвует в CSG
-      const text = textInput.trim() || "Text";
-      const { vertices, indices } = await buildTextMesh(text, { size: textSize, depth: textDepth });
-      // UX-AUDIT-6: имя объекта в дереве — «Текст: Hi» (ru) / «Text: Hi» (en)
-      await addRawMesh(t("textModal.objectName", { text }), vertices, indices);
-      setShowTextModal(false);
-    } catch (err) {
-      console.error("Ошибка генерации текста:", err);
-    }
-  }, [textInput, textSize, textDepth, addRawMesh, t]);
+    if (await addTextObject(textInput, { size: textSize, depth: textDepth })) setShowTextModal(false);
+  }, [textInput, textSize, textDepth]);
 
   // UX-AUDIT-9: клик по фигуре — двойной клик (<200 мс) даёт одну фигуру, позже — ещё одну
   // (клик во время занятого стора ждёт очереди, а не теряется)

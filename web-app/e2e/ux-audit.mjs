@@ -1,13 +1,11 @@
 // e2e/ux-audit.mjs — UX-AUDIT (v1.3.2): прогон «как пользователь».
 //
-// Две части:
-//  ✅  ожидание оправдывается — проверка падает при регрессии (сценарии, которых нет в
-//      других e2e: 7 примитивов и их поля, интерфейс, .3dtc и STL через UI, «удалить всё»
-//      + undo, объект на 100k треугольников);
-//  🐞  известные баги (DEVELOPMENT_PLAN.md › «UX-AUDIT») — `known(id, …)` проверяет
-//      ОЖИДАНИЕ пользователя и требует, чтобы оно сейчас НЕ выполнялось (баг воспроизводится).
-//      Если ожидание выполнилось — баг, видимо, исправлен: прогон падает с просьбой
-//      перенести проверку в ✅ (аналог `it.fails` в vitest).
+//  ✅  ожидание оправдывается — проверка падает при регрессии: сценарии, которых нет в других
+//      e2e (7 примитивов и их поля, интерфейс, .3dtc и STL через UI, «удалить всё» + undo,
+//      объект на 100k треугольников) и исправленные в fix-all баги UX-AUDIT-1…10;
+//  🐞  известный баг — `knownBug(id, …)`: проверяет ОЖИДАНИЕ пользователя и требует, чтобы оно
+//      сейчас НЕ выполнялось (баг воспроизводится). Выполнилось — баг, видимо, исправлен: прогон
+//      падает с просьбой перенести проверку в ✅ (аналог `it.fails` в vitest). Сейчас таких нет.
 // Запуск: `pnpm dev` в одном терминале, `pnpm e2e:ux-audit` в другом.
 // Необязательный аргумент — каталог для скриншотов: `node e2e/ux-audit.mjs /tmp/ux`.
 import fs from 'node:fs'
@@ -276,6 +274,22 @@ try {
   await clearScene()
   const c3 = await add('Куб')
   const b3 = new Set(await ids())
+  // ── ✅ UX-AUDIT-10: ошибка создания текста (размер 0) → уведомление, модалка не закрывается ──
+  {
+    await page.getByText('Текст', { exact: true }).first().click()
+    const modal = page.locator('.text-modal-backdrop')
+    await modal.waitFor({ timeout: 5000 })
+    await modal.locator('input.text-modal-num').first().fill('0')
+    await modal.locator('button.btn.primary').click()
+    await page.locator('.toast-msg', { hasText: 'Не удалось создать текст' }).waitFor({ timeout: 5000 })
+      .catch(async () => fail('UX-AUDIT-10: нет уведомления об ошибке текста: ' + (await toasts())))
+    if ((await modal.count()) !== 1) fail('UX-AUDIT-10: модалка закрылась после ошибки')
+    if ((await rows.count()) !== b3.size) fail('UX-AUDIT-10: объект добавлен несмотря на ошибку')
+    await modal.locator('input.text-modal-num').first().fill('10')
+    await modal.getByRole('button', { name: 'Отмена', exact: true }).click()
+    await page.locator('.toast').first().click().catch(() => {})
+    ok.push('UX-AUDIT-10: ошибка текста (размер 0) → уведомление, модалка открыта, объекта нет')
+  }
   await page.getByText('Текст', { exact: true }).first().click()
   await page.locator('.text-modal-backdrop').waitFor({ timeout: 5000 })
   await page.locator('.text-modal-backdrop input').first().fill('A')

@@ -25,11 +25,23 @@ export interface TextMesh {
   indices: number[]
 }
 
+/** Ошибка построения текста с причиной для пользователя (ключ i18n) — UX-AUDIT-10. */
+export class TextMeshError extends Error {
+  readonly reasonKey: 'errors.textNoGlyphs' | 'errors.textBadSize'
+  constructor(reasonKey: TextMeshError['reasonKey'], detail: string) {
+    super(detail)
+    this.name = 'TextMeshError'
+    this.reasonKey = reasonKey
+  }
+}
+
 /**
- * Построить замкнутый меш текста. Бросает ошибку, если геометрии нет (в шрифте нет ни
- * одного символа строки) — вызывающий показывает уведомление (UX-AUDIT-10).
+ * Построить замкнутый меш текста. Бросает `TextMeshError`, если размер/глубина не > 0 или
+ * геометрии нет (в шрифте нет ни одного символа строки) — вызывающий показывает
+ * уведомление (UX-AUDIT-10, `store/add-text.ts`).
  */
 export async function buildTextMesh(text: string, { size, depth }: TextMeshOptions): Promise<TextMesh> {
+  if (!(size > 0) || !(depth > 0)) throw new TextMeshError('errors.textBadSize', `size ${size}, depth ${depth}`)
   // шрифт (~60 КБ) и генераторы — отдельным чанком, только когда текст действительно нужен
   const [{ FontLoader }, { TextGeometry }, { mergeVertices }, fontModule] = await Promise.all([
     import('three/examples/jsm/loaders/FontLoader.js'),
@@ -54,7 +66,7 @@ export async function buildTextMesh(text: string, { size, depth }: TextMeshOptio
         const a = src[i], b = src[i + 1], c = src[i + 2]
         if (a !== b && b !== c && a !== c) indices.push(a, b, c)   // вырожденные (после сварки) — прочь
       }
-      if (indices.length === 0) throw new Error(`no glyphs for "${text}"`)
+      if (indices.length === 0) throw new TextMeshError('errors.textNoGlyphs', `no glyphs for "${text}"`)
       return { vertices, indices }
     } finally {
       welded.dispose()

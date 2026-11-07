@@ -288,6 +288,9 @@
       "noOperations": "Invalid model.json: the operations array is missing",
       "unknownOperation": "Invalid model.json: an operation of unknown type"
     },
+    "textFailed": "Could not create the text: {{reason}}",
+    "textNoGlyphs": "the font has none of the characters of this text",
+    "textBadSize": "size and depth must be greater than 0",
     "editChild": {
       "notFound": "CSG object or its component was not found",
       "notEditable": "This component cannot be edited (baked or mirrored)",

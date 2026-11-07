@@ -1,14 +1,11 @@
 // ============================================================
-// ux-audit.test.tsx — UX-AUDIT (v1.3.2): найденные UX-баги, зафиксированные тестами
+// ux-audit.test.tsx — UX-AUDIT (v1.3.2): регресс-тесты исправленных UX-багов (fix-all)
 // ============================================================
-// Баги НЕ чинятся в этой задаче. На каждый баг — пара тестов:
-//  - `it.fails('UX-AUDIT-N ожидание: …')` — что ждёт пользователь; сейчас НЕ выполняется,
-//    поэтому тест «проходит, пока баг есть». Когда баг починят, он станет красным —
-//    тогда заменить `it.fails` на `it`.
-//  - `it('UX-AUDIT-N реальность: …')` — точное текущее поведение (страховка: `it.fails`
-//    засчитал бы и падение из-за ошибки в самом тесте). После фикса — удалить/перевернуть.
+// Баги найдены прогоном «как пользователь» (v1.3.2) и были зафиксированы парой
+// `it.fails` «ожидание» + `it` «реальность». В fix-all все 10 исправлены: «ожидания» стали
+// обычными тестами, «реальности» удалены. Новый известный баг — снова `it.fails` (AGENTS.md).
 // Описание, приоритет и шаги — DEVELOPMENT_PLAN.md › «UX-AUDIT (v1.3.2)».
-// Браузерные баги (UX-AUDIT-1, -3 в UI, -5) — e2e/ux-audit.mjs.
+// Браузерные проверки тех же багов — e2e/ux-audit.mjs.
 
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest'
 
@@ -50,6 +47,7 @@ import { clearTree } from '../csg/history-tree'
 import { useAutosave } from '../hooks/useAutosave'
 import { restoreSession } from '../io/autosave'
 import { buildTextMesh } from '../io/text-mesh'
+import { addTextObject } from '../store/add-text'
 import { createAddShapeGate, addShapeWhenIdle } from '../store/add-shape-queue'
 import { ADD_SHAPE_DEBOUNCE_MS } from '../constants'
 import type { SceneObject, ShapeParams, ShapeType, TransformNR } from '../csg/types'
@@ -107,11 +105,10 @@ async function shape(type: ShapeType, params: ShapeParams, t: TransformNR): Prom
   return id
 }
 
-/** 3D-текст как в App.handleAddText: `buildTextMesh` (сварка вершин) → addRawMesh(«Текст: …»). */
+/** 3D-текст ровно как App.handleAddText: `addTextObject` (сварка вершин, имя «Текст: …»). */
 async function addText(text: string): Promise<string> {
-  const { vertices, indices } = await buildTextMesh(text, { size: 10, depth: 5 })
   const before = new Set(Object.keys(st().objects))
-  await st().addRawMesh(i18n.t('textModal.objectName', { text }), vertices, indices)
+  expect(await addTextObject(text, { size: 10, depth: 5 })).toBe(true)
   return Object.keys(st().objects).find((k) => !before.has(k))!
 }
 
@@ -463,5 +460,36 @@ describe('UX-AUDIT-9 — двойной клик по фигуре: <200 мс �
     expect(await addShapeWhenIdle('cube', 60)).toBe(false)
     useDocumentStore.setState({ busy: false })
     expect(Object.keys(st().objects)).toHaveLength(0)
+  })
+})
+
+describe('UX-AUDIT-10 — ошибка создания текста → уведомление (а не только console.error)', () => {
+  it('ошибка построителя → «Не удалось создать текст: <причина>», объект не добавлен', async () => {
+    const err = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const ok = await addTextObject('Hi', { size: 10, depth: 5 }, async () => { throw new Error('шрифт не загрузился') })
+    expect(ok).toBe(false)
+    expect(Object.keys(st().objects)).toHaveLength(0)
+    expect(notes()).toEqual([expect.objectContaining({ type: 'error', message: 'Не удалось создать текст: шрифт не загрузился' })])
+    err.mockRestore()
+  })
+  it('геометрии нет (строка из одних пробелов) — уведомление с понятной причиной', async () => {
+    const err = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    expect(await addTextObject('x', { size: 10, depth: 5 }, (_t, o) => buildTextMesh('   ', o))).toBe(false)
+    expect(notes().at(-1)?.message).toBe(i18n.t('errors.textFailed', { reason: i18n.t('errors.textNoGlyphs') }))
+    err.mockRestore()
+  })
+  it('размер или глубина 0 — уведомление; en — по-английски', async () => {
+    const err = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    expect(await addTextObject('Hi', { size: 0, depth: 5 })).toBe(false)
+    expect(notes().at(-1)?.message).toBe('Не удалось создать текст: размер и глубина должны быть больше 0')
+    await i18n.changeLanguage('en')
+    expect(await addTextObject('Hi', { size: 10, depth: 0 })).toBe(false)
+    expect(notes().at(-1)?.message).toBe('Could not create the text: size and depth must be greater than 0')
+    err.mockRestore()
+  })
+  it('удачно — true, без уведомлений; пустая строка → «Text»', async () => {
+    const id = await addText('  ')
+    expect(st().objects[id].name).toBe('Текст: Text')
+    expect(notes()).toEqual([])
   })
 })
