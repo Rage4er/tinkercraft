@@ -196,6 +196,19 @@ try {
     ok.push('UX-AUDIT-2: «Очистить сцену» — подтверждение (Отмена, Esc), Ctrl+Z возвращает объекты и историю')
   }
 
+  // ── ✅ UX-AUDIT-4: пересечение непересекающихся — уведомление, объекты и история не тронуты ──
+  {
+    const [p, q] = await ids()
+    await pick(p); await page.locator(`.ct-item[data-object-id="${q}"]`).click({ modifiers: ['Shift'] })
+    const n = await steps()
+    await panelButton(page, 'Пересечение').click()
+    await page.locator('.toast-msg', { hasText: 'Результат CSG пуст' }).waitFor({ timeout: 10000 })
+      .catch(async () => fail('UX-AUDIT-4: нет уведомления о пустом результате: ' + (await toasts())))
+    if ((await rows.count()) !== 2 || (await steps()) !== n) fail(`UX-AUDIT-4: объекты ${await rows.count()}, шагов ${await steps()} (было ${n})`)
+    ok.push('UX-AUDIT-4: пересечение непересекающихся — уведомление, 2 объекта, история без шага')
+    await page.locator('.toast').first().click().catch(() => {})   // закрыть уведомление (клик)
+  }
+
   // UX-AUDIT-5: горячие клавиши из подсказок не работают (Tab, L, U, M; по коду — ещё N, B, X, I)
   const a5 = await add('Куб'); const b5 = await add('Сфера')
   await knownBug('UX-AUDIT-5', 'сочетания из подсказок', async () => {

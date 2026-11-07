@@ -496,6 +496,14 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       syncNodeTransform(idB, objects[idB].transform)
       const res = await computeCsgResult(objects[idA], objects[idB], op, resultId)
       const ms = performance.now() - t0
+      // UX-AUDIT-4: пустой результат (пересечение непересекающихся, вычитание «всего») —
+      // невидимый объект и шаг истории не создаём: объекты не трогаем, сообщаем.
+      if (res.indices.length === 0) {
+        set({ busy: false, lastCsgMs: ms })
+        workerDeleteObjects([resultId]).catch(() => { /* кэш воркера — best effort */ })
+        notify(i18n.t('errors.csgEmpty'), 'warning')
+        return
+      }
       const resultTransform = res.transform
 
       // DIAG: CSG children — relative positions within the boolean result

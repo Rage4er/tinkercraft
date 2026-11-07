@@ -261,6 +261,7 @@
     "deleteFailed": "Failed to delete objects",
     "csgFailed": "CSG operation failed",
     "csgNonManifold": "Mesh is not closed (non-manifold), CSG is not possible. Check the STL.",
+    "csgEmpty": "The CSG result is empty (the objects do not overlap or everything was subtracted) — objects are unchanged",
     "alignFailed": "Alignment failed",
     "resizeFailed": "Resize failed",
     "resizeCsgFailed": "Failed to resize CSG object",

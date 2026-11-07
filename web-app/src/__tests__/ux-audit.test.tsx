@@ -291,28 +291,40 @@ describe('UX-AUDIT-3 — 3D-текст участвует в CSG', () => {
   })
 })
 
-describe('UX-AUDIT-4 — пустой результат CSG создаётся молча', () => {
-  async function disjoint(): Promise<[string, string]> {
+describe('UX-AUDIT-4 — пустой результат CSG: уведомление, объекты и история не тронуты', () => {
+  async function pair(b: TransformNR, sizeB = 8): Promise<[string, string]> {
     const a = await shape('cube', { width: 20, height: 20, depth: 20 }, at(0))
-    const b = await shape('sphere', { radius: 8, segments: 16 }, at(40))
-    st().selectObjects([a, b], false)
-    return [a, b]
+    const s2 = await shape('sphere', { radius: sizeB, segments: 16 }, b)
+    st().selectObjects([a, s2], false)
+    return [a, s2]
   }
-  it.fails('ожидание: пересечение непересекающихся — уведомление «результат пуст», объекты не тронуты', async () => {
-    const [a, b] = await disjoint()
+  it('пересечение непересекающихся — уведомление «результат пуст», объекты и история не тронуты', async () => {
+    const [a, b] = await pair(at(40))
+    const ops = st().operations.length
     await st().csgBoolean('intersect')
     expect(Object.keys(st().objects).sort()).toEqual([a, b].sort())
-    expect(notes().some((n) => n.type === 'warning' || n.type === 'info')).toBe(true)
+    expect(st().operations).toHaveLength(ops)
+    expect(st().busy).toBe(false)
+    expect(notes()).toEqual([expect.objectContaining({ type: 'warning', message: i18n.t('errors.csgEmpty') })])
   })
-  it('реальность: появляется «CSG результат» с 0 треугольников и шаг истории, без уведомлений', async () => {
-    await disjoint()
-    const n = st().operations.length
+  it('вычитание «всего» (малый куб − большая сфера) — тоже отказ с уведомлением', async () => {
+    const a = await shape('cube', { width: 4, height: 4, depth: 4 }, at(0))
+    const b = await shape('sphere', { radius: 20, segments: 24 }, at(0))
+    st().selectObjects([a, b], false)
+    const ops = st().operations.length
+    await st().csgBoolean('subtract')
+    expect(Object.keys(st().objects).sort()).toEqual([a, b].sort())
+    expect(st().operations).toHaveLength(ops)
+    expect(notes().at(-1)?.message).toBe(i18n.t('errors.csgEmpty'))
+  })
+  it('непустое пересечение — как раньше: CSG-результат и шаг истории, без уведомлений', async () => {
+    await pair(at(12))
+    const ops = st().operations.length
     await st().csgBoolean('intersect')
     const objs = Object.values(st().objects)
     expect(objs).toHaveLength(1)
-    expect(objs[0].shapeType).toBe('csg')
-    expect(objs[0].indices.length).toBe(0)
-    expect(st().operations).toHaveLength(n + 1)
+    expect(objs[0].indices.length).toBeGreaterThan(0)
+    expect(st().operations).toHaveLength(ops + 1)
     expect(notes()).toEqual([])
   })
 })
