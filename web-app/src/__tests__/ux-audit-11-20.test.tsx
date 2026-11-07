@@ -194,7 +194,7 @@ describe('UX-AUDIT-17 — вставка, подсказка палитры, en'
 })
 
 describe('UX-AUDIT-18 — символы, которых нет в шрифте, — предупреждение', () => {
-  it.fails('«A漢字» → текст создаётся, предупреждение называет «漢字»', async () => {
+  it('«A漢字» → текст создаётся, предупреждение называет «漢字»', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const err = vi.spyOn(console, 'error').mockImplementation(() => {})
     expect(await addTextObject('A漢字', { size: 10, depth: 5 })).toBe(true)
@@ -237,6 +237,68 @@ function shadingErrors(mesh: THREE.Mesh, c: THREE.Vector3, r: number): [number, 
   }
   return [sphere, face]
 }
+
+describe('UX-AUDIT-18 — кириллица и диакритика — запасным шрифтом, без «?»', () => {
+  it('латиница, кириллица, ё, диакритика, цифры — без предупреждения; отсутствуют только 漢字', async () => {
+    expect(await addTextObject('Ёжик 42 Hi! Üß é', { size: 10, depth: 5 })).toBe(true)
+    expect(notes()).toEqual([])
+    const { buildTextMesh } = await import('../io/text-mesh')
+    expect((await buildTextMesh('Ж 漢 B 字 漢', { size: 10, depth: 5 })).missing).toEqual(['漢', '字'])
+  })
+  it('«Ж» рисуется буквой Ж, а не «?» (другая геометрия); меш кириллицы замкнут — CSG работает', async () => {
+    const { buildTextMesh } = await import('../io/text-mesh')
+    const zh = await buildTextMesh('Ж', { size: 10, depth: 5 })
+    const q = await buildTextMesh('?', { size: 10, depth: 5 })
+    expect(zh.missing).toEqual([])
+    expect(zh.indices.length).not.toBe(q.indices.length)
+    const cube = await shape('cube', { width: 80, height: 20, depth: 20 }, at(0))
+    expect(await addTextObject('Привет', { size: 10, depth: 5 })).toBe(true)
+    const txt = st().selectedIds[0]
+    await st().moveObject(txt, { ...st().objects[txt].transform, x: 0, y: 0, z: 8 })
+    st().selectObjects([cube, txt], false)
+    await st().csgBoolean('subtract')
+    expect(Object.keys(st().objects)).toHaveLength(1)
+    expect(notes().filter((n) => n.type !== 'info')).toEqual([])
+  })
+})
+
+describe('UX-AUDIT-18 — кириллица запасного шрифта — замкнутый меш (Т-образные стыки)', () => {
+  /** Ориентированное ребро — ровно один раз, у каждого есть встречное, вырожденных нет. */
+  function openEdges(indices: number[]): number {
+    const edges = new Map<string, number>()
+    for (let i = 0; i < indices.length; i += 3) {
+      const tri = [indices[i], indices[i + 1], indices[i + 2]]
+      if (new Set(tri).size !== 3) return Infinity
+      for (let k = 0; k < 3; k++) { const key = `${tri[k]}>${tri[(k + 1) % 3]}`; edges.set(key, (edges.get(key) ?? 0) + 1) }
+    }
+    let bad = 0
+    for (const [key, n] of edges) { const [a, b] = key.split('>'); if (n !== 1 || edges.get(`${b}>${a}`) !== 1) bad++ }
+    return bad
+  }
+  it('весь алфавит (в т.ч. «Д», «д», «Ф» — дырка касается контура) и диакритика — без открытых рёбер', async () => {
+    const { buildTextMesh } = await import('../io/text-mesh')
+    for (const text of ['АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ', 'абвгдеёжзийклмнопрстуфхцчшщъыьэюя', 'ÜÖÄßéèàçñ №«»—', 'Hello, 123!']) {
+      const m = await buildTextMesh(text, { size: 10, depth: 5 })
+      expect(m.missing, text).toEqual([])
+      expect(openEdges(m.indices), text).toBe(0)
+    }
+  })
+  it('repairTJunctions: ребро, на котором лежит вершина, делится; замкнутый меш не меняется', async () => {
+    const { repairTJunctions } = await import('../io/text-mesh')
+    // тетраэдр — замкнут: без изменений
+    const tv = [0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1]
+    const tet = [0, 2, 1, 0, 1, 3, 0, 3, 2, 1, 2, 3]
+    expect(repairTJunctions(tv, tet)).toEqual(tet)
+    // Т-стык: квадрат z = 0 с двух сторон; спереди ребро 0→1 целиком, сзади — через вершину 4
+    const v = [0, 0, 0, 2, 0, 0, 2, 2, 0, 0, 2, 0, 1, 0, 0]
+    const front = [0, 1, 2, 0, 2, 3]
+    const back = [0, 3, 4, 4, 3, 1, 1, 3, 2]
+    const fixed = repairTJunctions(v, [...front, ...back])
+    expect(fixed).toHaveLength(front.length + back.length + 3)   // треугольник (0, 1, 2) разделён в 4
+    expect(fixed.slice(0, 6)).toEqual([0, 4, 2, 4, 1, 2])
+    expect(openEdges(fixed)).toBe(0)
+  })
+})
 
 describe('UX-AUDIT-20 — CSG-результат затенён гладко (сфера), острые рёбра — остры', () => {
   it.fails('куб ∪ сфера: нормали на сфере ≈ радиальные (< 1°), на грани куба — нормаль грани (< 0.01°)', async () => {
