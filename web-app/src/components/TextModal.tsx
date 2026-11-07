@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { TextIcon, PlusIcon } from "./icons";
 
@@ -28,6 +28,19 @@ export default function TextModal({
   const { t } = useTranslation();
   const handleAdd = useCallback(() => void onAdd(), [onAdd]);
 
+  // UX-AUDIT-27: Esc закрывает модалку откуда угодно — поле текста, «Размер», «Глубина», кнопка,
+  // клик по модалке (как менеджер проектов, UX-AUDIT-15); раньше — только из поля текста.
+  // Сочетания App под модалкой и так заблокированы.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === "Escape") { e.preventDefault(); onCloseRef.current(); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   return (
     <div className="text-modal-backdrop" onClick={onClose}>
       <div
@@ -50,7 +63,6 @@ export default function TextModal({
           onChange={(e) => onTextChange(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter") handleAdd();
-            if (e.key === "Escape") onClose();
           }}
         />
         <div className="text-modal-row">

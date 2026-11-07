@@ -47,6 +47,8 @@ export interface ImportMeshOperation {
   indices: Uint32Array | number[]
   /** UX-AUDIT-13: объект вставлен из буфера (Ctrl+V) — в истории «Вставить …» */
   pasted?: boolean
+  /** UX-AUDIT-31: 3D-текст — исходная строка (история «Добавить текст: …»); STL — нет */
+  text?: string
 }
 
 export interface MoveOperation {
@@ -293,6 +295,8 @@ export interface ShapeParams {
 export interface SceneObject {
   id: string
   name?: string
+  /** UX-AUDIT-31: 3D-текст (import_mesh) — исходная строка; «Тип: Текст», иконка текста */
+  text?: string
   shapeType: ShapeType
   params: ShapeParams
   color: string

@@ -339,12 +339,12 @@ describe('UX-AUDIT-20 — путь обновления и виды затене
     expect(mesh.geometry.boundingBox!.max.x).toBeCloseTo(15, 3)       // геометрия обновилась
     void h
   })
-  it('shadingOf: куб/призма/пирамида — плоско, CSG/импорт — по излому, сфера/цилиндр/конус/тор — гладко', async () => {
+  it('shadingOf: куб/призма/пирамида — плоско, CSG/импорт/цилиндр/конус — по излому (UX-AUDIT-26), сфера/тор — гладко', async () => {
     const { shadingOf } = await import('../components/object-geometry')
     expect(['cube', 'prism', 'pyramid'].map((t2) => shadingOf({ shapeType: t2 as ShapeType, params: { width: 1 } }))).toEqual(['flat', 'flat', 'flat'])
     expect(shadingOf({ shapeType: 'csg', params: {} })).toBe('crease')
     expect(shadingOf({ shapeType: 'import_mesh', params: {} })).toBe('crease')
-    expect(['sphere', 'cylinder', 'cone', 'torus'].map((t2) => shadingOf({ shapeType: t2 as ShapeType, params: { radius: 1 } }))).toEqual(['smooth', 'smooth', 'smooth', 'smooth'])
+    expect(['sphere', 'cylinder', 'cone', 'torus'].map((t2) => shadingOf({ shapeType: t2 as ShapeType, params: { radius: 1 } }))).toEqual(['smooth', 'crease', 'crease', 'smooth'])
   })
 })
 

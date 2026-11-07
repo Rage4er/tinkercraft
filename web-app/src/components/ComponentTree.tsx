@@ -28,7 +28,9 @@ import {
   UnionIcon,
   SubtractIcon,
   IntersectIcon,
+  TextIcon,
 } from './icons'
+import { isTextObject } from '../store/text-object'
 
 interface Props {
   objects: SceneObject[]
@@ -51,8 +53,9 @@ export function displayName(obj: Pick<SceneObject, 'id' | 'shapeType' | 'name'>,
   return `${t(`shapes.${obj.shapeType}`)} ${num}`
 }
 
-/** Иконка фигуры / CSG-операции (общая для строк объектов и детей). */
-function Glyph({ shapeType, operation }: { shapeType?: ShapeType | 'csg'; operation?: 'union' | 'subtract' | 'intersect' }) {
+/** Иконка фигуры / CSG-операции (общая для строк объектов и детей); `text` — 3D-текст (UX-AUDIT-31). */
+function Glyph({ shapeType, operation, text }: { shapeType?: ShapeType | 'csg'; operation?: 'union' | 'subtract' | 'intersect'; text?: boolean }) {
+  if (text) return <TextIcon size={32} />
   if (operation === 'subtract') return <SubtractIcon size={32} />
   if (operation === 'intersect') return <IntersectIcon size={32} />
   if (operation === 'union' || shapeType === 'csg') return <UnionIcon size={32} />
@@ -66,6 +69,11 @@ function Glyph({ shapeType, operation }: { shapeType?: ShapeType | 'csg'; operat
     case 'pyramid': return <PyramidIcon size={32} />
     default: return <ImportIcon size={32} />
   }
+}
+
+/** UX-AUDIT-25: операция корня CSG — из Build Tree (корень — boolean-узел), иначе — из объекта. */
+function rootOperation(obj: SceneObject, view: TreeViewNode | undefined): 'union' | 'subtract' | 'intersect' | undefined {
+  return view?.operation ?? obj.operation
 }
 
 export default function ComponentTree({ objects, selectedIds, onSelect, onRename, onToggleVis, onDelete }: Props) {
@@ -218,8 +226,9 @@ export default function ComponentTree({ objects, selectedIds, onSelect, onRename
               {/* Цветовая метка */}
               <div className="ct-swatch" style={{ background: obj.color, opacity: obj.visible ? 1 : 0.4 }} />
 
-              {/* Иконка фигуры */}
-              <span className="ct-icon"><Glyph shapeType={obj.shapeType} /></span>
+              {/* Иконка фигуры; UX-AUDIT-25: у корня CSG — иконка его операции (вычитание,
+                  пересечение), как у вложенных CSG и в истории, а не всегда объединения */}
+              <span className="ct-icon"><Glyph shapeType={obj.shapeType} operation={obj.shapeType === 'csg' ? rootOperation(obj, view) : undefined} text={isTextObject(obj)} /></span>
 
               {/* Имя (двойной клик = редактирование) */}
               {isEd ? (

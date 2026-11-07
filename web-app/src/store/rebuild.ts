@@ -7,6 +7,7 @@ import type {
   TinkerCraftOperation, SceneObject, ShapeType, ShapeParams,
   TransformNR, Vec3, AlignOperation, MirrorPlane,
 } from '../csg/types'
+import { textOfOp } from './text-object'
 import { workerRebuildScene } from '../csg/worker-client'
 import { centerMassAtOrigin, makeObject, composeMirroredList } from './helpers'
 import {
@@ -40,6 +41,8 @@ export interface RebuildMeta {
   transform: TransformNR
   visible: boolean
   name?: string
+  /** UX-AUDIT-31: 3D-текст — исходная строка */
+  text?: string
   // CSG result mesh data — stored for rebuildFromHistory reconstruction
   resultVertices?: Float32Array | number[]
   resultIndices?: Uint32Array | number[]
@@ -77,7 +80,9 @@ export function buildRebuildMeta(rawOps: TinkerCraftOperation[]): {
 
     } else if (op.type === 'import_mesh') {
       const t: TransformNR = { ...op.transform }
-      meta[op.id] = { color: op.color, shapeType: 'import_mesh', params: {}, transform: t, visible: true, name: op.name }
+      // UX-AUDIT-31: 3D-текст — строка у объекта (как у живого)
+      const text = textOfOp(op)
+      meta[op.id] = { color: op.color, shapeType: 'import_mesh', params: {}, transform: t, visible: true, name: op.name, ...(text !== undefined ? { text } : {}) }
       transforms[op.id] = t
 
     } else if (op.type === 'fillet') {
@@ -336,6 +341,7 @@ export async function rebuildFromHistory(
     objects[m.objId] = makeObject({
       id: m.objId,
       name: info?.name,
+      ...(info?.text !== undefined ? { text: info.text } : {}),
       shapeType: info?.shapeType ?? 'cube',
       params: info?.params ?? {},
       color: info?.color ?? '#89b4fa',

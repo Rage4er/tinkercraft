@@ -7,16 +7,16 @@
 //  N — предупреждение (тост) в обеих темах читается; L — 52 фигуры, 104 шага: undo всё / redo
 //  всё, быстрое переключение вкладок / темы / гизмо, FPS.
 //  O. Текст: «Привет», «Дом», «Федя», «Hello» — буквы, без предупреждений; куб − «ДдФ» → CSG;
-//     «漢字» и emoji — предупреждение называет символы.
+//     «漢字» и emoji — предупреждение называет символы; Esc закрывает модалку из любого поля.
 //  P. Сфера ∪ / − / ∩ куб — CSG без ошибок (гладкость нормалей — __tests__/ux-audit-3.test.tsx).
 //  R. Тост: над модалкой, исчезает через ~5 с, не поверх правой панели и тулбара.
 //  S. Поле: «−1234.5» целиком на 1366, ↑ с клавиатуры меняет значение, Enter — шаг истории.
 //  T. История: объединение / вычитание / пересечение — свои подписи и иконки; вставка — «Вставить
 //     куб / CSG / импорт»; фильтр «CSG» прячет операции CSG.
-//  🐞 known — новые баги прогона 3 (вёрстка, только браузер), `knownBug`: ожидание обязано
-//     сейчас НЕ выполняться; выполнилось — баг исправлен, перенести проверку в ✅:
-//     UX-AUDIT-23 стрелки поля не появляются при наведении; UX-AUDIT-24 плашка линейки поверх
-//     тулбара (≤ 1280); UX-AUDIT-30 тост на 768 закрывает «Привязку».
+//  Баги прогона 3 в браузере (были `knownBug`), исправлены в fix-all-3 — обычные проверки:
+//     UX-AUDIT-21 (долгие задачи при импорте 100k), UX-AUDIT-23 (стрелки поля при наведении и
+//     в фокусе), UX-AUDIT-24 (плашка линейки — во вьюпорте, не на тулбаре и «Привязке»),
+//     UX-AUDIT-30 (на 768 тост — под «Привязкой» и плашкой линейки). `knownBug` сейчас нет.
 // Ошибок консоли нет (все сценарии). Логика — __tests__/ux-audit-3.test.tsx (`it.fails`).
 // Запуск: `pnpm dev` в одном терминале, `pnpm e2e:ux-audit-3` в другом.
 // Необязательный аргумент — каталог для скриншотов: `node e2e/ux-audit-3.mjs /tmp/ux3`.
@@ -127,6 +127,16 @@ try {
   {
     const s = await session()
     const { page } = s
+    // ✅ UX-AUDIT-27: Esc закрывает модалку текста из поля «Размер» и после клика по модалке
+    for (const where of ['размер', 'клик']) {
+      await page.getByText('Текст', { exact: true }).first().click()
+      const modal = page.locator('.text-modal-backdrop'); await modal.waitFor({ timeout: 5000 })
+      if (where === 'размер') await modal.locator('input.text-modal-num').first().focus()
+      else await page.locator('.text-modal-title').click()
+      await page.keyboard.press('Escape')
+      await modal.waitFor({ state: 'detached', timeout: 3000 }).catch(() => fail(`UX-AUDIT-27: Esc (${where}) не закрыл модалку текста`))
+    }
+    ok.push('O: модалка текста закрывается по Esc из поля «Размер» и после клика по модалке (UX-AUDIT-27)')
     // O. кириллица / латиница — без предупреждений, «Текст: …» в дереве
     for (const text of ['Привет', 'Дом', 'Федя', 'Hello']) {
       const id = await s.addText(text)
@@ -135,6 +145,13 @@ try {
       if (await s.toasts()) fail(`O: «${text}» — уведомления: ${await s.toasts()}`)
     }
     await s.blur(); await page.keyboard.press('KeyF'); await page.waitForTimeout(600); await s.shot('o-text.png')
+    // ✅ UX-AUDIT-31: в истории — «Добавить текст: Привет» (не «Импорт …»), в свойствах — «Тип: Текст»
+    const textSteps = (await page.locator('.tl-label').allInnerTexts()).map((x) => x.trim())
+    if (textSteps.join() !== 'Добавить текст: Привет,Добавить текст: Дом,Добавить текст: Федя,Добавить текст: Hello') fail('UX-AUDIT-31: шаги текста — ' + textSteps.join(' / '))
+    await s.pick((await s.ids())[0])
+    const type = (await page.locator('.panel-right .props-row', { hasText: 'Тип' }).first().innerText()).replace(/\s+/g, ' ')
+    if (!type.includes('Текст')) fail('UX-AUDIT-31: в свойствах — ' + type)
+    ok.push('O: шаги текста — «Добавить текст: Привет» …, в свойствах «Тип: Текст» (UX-AUDIT-31)')
     // O. куб − «ДдФ» → CSG без уведомлений
     await s.confirmClear()
     const cube = await s.add('Куб'); await s.setF(cube, 'num-input-pos-X', 0)
@@ -188,8 +205,15 @@ try {
     const shown = (await page.locator('.tl-label').allInnerTexts()).map((x) => x.trim())
     if (shown.some((x) => ['Объединение', 'Вычитание', 'Пересечение'].includes(x))) fail('T: фильтр «CSG» не прячет операции CSG')
     if (!shown.some((x) => x.startsWith('Добавить'))) fail('T: фильтр «CSG» спрятал и «Добавить …»')
-    await csgFilter.check(); await page.locator('.tl-filter-toggle').click()
-    ok.push('T: вставка — «Вставить куб», «Вставить CSG», «Вставить импорт» (UX-AUDIT-13); фильтр «CSG» прячет объединение/вычитание/пересечение')
+    await csgFilter.check()
+    // ✅ UX-AUDIT-29: фильтр «Вставить» прячет все три вставки — и только их
+    const pasteFilter = page.locator('.tl-filter-row', { hasText: /^Вставить$/ }).locator('input')
+    await pasteFilter.uncheck()
+    const shown2 = (await page.locator('.tl-label').allInnerTexts()).map((x) => x.trim())
+    if (shown2.some((x) => x.startsWith('Вставить'))) fail('UX-AUDIT-29: фильтр «Вставить» не прячет вставку — ' + shown2.filter((x) => x.startsWith('Вставить')).join(', '))
+    if (!shown2.includes('Добавить куб') || !shown2.includes('Объединение')) fail('UX-AUDIT-29: фильтр «Вставить» спрятал лишнее')
+    await pasteFilter.check(); await page.locator('.tl-filter-toggle').click()
+    ok.push('T: вставка — «Вставить куб», «Вставить CSG», «Вставить импорт» (UX-AUDIT-13); фильтр «CSG» прячет объединение/вычитание/пересечение, «Вставить» — все три вставки и только их (UX-AUDIT-29)')
     if (s.errors.length) fail('O/P/T: ошибки консоли ' + s.errors.join(' | '))
     await s.browser.close()
   }
@@ -244,6 +268,31 @@ try {
     if (await s.toasts()) fail('K: уведомления ' + (await s.toasts()))
     ok.push('K: повёрнутый CSG (rotZ 30) и куб — «Выровнять» + «Множественное», Z (XY): грань CSG, затем грань куба → верхи в z = 0')
     if (s.errors.length) fail('J/K: ошибки консоли ' + s.errors.join(' | '))
+    await s.browser.close()
+  }
+
+  // ── ✅ UX-AUDIT-21: импорт 100k в сцене — правка другого объекта без долгих задач ──
+  {
+    const s = await session()
+    const { page } = s
+    const R = 30, rings = 225, segs = 224
+    const P = (i, j) => { const th = Math.PI * i / rings, ph = 2 * Math.PI * j / segs; return [R * Math.sin(th) * Math.cos(ph), R * Math.sin(th) * Math.sin(ph), R * Math.cos(th)] }
+    const tris = []
+    for (let i = 0; i < rings; i++) for (let j = 0; j < segs; j++) { const a = P(i, j), b = P(i + 1, j), c = P(i + 1, j + 1), d = P(i, j + 1); if (i !== 0) tris.push([a, b, d]); if (i !== rings - 1) tris.push([b, c, d]) }
+    const buf = Buffer.alloc(84 + tris.length * 50); buf.writeUInt32LE(tris.length, 80)
+    tris.forEach((tt, q) => tt.flat().forEach((v, m) => buf.writeFloatLE(v, 84 + q * 50 + 12 + m * 4)))
+    const big = path.join(tmp, 'big.stl'); fs.writeFileSync(big, buf)
+    await s.importStl(big)
+    const cube = await s.add('Куб')
+    await s.pick(cube); await page.waitForTimeout(800)
+    await page.evaluate(() => { window.__lt = []; new PerformanceObserver((l) => { for (const e of l.getEntries()) window.__lt.push(Math.round(e.duration)) }).observe({ type: 'longtask' }) })
+    for (let k = 0; k < 4; k++) await s.setF(cube, 'num-input-pos-Y', 40 + k * 5)
+    await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))))
+    const long = await page.evaluate(() => window.__lt.filter((d) => d >= 120))
+    // было: каждая правка — долгая задача 155–194 мс (пересборка нормалей и рёбер импорта); GC — допускаем одну
+    if (long.length > 1) fail(`UX-AUDIT-21: правки куба при импорте 100k — долгие задачи ${long.join(', ')} мс`)
+    if (s.errors.length) fail('UX-AUDIT-21: ошибки консоли ' + s.errors.join(' | '))
+    ok.push(`UX-AUDIT-21: импорт ${tris.length} в сцене — 4 правки куба без долгих задач ≥ 120 мс (${long.length ? long.join(', ') + ' мс' : 'нет'})`)
     await s.browser.close()
   }
 
@@ -340,17 +389,23 @@ try {
     await s.blur()
     ok.push(`S: «−1234.5» видно целиком (${w.sw} ≤ ${w.cw} px); ↑ с клавиатуры → −1233.5, Enter → шаг истории`)
 
-    // 🐞 UX-AUDIT-23: стрелки поля при наведении не появляются (у обычного числового поля — есть)
-    await knownBug('UX-AUDIT-23', 'стрелки поля при наведении', async () => {
+    // ✅ UX-AUDIT-23: стрелки поля появляются при наведении и в фокусе (в покое — нет: «−1234.5» целиком)
+    {
       const box = await f.boundingBox()
       const clip = { x: box.x + box.width - 16, y: box.y + 2, width: 14, height: box.height - 4 }
-      await page.mouse.move(5, 400); await page.waitForTimeout(200)
+      await s.blur(); await page.mouse.move(5, 400); await page.waitForTimeout(200)
       const rest = await page.screenshot({ clip })
       await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2); await page.waitForTimeout(400)
       const hover = await page.screenshot({ clip })
-      await page.mouse.move(5, 400)
-      if (Buffer.compare(rest, hover) === 0) throw new Error('при наведении поле не изменилось — стрелок нет')
-    })
+      await page.mouse.move(5, 400); await f.focus(); await page.waitForTimeout(300)
+      const focus = await page.screenshot({ clip, path: shotDir ? path.join(shotDir, 'field-focus.png') : undefined })
+      await s.blur(); await page.waitForTimeout(200)
+      const rest2 = await page.screenshot({ clip })
+      if (Buffer.compare(rest, hover) === 0) fail('UX-AUDIT-23: при наведении стрелок нет')
+      if (Buffer.compare(rest, focus) === 0) fail('UX-AUDIT-23: в фокусе стрелок нет')
+      if (Buffer.compare(rest, rest2) !== 0) fail('UX-AUDIT-23: после ухода фокуса стрелки остались')
+      ok.push('S: стрелки поля — при наведении и в фокусе, в покое скрыты (UX-AUDIT-23)')
+    }
 
     // N. предупреждение (тост «нет символов») читается в тёмной и светлой темах
     for (const theme of ['тёмная', 'светлая']) {
@@ -366,9 +421,9 @@ try {
     await s.browser.close()
   }
 
-  // ── 🐞 вёрстка узких окон: линейка (1024), тост и «Привязка» (768) ──
-  {
-    const s = await session({ width: 1024, height: 768 })
+  // ── ✅ UX-AUDIT-24: плашка «Расстояние» — во вьюпорте, не на тулбаре (1400, 1024) и не на «Привязке» (768) ──
+  for (const [width, height] of [[1400, 850], [1024, 768], [768, 1024]]) {
+    const s = await session({ width, height })
     const { page } = s
     await s.add('Куб')
     await s.blur(); await page.keyboard.press('Escape'); await page.keyboard.press('KeyL')
@@ -376,28 +431,39 @@ try {
     await page.mouse.click(vp.left + (vp.right - vp.left) * 0.3, vp.top + (vp.bottom - vp.top) * 0.7)
     await page.mouse.click(vp.left + (vp.right - vp.left) * 0.7, vp.top + (vp.bottom - vp.top) * 0.75)
     await page.locator('.ruler-display').waitFor({ timeout: 5000 })
-    await s.shot('ruler-1024.png')
-    // 🐞 UX-AUDIT-24: плашка «Расстояние» (fixed, top 54 px) — поверх тулбара в 2–3 строки
-    await knownBug('UX-AUDIT-24', 'плашка линейки поверх тулбара (1024)', async () => {
-      const [r, tb] = [await s.rect('.ruler-display'), await s.rect('[role=toolbar]')]
-      if (overlap(r, tb)) throw new Error(`плашка ${Math.round(r.top)}–${Math.round(r.bottom)} px, тулбар до ${Math.round(tb.bottom)} px`)
-    })
+    await s.shot(`ruler-${width}.png`)
+    const [r, tb, snap, left] = [await s.rect('.ruler-display'), await s.rect('[role=toolbar]'), await s.rect('.snap-selector'), await s.rect('.panel-left')]
+    const bad = [...(overlap(r, tb) ? ['тулбар'] : []), ...(overlap(r, snap) ? ['«Привязку»'] : []), ...(overlap(r, left) ? ['левую панель'] : [])]
+    if (bad.length) fail(`UX-AUDIT-24 ${width}: плашка «Расстояние» перекрывает ${bad.join(', ')}`)
+    if (r.left < vp.left || r.right > vp.right || r.top < vp.top) fail(`UX-AUDIT-24 ${width}: плашка за пределами вьюпорта`)
+    if (!/Расстояние: \d/.test(await page.locator('.ruler-display').innerText())) fail(`UX-AUDIT-24 ${width}: текст плашки`)
     if (s.errors.length) fail('UX-AUDIT-24: ошибки консоли ' + s.errors.join(' | '))
+    ok.push(`Q: ${width}×${height} — плашка «Расстояние» во вьюпорте, не на тулбаре${width <= 940 ? ' и не на «Привязке»' : ''} (UX-AUDIT-24)`)
     await s.browser.close()
   }
+  // ── ✅ UX-AUDIT-30: на 768 тост не закрывает «Привязку» и плашку линейки; не на панели и тулбаре (19) ──
   {
     const s = await session({ width: 768, height: 1024 })
     const { page } = s
     const a = await s.add('Куб'); const b = await s.add('Сфера')
-    await s.pair(a, b); await panelButton(page, 'Пересечение').click()
+    await s.blur(); await page.keyboard.press('Escape'); await page.keyboard.press('KeyL')
+    const vp = await s.rect('.main > .viewport')
+    await page.mouse.click(vp.left + (vp.right - vp.left) * 0.3, vp.top + (vp.bottom - vp.top) * 0.8)
+    await page.mouse.click(vp.left + (vp.right - vp.left) * 0.7, vp.top + (vp.bottom - vp.top) * 0.85)
+    await page.locator('.ruler-display').waitFor({ timeout: 5000 })
+    await s.pair(a, b); await panelButton(page, 'Пересечение').click()     // линейка включена — плашка видна
     await page.locator('.toast').first().waitFor({ timeout: 5000 }); await page.waitForTimeout(400)
     await s.shot('toast-768.png')
-    // 🐞 UX-AUDIT-30: на 768 тост (верх вьюпорта) закрывает «Привязку» (тоже вверху, ≤ 420 px)
-    await knownBug('UX-AUDIT-30', 'тост закрывает «Привязку» (768)', async () => {
-      const [t, snap] = [await s.rect('.toast'), await s.rect('.snap-selector')]
-      if (overlap(t, snap)) throw new Error('тост поверх «Привязки» — 5 с привязку не переключить')
-    })
+    const [t, snap, ruler, right, tb] = [await s.rect('.toast'), await s.rect('.snap-selector'), await s.rect('.ruler-display'), await s.rect('.panel-right'), await s.rect('[role=toolbar]')]
+    if (!ruler) fail('UX-AUDIT-30 (768): плашки линейки нет')
+    const bad = [...(overlap(t, snap) ? ['«Привязку»'] : []), ...(overlap(t, ruler) ? ['плашку линейки'] : []), ...(overlap(t, right) ? ['правую панель'] : []), ...(overlap(t, tb) ? ['тулбар'] : [])]
+    if (bad.length) fail('UX-AUDIT-30 (768): тост перекрывает ' + bad.join(', '))
+    if (t.left < vp.left || t.right > vp.right) fail('UX-AUDIT-30 (768): тост за пределами вьюпорта')
+    // «Привязка» кликабельна, пока виден тост
+    await page.locator('.snap-btn', { hasText: /^5$/ }).click({ timeout: 2000 })
+    if (!(await page.locator('.snap-btn.active', { hasText: /^5$/ }).count())) fail('UX-AUDIT-30 (768): «Привязка» не переключилась при тосте')
     if (s.errors.length) fail('UX-AUDIT-30: ошибки консоли ' + s.errors.join(' | '))
+    ok.push('R: 768 — тост под «Привязкой» и плашкой линейки, не на панели и тулбаре; «Привязка» переключается при тосте (UX-AUDIT-30)')
     await s.browser.close()
   }
 

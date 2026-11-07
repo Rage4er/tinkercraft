@@ -393,6 +393,20 @@ export function setGridColor(grid: THREE.GridHelper | null, theme: 'dark' | 'lig
 /**
  * Fast hash for vertex array comparison (FNV-1a inspired).
  */
+/**
+ * UX-AUDIT-21: что было источником геометрии меша — длины и хэш вершин `SceneObject`.
+ * Раньше «вершины изменились» сверялось с `geometry.index?.count`, а у геометрии по излому
+ * (CSG, импорт — UX-AUDIT-20) индекса нет → «изменились» на каждый рендер: нормали по излому и
+ * рёбра пересчитывались у всех CSG и импортов при любом действии (импорт 100k — ~170 мс).
+ * Теперь сверка — с тем, из чего геометрия построена (не с самой геометрией); пишется и при
+ * создании меша, чтобы первое же обновление не пересобирало его.
+ */
+function rememberGeometrySource(mesh: THREE.Mesh, obj: Pick<SceneObject, 'vertices' | 'indices'>, hash = computeVertsHash(obj.vertices)): void {
+    mesh.userData.srcVertexLength = obj.vertices.length;
+    mesh.userData.srcIndexLength = obj.indices.length;
+    mesh.userData.srcVertsHash = hash;
+}
+
 function computeVertsHash(vertices: Float32Array): number {
     let hash = 0x811c9dc5;
     const len = vertices.length;
@@ -547,18 +561,15 @@ export function useMeshSync(
         for (const obj of objects) {
             const existing = map.get(obj.id);
             if (existing) {
-                // Update geometry if raw vertices changed
-                const cachedRaw = existing.mesh.userData.cachedRawVertices as Float32Array | undefined;
-                const cachedHash = existing.mesh.userData.cachedVertsHash as number | undefined;
+                // Update geometry if raw vertices changed (UX-AUDIT-21: сверка с источником геометрии)
+                const src = existing.mesh.userData;
                 const vertsHash = computeVertsHash(obj.vertices);
                 const vertsChanged =
-                    !cachedRaw ||
-                    cachedRaw.length !== obj.vertices.length ||
-                    obj.indices.length !== (existing.mesh.geometry.index?.count ?? 0) ||
-                    cachedHash !== vertsHash;
+                    src.srcVertexLength !== obj.vertices.length ||
+                    src.srcIndexLength !== obj.indices.length ||
+                    src.srcVertsHash !== vertsHash;
                 if (vertsChanged) {
-                    existing.mesh.userData.cachedRawVertices = new Float32Array(obj.vertices);
-                    existing.mesh.userData.cachedVertsHash = vertsHash;
+                    rememberGeometrySource(existing.mesh, obj, vertsHash);
 
                     // UX-AUDIT-20: новая геометрия тем же построителем, что при создании (раньше
                     // computeVertexNormals по всем вершинам — у куба после правки сглаживались углы).
@@ -632,6 +643,7 @@ export function useMeshSync(
                     side: THREE.DoubleSide,
                 });
                 const rawMesh = new THREE.Mesh(geometry, material);
+                rememberGeometrySource(rawMesh, obj);          // UX-AUDIT-21
                 rawMesh.castShadow = true;
                 rawMesh.receiveShadow = true;
                 rawMesh.userData.objectId = obj.id;

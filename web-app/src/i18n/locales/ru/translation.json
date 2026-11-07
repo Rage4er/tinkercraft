@@ -148,6 +148,7 @@
   },
   "timeline": {
     "addShape": "Добавить {{shape}}",
+    "addText": "Добавить текст: {{text}}",
     "importMesh": "Импорт {{name}}",
     "move": "Переместить",
     "scale": "Масштаб",
@@ -179,8 +180,11 @@
   },
   "filters": {
     "add_shape": "Добавить",
+    "paste": "Вставить",
     "import_mesh": "Импорт",
     "move": "Переместить",
+    "rotate": "Повернуть",
+    "scale": "Масштаб",
     "resize_dims": "Размер",
     "mirror": "Зеркало",
     "align": "Выровнять",

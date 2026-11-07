@@ -2,6 +2,7 @@ import { useRef, useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import type { TinkerCraftOperation, StepPatch } from "../csg/types";
 import { effectivePatches, applyStepPatch } from "../store/project-history";
+import { textOfOp } from "../store/text-object";
 import { isStepEditable } from "../store/edit-step";
 import { fmtVec, fmtNum } from "./StepPanel";
 import {
@@ -82,7 +83,8 @@ export function opIcon(op: TinkerCraftOperation): React.ReactNode {
         default: return <CubeIcon size={32} />;
       }
     case "import_mesh":
-      return op.pasted ? <PasteIcon size={32} /> : <ImportIcon size={32} />;
+      // UX-AUDIT-31: добавление 3D-текста — иконка текста (а не импорта)
+      return op.pasted ? <PasteIcon size={32} /> : textOfOp(op) !== undefined ? <TextIcon size={32} /> : <ImportIcon size={32} />;
     case "move": {
       const k = (op as { kind?: string }).kind;
       return k === "scale" ? <ScaleIcon size={32} /> : k === "rotate" ? <RotateIcon size={32} /> : <MoveIcon size={32} />;
@@ -121,6 +123,23 @@ export function opIcon(op: TinkerCraftOperation): React.ReactNode {
 }
 
 // ---- Operation label ----
+/**
+ * UX-AUDIT-29: категория шага для фильтра истории — по тому, что написано в шаге, а не по типу
+ * операции: «Повернуть» и «Масштаб» (move с kind) — свои категории, а не «Переместить»; любая
+ * вставка («Вставить куб / CSG / импорт») — одна категория «Вставить», а не «Добавить» / «CSG» /
+ * «Импорт». Ключи — `OP_FILTER_LABELS`.
+ */
+export function filterKeyOf(op: TinkerCraftOperation): string {
+  if ((op.type === "add_shape" || op.type === "import_mesh") && op.pasted) return "paste";
+  if (op.type === "import_mesh" && textOfOp(op) !== undefined) return "add_shape";     // «Добавить текст» (UX-AUDIT-31)
+  if (op.type === "group" && op.source?.kind !== "extrude" && isPastedGroup(op)) return "paste";
+  if (op.type === "move") {
+    const k = (op as { kind?: string }).kind;
+    if (k === "rotate" || k === "scale") return k;
+  }
+  return op.type;
+}
+
 export function opLabel(op: TinkerCraftOperation, t: (key: string, opts?: Record<string, unknown>) => string): string {
   switch (op.type) {
     case "add_shape":
@@ -128,9 +147,13 @@ export function opLabel(op: TinkerCraftOperation, t: (key: string, opts?: Record
       if (op.pasted) return t('timeline.paste', { what: t(`shapesAcc.${op.shapeType}`) });
       if (op.shapeType === 'csg') return t('timeline.csgResult')
       return t('timeline.addShape', { shape: t(`shapesAcc.${op.shapeType}`) });
-    case "import_mesh":
-      if (op.pasted) return t('timeline.paste', { what: t('timeline.pastedImport') });
+    case "import_mesh": {
+      // UX-AUDIT-31: 3D-текст — «Добавить текст: Привет» / «Вставить текст», а не «Импорт Текст: …»
+      const text = textOfOp(op);
+      if (op.pasted) return t('timeline.paste', { what: text !== undefined ? t('shapesAcc.text') : t('timeline.pastedImport') });
+      if (text !== undefined) return t('timeline.addText', { text });
       return t('timeline.importMesh', { name: (op as { name?: string }).name ?? "STL" });
+    }
     case "move": {
       const k = (op as { kind?: string }).kind;
       return k === "scale" ? t("timeline.scale") : k === "rotate" ? t("timeline.rotate") : t("timeline.move");
@@ -210,7 +233,7 @@ export default function Timeline({
   const visible = useMemo(
     () => operations
       .map((op, i) => ({ op, i }))
-      .filter(({ op }) => filters[op.type] !== false),
+      .filter(({ op }) => filters[filterKeyOf(op)] !== false),
     [operations, filters]
   );
   // Фаза 9.5: действующие правки шагов (по префиксу до historyIndex) — эффективные значения в подписи

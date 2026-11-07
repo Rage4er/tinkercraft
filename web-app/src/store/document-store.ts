@@ -37,6 +37,7 @@ import { computeAABB, extractAndCenterInPlace, extractAndCenterGetAABB, centerMa
 import type { ClipEntry } from './helpers'
 import type { DocumentStore } from './types'
 import { rebuildFromHistory, rebuildBuildTree } from './rebuild'
+import { isTextObject, textFromName } from './text-object'
 import { computeCsgResult, groupOperationFromResult, isNonManifoldError } from './csg-result'
 import { computeEditedChild, editFailureKey, findCreationTransform } from './edit-child'
 import { computeStepEdit, editStepFailureKey } from './edit-step'
@@ -238,7 +239,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   },
 
   // ── Добавить произвольный меш (текст, и т.д.) ──
-  addRawMesh: async (name, vertices, indices) => {
+  addRawMesh: async (name, vertices, indices, text) => {
     if (get().busy) return
     const { objects, operations, historyIndex } = get()
     const id = nextId('txt')
@@ -258,8 +259,9 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const pivot: TransformNR = { ...transform, x: transform.x + com.cx, y: transform.y + com.cy, z: transform.z + com.cz }
       // UX-AUDIT-6: имя («Текст: Hi») — и у объекта, а не только в операции (дерево показывало
       // «Импорт N»; после перемотки/загрузки rebuild брал имя из операции — живое ≠ rebuild)
-      const obj: SceneObject = makeObject({ id, shapeType: 'import_mesh', params: {}, color, transform: pivot, visible: true, locked: false, vertices: result.vertices, indices: result.indices, normals: result.normals, name })
-      const op: ImportMeshOperation = { type: 'import_mesh', id, name, color, transform, vertices, indices }
+      // UX-AUDIT-31: исходная строка текста — у объекта и шага («Добавить текст: …», «Тип: Текст»)
+      const obj: SceneObject = makeObject({ id, shapeType: 'import_mesh', params: {}, color, transform: pivot, visible: true, locked: false, vertices: result.vertices, indices: result.indices, normals: result.normals, name, ...(text !== undefined ? { text } : {}) })
+      const op: ImportMeshOperation = { type: 'import_mesh', id, name, color, transform, vertices, indices, ...(text !== undefined ? { text } : {}) }
       const newOps = [...operations.slice(0, historyIndex), op]
       const newObjects = { ...objects, [id]: obj }
       // Register baked node in build tree BEFORE caching snapshot
@@ -321,6 +323,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         // PERF-R8-1: Храним TypedArray вместо number[] для экономии памяти (8×)
         entry.importVertices = new Float32Array(obj.vertices)
         entry.importIndices = new Uint32Array(obj.indices)
+        // UX-AUDIT-31: копия текста — тоже текст («Вставить текст», имя и строка — с собой)
+        if (isTextObject(obj)) { entry.text = obj.text ?? textFromName(obj.name); entry.name = obj.name }
       } else if (obj.shapeType === 'csg') {
         // FIX (PASTE-CSG): Store CSG mesh data for paste
         entry.csgVertices = new Float32Array(obj.vertices)
@@ -364,8 +368,10 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
 
         if (clip.shapeType === 'import_mesh' && clip.importVertices && clip.importIndices) {
           const result = await workerBuildImportedMesh(id, clip.importVertices, clip.importIndices)
-          const obj: SceneObject = makeObject({ id, shapeType: 'import_mesh', params: {}, color: clip.color, transform, visible: true, locked: false, vertices: result.vertices, indices: result.indices })
-          const op: ImportMeshOperation = { type: 'import_mesh', id, name: 'pasted', color: clip.color, transform, vertices: clip.importVertices, indices: clip.importIndices, pasted: true }
+          // UX-AUDIT-31: копия текста — текст (строка и имя у объекта и шага)
+          const textName = clip.name ?? 'pasted'
+          const obj: SceneObject = makeObject({ id, shapeType: 'import_mesh', params: {}, color: clip.color, transform, visible: true, locked: false, vertices: result.vertices, indices: result.indices, ...(clip.text !== undefined ? { text: clip.text, name: textName } : {}) })
+          const op: ImportMeshOperation = { type: 'import_mesh', id, name: clip.text !== undefined ? textName : 'pasted', color: clip.color, transform, vertices: clip.importVertices, indices: clip.importIndices, pasted: true, ...(clip.text !== undefined ? { text: clip.text } : {}) }
           newObjects = { ...newObjects, [id]: obj }
           newOps.push(op)
           // Register baked node in build tree for CSG/mirror/align support

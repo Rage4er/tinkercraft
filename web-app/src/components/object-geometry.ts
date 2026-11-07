@@ -13,7 +13,10 @@
 //  • CSG и импорт — нормали по углу излома (`toCreasedNormals`, CREASE_ANGLE_DEG): соседние
 //    треугольники с углом меньше порога сглаживаются (сфера, цилиндр, тор в составе CSG —
 //    гладкие), больше — остаются острыми (рёбра куба);
-//  • остальные примитивы — гладкие нормали воркера (или пересчитанные).
+//  • цилиндр и конус — тоже по излому (UX-AUDIT-26): гладкий бок, острая кромка торца. Раньше —
+//    «гладко» по общим вершинам: нормаль кромки усреднялась между торцом и боком (до ≈ 90°),
+//    торец выглядел выпуклым, а тот же цилиндр в CSG — с острой кромкой;
+//  • сфера и тор — гладкие нормали воркера (или пересчитанные): острых рёбер у них нет.
 // Порядок треугольников сохраняется (выбор грани, привязка линейки работают по нему).
 
 import * as THREE from "three";
@@ -24,10 +27,13 @@ import type { SceneObject } from "../csg/types";
 export const CREASE_ANGLE_DEG = 30;
 
 const FLAT_SHAPES = ["cube", "prism", "pyramid"];
+/** UX-AUDIT-26: гладкий бок + острая кромка торца */
+const CREASE_SHAPES = ["cylinder", "cone"];
 
-/** Как затенять объект: плоско (грани), по углу излома (CSG, импорт) или гладко. */
+/** Как затенять объект: плоско (грани), по углу излома (CSG, импорт, цилиндр, конус) или гладко. */
 export function shadingOf(obj: Pick<SceneObject, "shapeType" | "params">): "flat" | "crease" | "smooth" {
   if (FLAT_SHAPES.includes(obj.shapeType)) return "flat";
+  if (CREASE_SHAPES.includes(obj.shapeType)) return "crease";
   if (!obj.params || Object.keys(obj.params).length === 0) return "crease";
   return "smooth";
 }

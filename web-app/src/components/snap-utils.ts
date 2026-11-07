@@ -117,47 +117,61 @@ function collectWorldVertices(
 
 /**
  * Собрать все рёбра (попарные точки) меша в мировом пространстве.
+ *
+ * UX-AUDIT-22: геометрия может быть и без индекса — у CSG, импорта, цилиндра и конуса нормали по
+ * излому (UX-AUDIT-20/26, `toCreasedNormals`): каждая вершина повторена в каждом своём
+ * треугольнике. Раньше без индекса рёбер не было вовсе (привязка «ребро» на CSG/импорте
+ * пропала). Вершина ребра — индекс (индексированная геометрия) или позиция (без индекса), так что
+ * общее ребро соседних треугольников учитывается один раз.
  */
 function collectWorldEdges(
   mesh: THREE.Mesh,
   edges: { from: THREE.Vector3; to: THREE.Vector3 }[] = [],
 ): { from: THREE.Vector3; to: THREE.Vector3 }[] {
   const pos = mesh.geometry.attributes.position;
-  const idx = mesh.geometry.index;
-  if (!pos || !idx) return edges;
-
-  // Deduplicate edges using a Set with canonical key "i1,i2" (i1 < i2)
-  const edgeSet = new Set<string>();
-
-  for (let i = 0; i < idx.count; i += 3) {
-    const indices = [idx.getX(i), idx.getX(i + 1), idx.getX(i + 2)];
-    const triEdges = [
-      [0, 1],
-      [1, 2],
-      [2, 0],
-    ];
-    for (const [a, b] of triEdges) {
-      const i1 = indices[a];
-      const i2 = indices[b];
-      const key = i1 < i2 ? `${i1},${i2}` : `${i2},${i1}`;
-      if (edgeSet.has(key)) continue;
-      edgeSet.add(key);
-
-      // FIX (MED-18-31): Reuse Vector3 objects to reduce GC pressure
-      const from = new THREE.Vector3(
-        pos.getX(i1),
-        pos.getY(i1),
-        pos.getZ(i1),
-      ).applyMatrix4(mesh.matrixWorld);
-      const to = new THREE.Vector3(
-        pos.getX(i2),
-        pos.getY(i2),
-        pos.getZ(i2),
-      ).applyMatrix4(mesh.matrixWorld);
-      edges.push({ from, to });
-    }
+  if (!pos) return edges;
+  const pairs = edgePairs(mesh.geometry);
+  for (let e = 0; e < pairs.length; e += 2) {
+    const i1 = pairs[e], i2 = pairs[e + 1];
+    // FIX (MED-18-31): Reuse Vector3 objects to reduce GC pressure
+    const from = new THREE.Vector3(pos.getX(i1), pos.getY(i1), pos.getZ(i1)).applyMatrix4(mesh.matrixWorld);
+    const to = new THREE.Vector3(pos.getX(i2), pos.getY(i2), pos.getZ(i2)).applyMatrix4(mesh.matrixWorld);
+    edges.push({ from, to });
   }
   return edges;
+}
+
+/** Рёбра геометрии (пары индексов вершин position) — по геометрии один раз: она не меняется, пока
+ *  объект не изменился (useMeshSync строит новую — UX-AUDIT-21), а дедупликация — дорогая часть. */
+const edgePairsCache = new WeakMap<THREE.BufferGeometry, Uint32Array>();
+
+function edgePairs(geometry: THREE.BufferGeometry): Uint32Array {
+  const cached = edgePairsCache.get(geometry);
+  if (cached) return cached;
+  const pos = geometry.attributes.position;
+  const idx = geometry.index;
+  const count = idx ? idx.count : pos.count;
+  const vertexAt = (k: number) => (idx ? idx.getX(k) : k);
+  const keyOf = idx
+    ? (i: number) => String(i)
+    : (i: number) => `${pos.getX(i)},${pos.getY(i)},${pos.getZ(i)}`;
+  // Deduplicate edges using a Set with canonical key "a|b" (a < b)
+  const edgeSet = new Set<string>();
+  const out: number[] = [];
+  for (let t = 0; t + 2 < count; t += 3) {
+    const tri = [vertexAt(t), vertexAt(t + 1), vertexAt(t + 2)];
+    for (const [a, b] of [[0, 1], [1, 2], [2, 0]]) {
+      const k1 = keyOf(tri[a]);
+      const k2 = keyOf(tri[b]);
+      const key = k1 < k2 ? `${k1}|${k2}` : `${k2}|${k1}`;
+      if (edgeSet.has(key)) continue;
+      edgeSet.add(key);
+      out.push(tri[a], tri[b]);
+    }
+  }
+  const pairs = new Uint32Array(out);
+  edgePairsCache.set(geometry, pairs);
+  return pairs;
 }
 
 /**

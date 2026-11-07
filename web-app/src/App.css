@@ -798,6 +798,11 @@ body {
 }
 
 @container viewport (max-width: 420px) {
+  .viewport .ruler-display {
+    top: 40px;          /* UX-AUDIT-24: под «Привязкой» (она здесь — в левом верхнем углу); селектор
+                           сильнее — правило .ruler-display ниже по файлу */
+  }
+
   .snap-selector {
     top: 8px;
     left: 8px;
@@ -910,21 +915,31 @@ body {
 
 /* UX-AUDIT-16: стрелки-счётчики занимали ~15 px внутри поля 65 px и закрывали последние цифры
    («−1234.5» → «−1234.»). В покое — скрыты (значение целиком), при наведении/фокусе — видны;
-   ↑/↓ с клавиатуры работают всегда. */
-.props-input {
+   ↑/↓ с клавиатуры работают всегда.
+   UX-AUDIT-23: прятать — только «не при наведении и не в фокусе». Раньше стрелки снимались всегда
+   (`appearance: none`), а при наведении возвращались `appearance: inner-spin-button` — Chromium
+   их не возвращал, и стрелок не было вовсе. Теперь при наведении/фокусе — обычные стрелки. */
+.props-input:not(:hover):not(:focus) {
   -moz-appearance: textfield;
 }
 
-.props-input::-webkit-inner-spin-button,
+.props-input:not(:hover):not(:focus)::-webkit-inner-spin-button,
 .props-input::-webkit-outer-spin-button {
   -webkit-appearance: none;
   margin: 0;
 }
 
-.props-input:hover::-webkit-inner-spin-button,
-.props-input:focus::-webkit-inner-spin-button {
-  -webkit-appearance: inner-spin-button;
-  opacity: 0.4;
+/* Стрелки — в тон теме (иначе в тёмной — светлая системная плашка) */
+.props-input {
+  color-scheme: dark;
+}
+
+[data-theme="light"] .props-input {
+  color-scheme: light;
+}
+
+.props-input::-webkit-inner-spin-button {
+  opacity: 0.6;
 }
 
 /* ---- CSG group ---- */
@@ -1219,11 +1234,14 @@ body {
 }
 
 /* ---- Ruler display ---- */
+/* UX-AUDIT-24: было `fixed; top: 54px` по центру окна — при тулбаре в 2–3 строки (≤ 1280) плашка
+   лежала на его кнопках. Теперь — в левом верхнем углу вьюпорта (ниже тулбара любой высоты; справа
+   вверху — уведомления, по центру — «Вычисление…»); на узком вьюпорте — под «Привязкой». */
 .ruler-display {
-  position: fixed;
-  top: 54px;
-  left: 50%;
-  transform: translateX(-50%);
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  white-space: nowrap;
   background: rgba(19, 19, 31, 0.92);
   border: 1px solid rgba(250, 204, 21, 0.6);
   border-radius: 8px;
@@ -1232,7 +1250,7 @@ body {
   color: #facc15;
   z-index: 1000;
   pointer-events: none;
-  animation: fadeIn 0.2s ease;
+  animation: rulerIn 0.2s ease;    /* fadeIn центрирует (translateX −50%) — плашка больше не по центру */
 }
 
 /* FIX (LOW-18-37): Light theme adaptation for ruler display */
@@ -1240,6 +1258,18 @@ body {
   background: rgba(255, 255, 255, 0.92);
   border: 1px solid rgba(202, 138, 4, 0.6);
   color: #a16207;
+}
+
+@keyframes rulerIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes fadeIn {
@@ -1405,6 +1435,15 @@ body {
   flex-direction: column;
   gap: 6px;
   pointer-events: auto;
+}
+
+/* UX-AUDIT-30: узкий вьюпорт (окно ≤ 940 px = вьюпорт ≤ 420 px) — вверху вьюпорта «Привязка»
+   (8–33 px) и плашка линейки (40–67 px, UX-AUDIT-24): тост ниже них, а не поверх «Привязки».
+   Контейнерный запрос сюда не достаёт (тосты — в .main, не во вьюпорте) — запрос по окну. */
+@media (max-width: 940px) {
+  .toast-container {
+    top: 72px;
+  }
 }
 
 .toast {
