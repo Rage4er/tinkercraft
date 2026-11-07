@@ -7,7 +7,7 @@
 //  N — предупреждение (тост) в обеих темах читается; L — 52 фигуры, 104 шага: undo всё / redo
 //  всё, быстрое переключение вкладок / темы / гизмо, FPS.
 //  O. Текст: «Привет», «Дом», «Федя», «Hello» — буквы, без предупреждений; куб − «ДдФ» → CSG;
-//     «漢字» и emoji — предупреждение называет символы.
+//     «漢字» и emoji — предупреждение называет символы; Esc закрывает модалку из любого поля.
 //  P. Сфера ∪ / − / ∩ куб — CSG без ошибок (гладкость нормалей — __tests__/ux-audit-3.test.tsx).
 //  R. Тост: над модалкой, исчезает через ~5 с, не поверх правой панели и тулбара.
 //  S. Поле: «−1234.5» целиком на 1366, ↑ с клавиатуры меняет значение, Enter — шаг истории.
@@ -127,6 +127,16 @@ try {
   {
     const s = await session()
     const { page } = s
+    // ✅ UX-AUDIT-27: Esc закрывает модалку текста из поля «Размер» и после клика по модалке
+    for (const where of ['размер', 'клик']) {
+      await page.getByText('Текст', { exact: true }).first().click()
+      const modal = page.locator('.text-modal-backdrop'); await modal.waitFor({ timeout: 5000 })
+      if (where === 'размер') await modal.locator('input.text-modal-num').first().focus()
+      else await page.locator('.text-modal-title').click()
+      await page.keyboard.press('Escape')
+      await modal.waitFor({ state: 'detached', timeout: 3000 }).catch(() => fail(`UX-AUDIT-27: Esc (${where}) не закрыл модалку текста`))
+    }
+    ok.push('O: модалка текста закрывается по Esc из поля «Размер» и после клика по модалке (UX-AUDIT-27)')
     // O. кириллица / латиница — без предупреждений, «Текст: …» в дереве
     for (const text of ['Привет', 'Дом', 'Федя', 'Hello']) {
       const id = await s.addText(text)

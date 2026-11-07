@@ -404,10 +404,10 @@ describe('UX-AUDIT-26 — цилиндр и конус: острая кромк�
   })
 })
 
-describe('UX-AUDIT-27 — модалка «3D-текст»: Esc закрывает только из поля текста', () => {
-  // Обработчик Esc — только у поля текста (onKeyDown); фокус в «Размер»/«Глубина» или на кнопке —
-  // Esc не действует (менеджер проектов после UX-AUDIT-15 закрывается по Esc откуда угодно).
-  it.fails('ожидание: Esc в поле «Размер» и в поле «Глубина» → onClose', () => {
+describe('UX-AUDIT-27 — модалка «3D-текст»: Esc закрывает из любого поля', () => {
+  // Было: обработчик Esc — только у поля текста (onKeyDown); фокус в «Размер»/«Глубина» или на
+  // кнопке — Esc не действовал. Исправлено в fix-all-3: Esc ловится на окне (как UX-AUDIT-15).
+  it('Esc в поле «Размер» и в поле «Глубина» → onClose', () => {
     const onClose = vi.fn()
     const h = mount(<TextModal textInput="Hi" textSize={10} textDepth={2} busy={false} workerOk={true} onTextChange={noop} onSizeChange={noop} onDepthChange={noop} onAdd={noop} onClose={onClose} />)
     const nums = h.querySelectorAll<HTMLInputElement>('.text-modal-num')
@@ -417,6 +417,20 @@ describe('UX-AUDIT-27 — модалка «3D-текст»: Esc закрывае
       act(() => { el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true })) })
     }
     expect(onClose).toHaveBeenCalledTimes(2)
+  })
+  it('Esc из поля текста и без фокуса (клик по модалке) — onClose ровно один раз; Enter в поле текста — добавить', () => {
+    const onClose = vi.fn(), onAdd = vi.fn()
+    const h = mount(<TextModal textInput="Hi" textSize={10} textDepth={2} busy={false} workerOk={true} onTextChange={noop} onSizeChange={noop} onDepthChange={noop} onAdd={onAdd} onClose={onClose} />)
+    const input = h.querySelector<HTMLInputElement>('.text-modal-input')!
+    act(() => { input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })) })
+    expect(onClose).toHaveBeenCalledTimes(1)                              // не дважды (поле + окно)
+    act(() => { document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })) })
+    expect(onClose).toHaveBeenCalledTimes(2)
+    act(() => { input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })) })
+    expect(onAdd).toHaveBeenCalledTimes(1)
+    act(() => root!.unmount()); root = null
+    act(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })) })
+    expect(onClose).toHaveBeenCalledTimes(2)                              // после закрытия — слушателя нет
   })
 })
 
