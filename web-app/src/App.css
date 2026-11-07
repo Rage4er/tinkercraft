@@ -69,8 +69,9 @@ body {
 /* ---- Toolbar ---- */
 .toolbar {
   display: flex;
-  flex-wrap: nowrap;
-  /* группы НЕ переносятся — всегда одна строка */
+  flex-wrap: wrap;
+  /* UX-AUDIT-12: группы раскладывает useToolbarLayout (строки внутри групп); если и так не
+     влезает — группы переносятся на следующую строку, а не уезжают за край окна */
   align-items: stretch;
   /* все группы и разделители одной высоты */
   gap: 0;
@@ -667,6 +668,13 @@ body {
   overflow: hidden;
 }
 
+/* UX-AUDIT-12: подсказка и «Привязка» подстраиваются под ширину вьюпорта, а не окна
+   (контейнер — внешний .viewport App; у канваса Viewport3D тот же класс) */
+.main > .viewport {
+  container-type: inline-size;
+  container-name: viewport;
+}
+
 .viewport-loading {
   position: absolute;
   inset: 0;
@@ -778,6 +786,27 @@ body {
 
 [data-theme="light"] .viewport-hint {
   background: rgba(244, 244, 248, 0.9);
+}
+
+/* UX-AUDIT-12: узкий вьюпорт — подсказка не помещается (её смысл есть в подсказках кнопок),
+   «Привязка» — наверх влево без подписи, чтобы не обрезалась и не наезжала на ViewCube */
+@container viewport (max-width: 600px) {
+  .viewport-hint {
+    display: none;
+  }
+}
+
+@container viewport (max-width: 420px) {
+  .snap-selector {
+    top: 8px;
+    left: 8px;
+    right: auto;
+    bottom: auto;
+  }
+
+  .snap-label {
+    display: none;
+  }
 }
 
 /* ---- Right panel ---- */
@@ -913,6 +942,33 @@ body {
   color: var(--text-muted);
   flex-shrink: 0;
   overflow: hidden;
+}
+
+.status-item {
+  /* UX-AUDIT-12: пункт не переносится на 2 строки */
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.status-item.status-shrink {
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* UX-AUDIT-12: узкое окно — второстепенные пункты статус-бара (время CSG, версия) скрыты */
+@media (max-width: 900px) {
+  .status-optional {
+    display: none;
+  }
+}
+
+/* UX-AUDIT-12: узкое окно — у логотипа только значок */
+@media (max-width: 1200px) {
+  .toolbar-logo-text {
+    display: none;
+  }
 }
 
 .status-item strong {

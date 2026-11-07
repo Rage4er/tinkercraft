@@ -140,7 +140,7 @@ export default function Toolbar({
       role="toolbar"
       aria-label={t("toolbar.label")}
     >
-      <span className="toolbar-logo"><TCLogoIcon size={34} /> {t("app.name")}</span>
+      <span className="toolbar-logo"><TCLogoIcon size={34} /> <span className="toolbar-logo-text">{t("app.name")}</span></span>
 
       {/* Group 0: File */}
       <ToolbarRowSplit

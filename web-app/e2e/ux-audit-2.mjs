@@ -4,7 +4,8 @@
 //  J.   STL 100k треугольников − куб (клавиша X) → экспорт STL = сцене;
 //  L.   стресс: 35 фигур, ~65 шагов, undo всё / redo всё, быстрое переключение, FPS;
 //  M.   1024×768 и 768×1024: страница без горизонтальной прокрутки, палитра 320 px / 3 столбца,
-//       CSG-кнопки панели видны (тулбар шире окна — известный баг UX-AUDIT-12, не проверяется);
+//       CSG-кнопки панели видны, все кнопки тулбара в окне, «Привязка» и подсказка не обрезаны,
+//       статус-бар в одну строку (UX-AUDIT-12);
 //  N.   светлая и тёмная темы: модалки (подтверждение, текст, проекты), тост, панели — фон
 //       меняется с темой, текст читается (контраст ≥ 3).
 // Ошибок консоли нет (все сценарии). Логика тех же сценариев в сторе — __tests__/ux-audit-2.test.ts.
@@ -210,19 +211,23 @@ try {
     if (m.left !== 320 || m.cols !== 3) fail(`M ${width}: палитра ${m.left}px, ${m.cols} столбца`)
     if (!m.right) fail(`M ${width}: правая панель за краем`)
     for (const name of ['Объединение', 'Вычитание', 'Пересечение']) if (!(await panelButton(page, name).isVisible())) fail(`M ${width}: не видна кнопка панели «${name}»`)
-    // UX-AUDIT-12: все кнопки тулбара — в окне (без прокрутки), «Привязка» и подсказка вьюпорта не обрезаны
-    await knownBug('UX-AUDIT-12', `${width}×${height}: тулбар и подсказки вьюпорта`, async () => {
+    // ✅ UX-AUDIT-12: все кнопки тулбара — в окне (без прокрутки), «Привязка» и подсказка вьюпорта
+    // не обрезаны (подсказка на узком вьюпорте скрыта), статус-бар — одна строка
+    {
       const r = await page.evaluate(() => {
         const vp = document.querySelector('.viewport').getBoundingClientRect()
+        const tb = document.querySelector('[role=toolbar]').getBoundingClientRect()
         const inside = (e) => { if (!e || getComputedStyle(e).display === 'none') return true; const b = e.getBoundingClientRect(); return b.left >= vp.left - 0.5 && b.right <= vp.right + 0.5 }
+        const sb = document.querySelector('.statusbar')
         return {
-          cut: [...document.querySelectorAll('[role=toolbar] button')].filter((b) => { const q = b.getBoundingClientRect(); return q.width === 0 || q.left < 0 || q.right > window.innerWidth + 0.5 }).map((b) => b.getAttribute('aria-label')),
+          cut: [...document.querySelectorAll('[role=toolbar] button')].filter((b) => { const q = b.getBoundingClientRect(); return q.width === 0 || q.left < 0 || q.right > window.innerWidth + 0.5 || q.bottom > tb.bottom + 0.5 }).map((b) => b.getAttribute('aria-label')),
           snap: inside(document.querySelector('.snap-selector')), hint: inside(document.querySelector('.viewport-hint')),
+          statusH: Math.round(sb.getBoundingClientRect().height),
         }
       })
-      const bad = [...(r.cut.length ? [`за краем: ${r.cut.join(', ')}`] : []), ...(r.snap ? [] : ['«Привязка» обрезана']), ...(r.hint ? [] : ['подсказка обрезана'])]
-      if (bad.length) throw new Error(bad.join('; '))
-    })
+      const bad = [...(r.cut.length ? [`за краем: ${r.cut.join(', ')}`] : []), ...(r.snap ? [] : ['«Привязка» обрезана']), ...(r.hint ? [] : ['подсказка обрезана']), ...(r.statusH > 30 ? [`статус-бар ${r.statusH}px`] : [])]
+      if (bad.length) fail(`UX-AUDIT-12 ${width}×${height}: ${bad.join('; ')}`)
+    }
     // UX-AUDIT-16: значение поля видно целиком (−1234.5)
     if (width === 1024) {
       await knownBug('UX-AUDIT-16', 'поле «−1234.5»', async () => {
@@ -235,7 +240,7 @@ try {
       })
     }
     if (s.errors.length) fail(`M ${width}: ошибки консоли ` + s.errors.join(' | '))
-    ok.push(`M: ${width}×${height} — без горизонтальной прокрутки страницы, палитра 320px/3 столбца, CSG-кнопки панели видны`)
+    ok.push(`M: ${width}×${height} — без горизонтальной прокрутки страницы, палитра 320px/3 столбца, CSG-кнопки панели видны; все кнопки тулбара в окне, «Привязка» не обрезана, статус-бар в 1 строку (UX-AUDIT-12)`)
     await s.browser.close()
   }
 
