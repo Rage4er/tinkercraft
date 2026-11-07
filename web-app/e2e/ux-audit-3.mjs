@@ -15,9 +15,9 @@
 //     куб / CSG / импорт»; фильтр «CSG» прячет операции CSG.
 //  🐞 known — новые баги прогона 3 (вёрстка, только браузер), `knownBug`: ожидание обязано
 //     сейчас НЕ выполняться; выполнилось — баг исправлен, перенести проверку в ✅:
-//     UX-AUDIT-24 плашка линейки поверх тулбара (≤ 1280); UX-AUDIT-30 тост на 768 закрывает
-//     «Привязку». Исправлены (fix-all-3) — обычные проверки: UX-AUDIT-21 (долгие задачи при
-//     импорте 100k), UX-AUDIT-23 (стрелки поля при наведении и в фокусе).
+//     UX-AUDIT-30 тост на 768 закрывает «Привязку». Исправлены (fix-all-3) — обычные проверки:
+//     UX-AUDIT-21 (долгие задачи при импорте 100k), UX-AUDIT-23 (стрелки поля при наведении и
+//     в фокусе), UX-AUDIT-24 (плашка линейки — во вьюпорте, не на тулбаре и «Привязке»).
 // Ошибок консоли нет (все сценарии). Логика — __tests__/ux-audit-3.test.tsx (`it.fails`).
 // Запуск: `pnpm dev` в одном терминале, `pnpm e2e:ux-audit-3` в другом.
 // Необязательный аргумент — каталог для скриншотов: `node e2e/ux-audit-3.mjs /tmp/ux3`.
@@ -398,9 +398,9 @@ try {
     await s.browser.close()
   }
 
-  // ── 🐞 вёрстка узких окон: линейка (1024), тост и «Привязка» (768) ──
-  {
-    const s = await session({ width: 1024, height: 768 })
+  // ── ✅ UX-AUDIT-24: плашка «Расстояние» — во вьюпорте, не на тулбаре (1400, 1024) и не на «Привязке» (768) ──
+  for (const [width, height] of [[1400, 850], [1024, 768], [768, 1024]]) {
+    const s = await session({ width, height })
     const { page } = s
     await s.add('Куб')
     await s.blur(); await page.keyboard.press('Escape'); await page.keyboard.press('KeyL')
@@ -408,13 +408,14 @@ try {
     await page.mouse.click(vp.left + (vp.right - vp.left) * 0.3, vp.top + (vp.bottom - vp.top) * 0.7)
     await page.mouse.click(vp.left + (vp.right - vp.left) * 0.7, vp.top + (vp.bottom - vp.top) * 0.75)
     await page.locator('.ruler-display').waitFor({ timeout: 5000 })
-    await s.shot('ruler-1024.png')
-    // 🐞 UX-AUDIT-24: плашка «Расстояние» (fixed, top 54 px) — поверх тулбара в 2–3 строки
-    await knownBug('UX-AUDIT-24', 'плашка линейки поверх тулбара (1024)', async () => {
-      const [r, tb] = [await s.rect('.ruler-display'), await s.rect('[role=toolbar]')]
-      if (overlap(r, tb)) throw new Error(`плашка ${Math.round(r.top)}–${Math.round(r.bottom)} px, тулбар до ${Math.round(tb.bottom)} px`)
-    })
+    await s.shot(`ruler-${width}.png`)
+    const [r, tb, snap, left] = [await s.rect('.ruler-display'), await s.rect('[role=toolbar]'), await s.rect('.snap-selector'), await s.rect('.panel-left')]
+    const bad = [...(overlap(r, tb) ? ['тулбар'] : []), ...(overlap(r, snap) ? ['«Привязку»'] : []), ...(overlap(r, left) ? ['левую панель'] : [])]
+    if (bad.length) fail(`UX-AUDIT-24 ${width}: плашка «Расстояние» перекрывает ${bad.join(', ')}`)
+    if (r.left < vp.left || r.right > vp.right || r.top < vp.top) fail(`UX-AUDIT-24 ${width}: плашка за пределами вьюпорта`)
+    if (!/Расстояние: \d/.test(await page.locator('.ruler-display').innerText())) fail(`UX-AUDIT-24 ${width}: текст плашки`)
     if (s.errors.length) fail('UX-AUDIT-24: ошибки консоли ' + s.errors.join(' | '))
+    ok.push(`Q: ${width}×${height} — плашка «Расстояние» во вьюпорте, не на тулбаре${width <= 940 ? ' и не на «Привязке»' : ''} (UX-AUDIT-24)`)
     await s.browser.close()
   }
   {

@@ -404,13 +404,6 @@ export default function App() {
   return (
     <div className="app">
 
-      {/* ── Ruler distance display ── */}
-      {rulerDist !== null && (
-        <div className="ruler-display">
-          📏 {t("ruler.distance")}: <strong>{rulerDist.toFixed(2)} {t("units.mm")}</strong>
-        </div>
-      )}
-
       {/* ── Text Modal ── */}
       {showTextModal && (
         <TextModal
@@ -598,6 +591,13 @@ export default function App() {
           <div className="viewport-hint">
             {t("viewport.hint")}
           </div>
+
+          {/* ── Ruler distance display — UX-AUDIT-24: во вьюпорте (под тулбаром любой высоты) ── */}
+          {rulerDist !== null && (
+            <div className="ruler-display">
+              📏 {t("ruler.distance")}: <strong>{rulerDist.toFixed(2)} {t("units.mm")}</strong>
+            </div>
+          )}
         </div>
 
         {/* ── Правая панель ── */}

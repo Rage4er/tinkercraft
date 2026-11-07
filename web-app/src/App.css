@@ -798,6 +798,11 @@ body {
 }
 
 @container viewport (max-width: 420px) {
+  .viewport .ruler-display {
+    top: 40px;          /* UX-AUDIT-24: под «Привязкой» (она здесь — в левом верхнем углу); селектор
+                           сильнее — правило .ruler-display ниже по файлу */
+  }
+
   .snap-selector {
     top: 8px;
     left: 8px;
@@ -1229,11 +1234,14 @@ body {
 }
 
 /* ---- Ruler display ---- */
+/* UX-AUDIT-24: было `fixed; top: 54px` по центру окна — при тулбаре в 2–3 строки (≤ 1280) плашка
+   лежала на его кнопках. Теперь — в левом верхнем углу вьюпорта (ниже тулбара любой высоты; справа
+   вверху — уведомления, по центру — «Вычисление…»); на узком вьюпорте — под «Привязкой». */
 .ruler-display {
-  position: fixed;
-  top: 54px;
-  left: 50%;
-  transform: translateX(-50%);
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  white-space: nowrap;
   background: rgba(19, 19, 31, 0.92);
   border: 1px solid rgba(250, 204, 21, 0.6);
   border-radius: 8px;
@@ -1242,7 +1250,7 @@ body {
   color: #facc15;
   z-index: 1000;
   pointer-events: none;
-  animation: fadeIn 0.2s ease;
+  animation: rulerIn 0.2s ease;    /* fadeIn центрирует (translateX −50%) — плашка больше не по центру */
 }
 
 /* FIX (LOW-18-37): Light theme adaptation for ruler display */
@@ -1250,6 +1258,18 @@ body {
   background: rgba(255, 255, 255, 0.92);
   border: 1px solid rgba(202, 138, 4, 0.6);
   color: #a16207;
+}
+
+@keyframes rulerIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes fadeIn {
