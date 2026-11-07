@@ -389,7 +389,7 @@ describe('UX-AUDIT-7 — английский интерфейс без русс
   })
 })
 
-describe('UX-AUDIT-8 — целое поле «Граней» показывается дробным', () => {
+describe('UX-AUDIT-8 — целое поле «Граней» без «.0»', () => {
   const prism: SceneObject = {
     id: 'p1', shapeType: 'prism', params: { radius: 12, height: 20, sides: 6 }, color: '#94e2d5', visible: true, locked: false,
     transform: ID, vertices: new Float32Array(9), indices: new Uint32Array([0, 1, 2]),
@@ -408,10 +408,26 @@ describe('UX-AUDIT-8 — целое поле «Граней» показывае
   const sidesValue = (h: HTMLElement) =>
     Array.from(h.querySelectorAll('.props-row')).find((r) => r.querySelector('.props-label')?.textContent === i18n.t('properties.sides'))!
       .querySelector('input')!.value
-  it.fails('ожидание: «Граней 6»', () => {
+  it('«Граней 6» — без дробной части', () => {
     expect(sidesValue(panel())).toBe('6')
   })
-  it('реальность: «Граней 6.0»', () => {
-    expect(sidesValue(panel())).toBe('6.0')
+  it('целое поле: ввод 7.6 → 8 (округление), шаг 1; обычное поле — как раньше (1 знак)', () => {
+    const got: number[] = []
+    const h = mount(<NumInput label="n" unit="" integer min={3} value={6} onChange={(v) => got.push(v)} />)
+    const input = h.querySelector('input')!
+    expect(input.value).toBe('6')
+    expect(input.step).toBe('1')
+    const setValue = (v: string) => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, v)
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    }
+    act(() => { setValue('7.6') })
+    act(() => { input.dispatchEvent(new FocusEvent('focusout', { bubbles: true })) })
+    act(() => { setValue('1') })                           // меньше min — 3
+    act(() => { input.dispatchEvent(new FocusEvent('focusout', { bubbles: true })) })
+    expect(got).toEqual([8, 3])
+    unmountNow()
+    const h2 = mount(<NumInput label="X" value={6} onChange={() => {}} />)
+    expect(h2.querySelector('input')!.value).toBe('6.0')
   })
 })

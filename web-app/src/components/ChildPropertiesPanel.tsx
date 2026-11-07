@@ -114,6 +114,7 @@ export default function ChildPropertiesPanel() {
               key={`${selectedChild.nodeId}:${f.key}`}
               label={t(f.labelKey)}
               unit={f.integer ? '' : undefined}
+              integer={f.integer}
               min={f.min}
               value={node.params?.[f.key] ?? f.fallback}
               disabled={busy || check !== null}

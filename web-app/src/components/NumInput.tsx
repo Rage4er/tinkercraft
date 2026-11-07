@@ -21,6 +21,7 @@ export default function NumInput({
   min,
   max,
   step,
+  integer,
   onChange,
 }: {
   /** id поля (связь с <label>); по умолчанию `num-input-<label>` — задавайте, если метки повторяются */
@@ -33,11 +34,13 @@ export default function NumInput({
   min?: number;
   max?: number;
   step?: number;
+  /** целое поле (граней и т.п.): показ без дробной части, шаг 1, ввод округляется (UX-AUDIT-8) */
+  integer?: boolean;
   onChange: (v: number) => void;
 }) {
   const { t } = useTranslation();
   const unitLabel = unit ?? t("units.mm");
-  const decimals = step !== undefined && step > 0 && step < 1 ? Math.ceil(-Math.log10(step)) : 1;
+  const decimals = integer ? 0 : step !== undefined && step > 0 && step < 1 ? Math.ceil(-Math.log10(step)) : 1;
   const inputId = id ?? `num-input-${label}`;
   const [draft, setDraft] = useState(formatNum(value, decimals));
   useEffect(() => {
@@ -51,7 +54,7 @@ export default function NumInput({
           id={inputId}
           className="props-input"
           type="number"
-          step={step ?? 1}
+          step={integer ? 1 : step ?? 1}
           value={draft}
           disabled={disabled}
           onChange={(e) => setDraft(e.target.value)}
@@ -61,6 +64,7 @@ export default function NumInput({
               setDraft(formatNum(value, decimals));
               return;
             }
+            if (integer) v = Math.round(v);
             if (min !== undefined) v = Math.max(min, v);
             // FIX (MED-18-36): Validate max value — user can enter arbitrarily large numbers
             if (max !== undefined) v = Math.min(max, v);
