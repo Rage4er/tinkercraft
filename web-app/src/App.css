@@ -69,8 +69,9 @@ body {
 /* ---- Toolbar ---- */
 .toolbar {
   display: flex;
-  flex-wrap: nowrap;
-  /* группы НЕ переносятся — всегда одна строка */
+  flex-wrap: wrap;
+  /* UX-AUDIT-12: группы раскладывает useToolbarLayout (строки внутри групп); если и так не
+     влезает — группы переносятся на следующую строку, а не уезжают за край окна */
   align-items: stretch;
   /* все группы и разделители одной высоты */
   gap: 0;
@@ -322,6 +323,7 @@ body {
   display: flex;
   flex: 1;
   overflow: hidden;
+  position: relative;   /* UX-AUDIT-19: опора для .toast-container */
 }
 
 /* ---- Left panel ---- */
@@ -667,6 +669,13 @@ body {
   overflow: hidden;
 }
 
+/* UX-AUDIT-12: подсказка и «Привязка» подстраиваются под ширину вьюпорта, а не окна
+   (контейнер — внешний .viewport App; у канваса Viewport3D тот же класс) */
+.main > .viewport {
+  container-type: inline-size;
+  container-name: viewport;
+}
+
 .viewport-loading {
   position: absolute;
   inset: 0;
@@ -780,6 +789,27 @@ body {
   background: rgba(244, 244, 248, 0.9);
 }
 
+/* UX-AUDIT-12: узкий вьюпорт — подсказка не помещается (её смысл есть в подсказках кнопок),
+   «Привязка» — наверх влево без подписи, чтобы не обрезалась и не наезжала на ViewCube */
+@container viewport (max-width: 600px) {
+  .viewport-hint {
+    display: none;
+  }
+}
+
+@container viewport (max-width: 420px) {
+  .snap-selector {
+    top: 8px;
+    left: 8px;
+    right: auto;
+    bottom: auto;
+  }
+
+  .snap-label {
+    display: none;
+  }
+}
+
 /* ---- Right panel ---- */
 .panel-right {
   width: 200px;
@@ -856,7 +886,7 @@ body {
 }
 
 .props-input {
-  width: 65px;
+  width: 70px;  /* UX-AUDIT-16: запас под «−12345.6» */
   background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -878,8 +908,22 @@ body {
   cursor: not-allowed;
 }
 
+/* UX-AUDIT-16: стрелки-счётчики занимали ~15 px внутри поля 65 px и закрывали последние цифры
+   («−1234.5» → «−1234.»). В покое — скрыты (значение целиком), при наведении/фокусе — видны;
+   ↑/↓ с клавиатуры работают всегда. */
+.props-input {
+  -moz-appearance: textfield;
+}
+
 .props-input::-webkit-inner-spin-button,
 .props-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.props-input:hover::-webkit-inner-spin-button,
+.props-input:focus::-webkit-inner-spin-button {
+  -webkit-appearance: inner-spin-button;
   opacity: 0.4;
 }
 
@@ -913,6 +957,33 @@ body {
   color: var(--text-muted);
   flex-shrink: 0;
   overflow: hidden;
+}
+
+.status-item {
+  /* UX-AUDIT-12: пункт не переносится на 2 строки */
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.status-item.status-shrink {
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* UX-AUDIT-12: узкое окно — второстепенные пункты статус-бара (время CSG, версия) скрыты */
+@media (max-width: 900px) {
+  .status-optional {
+    display: none;
+  }
+}
+
+/* UX-AUDIT-12: узкое окно — у логотипа только значок */
+@media (max-width: 1200px) {
+  .toolbar-logo-text {
+    display: none;
+  }
 }
 
 .status-item strong {
@@ -1321,15 +1392,19 @@ body {
 
 /* ---- Toast notifications (SEC-2) ---- */
 .toast-container {
-  position: fixed;
-  top: 48px;
-  right: 12px;
+  /* UX-AUDIT-19: был fixed в правом верхнем углу окна — поверх тулбара и верха правой панели
+     (заголовок, подсказка режима выравнивания). Теперь — правый верхний угол вьюпорта:
+     левее правой панели (200 px), не шире вьюпорта (окно − 320 − 200). Над модалками
+     (z-index 999) — по-прежнему: .main не создаёт контекст наложения. */
+  position: absolute;
+  top: 8px;
+  right: 212px;
+  max-width: min(360px, calc(100% - 544px));
   z-index: 3000;
   display: flex;
   flex-direction: column;
   gap: 6px;
   pointer-events: auto;
-  max-width: 360px;
 }
 
 .toast {

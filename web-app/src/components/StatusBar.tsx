@@ -70,7 +70,7 @@ export default function StatusBar({
         </span>
       )}
       {lastCsgMs !== null && (
-        <span className="status-item">
+        <span className="status-item status-optional">
           {t("statusbar.csgTime")}&nbsp;
           <strong className={lastCsgMs < 100 ? "status-ok" : "status-warn"}>
             {lastCsgMs.toFixed(1)} {t("statusbar.ms")}
@@ -83,7 +83,7 @@ export default function StatusBar({
         </span>
       )}
       {alignMode && (
-        <span className="status-item" style={{ color: "#89b4fa" }} data-testid="align-hint">
+        <span className="status-item status-shrink" style={{ color: "#89b4fa" }} data-testid="align-hint">
           {t(alignHintKey(alignMode))}
         </span>
       )}
@@ -97,7 +97,7 @@ export default function StatusBar({
       >
         {currentLang === "en" ? "🇬🇧 EN" : "🇷🇺 RU"}
       </button>
-      <span className="status-item text-muted-xs">
+      <span className="status-item status-optional text-muted-xs">
         {t("app.name")} v{APP_VERSION}
       </span>
     </div>

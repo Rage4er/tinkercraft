@@ -5,6 +5,7 @@
 // пересчитывает при смене `objects` (дерево мутируется ДО set() в сторе).
 import type { ShapeParams, ShapeType, TreeNode } from './types'
 import { getNode } from './history-tree'
+import { getParamFields } from './child-params'
 
 /**
  * Почему узел нельзя редактировать (null — можно).
@@ -160,9 +161,22 @@ const PARAM_LABELS: Array<[keyof ShapeParams, string]> = [
   ['sides', 'n'],
 ]
 
-/** Краткая сводка параметров для строки дерева: «W20 H20 D20». */
-export function formatParams(params: ShapeParams | undefined): string {
+/**
+ * Краткая сводка параметров для строки дерева: «W20 H20 D20».
+ * UX-AUDIT-14: с `shapeType` — только параметры этой фигуры (те же поля и умолчания, что у
+ * формы правки, `getParamFields`): цилиндр старых проектов с параметрами куба (`width/height/
+ * depth`) показывается «R10 H20», а не «W20 H20 D20».
+ */
+export function formatParams(params: ShapeParams | undefined, shapeType?: ShapeType): string {
   if (!params) return ''
+  const fields = getParamFields(shapeType)
+  if (fields.length > 0) {
+    const label = Object.fromEntries(PARAM_LABELS) as Partial<Record<keyof ShapeParams, string>>
+    return fields.map((f) => {
+      const v = params[f.key]
+      return `${label[f.key]}${Math.round((typeof v === 'number' ? v : f.fallback) * 100) / 100}`
+    }).join(' ')
+  }
   const parts: string[] = []
   for (const [key, label] of PARAM_LABELS) {
     const v = params[key]

@@ -9,6 +9,16 @@
     "pyramid": "Пирамида",
     "text": "Текст"
   },
+  "shapesAcc": {
+    "cube": "куб",
+    "sphere": "сферу",
+    "cylinder": "цилиндр",
+    "cone": "конус",
+    "torus": "тор",
+    "prism": "призму",
+    "pyramid": "пирамиду",
+    "text": "текст"
+  },
   "shapesCategory": {
     "basic": "Основные",
     "special": "Особые"
@@ -152,6 +162,8 @@
     "visibility": "Видимость",
     "color": "Цвет",
     "rename": "Переименовать",
+    "paste": "Вставить {{what}}",
+    "pastedImport": "импорт",
     "csgResult": "CSG результат",
     "goToStep": "Перейти к шагу {{step}}",
     "empty": "Пусто",
@@ -290,6 +302,7 @@
       "unknownOperation": "Некорректный model.json: обнаружена операция с неизвестным типом"
     },
     "textFailed": "Не удалось создать текст: {{reason}}",
+    "textMissingGlyphs": "В шрифте нет символов «{{chars}}» — вместо них «?»",
     "textNoGlyphs": "в шрифте нет ни одного символа этой строки",
     "textBadSize": "размер и глубина должны быть больше 0",
     "editChild": {

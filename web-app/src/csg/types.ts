@@ -32,6 +32,8 @@ export interface AddShapeOperation {
   params: ShapeParams
   color: string
   transform: TransformNR
+  /** UX-AUDIT-13: объект вставлен из буфера (Ctrl+V) — в истории «Вставить …» */
+  pasted?: boolean
 }
 
 /** Импортированный STL/OBJ меш — хранит сырые вершины в истории */
@@ -43,6 +45,8 @@ export interface ImportMeshOperation {
   transform: TransformNR
   vertices: Float32Array | number[]
   indices: Uint32Array | number[]
+  /** UX-AUDIT-13: объект вставлен из буфера (Ctrl+V) — в истории «Вставить …» */
+  pasted?: boolean
 }
 
 export interface MoveOperation {
@@ -135,6 +139,8 @@ export interface GroupOperation {
    * Без поля (старые вставки) — запечённый меш, как раньше.
    */
   copyTree?: CopiedTree
+  /** UX-AUDIT-13: вставка CSG (`ids: []`) — в истории «Вставить CSG», а не «Объединение» */
+  pasted?: boolean
 }
 
 /** CSG-INDEPENDENT-COPY: снимок дерева CSG для вставки (буфер обмена → операция group). */

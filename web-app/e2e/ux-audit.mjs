@@ -312,6 +312,21 @@ try {
   ok.push('UX-AUDIT-3: куб − 3D-текст «A» → CSG-результат, без уведомлений')
   await shot('ux-text-csg.png')
 
+  // ── ✅ UX-AUDIT-18: кириллица — запасным шрифтом (без «?»), символ не из шрифта — предупреждение ──
+  {
+    const b18 = new Set(await ids())
+    await page.getByText('Текст', { exact: true }).first().click()
+    await page.locator('.text-modal-backdrop').waitFor({ timeout: 5000 })
+    await page.locator('.text-modal-backdrop input').first().fill('Ёж漢')
+    await page.locator('.text-modal-backdrop button.btn.primary').click()
+    await page.waitForFunction((k) => document.querySelectorAll('.ct-item[data-object-id]').length === k + 1, b18.size, { timeout: 15000 })
+    await page.locator('.toast-msg', { hasText: 'В шрифте нет символов «漢»' }).waitFor({ timeout: 5000 })
+      .catch(async () => fail('UX-AUDIT-18: нет предупреждения о «漢»: ' + (await toasts())))
+    if ((await toasts()).includes('Ё') || (await toasts()).includes('ж')) fail('UX-AUDIT-18: кириллица названа отсутствующей: ' + (await toasts()))
+    await page.locator('.toast').first().click().catch(() => {})
+    ok.push('UX-AUDIT-18: текст «Ёж漢» — создан (кириллица запасным шрифтом), предупреждение только о «漢»')
+  }
+
   // ── ✅ UX-AUDIT-1: автосохранение → перезагрузка → работа и история на месте, уведомление ──
   await clearScene()
   await add('Куб'); await add('Сфера')

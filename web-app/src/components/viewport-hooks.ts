@@ -17,6 +17,7 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { TransformControls } from "three/examples/jsm/controls/TransformControls.js";
 import type { SceneObject, TransformNR } from "../csg/types";
 import { computeAABB } from "../store/helpers";
+import { buildObjectGeometry } from "./object-geometry";
 import {
     findNearestSnap,
     createSnapIndicator,
@@ -559,22 +560,12 @@ export function useMeshSync(
                     existing.mesh.userData.cachedRawVertices = new Float32Array(obj.vertices);
                     existing.mesh.userData.cachedVertsHash = vertsHash;
 
-                    // FIX (CRIT-18-4): Dispose old BufferAttribute before replacing to prevent memory leak
-                    const oldPos = existing.mesh.geometry.getAttribute('position');
-                    if (oldPos) (oldPos as unknown as { dispose?: () => void }).dispose?.()
-                    const oldIdx = existing.mesh.geometry.index;
-                    if (oldIdx) (oldIdx as unknown as { dispose?: () => void }).dispose?.()
-
-                    existing.mesh.geometry.setAttribute(
-                        "position",
-                        new THREE.Float32BufferAttribute(obj.vertices, 3),
-                    );
-                    existing.mesh.geometry.setIndex(
-                        new THREE.BufferAttribute(obj.indices, 1),
-                    );
-                    existing.mesh.geometry.computeVertexNormals();
-                    existing.mesh.geometry.computeBoundingBox();
-                    existing.mesh.geometry.computeBoundingSphere();
+                    // UX-AUDIT-20: новая геометрия тем же построителем, что при создании (раньше
+                    // computeVertexNormals по всем вершинам — у куба после правки сглаживались углы).
+                    // FIX (CRIT-18-4): старая геометрия освобождается.
+                    const oldGeometry = existing.mesh.geometry;
+                    existing.mesh.geometry = buildObjectGeometry(obj);
+                    oldGeometry.dispose();
 
                     // FIX (8.5.3): geometry = vertices как есть — centerGeometry удалён.
                     // SceneObject.vertices всегда в origin (COM), pivot несёт позицию.
@@ -631,90 +622,8 @@ export function useMeshSync(
                     indexCount: obj.indices.length,
                     transform: fmtTransform(obj.transform),
                 });
-                const geometry = new THREE.BufferGeometry();
-                geometry.setAttribute(
-                    "position",
-                    new THREE.Float32BufferAttribute(obj.vertices, 3),
-                );
-                geometry.setIndex(new THREE.BufferAttribute(obj.indices, 1));
-
-                // FIX: Для flat-фигур (куб, призма, пирамида, CSG) разворачиваем
-                // индексированную геометрию в неиндексированную — каждая грань
-                // получает уникальные вершины с нормалью по нормали грани.
-                const flatShapes = ['cube', 'prism', 'pyramid'];
-                const isFlat = flatShapes.includes(obj.shapeType) || !obj.params || Object.keys(obj.params).length === 0;
-
-                if (isFlat) {
-                    // Разворачиваем: 3 уникальные вершины на треугольник
-                    // Для flat-shading нормали вычисляются по ГРАНИ (cross product
-                    // рёбер треугольника), а не берутся по вершине — иначе CSG
-                    // без normals даёт (0,1,0) на всех гранях → однотонное пятно.
-                    const numTris = obj.indices.length / 3;
-                    const flatVerts = new Float32Array(numTris * 9);
-                    const flatNormals = new Float32Array(numTris * 9);
-                    const flatIndices = new Uint32Array(numTris * 3);
-
-                    for (let t = 0; t < numTris; t++) {
-                        const i0 = obj.indices[t * 3];
-                        const i1 = obj.indices[t * 3 + 1];
-                        const i2 = obj.indices[t * 3 + 2];
-
-                        // Векторы рёбер треугольника
-                        const v0x = obj.vertices[i0 * 3], v0y = obj.vertices[i0 * 3 + 1], v0z = obj.vertices[i0 * 3 + 2];
-                        const v1x = obj.vertices[i1 * 3], v1y = obj.vertices[i1 * 3 + 1], v1z = obj.vertices[i1 * 3 + 2];
-                        const v2x = obj.vertices[i2 * 3], v2y = obj.vertices[i2 * 3 + 1], v2z = obj.vertices[i2 * 3 + 2];
-                        const e1x = v1x - v0x, e1y = v1y - v0y, e1z = v1z - v0z;
-                        const e2x = v2x - v0x, e2y = v2y - v0y, e2z = v2z - v0z;
-
-                        // Нормаль грани (cross product)
-                        let nx = e1y * e2z - e1z * e2y;
-                        let ny = e1z * e2x - e1x * e2z;
-                        let nz = e1x * e2y - e1y * e2x;
-                        const len = Math.sqrt(nx * nx + ny * ny + nz * nz);
-                        if (len > 0.0001) { nx /= len; ny /= len; nz /= len; }
-                        else { nx = 0; ny = 1; nz = 0; }
-
-                        // Копируем вершины и нормаль грани для всех 3 вершин треугольника
-                        for (let v = 0; v < 3; v++) {
-                            const dstOff = (t * 3 + v) * 3;
-                            const srcIdx = obj.indices[t * 3 + v];
-                            flatVerts[dstOff] = obj.vertices[srcIdx * 3];
-                            flatVerts[dstOff + 1] = obj.vertices[srcIdx * 3 + 1];
-                            flatVerts[dstOff + 2] = obj.vertices[srcIdx * 3 + 2];
-                            flatNormals[dstOff] = nx;
-                            flatNormals[dstOff + 1] = ny;
-                            flatNormals[dstOff + 2] = nz;
-                            flatIndices[t * 3 + v] = t * 3 + v;
-                        }
-                    }
-
-                    geometry.setAttribute("position", new THREE.Float32BufferAttribute(flatVerts, 3));
-                    geometry.setAttribute("normal", new THREE.Float32BufferAttribute(flatNormals, 3));
-                    geometry.setIndex(new THREE.BufferAttribute(flatIndices, 1));
-                } else {
-                    // Smooth shading: используем нормали из воркера (или пересчитываем)
-                    if (obj.normals && obj.normals.length > 0) {
-                        const normalizedNormals = new Float32Array(obj.normals.length);
-                        for (let i = 0; i < obj.normals.length; i += 3) {
-                            const nx = obj.normals[i];
-                            const ny = obj.normals[i + 1];
-                            const nz = obj.normals[i + 2];
-                            const length = Math.sqrt(nx * nx + ny * ny + nz * nz);
-                            if (length > 0.0001) {
-                                normalizedNormals[i] = nx / length;
-                                normalizedNormals[i + 1] = ny / length;
-                                normalizedNormals[i + 2] = nz / length;
-                            } else {
-                                normalizedNormals[i] = 0;
-                                normalizedNormals[i + 1] = 1;
-                                normalizedNormals[i + 2] = 0;
-                            }
-                        }
-                        geometry.setAttribute("normal", new THREE.Float32BufferAttribute(normalizedNormals, 3));
-                    } else {
-                        geometry.computeVertexNormals();
-                    }
-                }
+                // UX-AUDIT-20: затенение (плоское / по углу излома / гладкое) — object-geometry.ts
+                const geometry = buildObjectGeometry(obj);
 
                 const material = new THREE.MeshStandardMaterial({
                     color: obj.color,

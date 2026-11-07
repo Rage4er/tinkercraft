@@ -1,5 +1,5 @@
 // ============================================================
-// add-text — 3D-текст в сцену (UX-AUDIT-3/6/10)
+// add-text — 3D-текст в сцену (UX-AUDIT-3/6/10/18)
 // ============================================================
 //
 // Было в App.handleAddText: ошибка генерации уходила только в console.error — модалка
@@ -40,5 +40,8 @@ export async function addTextObject(
   const before = Object.keys(store.objects).length
   // ошибки построения в воркере addRawMesh сообщает сам (errors.importMeshFailed)
   await store.addRawMesh(i18n.t('textModal.objectName', { text }), mesh.vertices, mesh.indices)
-  return Object.keys(useDocumentStore.getState().objects).length > before
+  const added = Object.keys(useDocumentStore.getState().objects).length > before
+  // UX-AUDIT-18: символы не из шрифта шрифт рисует «?» — раньше молча
+  if (added && mesh.missing.length > 0) notify(i18n.t('errors.textMissingGlyphs', { chars: mesh.missing.join('') }), 'warning')
+  return added
 }

@@ -4,7 +4,8 @@
 //  J.   STL 100k треугольников − куб (клавиша X) → экспорт STL = сцене;
 //  L.   стресс: 35 фигур, ~65 шагов, undo всё / redo всё, быстрое переключение, FPS;
 //  M.   1024×768 и 768×1024: страница без горизонтальной прокрутки, палитра 320 px / 3 столбца,
-//       CSG-кнопки панели видны (тулбар шире окна — известный баг UX-AUDIT-12, не проверяется);
+//       CSG-кнопки панели видны, все кнопки тулбара в окне, «Привязка» и подсказка не обрезаны,
+//       статус-бар в одну строку (UX-AUDIT-12);
 //  N.   светлая и тёмная темы: модалки (подтверждение, текст, проекты), тост, панели — фон
 //       меняется с темой, текст читается (контраст ≥ 3).
 // Ошибок консоли нет (все сценарии). Логика тех же сценариев в сторе — __tests__/ux-audit-2.test.ts.
@@ -16,7 +17,16 @@ import { openApp, panelButton, toolbarButton, spaceShapeClick } from './helpers.
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ux-audit-2-'))
 const ok = []
+const known = []
 const fail = (msg) => { throw new Error(msg) }
+/** Известный баг (UX-AUDIT-11…20): `expectation` бросает — баг на месте; выполнилась — перенести в ✅. */
+async function knownBug(id, title, expectation) {
+  let reproduced = false
+  try { await expectation() } catch (e) { reproduced = true; known.push(`${id} ${title} — ${e.message}`) }
+  if (!reproduced) fail(`${id} (${title}): ожидание выполнилось — баг исправлен? Перенести проверку в ✅ и обновить DEVELOPMENT_PLAN`)
+}
+/** Пересекаются ли прямоугольники (DOMRect-подобные). */
+const overlap = (a, b) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom
 
 /** Сессия браузера с общими хелперами. */
 async function session(size) {
@@ -97,6 +107,8 @@ try {
     const s = await session()
     const { page } = s
     const a = await s.add('Куб'); const sp = await s.add('Сфера'); await s.setF(sp, 'num-input-pos-X', 12)
+    const added = (await page.locator('.tl-item').allInnerTexts()).slice(0, 2).map((x) => x.replace(/\s+/g, ' '))
+    if (!added[0].includes('Добавить куб') || !added[1].includes('Добавить сферу')) fail('UX-AUDIT-17: шаги истории — ' + added.join(' / '))
     const g1 = await s.union(a, sp); await s.setF(g1, 'num-input-pos-X', 5); await s.setF(g1, 'num-input-rot-Z', 20)
     const c = await s.add('Цилиндр'); await s.setF(c, 'num-input-pos-X', -8)
     const g2 = await s.union(g1, c); await s.setF(g2, 'num-input-pos-Y', 7)
@@ -105,20 +117,24 @@ try {
     const locks = await expandAll(page, g3)
     if (locks.length) fail('H: замки в дереве 3 уровней: ' + locks.join(','))
     if ((await page.locator('.ct-child').count()) !== 6) fail('H: детей в дереве ' + (await page.locator('.ct-child').count()))
+    const cylRow = (await page.locator('.ct-child', { hasText: 'Цилиндр' }).first().innerText()).replace(/\s+/g, ' ')
+    if (!cylRow.includes('R10 H20')) fail('UX-AUDIT-14: строка цилиндра в дереве — ' + cylRow)
     await editSphere(s, 15, 'H')
-    ok.push('H: CSG 3 уровней (сдвиги/поворот между уровнями) — без замков, правка сферы R12 → R15')
+    ok.push('H: CSG 3 уровней (сдвиги/поворот между уровнями) — без замков, «Добавить сферу» (UX-AUDIT-17), «Цилиндр · R10 H20» (UX-AUDIT-14), правка сферы R12 → R15')
     await s.pick(g3); await page.evaluate(() => document.activeElement?.blur())
     await page.keyboard.press('Control+c'); await page.keyboard.press('Control+v'); await s.waitRows(2)
     const cp1 = (await s.ids()).find((i) => i !== g3)
     await s.pick(cp1); await page.evaluate(() => document.activeElement?.blur())
     await page.keyboard.press('Control+c'); await page.keyboard.press('Control+v'); await s.waitRows(3)
     const cp2 = (await s.ids()).find((i) => i !== g3 && i !== cp1)
+    const pasteSteps = (await page.locator('.tl-item').allInnerTexts()).slice(-2).map((x) => x.replace(/\s+/g, ' '))
+    if (!pasteSteps.every((x) => x.includes('Вставить CSG'))) fail('UX-AUDIT-13: шаги вставки в истории — ' + pasteSteps.join(' / '))
     const locks2 = await expandAll(page, cp2)
     if (locks2.length) fail('I: замки в копии копии: ' + locks2.join(','))
     await editSphere(s, 9, 'I')
     const tri = await s.rows.evaluateAll((els) => els.map((e) => e.querySelector('.ct-tri')?.textContent))
     if (tri[0] !== tri[1] || tri[2] === tri[0]) fail('I: правка копии копии задела оригинал/первую копию или не изменила копию: ' + tri.join(' / '))
-    ok.push('I: копия копии (Ctrl+C/V ×2) — без замков, правка сферы → только копия копии')
+    ok.push('I: копия копии (Ctrl+C/V ×2) — в истории «Вставить CSG» (UX-AUDIT-13), без замков, правка сферы → только копия копии')
     if (s.errors.length) fail('H/I: ошибки консоли ' + s.errors.join(' | '))
     await s.browser.close()
   }
@@ -141,13 +157,15 @@ try {
     await page.evaluate(() => document.activeElement?.blur())
     let t = Date.now(); await page.keyboard.press('KeyX'); await s.waitRows(1, 30000)
     const tCsg = Date.now() - t
+    const lastStep = await page.locator('.tl-item').last().innerText()
+    if (!lastStep.includes('Вычитание')) fail('UX-AUDIT-11: шаг вычитания в истории — ' + lastStep.replace(/\s+/g, ' '))
     const inScene = (await s.status()).match(/Треуг\.: ([\d\s]+)/)[1].replace(/\s/g, '')
     const dl = page.waitForEvent('download'); await toolbarButton(page, 'Экспорт').click()
     const stl = path.join(tmp, 'e.stl'); await (await dl).saveAs(stl)
     const n = fs.readFileSync(stl).readUInt32LE(80)
     if (String(n) !== inScene) fail(`J: в STL ${n} треугольников, в сцене ${inScene}`)
     if (tCsg > 15000) fail(`J: вычитание 100k ${tCsg} мс`)
-    ok.push(`J: STL ${tris.length} − куб (X) за ${tCsg} мс → экспорт ${n} треугольников = сцене`)
+    ok.push(`J: STL ${tris.length} − куб (X) за ${tCsg} мс → в истории «Вычитание» (UX-AUDIT-11) → экспорт ${n} треугольников = сцене`)
 
     await s.confirmClear()
     const LABELS = ['Куб', 'Сфера', 'Цилиндр', 'Конус', 'Тор', 'Призма', 'Пирамида']
@@ -199,8 +217,35 @@ try {
     if (m.left !== 320 || m.cols !== 3) fail(`M ${width}: палитра ${m.left}px, ${m.cols} столбца`)
     if (!m.right) fail(`M ${width}: правая панель за краем`)
     for (const name of ['Объединение', 'Вычитание', 'Пересечение']) if (!(await panelButton(page, name).isVisible())) fail(`M ${width}: не видна кнопка панели «${name}»`)
+    // ✅ UX-AUDIT-12: все кнопки тулбара — в окне (без прокрутки), «Привязка» и подсказка вьюпорта
+    // не обрезаны (подсказка на узком вьюпорте скрыта), статус-бар — одна строка
+    {
+      const r = await page.evaluate(() => {
+        const vp = document.querySelector('.viewport').getBoundingClientRect()
+        const tb = document.querySelector('[role=toolbar]').getBoundingClientRect()
+        const inside = (e) => { if (!e || getComputedStyle(e).display === 'none') return true; const b = e.getBoundingClientRect(); return b.left >= vp.left - 0.5 && b.right <= vp.right + 0.5 }
+        const sb = document.querySelector('.statusbar')
+        return {
+          cut: [...document.querySelectorAll('[role=toolbar] button')].filter((b) => { const q = b.getBoundingClientRect(); return q.width === 0 || q.left < 0 || q.right > window.innerWidth + 0.5 || q.bottom > tb.bottom + 0.5 }).map((b) => b.getAttribute('aria-label')),
+          snap: inside(document.querySelector('.snap-selector')), hint: inside(document.querySelector('.viewport-hint')),
+          statusH: Math.round(sb.getBoundingClientRect().height),
+        }
+      })
+      const bad = [...(r.cut.length ? [`за краем: ${r.cut.join(', ')}`] : []), ...(r.snap ? [] : ['«Привязка» обрезана']), ...(r.hint ? [] : ['подсказка обрезана']), ...(r.statusH > 30 ? [`статус-бар ${r.statusH}px`] : [])]
+      if (bad.length) fail(`UX-AUDIT-12 ${width}×${height}: ${bad.join('; ')}`)
+    }
+    // ✅ UX-AUDIT-16: значение поля видно целиком (−1234.5) — в покое (без наведения и фокуса)
+    if (width === 1024) {
+      await s.pick(a)
+      const f = page.locator('.panel-right #num-input-pos-X'); await f.fill('-1234.5'); await f.press('Enter')
+      await page.waitForFunction(() => document.querySelector('.panel-right #num-input-pos-X')?.value === '-1234.5', null, { timeout: 5000 })
+      await page.evaluate(() => document.activeElement?.blur()); await page.mouse.move(0, 300)
+      const m = await f.evaluate((e) => ({ sw: e.scrollWidth, cw: e.clientWidth }))
+      if (m.sw > m.cw) fail(`UX-AUDIT-16: «−1234.5» обрезано: scrollWidth ${m.sw} > clientWidth ${m.cw}`)
+      ok.push(`M: поле «−1234.5» видно целиком (${m.sw} ≤ ${m.cw} px, UX-AUDIT-16)`)
+    }
     if (s.errors.length) fail(`M ${width}: ошибки консоли ` + s.errors.join(' | '))
-    ok.push(`M: ${width}×${height} — без горизонтальной прокрутки страницы, палитра 320px/3 столбца, CSG-кнопки панели видны`)
+    ok.push(`M: ${width}×${height} — без горизонтальной прокрутки страницы, палитра 320px/3 столбца, CSG-кнопки панели видны; все кнопки тулбара в окне, «Привязка» не обрезана, статус-бар в 1 строку (UX-AUDIT-12)`)
     await s.browser.close()
   }
 
@@ -209,6 +254,7 @@ try {
     const s = await session()
     const { page } = s
     await s.add('Куб'); await s.add('Сфера')
+    let toastChecked = false
     const sample = async () => {
       const read = (sel) => page.evaluate((q) => { const e = document.querySelector(q); if (!e) return null; const cs = getComputedStyle(e); return { bg: cs.backgroundColor, fg: cs.color } }, sel)
       const res = {}
@@ -219,6 +265,15 @@ try {
       await s.pick(p); await page.locator(`.ct-item[data-object-id="${q}"]`).click({ modifiers: ['Shift'] })
       await panelButton(page, 'Пересечение').click(); await page.locator('.toast').first().waitFor({ timeout: 5000 })
       res.toast = await read('.toast'); res.toastText = await read('.toast-msg')
+      // ✅ UX-AUDIT-19: тост не закрывает правую панель и тулбар — в правом верхнем углу вьюпорта
+      if (!toastChecked) {
+        toastChecked = true
+        await page.waitForTimeout(400)                       // анимация появления (translateX) закончилась
+        const r = await page.evaluate(() => ['.toast', '.panel-right', '[role=toolbar]', '.main > .viewport'].map((q) => { const b = document.querySelector(q).getBoundingClientRect(); return { left: b.left, right: b.right, top: b.top, bottom: b.bottom } }))
+        const bad = [...(overlap(r[0], r[1]) ? ['правую панель'] : []), ...(overlap(r[0], r[2]) ? ['тулбар'] : [])]
+        if (bad.length) fail('UX-AUDIT-19: тост перекрывает ' + bad.join(' и '))
+        if (r[0].left < r[3].left || r[0].right > r[3].right) fail('UX-AUDIT-19: тост выходит за вьюпорт')
+      }
       await page.locator('.toast').first().click()
       await toolbarButton(page, 'Очистить сцену').click(); await page.locator('[data-testid=confirm-modal]').waitFor()
       res.confirm = await read('[data-testid=confirm-modal]'); res.confirmText = await read('#confirm-modal-message')
@@ -228,7 +283,8 @@ try {
       await page.locator('.text-modal-backdrop').getByRole('button', { name: 'Отмена', exact: true }).click()
       await toolbarButton(page, 'Менеджер проектов').click(); await page.locator('.modal-backdrop').waitFor()
       res.pm = await read('.modal-backdrop > *')
-      await page.locator('.modal-backdrop').click({ position: { x: 5, y: 5 } })
+      await page.keyboard.press('Escape')                   // UX-AUDIT-15: Esc закрывает менеджер проектов
+      await page.locator('.modal-backdrop').waitFor({ state: 'detached', timeout: 3000 }).catch(() => fail('UX-AUDIT-15: менеджер проектов не закрылся по Esc'))
       return res
     }
     const dark = await sample()
@@ -245,12 +301,13 @@ try {
       }
     }
     if (s.errors.length) fail('N: ошибки консоли ' + s.errors.join(' | '))
-    ok.push('N: тёмная/светлая — панель, тулбар, тост, подтверждение, модалка текста, проекты: фон меняется, контраст ≥ 3')
+    ok.push('N: тёмная/светлая — панель, тулбар, тост (во вьюпорте, не поверх панели — UX-AUDIT-19), подтверждение, модалка текста, проекты (Esc, UX-AUDIT-15): фон меняется, контраст ≥ 3')
     await s.browser.close()
   }
 
   console.log('e2e ux-audit-2 OK')
   for (const x of ok) console.log('  ✅ ' + x)
+  for (const x of known) console.log('  🐞 known: ' + x)
 } catch (e) {
   console.error('e2e ux-audit-2 FAIL —', e.message)
   for (const x of ok) console.error('  ✅ ' + x)
