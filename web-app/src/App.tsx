@@ -5,6 +5,7 @@ import Viewport3D, { type GizmoMode } from "./components/Viewport3D";
 import ErrorBoundary from "./components/ErrorBoundary";
 import WebGLFallback from "./components/WebGLFallback";
 import ProjectManagerModal from "./components/ProjectManagerModal";
+import ConfirmModal from "./components/ConfirmModal";
 import ToastContainer from "./components/ToastContainer";
 import Toolbar from "./components/Toolbar";
 import TextModal from "./components/TextModal";
@@ -16,7 +17,7 @@ import StepPanel from "./components/StepPanel";
 import AlignPanel from "./components/AlignPanel";
 import { useAlignModeStore } from "./store/align-mode";
 import { useAlignModeKeys } from "./hooks/useAlignModeKeys";
-import { useDocumentStore } from "./store/document-store";
+import { useDocumentStore, canUndoClear } from "./store/document-store";
 import { useUiStore } from "./store/ui-store";
 import { useShallow } from "zustand/shallow";
 import { isWorkerReady } from "./csg/worker-client";
@@ -79,6 +80,8 @@ export default function App() {
   const [textInput, setTextInput] = useState("Text");
   const [textSize, setTextSize] = useState(10);
   const [textDepth, setTextDepth] = useState(5);
+  // UX-AUDIT-2: «Очистить сцену» — с подтверждением
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   const fitViewRef = useRef<(() => void) | null>(null);
   const resetViewRef = useRef<(() => void) | null>(null);
@@ -361,7 +364,9 @@ export default function App() {
     () => objectList.reduce((s, o) => s + o.indices.length / 3, 0),
     [objectList],
   );
-  const canUndo = historyIndex > 0;
+  // UX-AUDIT-2: сразу после «Очистить сцену» отмена возвращает документ
+  const undoClear = useDocumentStore(canUndoClear);
+  const canUndo = historyIndex > 0 || undoClear;
   const canRedo = historyIndex < operations.length;
   // CSG недоступен, если среди выбранных объектов есть non-manifold (import_mesh)
   // IMPORT-MESH-CSG: импорт (STL, 3D-текст) не блокируется по типу — замкнутость проверяет
@@ -462,6 +467,20 @@ export default function App() {
         />
       )}
 
+      {/* ── Подтверждение очистки сцены (UX-AUDIT-2) ── */}
+      {showClearConfirm && (
+        <ConfirmModal
+          title={t("confirmClear.title")}
+          message={t("confirmClear.message")}
+          confirmLabel={t("confirmClear.confirm")}
+          onConfirm={() => {
+            setShowClearConfirm(false);
+            void clearScene();
+          }}
+          onCancel={() => setShowClearConfirm(false)}
+        />
+      )}
+
       {/* ── Project Manager Modal ── */}
       {showPM && (
         <ProjectManagerModal
@@ -520,7 +539,9 @@ export default function App() {
         onAlignMode={() => (alignActive ? exitAlignMode() : startAlignMode())}
         onCsg={csgBoolean}
         onToggleTheme={() => setTheme(theme === "dark" ? "light" : "dark")}
-        onClearScene={clearScene}
+        onClearScene={() => {
+          if (objectList.length > 0 || operations.length > 0) setShowClearConfirm(true);
+        }}
       />
 
       {/* ── MAIN ── */}

@@ -88,6 +88,39 @@ async function jumpToHistoryInner(newIdx: number, actionName: string): Promise<v
   } catch (e) { setState({ busy: false }); console.error(actionName + ':', e); notify(i18n.t('errors.operationFailed', { name: actionName.toLowerCase() }), 'error') }
 }
 
+// ── UX-AUDIT-2: отмена «Очистить сцену» ──
+
+/**
+ * Можно ли отменить очистку сцены: снимок есть и после очистки ничего не сделано
+ * (история пуста). «Отменить» в UI активна при `historyIndex > 0 || canUndoClear(s)`.
+ */
+export function canUndoClear(s: Pick<DocumentStore, 'clearedDocument' | 'operations' | 'historyIndex'>): boolean {
+  return s.clearedDocument !== null && s.operations.length === 0 && s.historyIndex === 0
+}
+
+/** Вернуть документ до очистки: история (с redo), объекты, дерево, файл/проект, «не сохранено». */
+async function restoreClearedDocument(): Promise<void> {
+  const getState = useDocumentStore.getState
+  const setState = useDocumentStore.setState
+  const doc = getState().clearedDocument
+  if (!doc) return
+  setState({ busy: true })
+  try {
+    const t0 = performance.now()
+    await workerClearAll()
+    clearSnapshots()
+    const newObjects = await rebuildFromHistory(doc.operations.slice(0, doc.historyIndex))
+    rebuildBuildTree(doc.operations.slice(0, doc.historyIndex), newObjects)
+    setState({
+      operations: doc.operations, historyIndex: doc.historyIndex, objects: newObjects, selectedIds: [],
+      fileName: doc.fileName, modified: doc.modified, currentProjectId: doc.currentProjectId, currentProjectName: doc.currentProjectName,
+      clearedDocument: null, busy: false, lastCsgMs: performance.now() - t0,
+    })
+    cacheSnapshotWithTree(doc.historyIndex, newObjects)
+    invalidateMirrorCache()
+  } catch (e) { setState({ busy: false }); console.error('undo clearScene:', e); notify(i18n.t('errors.operationFailed', { name: i18n.t('actions.undo') }), 'error') }
+}
+
 // ── Загрузка старых проектов: скругление удалено (remove-fillet) ──
 
 /**
@@ -165,6 +198,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   lastCsgMs: null,
   currentProjectId: null,
   currentProjectName: null,
+  clearedDocument: null,
 
   // ── Добавить фигуру ──
   addShape: async (shapeType, params) => {
@@ -813,7 +847,11 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   undo: async () => {
     if (get().busy) return
     const { historyIndex } = get()
-    if (historyIndex === 0) return
+    if (historyIndex === 0) {
+      // UX-AUDIT-2: отмена «Очистить сцену» — вернуть документ целиком (история, redo, файл)
+      if (canUndoClear(get())) await restoreClearedDocument()
+      return
+    }
     await jumpToHistoryInner(historyIndex - 1, 'Отмена')
   },
 
@@ -835,12 +873,18 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   },
 
   // ── Clear ──
+  // UX-AUDIT-2: UI спрашивает подтверждение (ConfirmModal); документ до очистки запоминается —
+  // Ctrl+Z / «Отменить» сразу после очистки возвращает его (restoreClearedDocument).
   clearScene: async () => {
     if (get().busy) return
+    const { operations, historyIndex, objects, fileName, modified, currentProjectId, currentProjectName } = get()
+    // пустой документ: очищать нечего — прежний снимок очистки (если есть) сохраняется
+    if (operations.length === 0 && Object.keys(objects).length === 0) return
+    const clearedDocument = { operations, historyIndex, fileName, modified, currentProjectId, currentProjectName }
     await workerClearAll()
     clearSnapshots()
     clearTree()
-    set({ operations: [], historyIndex: 0, objects: {}, selectedIds: [], modified: false, fileName: null, lastCsgMs: null, currentProjectId: null, currentProjectName: null })
+    set({ operations: [], historyIndex: 0, objects: {}, selectedIds: [], modified: false, fileName: null, lastCsgMs: null, currentProjectId: null, currentProjectName: null, clearedDocument })
     invalidateMirrorCache()
     // UX-AUDIT-1: иначе при следующем старте восстановилась бы очищенная сессия
     // (эффект автосохранения пустую историю не пишет)
@@ -881,7 +925,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const ops = mig.operations
       const loadedObjects = mig.changed ? await rebuildFromHistory(ops) : newObjects
       rebuildBuildTree(ops, loadedObjects)
-      set({ operations: ops, historyIndex: ops.length, objects: loadedObjects, selectedIds: [], fileName: picked.file.name, modified: false, busy: false, lastCsgMs: performance.now() - t0, currentProjectId: null, currentProjectName: null })
+      set({ operations: ops, historyIndex: ops.length, objects: loadedObjects, selectedIds: [], fileName: picked.file.name, modified: false, busy: false, lastCsgMs: performance.now() - t0, currentProjectId: null, currentProjectName: null, clearedDocument: null })
       cacheSnapshotWithTree(ops.length, loadedObjects)
       invalidateMirrorCache()
     } catch (e) { set({ busy: false }); notify(i18n.t('errors.openFailed', { error: e }), 'error') }
@@ -1244,7 +1288,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const newObjects = await rebuildFromHistory(ops)
       rebuildBuildTree(ops, newObjects)
       // несохранённость — из записи (старые записи без поля: работа не в файле → «не сохранено»)
-      set({ operations: ops, historyIndex: idx, objects: newObjects, selectedIds: [], fileName: entry.fileName, modified: entry.modified ?? true, busy: false, lastCsgMs: performance.now() - t0 })
+      set({ operations: ops, historyIndex: idx, objects: newObjects, selectedIds: [], fileName: entry.fileName, modified: entry.modified ?? true, busy: false, lastCsgMs: performance.now() - t0, clearedDocument: null })
       cacheSnapshotWithTree(idx, newObjects)
       return true
     } catch (e) { set({ busy: false }); return false }
@@ -1290,7 +1334,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const ops = migrateLoaded(record.operations).operations
       const newObjects = await rebuildFromHistory(ops)
       rebuildBuildTree(ops, newObjects)
-      set({ operations: ops, historyIndex: ops.length, objects: newObjects, selectedIds: [], fileName: null, modified: false, busy: false, lastCsgMs: performance.now() - t0, currentProjectId: id, currentProjectName: record.name })
+      set({ operations: ops, historyIndex: ops.length, objects: newObjects, selectedIds: [], fileName: null, modified: false, busy: false, lastCsgMs: performance.now() - t0, currentProjectId: id, currentProjectName: record.name, clearedDocument: null })
       cacheSnapshotWithTree(ops.length, newObjects)
     } catch (e) { set({ busy: false }); console.error('loadFromProject:', e); notify(i18n.t('errors.loadProjectFailed'), 'error') }
   },

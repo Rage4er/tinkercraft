@@ -1681,6 +1681,17 @@ body {
   margin-top: 14px;
 }
 
+/* ---- Confirm modal (UX-AUDIT-2) ---- */
+.confirm-modal-box {
+  max-width: 380px;
+}
+
+.confirm-modal-message {
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-primary);
+}
+
 /* ---- ViewCube navigation ---- */
 .viewcube-container {
   position: absolute;

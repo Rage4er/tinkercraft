@@ -51,8 +51,11 @@ async function setPos(id, axis, value) {
   await f.fill(String(value)); await f.press('Enter')
   await page.waitForFunction((k) => document.querySelectorAll('.tl-item').length === k + 1, n, { timeout: 10000 })
 }
+/** «Очистить сцену» → подтверждение (UX-AUDIT-2) → пусто. */
 async function clearScene() {
+  if ((await rows.count()) === 0 && (await steps()) === 0) return     // очищать нечего — модалки нет
   await toolbarButton(page, 'Очистить сцену').click()
+  await page.locator('[data-testid=confirm-modal]').getByRole('button', { name: 'Очистить', exact: true }).click()
   await page.waitForFunction(() => document.querySelectorAll('.ct-item[data-object-id]').length === 0, null, { timeout: 10000 })
 }
 /** Поля панели свойств выделенного объекта: «метка=значение». */
@@ -173,12 +176,25 @@ try {
   await clearScene()
   await add('Куб'); await add('Сфера')
 
-  // UX-AUDIT-2: «Очистить сцену» — без подтверждения и без отмены
-  await knownBug('UX-AUDIT-2', '«Очистить сцену» необратима', async () => {
-    await toolbarButton(page, 'Очистить сцену').click(); await page.waitForTimeout(500)
-    const n = await rows.count()
-    if (n === 0 && await toolbarButton(page, 'Отменить').isDisabled()) throw new Error('объекты и история стёрты сразу, «Отменить» неактивна')
-  })
+  // ── ✅ UX-AUDIT-2: «Очистить сцену» — подтверждение (Отмена / Esc не очищают), Ctrl+Z возвращает ──
+  {
+    const modal = page.locator('[data-testid=confirm-modal]')
+    const hist = await page.locator('.tl-item').allInnerTexts()
+    await toolbarButton(page, 'Очистить сцену').click()
+    await modal.waitFor({ timeout: 5000 })
+    await modal.getByRole('button', { name: 'Отмена', exact: true }).click()
+    if ((await modal.count()) !== 0 || (await rows.count()) !== 2) fail('UX-AUDIT-2: «Отмена» в подтверждении очистила сцену')
+    await toolbarButton(page, 'Очистить сцену').click(); await modal.waitFor({ timeout: 5000 })
+    await page.keyboard.press('Escape'); await page.waitForTimeout(200)
+    if ((await modal.count()) !== 0 || (await rows.count()) !== 2) fail('UX-AUDIT-2: Esc в подтверждении очистил сцену')
+    await clearScene()
+    if (await toolbarButton(page, 'Отменить').isDisabled()) fail('UX-AUDIT-2: после очистки «Отменить» неактивна')
+    await page.keyboard.press('Control+z')
+    await page.waitForFunction(() => document.querySelectorAll('.ct-item[data-object-id]').length === 2, null, { timeout: 10000 })
+    if (JSON.stringify(await page.locator('.tl-item').allInnerTexts()) !== JSON.stringify(hist)) fail('UX-AUDIT-2: история после отмены очистки другая')
+    if (!(await status()).includes('Не сохранено')) fail('UX-AUDIT-2: после отмены очистки нет «Не сохранено»')
+    ok.push('UX-AUDIT-2: «Очистить сцену» — подтверждение (Отмена, Esc), Ctrl+Z возвращает объекты и историю')
+  }
 
   // UX-AUDIT-5: горячие клавиши из подсказок не работают (Tab, L, U, M; по коду — ещё N, B, X, I)
   const a5 = await add('Куб'); const b5 = await add('Сфера')

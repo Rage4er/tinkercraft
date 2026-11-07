@@ -42,7 +42,8 @@ import fontData from 'three/examples/fonts/helvetiker_regular.typeface.json'
 import i18n from '../i18n'
 import NumInput from '../components/NumInput'
 import PropertiesPanel from '../components/PropertiesPanel'
-import { useDocumentStore } from '../store/document-store'
+import ConfirmModal from '../components/ConfirmModal'
+import { useDocumentStore, canUndoClear } from '../store/document-store'
 import { useNotifications } from '../store/notifications'
 import { clearSnapshots } from '../store/snapshots'
 import { clearTree } from '../csg/history-tree'
@@ -60,7 +61,7 @@ beforeAll(() => {
 })
 /** Пустой документ — как после перезагрузки страницы (стор, снимки, дерево). */
 function freshDocument(): void {
-  useDocumentStore.setState({ objects: {}, operations: [], historyIndex: 0, selectedIds: [], busy: false, modified: false, fileName: null })
+  useDocumentStore.setState({ objects: {}, operations: [], historyIndex: 0, selectedIds: [], busy: false, modified: false, fileName: null, clearedDocument: null })
   clearSnapshots(); clearTree()
 }
 beforeEach(async () => {
@@ -177,27 +178,64 @@ describe('UX-AUDIT-1 — автосохранение восстанавлива
   })
 })
 
-describe('UX-AUDIT-2 — «Очистить сцену» без подтверждения и без отмены', () => {
+describe('UX-AUDIT-2 — «Очистить сцену»: подтверждение и отмена', () => {
   async function scene(): Promise<void> {
     await shape('cube', { width: 20, height: 20, depth: 20 }, at(0))
     await shape('sphere', { radius: 8, segments: 16 }, at(30))
   }
-  it.fails('ожидание: после «Очистить сцену» Ctrl+Z возвращает объекты', async () => {
+  it('после «Очистить сцену» Ctrl+Z возвращает объекты, историю (с redo) и «не сохранено»', async () => {
     await scene()
+    const ids = Object.keys(st().objects).sort()
+    await st().undo()                                      // в истории есть шаг для redo
+    const ops = st().operations.length, idx = st().historyIndex
+    expect(idx).toBe(ops - 1)
+    await st().clearScene()
+    expect(Object.keys(st().objects)).toHaveLength(0)
+    expect(canUndoClear(st())).toBe(true)
+    await st().undo()
+    expect(Object.keys(st().objects).sort()).toEqual(ids)
+    expect(st().operations).toHaveLength(ops)
+    expect(st().historyIndex).toBe(idx)
+    expect(st().modified).toBe(true)
+    expect(canUndoClear(st())).toBe(false)
+    await st().redo()                                      // redo после восстановления работает
+    expect(st().historyIndex).toBe(ops)
+    expect(st().objects[ids[1]].transform.x).toBeCloseTo(30, 4)
+  })
+  it('после очистки сделано действие — отмена очистки больше недоступна', async () => {
+    await scene()
+    await st().clearScene()
+    const cube = await shape('cube', { width: 5, height: 5, depth: 5 }, at(0))
+    expect(canUndoClear(st())).toBe(false)
+    await st().undo()                                      // отменяет новый куб
+    expect(Object.keys(st().objects)).toHaveLength(0)
+    await st().undo()                                      // дальше отменять нечего — документ до очистки не возвращается
+    expect(Object.keys(st().objects)).toHaveLength(0)
+    expect(st().operations).toHaveLength(1)
+    expect(st().operations[0]).toMatchObject({ type: 'add_shape', id: cube })
+  })
+  it('очистка пустой сцены — no-op, снимок прежней очистки сохраняется', async () => {
+    await scene()
+    await st().clearScene()
     await st().clearScene()
     await st().undo()
     expect(Object.keys(st().objects)).toHaveLength(2)
   })
-  it('реальность: объекты, история и признак «не сохранено» стёрты — отменять нечего', async () => {
-    await scene()
-    expect(st().modified).toBe(true)
-    await st().clearScene()
-    expect(Object.keys(st().objects)).toHaveLength(0)
-    expect(st().operations).toHaveLength(0)
-    expect(st().historyIndex).toBe(0)
-    expect(st().modified).toBe(false)                      // «● Не сохранено» пропадает при потере работы
-    await st().undo()
-    expect(Object.keys(st().objects)).toHaveLength(0)
+  it('ConfirmModal: «Отмена» и Esc не подтверждают, «Очистить» подтверждает; клавиши не уходят наружу', () => {
+    const onConfirm = vi.fn(), onCancel = vi.fn(), outer = vi.fn()
+    window.addEventListener('keydown', outer)
+    const h = mount(<ConfirmModal title="T" message="M" confirmLabel="Очистить" onConfirm={onConfirm} onCancel={onCancel} />)
+    const [confirm, cancel] = Array.from(h.querySelectorAll('button'))
+    expect(document.activeElement).toBe(cancel)            // фокус на безопасной кнопке
+    act(() => { cancel.click() })
+    expect(onCancel).toHaveBeenCalledTimes(1)
+    act(() => { cancel.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })) })
+    expect(onCancel).toHaveBeenCalledTimes(2)
+    act(() => { cancel.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', code: 'Delete', bubbles: true })) })
+    expect(outer).not.toHaveBeenCalled()                   // Delete/Ctrl+Z под модалкой не срабатывают
+    act(() => { confirm.click() })
+    expect(onConfirm).toHaveBeenCalledTimes(1)
+    window.removeEventListener('keydown', outer)
   })
 })
 

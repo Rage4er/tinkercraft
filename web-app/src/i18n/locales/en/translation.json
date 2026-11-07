@@ -288,6 +288,11 @@
       "failed": "Could not recompute the history (step {{step}})"
     }
   },
+  "confirmClear": {
+    "title": "Clear the scene?",
+    "message": "All objects and the history will be removed. You can undo it right after clearing (Ctrl+Z).",
+    "confirm": "Clear"
+  },
   "autosave": {
     "restored": "Previous session restored"
   },
