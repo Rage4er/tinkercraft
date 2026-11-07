@@ -247,6 +247,31 @@ try {
     await s.browser.close()
   }
 
+  // ── ✅ UX-AUDIT-21: импорт 100k в сцене — правка другого объекта без долгих задач ──
+  {
+    const s = await session()
+    const { page } = s
+    const R = 30, rings = 225, segs = 224
+    const P = (i, j) => { const th = Math.PI * i / rings, ph = 2 * Math.PI * j / segs; return [R * Math.sin(th) * Math.cos(ph), R * Math.sin(th) * Math.sin(ph), R * Math.cos(th)] }
+    const tris = []
+    for (let i = 0; i < rings; i++) for (let j = 0; j < segs; j++) { const a = P(i, j), b = P(i + 1, j), c = P(i + 1, j + 1), d = P(i, j + 1); if (i !== 0) tris.push([a, b, d]); if (i !== rings - 1) tris.push([b, c, d]) }
+    const buf = Buffer.alloc(84 + tris.length * 50); buf.writeUInt32LE(tris.length, 80)
+    tris.forEach((tt, q) => tt.flat().forEach((v, m) => buf.writeFloatLE(v, 84 + q * 50 + 12 + m * 4)))
+    const big = path.join(tmp, 'big.stl'); fs.writeFileSync(big, buf)
+    await s.importStl(big)
+    const cube = await s.add('Куб')
+    await s.pick(cube); await page.waitForTimeout(800)
+    await page.evaluate(() => { window.__lt = []; new PerformanceObserver((l) => { for (const e of l.getEntries()) window.__lt.push(Math.round(e.duration)) }).observe({ type: 'longtask' }) })
+    for (let k = 0; k < 4; k++) await s.setF(cube, 'num-input-pos-Y', 40 + k * 5)
+    await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))))
+    const long = await page.evaluate(() => window.__lt.filter((d) => d >= 120))
+    // было: каждая правка — долгая задача 155–194 мс (пересборка нормалей и рёбер импорта); GC — допускаем одну
+    if (long.length > 1) fail(`UX-AUDIT-21: правки куба при импорте 100k — долгие задачи ${long.join(', ')} мс`)
+    if (s.errors.length) fail('UX-AUDIT-21: ошибки консоли ' + s.errors.join(' | '))
+    ok.push(`UX-AUDIT-21: импорт ${tris.length} в сцене — 4 правки куба без долгих задач ≥ 120 мс (${long.length ? long.join(', ') + ' мс' : 'нет'})`)
+    await s.browser.close()
+  }
+
   // ── L: стресс — 52 фигуры, 104 шага, undo всё / redo всё, переключения; консоль чистая ──
   {
     const s = await session()

@@ -275,13 +275,13 @@ describe('UX-прогон 3 — T. История после UX-AUDIT-11/13', ()
 // 🐞 Новые баги прогона 3 (логика) — it.fails «ожидание»
 // ════════════════════════════════════════════════════════════
 
-describe('UX-AUDIT-21 — CSG и импорт: геометрия вьюпорта пересобирается при любом изменении сцены', () => {
-  // UX-AUDIT-20 дал CSG/импорту неиндексированную геометрию (toCreasedNormals), а проверка
-  // «вершины изменились» в useMeshSync сравнивает obj.indices.length с geometry.index?.count
-  // (= 0) → всегда «изменились»: нормали по излому и рёбра пересчитываются на каждый рендер.
-  // В браузере: импорт 100k в сцене → сдвиг другого куба — долгая задача 155–194 мс (без
-  // импорта ≈ 45 мс).
-  it.fails('ожидание: сдвиг другого объекта не пересобирает геометрию CSG и импорта', async () => {
+describe('UX-AUDIT-21 — CSG и импорт: геометрия вьюпорта не пересобирается при чужих изменениях', () => {
+  // Было: UX-AUDIT-20 дал CSG/импорту неиндексированную геометрию (toCreasedNormals), а проверка
+  // «вершины изменились» в useMeshSync сравнивала obj.indices.length с geometry.index?.count
+  // (= 0) → всегда «изменились»: нормали по излому и рёбра пересчитывались на каждый рендер
+  // (импорт 100k в сцене → сдвиг другого куба — долгая задача 155–194 мс). Исправлено в
+  // fix-all-3: сверка с источником геометрии (userData меша, пишется и при создании).
+  it('сдвиг другого объекта не пересобирает геометрию CSG и импорта (и куба — уже с первого раза)', async () => {
     const g = await cubeSphere('union')
     const imp = await rawMesh('box.stl', 20, at(60))
     const c = await shape('cube', { width: 20, height: 20, depth: 20 }, at(-60))
@@ -291,11 +291,31 @@ describe('UX-AUDIT-21 — CSG и импорт: геометрия вьюпорт
       act(() => root!.render(<Harness objects={Object.values(st().objects)} />))
       return [lastMap!.get(g)!.mesh.geometry, lastMap!.get(imp)!.mesh.geometry, lastMap!.get(c)!.mesh.geometry]
     }
-    const before = await step(-70)         // первый сдвиг — кэш вершин заполнен
+    const created = [lastMap!.get(g)!.mesh.geometry, lastMap!.get(imp)!.mesh.geometry, lastMap!.get(c)!.mesh.geometry]
+    const before = await step(-70)
     const after = await step(-80)
-    expect(after[2]).toBe(before[2])        // куб (индексированная плоская геометрия) — не пересобран
-    expect(after[0]).toBe(before[0])        // CSG — пересобран (баг)
-    expect(after[1]).toBe(before[1])        // импорт — пересобран (баг)
+    expect(before).toEqual(created)         // первое обновление — тоже без пересборки
+    expect(after[2]).toBe(before[2])        // куб
+    expect(after[0]).toBe(before[0])        // CSG
+    expect(after[1]).toBe(before[1])        // импорт
+    // UX-AUDIT-20 не сломан: геометрия CSG — по излому (гладкая сфера), правка самого CSG — пересобирает
+    expect(after[0].getAttribute('normal')).toBeTruthy()
+  })
+  it('правка самого объекта (размер куба, CSG после правки ребёнка) — геометрия пересобирается', async () => {
+    const c = await shape('cube', { width: 20, height: 20, depth: 20 }, at(0))
+    mount(<Harness objects={Object.values(st().objects)} />)
+    const g0 = lastMap!.get(c)!.mesh.geometry
+    await st().resizeObject(c, { width: 30 })
+    act(() => root!.render(<Harness objects={Object.values(st().objects)} />))
+    const g1 = lastMap!.get(c)!.mesh.geometry
+    expect(g1).not.toBe(g0)
+    g1.computeBoundingBox()
+    expect(g1.boundingBox!.max.x).toBeCloseTo(15, 3)
+    // та же длина массивов, другие значения — тоже пересборка (хэш вершин)
+    const obj = st().objects[c]
+    const moved = { ...obj, vertices: obj.vertices.map((v, i) => (i % 3 === 2 ? v + 1 : v)) }
+    act(() => root!.render(<Harness objects={[moved]} />))
+    expect(lastMap!.get(c)!.mesh.geometry).not.toBe(g1)
   })
 })
 
