@@ -67,7 +67,7 @@ import { devLog, devWarn, devLogCsg, devLogStore } from '../utils/debug'
 // ── Shared undo/redo/jumpToHistory helper — FIX (MED-18-1): eliminates ~90 lines of duplication ──
 
 /** Internal helper: rebuilds scene from history up to the given index. */
-async function jumpToHistoryInner(newIdx: number, actionName: string): Promise<void> {
+async function jumpToHistoryInner(newIdx: number, action: 'undo' | 'redo' | 'jump'): Promise<void> {
   const getState = useDocumentStore.getState
   const setState = useDocumentStore.setState
   setState({ busy: true })
@@ -85,7 +85,7 @@ async function jumpToHistoryInner(newIdx: number, actionName: string): Promise<v
     }
     setState({ historyIndex: newIdx, objects: newObjects, selectedIds: [], busy: false, lastCsgMs: performance.now() - t0 })
     invalidateMirrorCache()
-  } catch (e) { setState({ busy: false }); console.error(actionName + ':', e); notify(i18n.t('errors.operationFailed', { name: actionName.toLowerCase() }), 'error') }
+  } catch (e) { setState({ busy: false }); console.error(`jumpToHistory (${action}):`, e); notify(i18n.t('errors.operationFailed', { name: i18n.t(`errors.historyAction.${action}`) }), 'error') }
 }
 
 // ── UX-AUDIT-2: отмена «Очистить сцену» ──
@@ -118,7 +118,7 @@ async function restoreClearedDocument(): Promise<void> {
     })
     cacheSnapshotWithTree(doc.historyIndex, newObjects)
     invalidateMirrorCache()
-  } catch (e) { setState({ busy: false }); console.error('undo clearScene:', e); notify(i18n.t('errors.operationFailed', { name: i18n.t('actions.undo') }), 'error') }
+  } catch (e) { setState({ busy: false }); console.error('undo clearScene:', e); notify(i18n.t('errors.operationFailed', { name: i18n.t('errors.historyAction.undo') }), 'error') }
 }
 
 // ── Загрузка старых проектов: скругление удалено (remove-fillet) ──
@@ -863,7 +863,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       if (canUndoClear(get())) await restoreClearedDocument()
       return
     }
-    await jumpToHistoryInner(historyIndex - 1, 'Отмена')
+    await jumpToHistoryInner(historyIndex - 1, 'undo')
   },
 
   // ── Redo ──
@@ -871,7 +871,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     if (get().busy) return
     const { historyIndex, operations } = get()
     if (historyIndex >= operations.length) return
-    await jumpToHistoryInner(historyIndex + 1, 'Повтор')
+    await jumpToHistoryInner(historyIndex + 1, 'redo')
   },
 
   // ── Jump to history ──
@@ -880,7 +880,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const { historyIndex, operations } = get()
     const newIdx = Math.max(0, Math.min(index, operations.length))
     if (newIdx === historyIndex) return
-    await jumpToHistoryInner(newIdx, 'Переход в истории')
+    await jumpToHistoryInner(newIdx, 'jump')
   },
 
   // ── Clear ──
@@ -1311,7 +1311,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const ops = operations.slice(0, historyIndex)
     const count = Object.keys(objects).length
     // If project already has an ID, update it. Use existing name if name is empty.
-    const effectiveName = name || currentProjectName || 'Без названия'
+    const effectiveName = name || currentProjectName || i18n.t('projectManager.untitled')
     try {
       // Check for name conflicts with other projects
       const all = await pmList()

@@ -309,6 +309,22 @@ try {
   if ((await rows.count()) !== 0) fail('UX-AUDIT-1: после «Очистить сцену» и перезагрузки вернулась очищенная сессия')
   ok.push(`UX-AUDIT-1: автосохранение (${saved} оп.) → перезагрузка → 2 объекта, история, уведомление; очистка → пусто`)
 
+  // ── ✅ UX-AUDIT-7: английский интерфейс (выделенный куб, панель свойств, статус) — без кириллицы ──
+  {
+    await page.evaluate(() => localStorage.setItem('i18nextLng', 'en'))
+    await page.reload({ waitUntil: 'load' })
+    await page.waitForSelector('canvas', { timeout: 20000 })
+    await page.waitForFunction(() => !document.body.innerText.includes('Loading CSG'), null, { timeout: 30000 })
+    await page.getByText('Cube', { exact: true }).first().click()
+    await page.waitForFunction(() => /Objects: 1/.test(document.querySelector('.statusbar')?.textContent ?? ''), null, { timeout: 15000 })
+    await page.locator('button.tab-btn', { hasText: 'Tree' }).click()
+    await page.locator('.ct-item[data-object-id]').first().click(); await page.waitForTimeout(300)
+    const cyr = await page.evaluate(() => document.body.innerText.split('\n').filter((l) => /[А-Яа-яЁё]/.test(l)))
+    if (cyr.length) fail('UX-AUDIT-7: русские строки в английском интерфейсе: ' + cyr.join(' | '))
+    await shot('ux-en.png')
+    ok.push('UX-AUDIT-7: английский интерфейс (куб выделен, свойства, статус) — без кириллицы')
+  }
+
   if (errors.length) fail('ошибки в консоли:\n' + errors.join('\n'))
   console.log('e2e ux-audit OK')
   for (const s of ok) console.log('  ✅ ' + s)

@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 
 /**
  * Значение поля для показа без «-0.0» (UX-NUMINPUT): если после округления до
@@ -16,7 +17,7 @@ export default function NumInput({
   label,
   value,
   disabled,
-  unit = "мм",
+  unit,
   min,
   max,
   step,
@@ -27,12 +28,15 @@ export default function NumInput({
   label: string;
   value: number;
   disabled?: boolean;
+  /** единица у поля; по умолчанию — «мм» на языке интерфейса (UX-AUDIT-7) */
   unit?: string;
   min?: number;
   max?: number;
   step?: number;
   onChange: (v: number) => void;
 }) {
+  const { t } = useTranslation();
+  const unitLabel = unit ?? t("units.mm");
   const decimals = step !== undefined && step > 0 && step < 1 ? Math.ceil(-Math.log10(step)) : 1;
   const inputId = id ?? `num-input-${label}`;
   const [draft, setDraft] = useState(formatNum(value, decimals));
@@ -71,7 +75,7 @@ export default function NumInput({
           }}
         />
         <span className="num-label">
-          {unit}
+          {unitLabel}
         </span>
       </div>
     </div>

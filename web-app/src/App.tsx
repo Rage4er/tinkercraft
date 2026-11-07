@@ -408,7 +408,7 @@ export default function App() {
       {/* ── Ruler distance display ── */}
       {rulerDist !== null && (
         <div className="ruler-display">
-          📏 Расстояние: <strong>{rulerDist.toFixed(2)} мм</strong>
+          📏 {t("ruler.distance")}: <strong>{rulerDist.toFixed(2)} {t("units.mm")}</strong>
         </div>
       )}
 
@@ -544,14 +544,14 @@ export default function App() {
                 className="spinner"
                 style={{ width: 14, height: 14, borderWidth: 2 }}
               />
-              Вычисление…
+              {t("viewportStatus.computing")}
             </div>
           )}
           {!workerOk && (
             <div className="viewport-loading">
               <div className="spinner" />
               <span style={{ color: "var(--text-muted)", fontSize: 13 }}>
-                Загрузка CSG (WASM)…
+                {t("viewportStatus.loadingCsg")}
               </span>
             </div>
           )}

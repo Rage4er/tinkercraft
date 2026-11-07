@@ -40,6 +40,8 @@ import i18n from '../i18n'
 import NumInput from '../components/NumInput'
 import PropertiesPanel from '../components/PropertiesPanel'
 import ConfirmModal from '../components/ConfirmModal'
+import TextModal from '../components/TextModal'
+import WebGLFallback from '../components/WebGLFallback'
 import { displayName } from '../components/ComponentTree'
 import { useDocumentStore, canUndoClear } from '../store/document-store'
 import { useNotifications } from '../store/notifications'
@@ -88,11 +90,12 @@ function mount(el: React.ReactElement): HTMLDivElement {
   act(() => root!.render(el))
   return host
 }
-afterEach(() => {
+function unmountNow(): void {
   act(() => root?.unmount())
   host?.remove()
   root = null; host = null
-})
+}
+afterEach(unmountNow)
 
 async function shape(type: ShapeType, params: ShapeParams, t: TransformNR): Promise<string> {
   const before = new Set(Object.keys(st().objects))
@@ -351,16 +354,38 @@ describe('UX-AUDIT-6 — 3D-текст в дереве называется «Т
   })
 })
 
-describe('UX-AUDIT-7 — в английском интерфейсе единица «мм»', () => {
-  it.fails('ожидание: en — единица поля «mm»', async () => {
+describe('UX-AUDIT-7 — английский интерфейс без русских строк', () => {
+  const CYR = /[А-Яа-яЁё]/
+  it('en — единица поля «mm», ru — «мм»; явная единица не меняется', async () => {
     await i18n.changeLanguage('en')
-    const h = mount(<NumInput label="X" value={1} onChange={() => {}} />)
+    let h = mount(<NumInput label="X" value={1} onChange={() => {}} />)
     expect(h.querySelector('.num-label')!.textContent).toBe('mm')
-  })
-  it('реальность: en — «мм» (значение по умолчанию NumInput зашито по-русски)', async () => {
-    await i18n.changeLanguage('en')
-    const h = mount(<NumInput label="X" value={1} onChange={() => {}} />)
+    unmountNow()
+    await i18n.changeLanguage('ru')
+    h = mount(<NumInput label="X" value={1} onChange={() => {}} />)
     expect(h.querySelector('.num-label')!.textContent).toBe('мм')
+    unmountNow()
+    h = mount(<NumInput label="rotX" unit="°" value={1} onChange={() => {}} />)
+    expect(h.querySelector('.num-label')!.textContent).toBe('°')
+  })
+  it('en — модалка текста, подтверждение очистки, экран «нет WebGL» без кириллицы', async () => {
+    await i18n.changeLanguage('en')
+    const noop = (): void => {}
+    for (const el of [
+      <TextModal key="t" textInput="Hi" textSize={10} textDepth={5} busy={false} workerOk onTextChange={noop} onSizeChange={noop} onDepthChange={noop} onAdd={noop} onClose={noop} />,
+      <ConfirmModal key="c" title={i18n.t('confirmClear.title')} message={i18n.t('confirmClear.message')} confirmLabel={i18n.t('confirmClear.confirm')} onConfirm={noop} onCancel={noop} />,
+      <WebGLFallback key="w" />,
+    ]) {
+      const h = mount(el)
+      expect(h.textContent!.length).toBeGreaterThan(5)
+      expect(h.textContent).not.toMatch(CYR)
+      unmountNow()
+    }
+  })
+  it('en — ошибка отмены/повтора в уведомлении без русского названия действия', async () => {
+    await i18n.changeLanguage('en')
+    expect(i18n.t('errors.operationFailed', { name: i18n.t('errors.historyAction.undo') })).toBe('Operation failed: undo')
+    expect(i18n.t('viewportStatus.loadingCsg')).toBe('Loading CSG (WASM)…')
   })
 })
 

@@ -214,6 +214,7 @@
     "hint": "LMB — select · Shift — multi · Drag — box · RMB — orbit · F — Fit View · H — Home View · G/R/S — gizmo"
   },
   "projectManager": {
+    "untitled": "Untitled",
     "title": "Project Manager",
     "saveCurrentScene": "Save current scene",
     "projectName": "Project name",
@@ -269,6 +270,24 @@
     "extrudeFailed": "Extrusion failed",
     "operationFailed": "Operation failed: {{name}}",
     "saveFailed": "Failed to save project",
+    "stlTooSmallFile": "STL: the file is too small",
+    "projectNotFound": "Project not found (id {{id}})",
+    "historyAction": {
+      "undo": "undo",
+      "redo": "redo",
+      "jump": "history jump"
+    },
+    "file": {
+      "tooDeep": "Invalid model.json: nesting is too deep (>{{max}}) at \"{{path}}\"",
+      "unsafeKey": "Invalid model.json: unsafe key \"{{key}}\" at \"{{path}}\"",
+      "tooLarge": "Invalid .3dtc: size {{size}} bytes exceeds the limit of {{max}} bytes",
+      "noModel": "Invalid .3dtc: model.json not found",
+      "notString": "Invalid model.json: not a string",
+      "jsonTooLarge": "Invalid model.json: size {{size}} bytes exceeds the limit of {{max}} bytes",
+      "badVersion": "Unsupported format version \"{{version}}\". Expected \"{{expected}}\".",
+      "noOperations": "Invalid model.json: the operations array is missing",
+      "unknownOperation": "Invalid model.json: an operation of unknown type"
+    },
     "editChild": {
       "notFound": "CSG object or its component was not found",
       "notEditable": "This component cannot be edited (baked or mirrored)",
@@ -294,6 +313,21 @@
     "title": "Clear the scene?",
     "message": "All objects and the history will be removed. You can undo it right after clearing (Ctrl+Z).",
     "confirm": "Clear"
+  },
+  "units": {
+    "mm": "mm"
+  },
+  "ruler": {
+    "distance": "Distance"
+  },
+  "viewportStatus": {
+    "loadingCsg": "Loading CSG (WASM)…",
+    "computing": "Computing…"
+  },
+  "webgl": {
+    "title": "WebGL is not available",
+    "message": "This environment does not support WebGL (headless or software rendering). Open the app in a browser with hardware acceleration for full 3D rendering.",
+    "hint": "The CSG engine and the rest of the UI work correctly."
   },
   "autosave": {
     "restored": "Previous session restored"

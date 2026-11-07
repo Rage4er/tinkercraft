@@ -214,6 +214,7 @@
     "hint": "ЛКМ — выбор · Shift — мульти · Drag — рамка · ПКМ — вид · F — Вписать в экран · H — Обзор · G/R/S — гизмо"
   },
   "projectManager": {
+    "untitled": "Без названия",
     "title": "Менеджер проектов",
     "saveCurrentScene": "Сохранить текущую сцену",
     "projectName": "Имя проекта",
@@ -270,6 +271,24 @@
     "extrudeFailed": "Ошибка экструзии",
     "operationFailed": "Ошибка: {{name}}",
     "saveFailed": "Ошибка сохранения проекта",
+    "stlTooSmallFile": "STL: файл слишком мал",
+    "projectNotFound": "Проект не найден (id {{id}})",
+    "historyAction": {
+      "undo": "отмена",
+      "redo": "повтор",
+      "jump": "переход в истории"
+    },
+    "file": {
+      "tooDeep": "Некорректный model.json: слишком глубокая вложенность (>{{max}}) по пути \"{{path}}\"",
+      "unsafeKey": "Некорректный model.json: обнаружен небезопасный ключ \"{{key}}\" по пути \"{{path}}\"",
+      "tooLarge": "Некорректный .3dtc: размер {{size}} байт превышает лимит {{max}} байт",
+      "noModel": "Некорректный .3dtc: model.json не найден",
+      "notString": "Некорректный model.json: не является строкой",
+      "jsonTooLarge": "Некорректный model.json: размер {{size}} байт превышает лимит {{max}} байт",
+      "badVersion": "Неподдерживаемая версия формата \"{{version}}\". Ожидается \"{{expected}}\".",
+      "noOperations": "Некорректный model.json: отсутствует массив operations",
+      "unknownOperation": "Некорректный model.json: обнаружена операция с неизвестным типом"
+    },
     "editChild": {
       "notFound": "Объект CSG или его компонент не найден",
       "notEditable": "Этот компонент нельзя править (запечённый или зеркальный)",
@@ -295,6 +314,21 @@
     "title": "Очистить сцену?",
     "message": "Все объекты и история будут удалены. Сразу после очистки её можно отменить (Ctrl+Z).",
     "confirm": "Очистить"
+  },
+  "units": {
+    "mm": "мм"
+  },
+  "ruler": {
+    "distance": "Расстояние"
+  },
+  "viewportStatus": {
+    "loadingCsg": "Загрузка CSG (WASM)…",
+    "computing": "Вычисление…"
+  },
+  "webgl": {
+    "title": "WebGL недоступен",
+    "message": "Это окружение не поддерживает WebGL (headless или software rendering). Откройте приложение в браузере с аппаратным ускорением для полной 3D-визуализации.",
+    "hint": "CSG движок и остальной UI работают корректно."
   },
   "autosave": {
     "restored": "Прошлая сессия восстановлена"

@@ -5,6 +5,7 @@
 import { describe, it, expect } from 'vitest'
 import { serialize3dtc, parse3dtc } from './3dtc-io'
 import JSZip from 'jszip'
+import i18n from '../i18n'
 import type { SceneObject, TransformNR, TinkerCraftOperation } from '../csg/types'
 
 const T: TransformNR = { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
@@ -279,7 +280,11 @@ describe('3dtc-io round-trip', () => {
     zip.file('model.json', JSON.stringify({ version: '1.0.0', operations: [] }))
     zip.file('thumbnail.png', 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', { base64: true })
     const blob = await zip.generateAsync({ type: 'blob' })
-    await expect(parse3dtc(blob)).rejects.toThrow('Неподдерживаемая версия формата')
+    // UX-AUDIT-7: сообщение — на языке интерфейса (попадает в уведомление «Ошибка открытия»)
+    await i18n.changeLanguage('ru')
+    await expect(parse3dtc(blob)).rejects.toThrow('Неподдерживаемая версия формата "1.0.0". Ожидается "3dtc-v1".')
+    await i18n.changeLanguage('en')
+    await expect(parse3dtc(blob)).rejects.toThrow('Unsupported format version "1.0.0". Expected "3dtc-v1".')
   })
 
   it('rejects missing model.json', async () => {
@@ -287,6 +292,9 @@ describe('3dtc-io round-trip', () => {
     zip.file('data.json', '{}')
     zip.file('thumbnail.png', 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', { base64: true })
     const blob = await zip.generateAsync({ type: 'blob' })
+    await i18n.changeLanguage('ru')
     await expect(parse3dtc(blob)).rejects.toThrow('model.json не найден')
+    await i18n.changeLanguage('en')
+    await expect(parse3dtc(blob)).rejects.toThrow('model.json not found')
   })
 })

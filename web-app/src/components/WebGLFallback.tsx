@@ -1,18 +1,15 @@
+import { useTranslation } from 'react-i18next'
 import { MonitorIcon } from './icons'
 
 export default function WebGLFallback() {
+  const { t } = useTranslation()
   return (
     <div className="fallback-screen" style={{ height: '100%', gap: 16 }}>
       <MonitorIcon size={48} />
-      <strong className="fallback-title">WebGL недоступен</strong>
-      <p className="fallback-msg">
-        {/* FIX (LOW-18-41): Remove hardcoded "Replit" reference — generic message */}
-        Это окружение не поддерживает WebGL (headless или software rendering).
-        Откройте приложение в&nbsp;браузере с аппаратным ускорением для полной 3D-визуализации.
-      </p>
-      <p className="fallback-hint">
-        CSG движок и остальной UI работают корректно.
-      </p>
+      <strong className="fallback-title">{t('webgl.title')}</strong>
+      {/* FIX (LOW-18-41): Remove hardcoded "Replit" reference — generic message */}
+      <p className="fallback-msg">{t('webgl.message')}</p>
+      <p className="fallback-hint">{t('webgl.hint')}</p>
     </div>
   )
 }

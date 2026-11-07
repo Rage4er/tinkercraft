@@ -68,7 +68,7 @@ export default function TextModal({
                 if (!isNaN(v)) onSizeChange(v)
               }}
             />
-            мм
+            {t("units.mm")}
           </label>
           <label className="text-modal-label">
             {t("textModal.depth")}
@@ -84,7 +84,7 @@ export default function TextModal({
                 if (!isNaN(v)) onDepthChange(v)
               }}
             />
-            мм
+            {t("units.mm")}
           </label>
         </div>
         <div className="text-modal-actions">

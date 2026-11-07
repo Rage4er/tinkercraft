@@ -15,6 +15,7 @@
 // ============================================================
 
 import JSZip from 'jszip'
+import i18n from '../i18n'
 import type { SceneObject, TinkerCraftOperation } from '../csg/types'
 
 export interface ThreeDtcDocument {
@@ -41,7 +42,7 @@ const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype'])
 
 function validateObjectKeys(obj: unknown, path: string, depth = 0): void {
   if (depth > MAX_RECURSION_DEPTH) {
-    throw new Error(`Некорректный model.json: слишком глубокая вложенность (>${MAX_RECURSION_DEPTH}) по пути "${path}"`)
+    throw new Error(i18n.t('errors.file.tooDeep', { max: MAX_RECURSION_DEPTH, path }))
   }
   if (typeof obj !== 'object' || obj === null) return
   if (Array.isArray(obj)) {
@@ -50,7 +51,7 @@ function validateObjectKeys(obj: unknown, path: string, depth = 0): void {
   }
   for (const key of Object.keys(obj as Record<string, unknown>)) {
     if (UNSAFE_KEYS.has(key)) {
-      throw new Error(`Некорректный model.json: обнаружен небезопасный ключ "${key}" по пути "${path}"`)
+      throw new Error(i18n.t('errors.file.unsafeKey', { key, path }))
     }
     validateObjectKeys((obj as Record<string, unknown>)[key], path ? `${path}.${key}` : key, depth + 1)
   }
@@ -297,24 +298,20 @@ export async function parse3dtc(source: Blob | ArrayBuffer): Promise<ThreeDtcDoc
   const buffer = source instanceof Blob ? await source.arrayBuffer() : source
 
   if (buffer.byteLength > MAX_3DTC_SIZE) {
-    throw new Error(
-      `Некорректный .3dtc: размер ${buffer.byteLength} байт превышает лимит ${MAX_3DTC_SIZE} байт`,
-    )
+    throw new Error(i18n.t('errors.file.tooLarge', { size: buffer.byteLength, max: MAX_3DTC_SIZE }))
   }
 
   const zip = await JSZip.loadAsync(buffer)
 
   const modelFile = zip.file('model.json')
-  if (!modelFile) throw new Error('Некорректный .3dtc: model.json не найден')
+  if (!modelFile) throw new Error(i18n.t('errors.file.noModel'))
 
   const json = await modelFile.async('string')
   if (typeof json !== 'string') {
-    throw new Error('Некорректный model.json: не является строкой')
+    throw new Error(i18n.t('errors.file.notString'))
   }
   if (json.length > MAX_MODEL_JSON_SIZE) {
-    throw new Error(
-      `Некорректный model.json: размер ${json.length} байт превышает лимит ${MAX_MODEL_JSON_SIZE} байт`,
-    )
+    throw new Error(i18n.t('errors.file.jsonTooLarge', { size: json.length, max: MAX_MODEL_JSON_SIZE }))
   }
 
   const raw = JSON.parse(json)
@@ -322,18 +319,16 @@ export async function parse3dtc(source: Blob | ArrayBuffer): Promise<ThreeDtcDoc
   const sanitized = sanitizeObjectKeys(raw) as typeof raw
 
   if (sanitized.version !== FORMAT_VERSION) {
-    throw new Error(
-      `Неподдерживаемая версия формата "${sanitized.version}". Ожидается "${FORMAT_VERSION}".`,
-    )
+    throw new Error(i18n.t('errors.file.badVersion', { version: String(sanitized.version), expected: FORMAT_VERSION }))
   }
 
   if (!Array.isArray(sanitized.operations)) {
-    throw new Error('Некорректный model.json: отсутствует массив operations')
+    throw new Error(i18n.t('errors.file.noOperations'))
   }
 
   const operations = sanitized.operations as TinkerCraftOperation[]
   if (!operations.every(op => op && typeof op === 'object' && VALID_OP_TYPES.has((op as { type?: string }).type ?? ''))) {
-    throw new Error('Некорректный model.json: обнаружена операция с неизвестным типом')
+    throw new Error(i18n.t('errors.file.unknownOperation'))
   }
 
   // decodeTypedArrays: SerializedTA → Float32Array/Uint32Array

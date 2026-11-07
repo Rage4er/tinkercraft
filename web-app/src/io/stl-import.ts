@@ -6,6 +6,7 @@ import * as THREE from 'three'
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js'
 import { VERTEX_MERGE_PRECISION } from '../constants'
 import type { TransformNR } from '../csg/types'
+import i18n from '../i18n'
 
 /** Максимальный размер файла STL (100 МБ) */
 export const MAX_STL_FILE_SIZE = 100 * 1024 * 1024
@@ -105,16 +106,16 @@ export function detectStlFormat(buffer: ArrayBuffer): 'binary' | 'ascii' | 'unkn
 export async function parseStlFile(file: File): Promise<StlParseResult> {
   // FIX (WARN-R3-6): Validate file size before processing
   if (file.size > MAX_STL_FILE_SIZE) {
-    const msg = `[STL Import] File too large: ${Math.round(file.size / 1024 / 1024)}MB (max ${MAX_STL_FILE_SIZE / 1024 / 1024}MB)`
-    console.error(msg)
+    const msg = i18n.t('errors.stlTooLarge', { size: Math.round(file.size / 1024 / 1024), max: MAX_STL_FILE_SIZE / 1024 / 1024 })
+    console.error('[STL Import]', msg)
     return { success: false, error: msg }
   }
 
   // Quick check: binary STL has 80-byte header + 4-byte triangle count
   // If it's too small to be valid, reject early
   if (file.size < 84) {
-    const msg = '[STL Import] File too small to be valid STL'
-    console.error(msg)
+    const msg = i18n.t('errors.stlTooSmallFile')
+    console.error('[STL Import]', msg)
     return { success: false, error: msg }
   }
 
@@ -124,14 +125,14 @@ export async function parseStlFile(file: File): Promise<StlParseResult> {
     // SEC-R6-1: Validate STL format via magic bytes before parsing
     const format = detectStlFormat(buffer)
     if (format === 'unknown') {
-      throw new Error('STL: unrecognized format (not valid ASCII or binary STL)')
+      throw new Error(i18n.t('errors.stlUnrecognized'))
     }
 
     const loader = new STLLoader()
     const geometry = loader.parse(buffer) as THREE.BufferGeometry
 
     const posAttr = geometry.getAttribute('position') as THREE.BufferAttribute
-    if (!posAttr) throw new Error('STL: no position attribute')
+    if (!posAttr) throw new Error(i18n.t('errors.stlUnrecognized'))
 
     const positions = posAttr.array as Float32Array
     const { vertices, indices } = mergeCoincidentVertices(positions)
@@ -139,16 +140,16 @@ export async function parseStlFile(file: File): Promise<StlParseResult> {
     const triangleCount = indices.length / 3
     // FIX (LOW-18-44): Explicit check for 0 triangles
     if (triangleCount === 0) {
-      throw new Error('STL: 0 triangles — empty mesh')
+      throw new Error(i18n.t('errors.stlEmpty'))
     }
     if (triangleCount > MAX_STL_TRIANGLES) {
-      const msg = `[STL Import] Too many triangles: ${triangleCount.toLocaleString()} (max ${MAX_STL_TRIANGLES.toLocaleString()})`
-      console.error(msg)
+      const msg = i18n.t('errors.stlTooManyTris', { count: triangleCount.toLocaleString(), max: MAX_STL_TRIANGLES.toLocaleString() })
+      console.error('[STL Import]', msg)
       return { success: false, error: msg }
     }
 
     if (vertices.length < 9 || indices.length < 3) {
-      throw new Error('STL: слишком мало данных')
+      throw new Error(i18n.t('errors.stlTooSmall'))
     }
 
     const defaultTransform: TransformNR = { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
