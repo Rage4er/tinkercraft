@@ -291,13 +291,15 @@ export default function App() {
   const handleAddText = useCallback(async () => {
     try {
       // UX-AUDIT-3: замкнутый меш (сварка вершин TextGeometry) — текст участвует в CSG
-      const { vertices, indices } = await buildTextMesh(textInput.trim() || "Text", { size: textSize, depth: textDepth });
-      await addRawMesh(`Текст: ${textInput}`, vertices, indices);
+      const text = textInput.trim() || "Text";
+      const { vertices, indices } = await buildTextMesh(text, { size: textSize, depth: textDepth });
+      // UX-AUDIT-6: имя объекта в дереве — «Текст: Hi» (ru) / «Text: Hi» (en)
+      await addRawMesh(t("textModal.objectName", { text }), vertices, indices);
       setShowTextModal(false);
     } catch (err) {
       console.error("Ошибка генерации текста:", err);
     }
-  }, [textInput, textSize, textDepth, addRawMesh]);
+  }, [textInput, textSize, textDepth, addRawMesh, t]);
 
   // Фаза 9.1: сброс выбора ребёнка CSG, если узел/выделение исчезли
   useSelectedChildGuard();

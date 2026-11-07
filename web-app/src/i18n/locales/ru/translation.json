@@ -231,6 +231,7 @@
     "deleteProjectConfirm": "Удалить проект \"{{name}}\"?"
   },
   "textModal": {
+    "objectName": "Текст: {{text}}",
     "title": "3D Текст",
     "placeholder": "Введите текст…",
     "size": "Размер",

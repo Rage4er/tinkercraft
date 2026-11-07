@@ -264,10 +264,12 @@ try {
   await page.locator('.text-modal-backdrop button.btn.primary').click()
   await page.waitForFunction((k) => document.querySelectorAll('.ct-item[data-object-id]').length === k + 1, b3.size, { timeout: 15000 })
   const txt = (await ids()).find((i) => !b3.has(i))
-  await knownBug('UX-AUDIT-6', '3D-текст в дереве назван «Импорт»', async () => {
-    const name = await page.locator(`.ct-item[data-object-id="${txt}"]`).innerText()
-    if (!name.includes('Текст')) throw new Error('строка дерева: ' + name.replace(/\s+/g, ' '))
-  })
+  // ── ✅ UX-AUDIT-6: 3D-текст в дереве — «Текст: A», а не «Импорт N» ──
+  {
+    const name = (await page.locator(`.ct-item[data-object-id="${txt}"]`).innerText()).replace(/\s+/g, ' ')
+    if (!name.includes('Текст: A')) fail('UX-AUDIT-6: строка дерева текста: ' + name)
+    ok.push('UX-AUDIT-6: 3D-текст в дереве — «Текст: A»')
+  }
   await setPos(txt, 'X', 0); await setPos(txt, 'Z', 8)
   // ── ✅ UX-AUDIT-3: куб − 3D-текст (гравировка) — CSG выполняется, без уведомлений ──
   await pick(c3); await page.locator(`.ct-item[data-object-id="${txt}"]`).click({ modifiers: ['Shift'] })

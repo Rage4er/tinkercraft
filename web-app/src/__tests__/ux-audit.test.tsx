@@ -40,6 +40,7 @@ import i18n from '../i18n'
 import NumInput from '../components/NumInput'
 import PropertiesPanel from '../components/PropertiesPanel'
 import ConfirmModal from '../components/ConfirmModal'
+import { displayName } from '../components/ComponentTree'
 import { useDocumentStore, canUndoClear } from '../store/document-store'
 import { useNotifications } from '../store/notifications'
 import { clearSnapshots } from '../store/snapshots'
@@ -101,11 +102,11 @@ async function shape(type: ShapeType, params: ShapeParams, t: TransformNR): Prom
   return id
 }
 
-/** 3D-текст как в App.handleAddText: `buildTextMesh` (сварка вершин) → addRawMesh(`Текст: …`). */
+/** 3D-текст как в App.handleAddText: `buildTextMesh` (сварка вершин) → addRawMesh(«Текст: …»). */
 async function addText(text: string): Promise<string> {
   const { vertices, indices } = await buildTextMesh(text, { size: 10, depth: 5 })
   const before = new Set(Object.keys(st().objects))
-  await st().addRawMesh(`Текст: ${text}`, vertices, indices)
+  await st().addRawMesh(i18n.t('textModal.objectName', { text }), vertices, indices)
   return Object.keys(st().objects).find((k) => !before.has(k))!
 }
 
@@ -329,17 +330,24 @@ describe('UX-AUDIT-4 — пустой результат CSG: уведомлен
   })
 })
 
-describe('UX-AUDIT-6 — 3D-текст в дереве называется «Импорт»', () => {
-  it.fails('ожидание: объект текста носит имя «Текст: Hi»', async () => {
+describe('UX-AUDIT-6 — 3D-текст в дереве называется «Текст: …»', () => {
+  const tr = (key: string, opts?: Record<string, unknown>) => i18n.t(key, opts)
+  it('объект текста носит имя «Текст: Hi» — его и показывает дерево', async () => {
     const id = await addText('Hi')
     expect(st().objects[id].name).toBe('Текст: Hi')
+    expect(displayName(st().objects[id], tr)).toBe('Текст: Hi')
   })
-  it('реальность: имя есть только в операции истории, у объекта — нет (дерево показывает «Импорт N»)', async () => {
+  it('живое = rebuild: имя то же после undo/redo без снимков (перестройка из истории)', async () => {
     const id = await addText('Hi')
-    expect(st().objects[id].name).toBeUndefined()
-    expect(st().objects[id].shapeType).toBe('import_mesh')
-    const op = st().operations.at(-1) as { type: string; name?: string }
-    expect(op).toMatchObject({ type: 'import_mesh', name: 'Текст: Hi' })
+    await shape('cube', { width: 5, height: 5, depth: 5 }, at(40))
+    clearSnapshots()
+    await st().undo(); await st().redo()
+    expect(st().objects[id].name).toBe('Текст: Hi')
+  })
+  it('en — «Text: Hi»', async () => {
+    await i18n.changeLanguage('en')
+    const id = await addText('Hi')
+    expect(st().objects[id].name).toBe('Text: Hi')
   })
 })
 

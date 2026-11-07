@@ -230,6 +230,7 @@
     "deleteProjectConfirm": "Delete project \"{{name}}\"?"
   },
   "textModal": {
+    "objectName": "Text: {{text}}",
     "title": "3D Text",
     "placeholder": "Enter text…",
     "size": "Size",

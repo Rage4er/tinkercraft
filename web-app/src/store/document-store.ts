@@ -253,7 +253,9 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       // делает то же центрирование, поэтому live == rebuild.
       const com = centerMassAtOrigin(result.vertices, result.indices)
       const pivot: TransformNR = { ...transform, x: transform.x + com.cx, y: transform.y + com.cy, z: transform.z + com.cz }
-      const obj: SceneObject = makeObject({ id, shapeType: 'import_mesh', params: {}, color, transform: pivot, visible: true, locked: false, vertices: result.vertices, indices: result.indices, normals: result.normals })
+      // UX-AUDIT-6: имя («Текст: Hi») — и у объекта, а не только в операции (дерево показывало
+      // «Импорт N»; после перемотки/загрузки rebuild брал имя из операции — живое ≠ rebuild)
+      const obj: SceneObject = makeObject({ id, shapeType: 'import_mesh', params: {}, color, transform: pivot, visible: true, locked: false, vertices: result.vertices, indices: result.indices, normals: result.normals, name })
       const op: ImportMeshOperation = { type: 'import_mesh', id, name, color, transform, vertices, indices }
       const newOps = [...operations.slice(0, historyIndex), op]
       const newObjects = { ...objects, [id]: obj }
@@ -292,7 +294,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const pivot: TransformNR = { ...baseT, x: baseT.x + com.cx, y: baseT.y + com.cy, z: baseT.z + com.cz }
 
       // BUG-R8-1: Передаём normals в makeObject для корректного рендеринга
-      const obj: SceneObject = makeObject({ id, shapeType: 'import_mesh', params: {}, color, transform: pivot, visible: true, locked: false, vertices: workerResult.vertices, indices: workerResult.indices, normals: workerResult.normals })
+      // UX-AUDIT-6: имя файла — у объекта, как после перемотки/загрузки (rebuild: name операции)
+      const obj: SceneObject = makeObject({ id, shapeType: 'import_mesh', params: {}, color, transform: pivot, visible: true, locked: false, vertices: workerResult.vertices, indices: workerResult.indices, normals: workerResult.normals, name: result.name })
       const op: ImportMeshOperation = { type: 'import_mesh', id, name: result.name, color, transform: baseT, vertices: result.vertices, indices: result.indices }
       const newOps = [...operations.slice(0, historyIndex), op]
       const newObjects = { ...objects, [id]: obj }
