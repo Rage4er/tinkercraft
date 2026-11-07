@@ -20,7 +20,8 @@ import { useDocumentStore } from "./store/document-store";
 import { useUiStore } from "./store/ui-store";
 import { useShallow } from "zustand/shallow";
 import { isWorkerReady } from "./csg/worker-client";
-import { SNAP_VALUES, AUTOSAVE_DELAY_MS } from "./constants";
+import { SNAP_VALUES } from "./constants";
+import { useAutosave } from "./hooks/useAutosave";
 import { useSelectedChildGuard } from "./hooks/useSelectedChildGuard";
 import { useSelectedStepGuard } from "./hooks/useSelectedStepGuard";
 import { useTimelineEdit } from "./hooks/useTimelineEdit";
@@ -81,7 +82,6 @@ export default function App() {
 
   const fitViewRef = useRef<(() => void) | null>(null);
   const resetViewRef = useRef<(() => void) | null>(null);
-  const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // FIX (PERF-R16-3): Use useShallow wrapper to prevent re-renders when
   // only the store's internal reference changes but values are the same.
@@ -122,8 +122,6 @@ export default function App() {
       previewMirror: s.previewMirror,
       copySelected: s.copySelected,
       pasteClipboard: s.pasteClipboard,
-      triggerAutosave: s.triggerAutosave,
-      restoreAutosave: s.restoreAutosave,
       saveToProject: s.saveToProject,
       loadFromProject: s.loadFromProject,
       setCurrentProject: s.setCurrentProject,
@@ -165,8 +163,6 @@ export default function App() {
     previewMirror,
     copySelected,
     pasteClipboard,
-    triggerAutosave,
-    restoreAutosave,
     saveToProject,
     loadFromProject,
     setCurrentProject,
@@ -192,16 +188,8 @@ export default function App() {
 
 
 
-  useEffect(() => {
-    if (operations.length === 0) return;
-    if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
-    autosaveTimer.current = setTimeout(() => {
-      triggerAutosave();
-    }, AUTOSAVE_DELAY_MS);
-    return () => {
-      if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
-    };
-  }, [operations, historyIndex, triggerAutosave]);
+  // UX-AUDIT-1: автосохранение + восстановление прошлой сессии при старте
+  useAutosave(workerOk);
 
   // Keyboard shortcuts — stable listener via ref (WARN-1 fix).
   // ref обновляется каждый рендер, но сам listener не переподключается.

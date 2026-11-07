@@ -221,24 +221,34 @@ try {
   })
   await shot('ux-text-csg.png')
 
-  // UX-AUDIT-1: автосохранение в IndexedDB есть, но после перезагрузки не восстанавливается
+  // ── ✅ UX-AUDIT-1: автосохранение → перезагрузка → работа и история на месте, уведомление ──
   await clearScene()
   await add('Куб'); await add('Сфера')
   await page.waitForTimeout(3500)                         // AUTOSAVE_DELAY_MS + запас
-  const saved = await page.evaluate(() => new Promise((res) => {
+  const savedOps = () => page.evaluate(() => new Promise((res) => {
     const r = indexedDB.open('tinkercraft-v1')
     r.onsuccess = () => { const g = r.result.transaction('autosave', 'readonly').objectStore('autosave').getAll(); g.onsuccess = () => res(g.result[0]?.operations?.length ?? 0) }
     r.onerror = () => res(-1)
   }))
+  const saved = await savedOps()
   if (saved < 2) fail('автосохранение не записалось в IndexedDB: операций ' + saved)
-  await knownBug('UX-AUDIT-1', 'восстановление автосохранения', async () => {
+  const hist1 = await page.locator('.tl-item').allInnerTexts()
+  const reload = async () => {
     await page.reload({ waitUntil: 'load' })
     await page.waitForSelector('canvas', { timeout: 20000 })
-    await page.waitForFunction(() => document.body.innerText.includes('✓'), null, { timeout: 30000 })
-    await page.waitForTimeout(2500)
-    const s = await status()
-    if (!/Объектов: 2/.test(s)) throw new Error(`в IndexedDB ${saved} операций, после перезагрузки: ${s.match(/Объектов: \d+/)?.[0]}`)
-  })
+    await page.waitForFunction(() => !document.body.innerText.includes('Загрузка CSG'), null, { timeout: 30000 })
+    await page.locator('button.tab-btn', { hasText: 'Дерево' }).click()   // вкладка не запоминается
+  }
+  await reload()
+  await page.waitForFunction(() => document.querySelectorAll('.ct-item[data-object-id]').length === 2, null, { timeout: 15000 })
+    .catch(async () => fail(`UX-AUDIT-1: в IndexedDB ${saved} операций, после перезагрузки: ${(await status()).match(/Объектов: \d+/)?.[0]}`))
+  if (JSON.stringify(await page.locator('.tl-item').allInnerTexts()) !== JSON.stringify(hist1)) fail('UX-AUDIT-1: история после восстановления другая')
+  if (!(await toasts()).includes('Прошлая сессия восстановлена')) fail('UX-AUDIT-1: нет уведомления о восстановлении: ' + (await toasts()))
+  if (!(await status()).includes('Не сохранено')) fail('UX-AUDIT-1: восстановленная работа не помечена «Не сохранено»')
+  await clearScene()
+  await reload(); await page.waitForTimeout(1500)
+  if ((await rows.count()) !== 0) fail('UX-AUDIT-1: после «Очистить сцену» и перезагрузки вернулась очищенная сессия')
+  ok.push(`UX-AUDIT-1: автосохранение (${saved} оп.) → перезагрузка → 2 объекта, история, уведомление; очистка → пусто`)
 
   if (errors.length) fail('ошибки в консоли:\n' + errors.join('\n'))
   console.log('e2e ux-audit OK')

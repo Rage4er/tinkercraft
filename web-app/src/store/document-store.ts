@@ -28,7 +28,7 @@ import { notify } from './notifications'
 import { saveProject as pmSave, updateProject as pmUpdate, loadProject as pmLoad, listProjects as pmList } from '../io/project-manager'
 import { exportToStl, downloadStlBlob, StlTooLargeError } from '../io/stl-export'
 import { openStlFilePicker, parseStlFile } from '../io/stl-import'
-import { autosaveSession, restoreSession } from '../io/autosave'
+import { autosaveSession, restoreSession, clearAutosave } from '../io/autosave'
 import { migrateLegacyFillet, type LegacyFilletMigration } from '../io/legacy-fillet'
 import i18n from '../i18n'
 
@@ -842,6 +842,9 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     clearTree()
     set({ operations: [], historyIndex: 0, objects: {}, selectedIds: [], modified: false, fileName: null, lastCsgMs: null, currentProjectId: null, currentProjectName: null })
     invalidateMirrorCache()
+    // UX-AUDIT-1: иначе при следующем старте восстановилась бы очищенная сессия
+    // (эффект автосохранения пустую историю не пишет)
+    await clearAutosave()
   },
 
   // ── Open .3dtc ──
@@ -1218,15 +1221,18 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   // ── Autosave ──
   triggerAutosave: async () => {
     if (get().busy) return
-    const { operations, historyIndex, fileName } = get()
-    await autosaveSession(operations.slice(0, historyIndex), historyIndex, fileName)
+    const { operations, historyIndex, fileName, modified } = get()
+    await autosaveSession(operations.slice(0, historyIndex), historyIndex, fileName, modified)
   },
 
   // ── Restore autosave ──
+  // UX-AUDIT-1: вызывается при старте (hooks/useAutosave.ts). Текущую работу не затирает:
+  // восстанавливает, только пока сцена и история пусты.
   restoreAutosave: async () => {
     if (get().busy) return false
     const entry = await restoreSession()
     if (!entry || entry.operations.length === 0) return false
+    if (get().busy || get().operations.length > 0 || Object.keys(get().objects).length > 0) return false
     await workerClearAll()
     clearSnapshots()
     set({ busy: true })
@@ -1237,7 +1243,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const idx = mig.remapIndex(entry.historyIndex)
       const newObjects = await rebuildFromHistory(ops)
       rebuildBuildTree(ops, newObjects)
-      set({ operations: ops, historyIndex: idx, objects: newObjects, selectedIds: [], fileName: entry.fileName, modified: false, busy: false, lastCsgMs: performance.now() - t0 })
+      // несохранённость — из записи (старые записи без поля: работа не в файле → «не сохранено»)
+      set({ operations: ops, historyIndex: idx, objects: newObjects, selectedIds: [], fileName: entry.fileName, modified: entry.modified ?? true, busy: false, lastCsgMs: performance.now() - t0 })
       cacheSnapshotWithTree(idx, newObjects)
       return true
     } catch (e) { set({ busy: false }); return false }

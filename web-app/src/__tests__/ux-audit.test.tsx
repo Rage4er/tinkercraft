@@ -31,6 +31,8 @@ vi.mock('../csg/worker-client', async () => {
   }
 })
 
+import '../__mocks__/indexeddb'
+import { _resetMockIndexedDB } from '../__mocks__/indexeddb'
 import React from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { act } from 'react-dom/test-utils'
@@ -44,6 +46,8 @@ import { useDocumentStore } from '../store/document-store'
 import { useNotifications } from '../store/notifications'
 import { clearSnapshots } from '../store/snapshots'
 import { clearTree } from '../csg/history-tree'
+import { useAutosave } from '../hooks/useAutosave'
+import { restoreSession } from '../io/autosave'
 import type { SceneObject, ShapeParams, ShapeType, TransformNR } from '../csg/types'
 
 const st = () => useDocumentStore.getState()
@@ -54,12 +58,26 @@ const notes = () => useNotifications.getState().notifications
 beforeAll(() => {
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 })
-beforeEach(async () => {
-  useDocumentStore.setState({ objects: {}, operations: [], historyIndex: 0, selectedIds: [], busy: false, modified: false })
-  useNotifications.setState({ notifications: [] })
+/** Пустой документ — как после перезагрузки страницы (стор, снимки, дерево). */
+function freshDocument(): void {
+  useDocumentStore.setState({ objects: {}, operations: [], historyIndex: 0, selectedIds: [], busy: false, modified: false, fileName: null })
   clearSnapshots(); clearTree()
+}
+beforeEach(async () => {
+  freshDocument()
+  _resetMockIndexedDB()
+  useNotifications.setState({ notifications: [] })
   await i18n.changeLanguage('ru')
 })
+
+/** Ждать условие, отдавая управление эффектам React и воркеру. */
+async function until(cond: () => boolean, ms = 10000): Promise<void> {
+  const t0 = Date.now()
+  while (!cond()) {
+    if (Date.now() - t0 > ms) throw new Error('until: не дождались')
+    await act(async () => { await new Promise((r) => setTimeout(r, 20)) })
+  }
+}
 
 let root: Root | null = null
 let host: HTMLDivElement | null = null
@@ -99,6 +117,65 @@ async function addText(text: string): Promise<string> {
   await st().addRawMesh(`Текст: ${text}`, vertices, indices)
   return Object.keys(st().objects).find((k) => !before.has(k))!
 }
+
+describe('UX-AUDIT-1 — автосохранение восстанавливается при старте', () => {
+  /** Корень App, сведённый к автосохранению: `useAutosave(workerOk)`. */
+  function Startup({ workerOk }: { workerOk: boolean }): null { useAutosave(workerOk); return null }
+  async function scene(): Promise<void> {
+    await shape('cube', { width: 20, height: 20, depth: 20 }, at(0))
+    await shape('sphere', { radius: 8, segments: 16 }, at(30))
+  }
+
+  it('перезагрузка → работа восстановлена (объекты, история, «не сохранено»), уведомление', async () => {
+    await scene()
+    await st().triggerAutosave()
+    const ops = st().operations.length
+    freshDocument()                                        // «F5»
+    mount(<Startup workerOk={true} />)
+    await until(() => Object.keys(st().objects).length === 2)
+    expect(st().operations).toHaveLength(ops)
+    expect(st().historyIndex).toBe(ops)
+    expect(st().modified).toBe(true)                       // работа не в файле — «● Не сохранено»
+    expect(notes().map((n) => n.message)).toContain(i18n.t('autosave.restored'))
+  })
+
+  it('до готовности воркера не восстанавливает; после — один раз', async () => {
+    await scene()
+    await st().triggerAutosave()
+    freshDocument()
+    const h = document.createElement('div'); document.body.appendChild(h)
+    const r = createRoot(h)
+    act(() => r.render(<Startup workerOk={false} />))
+    await act(async () => { await new Promise((res) => setTimeout(res, 100)) })
+    expect(Object.keys(st().objects)).toHaveLength(0)
+    act(() => r.render(<Startup workerOk={true} />))
+    await until(() => Object.keys(st().objects).length === 2)
+    act(() => r.render(<Startup workerOk={true} />))      // повторный рендер — без второго восстановления
+    await act(async () => { await new Promise((res) => setTimeout(res, 100)) })
+    expect(notes().filter((n) => n.message === i18n.t('autosave.restored'))).toHaveLength(1)
+    act(() => r.unmount()); h.remove()
+  })
+
+  it('«Очистить сцену» чистит автосохранение — после перезагрузки сцена пуста', async () => {
+    await scene()
+    await st().triggerAutosave()
+    expect((await restoreSession())?.operations.length).toBe(st().operations.length)
+    await st().clearScene()
+    expect(await restoreSession()).toBeNull()
+    freshDocument()
+    expect(await st().restoreAutosave()).toBe(false)
+    expect(Object.keys(st().objects)).toHaveLength(0)
+  })
+
+  it('не затирает текущую работу: при непустой сцене восстановление отклоняется', async () => {
+    await scene()
+    await st().triggerAutosave()
+    freshDocument()
+    const cube = await shape('cube', { width: 5, height: 5, depth: 5 }, at(0))
+    expect(await st().restoreAutosave()).toBe(false)
+    expect(Object.keys(st().objects)).toEqual([cube])
+  })
+})
 
 describe('UX-AUDIT-2 — «Очистить сцену» без подтверждения и без отмены', () => {
   async function scene(): Promise<void> {

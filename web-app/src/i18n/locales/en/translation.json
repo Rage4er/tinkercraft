@@ -288,6 +288,9 @@
       "failed": "Could not recompute the history (step {{step}})"
     }
   },
+  "autosave": {
+    "restored": "Previous session restored"
+  },
   "toolbar": {
     "label": "Toolbar"
   },
