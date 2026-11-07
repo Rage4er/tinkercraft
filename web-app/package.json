@@ -24,7 +24,8 @@
     "e2e:nested-moved-edit": "node e2e/nested-moved-edit.mjs",
     "e2e:ux-audit": "node e2e/ux-audit.mjs",
     "e2e:ux-audit-2": "node e2e/ux-audit-2.mjs",
-    "e2e:ux-audit-3": "node e2e/ux-audit-3.mjs"
+    "e2e:ux-audit-3": "node e2e/ux-audit-3.mjs",
+    "e2e:ux-audit-4": "node e2e/ux-audit-4.mjs"
   },
   "dependencies": {
     "i18next": "^26.3.6",
