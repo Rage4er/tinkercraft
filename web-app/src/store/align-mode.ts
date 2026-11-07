@@ -2,11 +2,13 @@
 // align-mode.ts — режим выравнивания как в Revit (ALIGN-UI-REVIT)
 // ============================================================
 // Одна кнопка «Выровнять» → режим: плоскость A (клик по грани объекта или кнопка
-// X/Y/Z) → клик по грани B → B сдвигается вдоль нормали плоскости, его грань ложится
-// в плоскость A. «Множественное» — после B режим и плоскость остаются (B2, B3… в ту же
+// X/Y/Z) → клик по грани B → его грань ложится в плоскость A: параллельная — сдвигом вдоль
+// нормали плоскости, непараллельная плоская — поворотом (нормаль B → нормаль A, в ту же
+// сторону) и сдвигом (UX-AUDIT-32), грань гладкой поверхности (цилиндр, сфера) — касанием
+// крайней точкой (ALIGN-REVIT). «Множественное» — после B режим и плоскость остаются (B2, B3… в ту же
 // плоскость). Esc / правый клик / «Готово» — выход.
 //
-// Геометрия — `helpers.solvePlaneAlignDelta` (реальная геометрия, как у ALIGN-REVIT);
+// Геометрия — `helpers.solvePlaneAlignTransform` (реальная геометрия, как у ALIGN-REVIT);
 // запись в историю — обычный шаг move (`moveObject`), он воспроизводится и правится ✎.
 
 import { create } from 'zustand'
@@ -14,7 +16,7 @@ import type { Vec3 } from '../csg/types'
 import { useDocumentStore } from './document-store'
 import { useUiStore } from './ui-store'
 import { notify } from './notifications'
-import { axisPlane, solvePlaneAlignDelta, type WorldPlane } from './helpers'
+import { axisPlane, solvePlaneAlignTransform, type WorldPlane } from './helpers'
 import i18n from '../i18n'
 
 /** Плоскость режима: грань объекта A (мировая нормаль + точка) или ось X/Y/Z. */
@@ -108,10 +110,10 @@ export const useAlignModeStore = create<AlignModeStore>((set, get) => ({
       notify(i18n.t('alignMode.locked'), 'warning')
       return false
     }
-    const d = solvePlaneAlignDelta(obj, resolvePlane(m.plane), { normal: pick.normal, point: pick.point })
-    const t = obj.transform
-    // moveObject сам пропускает нулевой сдвиг (объект уже в плоскости)
-    await doc.moveObject(pick.objectId, { ...t, x: t.x + d.x, y: t.y + d.y, z: t.z + d.z })
+    // UX-AUDIT-32: непараллельная грань B — поворот (в ту же сторону, что нормаль A) + сдвиг;
+    // параллельная — только сдвиг, как раньше. Один шаг move (moveObject пропускает нулевой).
+    const next = solvePlaneAlignTransform(obj, resolvePlane(m.plane), { normal: pick.normal, point: pick.point, triangleIndex: pick.triangleIndex })
+    await doc.moveObject(pick.objectId, next)
     const after = get().alignMode
     if (!after) return true
     if (after.multiple) set({ alignMode: { ...after, alignedCount: after.alignedCount + 1, hoveredFace: null } })

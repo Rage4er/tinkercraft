@@ -46,6 +46,7 @@ import {
 import { workerSyncObjects, workerSyncMesh } from '../csg/worker-client'
 import { centerMassAtOrigin } from '../csg/geometry-utils'
 import { devLog, devWarn } from '../utils/debug'
+import { isTextObject, textFromName } from './text-object'
 
 // ── Типы ──
 
@@ -265,6 +266,9 @@ export async function mirrorObject(
         visible: obj.visible ?? true,
         locked: obj.locked ?? false,
         name: obj.name,
+        // UX-AUDIT-33: копия 3D-текста — тоже текст (как в rebuild: метаданные источника целиком,
+        // в т.ч. `text`). Раньше `text` терялся: живая копия — «Импорт», после перезагрузки — «Текст».
+        ...(isTextObject(obj) ? { text: obj.text ?? textFromName(obj.name) } : {}),
     }
 
     return { object: newObj, id: newId }

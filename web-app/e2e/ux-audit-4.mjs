@@ -4,15 +4,14 @@
 //     txt_N — .3dtc без поля) — так же; копия — «Вставить текст».
 //  V. Цилиндр, конус, сфера ∪ куб, куб после правки размера — без ошибок (нормали —
 //     __tests__/ux-audit-3/4); скриншот (аргумент — каталог).
-//  W. Линейка: измерение по CSG; наведение над импортом 100k — см. 🐞 UX-AUDIT-35.
+//  W. Линейка: измерение по CSG; наведение над импортом 100k — без долгих задач (UX-AUDIT-35).
 //  X. История: поворот / масштаб полями — «Повернуть» / «Масштаб»; фильтр «Переместить» их не
 //     прячет, «Повернуть» — только поворот; корень вычитания в дереве — не иконка объединения.
 //  Y. 1280×800 (тулбар в 2 строки): кнопки в окне, «Расстояние» и тост — не на тулбаре и панели,
 //     статус-бар — 1 строка (1024 / 768 — `e2e:ux-audit-2`, `e2e:ux-audit-3`).
-//  🐞 known — новые баги (только браузер), `knownBug`: ожидание обязано сейчас НЕ выполняться;
-//     выполнилось — баг исправлен, перенести проверку в ✅:
-//     UX-AUDIT-32 «Выровнять»: боковая грань призмы к верху куба — призма не поворачивается;
-//     UX-AUDIT-35 линейка над импортом 100k — каждое движение мыши — долгая задача 50–90 мс.
+//  Баги прогона 4 в браузере (были `knownBug`), исправлены в fix-all-4 — обычные проверки:
+//     UX-AUDIT-32 «Выровнять»: боковая грань призмы к верху куба — призма поворачивается;
+//     UX-AUDIT-35 линейка над импортом 100k — наведение без долгих задач. `knownBug` сейчас нет.
 // Ошибок консоли нет (все сценарии). Логика — __tests__/ux-audit-4.test.tsx (`it.fails`).
 // Запуск: `pnpm dev` в одном терминале, `pnpm e2e:ux-audit-4` в другом.
 import fs from 'node:fs'
@@ -205,7 +204,7 @@ try {
     await s.browser.close()
   }
 
-  // ── UX-AUDIT-32: «Выровнять» — верх куба (A), боковая грань призмы (B) → поворота нет ──
+  // ── ✅ UX-AUDIT-32: «Выровнять» — верх куба (A), боковая грань призмы (B) → поворот + сдвиг ──
   {
     const s = await session()
     const { page } = s
@@ -219,16 +218,19 @@ try {
     await page.waitForFunction(() => document.querySelector('[data-testid=align-plane]')?.textContent?.includes('грань'), null, { timeout: 5000 })
     const sideB = await findAlignFace(page, prism, (n) => Math.abs(n[2]) < 0.05)
     const n0 = await s.steps()
-    await page.mouse.click(sideB.x, sideB.y); await page.waitForTimeout(1200)
-    if (await panel.count()) await page.keyboard.press('Escape')
-    await s.shot('align-32.png')
-    // 🐞 UX-AUDIT-32: ожидание — призма повёрнута (грань B — в плоскости A), один шаг истории
-    await knownBug('UX-AUDIT-32', '«Выровнять» не поворачивает', async () => {
-      await s.pick(prism)
-      const rot = await Promise.all(['X', 'Y', 'Z'].map(async (a) => Number(await page.locator(`.panel-right #num-input-rot-${a}`).inputValue())))
-      const steps = await s.steps()
-      if (rot.every((r) => Math.abs(r) < 0.05)) throw new Error(`поворот призмы ${rot.join(', ')}° (шагов: ${steps - n0})`)
-    })
+    await page.mouse.click(sideB.x, sideB.y); await s.waitSteps(n0 + 1)
+    await page.waitForTimeout(300); await s.shot('align-32.png')
+    // ✅ UX-AUDIT-32: призма повёрнута на 90° (боковая грань смотрит вверх, как верх куба), центр —
+    // z = 10 − апофема 12·cos 30° ≈ −0,4; один шаг «Повернуть»; режим закрыт
+    if (await panel.count()) fail('UX-AUDIT-32: режим не закрылся после грани B')
+    await s.pick(prism)
+    const rot = await Promise.all(['X', 'Y', 'Z'].map(async (a) => Number(await page.locator(`.panel-right #num-input-rot-${a}`).inputValue())))
+    const z = Number(await page.locator('.panel-right #num-input-pos-Z').inputValue())
+    const steps = await s.steps()
+    if (Math.max(Math.abs(rot[0]), Math.abs(rot[1])) < 89.9 || Math.max(Math.abs(rot[0]), Math.abs(rot[1])) > 90.1) fail(`UX-AUDIT-32: поворот призмы ${rot.join(', ')}°`)
+    if (Math.abs(z + 0.4) > 0.11) fail(`UX-AUDIT-32: призма Z = ${z} (ожидалось ≈ −0,4)`)
+    if (steps !== n0 + 1 || (await page.locator('.tl-label').last().innerText()).trim() !== 'Повернуть') fail('UX-AUDIT-32: шаг истории — ' + (await page.locator('.tl-label').last().innerText()))
+    ok.push(`K: «Выровнять» — верх куба (A), боковая грань призмы (B) → призма повёрнута (${rot.join(', ')}°), грань B в плоскости A (Z ${z}), один шаг «Повернуть» (UX-AUDIT-32)`)
     if (s.errors.length) fail('UX-AUDIT-32: ошибки консоли ' + s.errors.join(' | '))
     await s.browser.close()
   }
@@ -259,11 +261,11 @@ try {
     for (let k = 0; k < 12; k++) await page.mouse.move(x0 - 40 + k * 7, y0 + (k % 3) * 4)
     await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))))
     const lt = await page.evaluate(() => window.__lt)
-    // 🐞 UX-AUDIT-35: ожидание — наведение плавное: после первого движения нет долгих задач ≥ 50 мс
-    await knownBug('UX-AUDIT-35', `линейка над импортом ${n} — наведение рывками`, async () => {
-      const after = lt.slice(1).filter((d) => d >= 50)
-      if (after.length > 2) throw new Error(`12 движений — долгие задачи ${lt.join(', ')} мс`)
-    })
+    // ✅ UX-AUDIT-35: наведение плавное — после первого движения (сетка треугольников строится один
+    // раз) долгих задач ≥ 50 мс нет; было 63–113 мс на каждое движение
+    const after = lt.slice(1)
+    if (after.length > 1) fail(`UX-AUDIT-35: 12 движений над импортом ${n} — долгие задачи ${lt.join(', ')} мс`)
+    ok.push(`W: линейка над импортом ${n} — 12 движений: долгие задачи ${lt.length ? lt.join(', ') + ' мс' : 'нет'} (первое — сборка сетки; UX-AUDIT-35)`)
     if (s.errors.length) fail('W: ошибки консоли ' + s.errors.join(' | '))
     await s.browser.close()
   }
