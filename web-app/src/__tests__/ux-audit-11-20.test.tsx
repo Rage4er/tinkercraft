@@ -79,7 +79,7 @@ async function csg(op: 'union' | 'subtract' | 'intersect', dx = 12): Promise<str
 }
 
 describe('UX-AUDIT-11 — в истории вычитание и пересечение подписаны своим названием и иконкой', () => {
-  it.fails('вычитание → «Вычитание» и иконка вычитания; пересечение → «Пересечение» и иконка пересечения', async () => {
+  it('вычитание → «Вычитание» и иконка вычитания; пересечение → «Пересечение» и иконка пересечения', async () => {
     await csg('subtract')
     expect(opLabel(lastOp(), t)).toBe('Вычитание')
     expect((opIcon(lastOp()) as React.ReactElement).type).toBe(SubtractIcon)
@@ -87,6 +87,17 @@ describe('UX-AUDIT-11 — в истории вычитание и пересеч
     await csg('intersect')
     expect(opLabel(lastOp(), t)).toBe('Пересечение')
     expect((opIcon(lastOp()) as React.ReactElement).type).toBe(IntersectIcon)
+  })
+})
+
+describe('UX-AUDIT-11 — запасной путь и объединение', () => {
+  it('объединение — «Объединение»; старые шаги с флагами isIntersect/subtractOp — по флагам', async () => {
+    await csg('union')
+    expect(opLabel(lastOp(), t)).toBe('Объединение')
+    const legacy = (flags: Record<string, boolean>): TinkerCraftOperation => ({ type: 'group', ids: ['a', 'b'], ...flags } as TinkerCraftOperation)
+    expect(opLabel(legacy({ subtractOp: true }), t)).toBe('Вычитание')
+    expect(opLabel(legacy({ isIntersect: true }), t)).toBe('Пересечение')
+    expect(opLabel(legacy({}), t)).toBe('Объединение')
   })
 })
 

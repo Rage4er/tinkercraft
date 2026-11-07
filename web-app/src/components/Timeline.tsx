@@ -46,6 +46,17 @@ const ALIGN_ICON_MAP: Record<AlignAxis, Record<AlignAnchor, React.ComponentType<
 };
 
 // ---- Operation icon ----
+/**
+ * UX-AUDIT-11: вид CSG-шага. `csgBoolean` пишет операцию в `treeOperation`; раньше Timeline
+ * читал флаги `isIntersect`/`subtractOp`, которых никто не пишет (остались от старого формата —
+ * читаются запасным путём), и вычитание/пересечение показывались «Объединением».
+ */
+export function groupOpKind(op: TinkerCraftOperation & { type: "group" }): "union" | "subtract" | "intersect" {
+  if (op.treeOperation) return op.treeOperation;
+  const legacy = op as { isIntersect?: boolean; subtractOp?: boolean };
+  return legacy.isIntersect ? "intersect" : legacy.subtractOp ? "subtract" : "union";
+}
+
 export function opIcon(op: TinkerCraftOperation): React.ReactNode {
   switch (op.type) {
     case "add_shape":
@@ -78,12 +89,10 @@ export function opIcon(op: TinkerCraftOperation): React.ReactNode {
       const Icon = ALIGN_ICON_MAP[axis]?.[anchor] ?? AlignXMinIcon;
       return <Icon size={32} />;
     }
-    case "group":
-      return (op as { isIntersect?: boolean; subtractOp?: boolean }).isIntersect
-        ? <IntersectIcon size={32} />
-        : (op as { subtractOp?: boolean }).subtractOp
-          ? <SubtractIcon size={32} />
-          : <UnionIcon size={32} />;
+    case "group": {
+      const g = groupOpKind(op);
+      return g === "intersect" ? <IntersectIcon size={32} /> : g === "subtract" ? <SubtractIcon size={32} /> : <UnionIcon size={32} />;
+    }
     case "edit_child_params":
       return <ScaleIcon size={32} />;
     case "edit_step":
@@ -122,11 +131,10 @@ export function opLabel(op: TinkerCraftOperation, t: (key: string, opts?: Record
     case "group":
       // Фаза 9.5.4: группа extrude (source) подписана как выдавливание (эффективная глубина)
       if (op.source?.kind === "extrude") return t("timeline.extrude", { axis: op.source.axis, depth: fmtNum(op.source.depth) });
-      return (op as { isIntersect?: boolean; subtractOp?: boolean }).isIntersect
-        ? t("timeline.groupIntersect")
-        : (op as { subtractOp?: boolean }).subtractOp
-          ? t("timeline.groupSubtract")
-          : t("timeline.groupUnion");
+      {
+        const g = groupOpKind(op);
+        return g === "intersect" ? t("timeline.groupIntersect") : g === "subtract" ? t("timeline.groupSubtract") : t("timeline.groupUnion");
+      }
     case "edit_child_params":
       return t("timeline.editChildParams");
     case "edit_step":
