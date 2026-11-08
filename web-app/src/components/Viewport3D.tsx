@@ -20,6 +20,7 @@ import { devLogEvent, devLogPointer, devLogTransform } from "../utils/debug";
 import { fmtPoint, fmtPoint2 } from "../utils/debug-format";
 import { useAlignModeStore } from "../store/align-mode";
 import { pickFace, planarFaceTriangles } from "./align-picking";
+import { fitDistance, FIT_DIR } from "./camera-fit";
 
 export type { GizmoMode } from "./viewport-hooks";
 
@@ -326,12 +327,13 @@ export default function Viewport3D({
       const size = new THREE.Vector3();
       box.getCenter(center);
       box.getSize(size);
-      const dist = Math.max(size.x, size.y, size.z, 1) * 2.5;
+      // UX-AUDIT-39: расстояние — с учётом соотношения сторон вьюпорта (узкий — сцена не обрезается)
+      const dist = fitDistance(size, camera.fov, camera.aspect);
       fitTargetRef.current = {
         camPos: new THREE.Vector3(
-          center.x + dist * 0.5,
-          center.y - dist * 0.9,
-          center.z + dist * 0.6,
+          center.x + dist * FIT_DIR.x,
+          center.y + dist * FIT_DIR.y,
+          center.z + dist * FIT_DIR.z,
         ),
         target: center.clone(),
       };

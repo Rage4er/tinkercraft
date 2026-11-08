@@ -35,6 +35,7 @@ import { rebuildFromHistory } from '../store/rebuild'
 import ComponentTree, { displayName } from '../components/ComponentTree'
 import StepPanel from '../components/StepPanel'
 import { opLabel } from '../components/Timeline'
+import { fitDistance, FIT_DIR } from '../components/camera-fit'
 import type { SceneObject, ShapeParams, ShapeType, TransformNR, TinkerCraftOperation } from '../csg/types'
 
 const st = () => useDocumentStore.getState()
@@ -318,6 +319,37 @@ describe('UX-AUDIT-38 — панель «Шаг N» у шага поворота
     act(() => useUiStore.setState({ selectedStep: st().historyIndex - 1 }))
     expect(h.querySelector('.props-section-title')?.textContent).toBe(`Шаг ${st().historyIndex}: Перемещение`)
     expect(h.querySelector('[data-testid=step-original]')?.textContent).toBe('Δ (0, 3, 0)')
+  })
+})
+
+describe('UX-AUDIT-39 — «Вписать в экран»: вся сцена во вьюпорте при любом соотношении сторон', () => {
+  // Было: расстояние камеры = 2,5 × наибольший размер сцены, без угла обзора по горизонтали — на 768×1024
+  // (вьюпорт 248 × 883) сцена обрезалась по ширине (e2e: объект у края). Исправлено в fix-all-5:
+  // `fitDistance` (components/camera-fit) — не меньше, чем нужно описанной сфере для меньшего из
+  // углов обзора; на широком вьюпорте — как раньше.
+  /** Углы рамки сцены в NDC камеры «вписать» (fov 45, как CAMERA_FOV). */
+  function corners(size: THREE.Vector3, aspect: number, dist: number) {
+    const cam = new THREE.PerspectiveCamera(45, aspect, 0.1, 100000)
+    cam.position.set(FIT_DIR.x * dist, FIT_DIR.y * dist, FIT_DIR.z * dist); cam.lookAt(0, 0, 0); cam.updateMatrixWorld()
+    const out: THREE.Vector3[] = []
+    for (const sx of [-1, 1]) for (const sy of [-1, 1]) for (const sz of [-1, 1]) out.push(new THREE.Vector3(sx * size.x / 2, sy * size.y / 2, sz * size.z / 2).project(cam))
+    return out
+  }
+  it('сцена куб + призма X 40 (62 × 24 × 20) и плоская (200 × 10 × 5): углы рамки в кадре при aspect 0,28 / 0,8 / 1,13 / 2,5; на широком — прежнее расстояние', () => {
+    for (const size of [new THREE.Vector3(62, 24, 20), new THREE.Vector3(200, 10, 5), new THREE.Vector3(5, 5, 5)]) {
+      for (const aspect of [248 / 883, 504 / 627, 880 / 776, 2.5]) {
+        const ndc = corners(size, aspect, fitDistance(size, 45, aspect))
+        for (const p of ndc) {
+          expect(Math.abs(p.x), `${size.toArray()} aspect ${aspect.toFixed(2)}`).toBeLessThan(1)
+          expect(Math.abs(p.y), `${size.toArray()} aspect ${aspect.toFixed(2)}`).toBeLessThan(1)
+        }
+      }
+    }
+    const scene = new THREE.Vector3(62, 24, 20)
+    expect(fitDistance(scene, 45, 880 / 776)).toBe(62 * 2.5)                            // 1400 — как раньше
+    expect(fitDistance(scene, 45, 504 / 627)).toBe(62 * 2.5)                            // 1024 — как раньше
+    // было на 768: прежнее расстояние — углы за краем кадра по ширине
+    expect(corners(scene, 248 / 883, 62 * 2.5).some((p) => Math.abs(p.x) > 1)).toBe(true)
   })
 })
 
