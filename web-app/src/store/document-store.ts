@@ -14,7 +14,7 @@ import type {
   MirrorOperation, AlignOperation, AlignPlane, ResizeDimsOperation,
   MoveOperation, ColorOperation, GroupOperation, RenameOperation, HideShowOperation,
   DeleteOperation, EditChildParamsOperation,
-  SceneObject, ShapeParams, ShapeType, TransformNR, Vec3,
+  SceneObject, ShapeParams, TransformNR, Vec3,
   TreeNode,
 } from '../csg/types'
 import {
@@ -41,7 +41,7 @@ import { isTextObject, textFromName } from './text-object'
 import { computeCsgResult, groupOperationFromResult, isNonManifoldError } from './csg-result'
 import { computeEditedChild, editFailureKey, findCreationTransform } from './edit-child'
 import { computeStepEdit, editStepFailureKey } from './edit-step'
-import { cacheSnapshot, getCachedSnapshot, clearSnapshots, cacheTreeSnapshot, getCachedTreeSnapshot } from './snapshots'
+import { cacheSnapshot, getCachedSnapshot, clearSnapshots, cacheTreeSnapshot } from './snapshots'
 import { OBJECT_SPACING, PASTE_OFFSET } from '../constants'
 import {
   createPrimitiveNode,
@@ -134,47 +134,6 @@ function migrateLoaded(ops: TinkerCraftOperation[], objects?: Record<string, Sce
   return m
 }
 
-// ── Type guard ──
-
-function isShapeType(v: string): v is ShapeType {
-  return ['cube', 'sphere', 'cylinder', 'cone', 'torus', 'prism', 'pyramid', 'import_mesh'].includes(v)
-}
-
-// ── Tree snapshot helpers ──
-
-/** Restore build tree from cached snapshot */
-function restoreTreeFromSnapshot(index: number): void {
-  const treeSnap = getCachedTreeSnapshot(index)
-  if (!treeSnap) return
-
-  clearTree()
-  for (const nd of treeSnap.nodes) {
-    if (nd.type === 'primitive' && nd.shapeType && nd.params && isShapeType(nd.shapeType)) {
-      // FIX (MED-18-3): Use safe access instead of non-null assertions
-      const lt = nd.localTransform
-      if (lt) createPrimitiveNode(nd.id, nd.shapeType, nd.params, lt)
-    } else if (nd.type === 'baked') {
-      // FIX (MED-18-9): TypedArrays stored directly — no need for Array.from conversion
-      const verts = nd.vertices ? new Float32Array(nd.vertices) : new Float32Array()
-      const idxs = nd.indices ? new Uint32Array(nd.indices) : new Uint32Array()
-      const nrm = nd.normals ? new Float32Array(nd.normals) : null
-      const lt = nd.localTransform
-      if (lt) createBakedNode(nd.id, verts, idxs, nrm, lt)
-    } else if (nd.type === 'boolean' && nd.operation && nd.children) {
-      const lt = nd.localTransform
-      if (lt) {
-        const b = createBooleanNode(nd.id, nd.operation, nd.children[0], nd.children[1], lt)
-        // NESTED-MOVED-EDIT: TRS₀ из снимка (createBooleanNode взял бы текущий трансформ)
-        if (nd.originTransform) b.originTransform = { ...nd.originTransform }
-      }
-    }
-  }
-}
-
-/**
- * Wrapper around cacheSnapshot that also caches the build tree.
- * Replace all cacheSnapshot calls with this.
- */
 /**
  * Живое применение нового трансформа объекта (без шага истории): узел дерева и кэш AABB.
  * Общая часть `moveObject` и `alignToPlane` (ALIGN-PLANE-RESOLVE).
@@ -261,6 +220,12 @@ function liveTransformed(obj: SceneObject, newTransform: TransformNR): SceneObje
   return { ...obj, transform: newTransform, aabb: newWorldAabb }
 }
 
+// ── Tree snapshot helpers ──
+
+/**
+ * Wrapper around cacheSnapshot that also caches the build tree.
+ * Replace all cacheSnapshot calls with this.
+ */
 function cacheSnapshotWithTree(index: number, objects: Record<string, SceneObject>): void {
   cacheSnapshot(index, objects)
   // Cache tree nodes (only the structure, not cached mesh/BBox/hash)
