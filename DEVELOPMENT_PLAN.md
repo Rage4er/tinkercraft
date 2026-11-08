@@ -599,7 +599,7 @@ web-app/
 | ALIGN-UI-REVIT | ✅ Fixed (align-ui-revit) | Одна кнопка «Выровнять» → режим: плоскость A (грань объекта или X/Y/Z) → грань B встаёт в плоскость; подсветка грани при наведении, «Множественное», Esc/правый клик. 9 старых кнопок убраны. Тесты: `align-ui.test.tsx`, e2e `pnpm e2e:align-ui-revit` |
 | ALIGN-PLANE-RESOLVE | 🔲 низкий | Выравнивание режимом пишется шагом move: при правке прошлого шага (9.5) объект НЕ перевыравнивается по плоскости (в отличие от шагов `align` с re-solve). Нужна операция «align по плоскости» с re-solve, если понадобится |
 | CI-DEDUP | ✅ Fixed (ci-dedup) | `build.yml` дублировал `ci-web.yml` (install + typecheck + test; 4 прогона на PR). Удалён; `ci-web.yml` — единственный CI: без фильтра путей (docs-PR тоже проверяется), push — только `main` |
-| CI-E2E | 🔲 средний | e2e (Playwright, WebGL, dev-сервер) не в CI — регресс UI ловится только локально |
+| CI-E2E | ✅ Fixed (ci-e2e) | Все 18 e2e — в CI: job `e2e` в `ci-web.yml` (параллельно с `ci`, 4 группы, ~15 мин), Playwright Chromium + Mesa llvmpipe (GPU у раннера нет), `pnpm dev`, `LANG=ru_RU`, до 2 повторов, логи — артефакт. Пороги производительности — `assertPerf` (`e2e/helpers.mjs`): локально строго, в CI (`E2E_SOFT_PERF=1`) — предупреждение `[SOFT PERF]`; замер тоста — после `waitToastsSettled` (анимация появления) |
 | CLEANUP-DEAD-CODE | 🔲 низкий | `restoreTreeFromSnapshot` (`store/document-store.ts`) нигде не вызывается — undo/redo восстанавливают дерево через `rebuildBuildTree`. Удалить (`chore:`, ~5 мин); в NESTED-MOVED-EDIT лишь дополнен полем TRS₀. После CI-E2E / ALIGN-PLANE-RESOLVE |
 | IMPORT-MESH-CSG | ✅ Fixed (import-mesh-csg, `fd2f7fc`) | CSG допускает импортированный меш по замкнутости, а не по типу: отказ по `shapeType === 'import_mesh'` убран и в сторе, и в UI (кнопки CSG были неактивны); воркер для незамкнутого меша бросает ошибку с маркером `NON_MANIFOLD` → `notify(t('errors.csgNonManifold'))` (ru/en), объекты/история не меняются. Тесты: `import-mesh-csg.test.ts`, `import-mesh-csg-nonmanifold.test.ts` (сценарий «замкнутый тоже нельзя» перевёрнут), e2e `pnpm e2e:import-mesh-csg` |
 | IMPORT-CSG-STUB | ✅ Fixed (import-mesh-csg) | Скрытый баг: `computeCsgResult` считал импорт примитивом и слал воркеру `shapeType: 'import_mesh'` — тот строил ЗАГЛУШКУ вместо меша STL (незамкнутый треугольник «объединялся»). Не проявлялся, пока импорт отсекался по типу. Регресс-тест: `import-mesh-csg.test.ts` › «IMPORT-CSG-STUB» (проверен откатом) |
@@ -723,7 +723,7 @@ web-app/
 
 **Наблюдение (не баг, решение 3 к fix-all-6):** угол объекта продолжается от прежнего и может уйти за ±180° и за 360°: 350 + 30 → 380 (шаг — 30°). Тот же поворот; воспроизведение истории даёт тот же угол. Если понадобится «красивый» угол в поле — отдельная задача (нормализация показа поля без изменения шага).
 
-**Релиз v1.3.3** (2026-11-08): все 43 исправления UX-цикла (UX-AUDIT-1…42 и 32-followup) — `CHANGELOG.md` › `[1.3.3]`, тег `v1.3.3`. Дальше — CI-E2E (e2e в CI), затем `yandex-games`.
+**Релиз v1.3.3** (2026-11-08): все 43 исправления UX-цикла (UX-AUDIT-1…42 и 32-followup) — `CHANGELOG.md` › `[1.3.3]`, тег `v1.3.3`. Дальше — CI-E2E (e2e в CI, ✅), затем `yandex-games`.
 
 ### Процесс: `main` — production
 
