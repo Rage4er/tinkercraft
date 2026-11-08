@@ -6,8 +6,8 @@
 //  O/U. Текст: зеркало зеркала, вставка зеркального текста, вложенный CSG и его зеркальная копия,
 //     .3dtc — везде «Текст» / «Текст: Дом».
 //  M/Y. Панель выравнивания на 768 и 1024 — в панели, без прокрутки.
-//  Баги прогона 5 (`knownBug`, логика — __tests__/ux-audit-5.test.tsx, `it.fails`):
-//     UX-AUDIT-32-followup поворот при выравнивании — со смещением вбок (Y −19,4);
+//  Баги прогона 5 (`knownBug`, логика — __tests__/ux-audit-5.test.tsx, `it.fails`); исправленные в
+//  fix-all-5 — обычные проверки: UX-AUDIT-32-followup (поворот на месте, X/Y прежние);
 //     UX-AUDIT-36 в английском интерфейсе имя текста — «Текст: Дом»;
 //     UX-AUDIT-37 почти встречная грань (5°) — переворот на 175° на другую сторону плоскости;
 //     UX-AUDIT-38 панель «Шаг N» шага «Повернуть» — «Перемещение»;
@@ -174,7 +174,7 @@ try {
     const dx = sp.locator('[data-testid=step-delta] input.props-input').first()
     n0 = await s.steps(); await dx.fill(String(Number(await dx.inputValue()) + 5)); await dx.press('Enter'); await s.waitSteps(n0 + 1)
     const t2 = await s.tr(g)
-    if (!near(t2[0], t1[0] + 5) || t2.slice(1).join() !== t1.slice(1).join()) fail('K: правка шага — ' + t2.join(', '))
+    if (!near(t2[0], t1[0] + 5, 0.11) || t2.slice(1).join() !== t1.slice(1).join()) fail('K: правка шага — ' + t2.join(', ') + ' (до: ' + t1.join(', ') + ')')
     // копия CSG → правка ребёнка копии; оригинал не меняется
     const c2 = await s.copyPaste(g)
     await page.locator(`.ct-item[data-object-id="${c2}"] .ct-chevron`).click()
@@ -230,10 +230,10 @@ try {
     if ((await s.labels()).slice(-2).join() !== 'Повернуть,Повернуть') fail('K: «Множественное» — шаги ' + (await s.labels()).slice(-2).join(' / '))
     for (const tt of [t1, t2]) if (Math.max(Math.abs(tt[3]), Math.abs(tt[4])) < 89.9 || !near(tt[2], -0.4, 0.11)) fail('K: «Множественное» — призма ' + tt.join(', '))
     ok.push('K: «Множественное» — две призмы боковой гранью к верху куба: обе повёрнуты, грань в плоскости (Z −0,4), два шага «Повернуть»; R: B на объекте A — уведомление, шага нет')
-    // UX-AUDIT-32-followup: поворот — со смещением вбок (зависит от точки клика)
-    await knownBug('UX-AUDIT-32-followup', 'поворот при выравнивании — со смещением вбок', async () => {
-      if (!near(t1[0], 40) || !near(t1[1], 0) || !near(t2[0], -40) || !near(t2[1], 0)) throw new Error(`призмы X/Y ${t1[0]}, ${t1[1]} и ${t2[0]}, ${t2[1]} (были 40, 0 и −40, 0)`)
-    })
+    // ✅ UX-AUDIT-32-followup: поворот на месте — X/Y призм прежние (было: вокруг точки клика,
+    // Y −11,1 и −5,1 — от того, куда кликнули)
+    if (!near(t1[0], 40) || !near(t1[1], 0) || !near(t2[0], -40) || !near(t2[1], 0)) fail(`UX-AUDIT-32-followup: призмы X/Y ${t1[0]}, ${t1[1]} и ${t2[0]}, ${t2[1]} (были 40, 0 и −40, 0)`)
+    ok.push('UX-AUDIT-32-followup: «Множественное» — призмы повёрнуты на месте, X/Y прежние (40, 0 и −40, 0), только Z −0,4')
     // UX-AUDIT-37: строго встречная грань — куб встаёт на плоскость; наклонённая на 5° — переворот
     await s.confirmClear()
     const res = []

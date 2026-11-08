@@ -338,8 +338,9 @@ export function isSmoothSurfaceAt(obj: Pick<SceneObject, 'vertices' | 'indices'>
  *   грань гладкой поверхности (`isSmoothSurfaceAt`: цилиндр, сфера — нормаль грани — артефакт
  *   разбиения) — как раньше, только сдвиг (`solvePlaneAlignDelta`: касание крайней точкой).
  * - Не параллельна — сначала ПОВОРОТ по кратчайшей дуге: мировая нормаль грани B → нормаль
- *   плоскости A (в ту же сторону, dot > 0), вокруг точки клика на грани B; затем сдвиг вдоль
- *   нормали A, чтобы грань легла в плоскость. Раньше поворота не было: объект сдвигался до
+ *   плоскости A (в ту же сторону, dot > 0), на месте — вокруг опорной точки объекта
+ *   (UX-AUDIT-32-followup: было — вокруг точки клика, объект уходил вбок); затем сдвиг только
+ *   вдоль нормали A, чтобы грань легла в плоскость. Раньше поворота не было: объект сдвигался до
  *   касания крайней точкой, а если она уже в плоскости — не происходило ничего.
  * Поворот — слева к текущему (R' = ΔR·R): масштаб остаётся в локальных осях. Результат — обычный
  * шаг move (сдвиг + дельта углов), он воспроизводится из истории.
@@ -363,17 +364,18 @@ export function solvePlaneAlignTransform(
   const rd = axisAngleMatrix(k, Math.acos(Math.max(-1, Math.min(1, c))))
   const r0 = computeRSMatrix({ rotX: t.rotX, rotY: t.rotY, rotZ: t.rotZ }, { scaleX: 1, scaleY: 1, scaleZ: 1 })
   const rot = eulerXYZFromMatrix(mul3(rd, r0))
-  // pivot вокруг точки клика: p' = q + ΔR·(p − q)
+  // UX-AUDIT-32-followup: поворот — вокруг опорной точки объекта (его X/Y/Z, как поворот полями),
+  // а не вокруг точки клика: объект поворачивается на месте. Точка клика после поворота:
+  // q' = p + ΔR·(q − p); грань B (через q', нормаль ±n) — в плоскость A сдвигом только вдоль n.
   const q = pick.point
-  const px = t.x - q.x, py = t.y - q.y, pz = t.z - q.z
-  const p1 = {
-    x: q.x + rd[0] * px + rd[1] * py + rd[2] * pz,
-    y: q.y + rd[3] * px + rd[4] * py + rd[5] * pz,
-    z: q.z + rd[6] * px + rd[7] * py + rd[8] * pz,
+  const qx = q.x - t.x, qy = q.y - t.y, qz = q.z - t.z
+  const q1 = {
+    x: t.x + rd[0] * qx + rd[1] * qy + rd[2] * qz,
+    y: t.y + rd[3] * qx + rd[4] * qy + rd[5] * qz,
+    z: t.z + rd[6] * qx + rd[7] * qy + rd[8] * qz,
   }
-  // грань B (через q, нормаль n) — в плоскость A
-  const s = dot3(n, q) - dot3(n, plane.point)
-  return { ...t, ...rot, x: p1.x - s * n.x, y: p1.y - s * n.y, z: p1.z - s * n.z }
+  const s = dot3(n, q1) - dot3(n, plane.point)
+  return { ...t, ...rot, x: t.x - s * n.x, y: t.y - s * n.y, z: t.z - s * n.z }
 }
 
 /** Returns bbox center for a vertex buffer (no mutation). */
