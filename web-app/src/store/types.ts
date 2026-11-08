@@ -4,7 +4,7 @@
 
 import type {
   TinkerCraftOperation, SceneObject, ShapeType, ShapeParams,
-  TransformNR, CsgBooleanOp, StepPatch,
+  TransformNR, CsgBooleanOp, StepPatch, Vec3,
 } from '../csg/types'
 import type { ClipEntry } from './helpers'
 
@@ -59,6 +59,17 @@ export interface DocumentStore {
   mirrorSelected: (plane: 'XY' | 'XZ' | 'YZ') => Promise<void>
   previewMirror: (plane: 'XY' | 'XZ' | 'YZ') => Promise<void>
   alignSelected: (axis: 'X' | 'Y' | 'Z', anchor: 'min' | 'center' | 'max') => Promise<void>
+  /**
+   * ALIGN-PLANE-RESOLVE: выровнять грань B объекта `targetId` в плоскость A (мировая; `anchorId` —
+   * объект грани A, без него — плоскость по оси) — шаг `align` с плоскостью: правка прошлого шага
+   * пересчитывает выравнивание. `true` — шаг записан (`false` — уже в плоскости, занято, нет объекта).
+   */
+  alignToPlane: (args: {
+    targetId: string
+    plane: { normal: Vec3; point: Vec3 }
+    anchorId?: string
+    pick: { normal: Vec3; point: Vec3; triangleIndex?: number }
+  }) => Promise<boolean>
   copySelected: () => void
   pasteClipboard: () => Promise<void>
   undo: () => Promise<void>

@@ -96,6 +96,8 @@ export function applyReplacement(op: TinkerCraftOperation, r: StepReplacement): 
     }
   }
   if (op.type === 'align') {
+    // ALIGN-PLANE-RESOLVE: у выравнивания по плоскости пересчитан результат (сдвиг + поворот целей)
+    if (r.alignMoves && op.plane) return { ...op, plane: { ...op.plane, moves: { ...op.plane.moves, ...r.alignMoves } } }
     return r.deltas ? { ...op, deltas: { ...r.deltas } } : op
   }
   if (op.type === 'group') {

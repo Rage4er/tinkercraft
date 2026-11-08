@@ -11,7 +11,7 @@
 import { create } from 'zustand/react'
 import type {
   TinkerCraftOperation, AddShapeOperation, ImportMeshOperation,
-  MirrorOperation, AlignOperation, ResizeDimsOperation,
+  MirrorOperation, AlignOperation, AlignPlane, ResizeDimsOperation,
   MoveOperation, ColorOperation, GroupOperation, RenameOperation, HideShowOperation,
   DeleteOperation, EditChildParamsOperation,
   SceneObject, ShapeParams, ShapeType, TransformNR, Vec3,
@@ -33,7 +33,7 @@ import { migrateLegacyFillet, type LegacyFilletMigration } from '../io/legacy-fi
 import i18n from '../i18n'
 
 export { computeAABB, extractAndCenterInPlace, extractAndCenterGetAABB, computeWorldAABB, extractCenteredAt } from './helpers'
-import { computeAABB, extractAndCenterInPlace, extractAndCenterGetAABB, centerMassAtOrigin, solveAlignDeltas, extrudeSlab, worldVerticesAABB, makeObject, nextId, colorForIndex } from './helpers'
+import { computeAABB, extractAndCenterInPlace, extractAndCenterGetAABB, centerMassAtOrigin, solveAlignDeltas, extrudeSlab, worldVerticesAABB, makeObject, nextId, colorForIndex, faceToLocal, solvePlaneAlignMove, dominantAxis } from './helpers'
 import type { ClipEntry } from './helpers'
 import type { DocumentStore } from './types'
 import { rebuildFromHistory, rebuildBuildTree } from './rebuild'
@@ -175,6 +175,92 @@ function restoreTreeFromSnapshot(index: number): void {
  * Wrapper around cacheSnapshot that also caches the build tree.
  * Replace all cacheSnapshot calls with this.
  */
+/**
+ * Живое применение нового трансформа объекта (без шага истории): узел дерева и кэш AABB.
+ * Общая часть `moveObject` и `alignToPlane` (ALIGN-PLANE-RESOLVE).
+ */
+function liveTransformed(obj: SceneObject, newTransform: TransformNR): SceneObject {
+  const id = obj.id
+  const dx = newTransform.x - obj.transform.x
+  const dy = newTransform.y - obj.transform.y
+  const dz = newTransform.z - obj.transform.z
+  // FIX (BUG-CSG-POS-5/6): Do NOT rebuild the mesh on transform changes.
+  //
+  // The rendering model is:
+  // - obj.vertices = geometry centered at origin (from initial creation)
+  // - obj.transform = full TRS (position + rotation + scale)
+  // - Viewport3D centers vertices (no-op if already centered) and applies
+  //   transform via pivot (position + rotation + scale)
+  //
+  // handleBuildShape (worker) only applies TRANSLATION to the mesh, NOT
+  // rotation/scale — those are handled by Viewport3D's pivot. Rebuilding via
+  // rebuildNode/rebuildPrimitive would bake FULL TRS into vertices (via
+  // buildTransformMatrix), causing double-application when Viewport3D also
+  // applies the transform via pivot.
+  //
+  // For CSG results, moveTreeNode (old approach) recursed into children and
+  // only applied translation delta, leaving the boolean node's localTransform
+  // stale. This caused wrong positions when the result was used in subsequent
+  // CSG operations (workerSyncMesh received vertices at old centroid + new
+  // transform → double offset).
+  //
+  // Solution: just update obj.transform and sync the tree's localTransform.
+  // No mesh rebuild needed — vertices stay centered at origin.
+
+  // Ensure node exists in tree (may be missing after undo/redo tree restore)
+  const treeExists = getNode(id) !== undefined
+  if (!treeExists) {
+    // FIX (MIRROR-CSG-KEEPTYPE): CSG-результаты (shapeType='csg') и import_mesh
+    // регистрируются как baked-ноды (готовый меш), а не как primitive.
+    // FIX (8.5.12): зеркальный примитив (mirrored) тоже baked — vertices с зеркалом.
+    registerObjectInTree(id, obj)
+  }
+
+  // FIX (MIRROR-DOUBLE-TRANSLATE): Do NOT call moveTreeNode here.
+  //
+  // The previous code called moveTreeNode(id, delta) to shift child primitives
+  // in the tree by the translation delta. However, syncNodeTransform below
+  // ALSO sets the boolean root's localTransform to the full new TRS (including
+  // translation). This creates DOUBLE TRANSLATION when applyCSGMeshes rebuilds:
+  //   1. Children are shifted by accumulated delta (via moveTreeNode)
+  //   2. Root localTransform translation is applied again (via applyCSGMeshes)
+  //
+  // During normal rendering this is masked (Viewport3D uses cached centered
+  // vertices + pivot TRS, not tree rebuild). But during mirror, the clone's
+  // root is reset to identity — only the shifted children remain, producing
+  // broken, non-deterministic mirror results.
+  //
+  // Correct model: children keep their ORIGINAL world positions (from CSG
+  // creation). The boolean root's localTransform carries the full TRS.
+  // applyCSGMeshes centers the child geometry and applies root TRS → correct
+  // world position. Mirror clones the tree, mirrors children + root TRS,
+  // resets root to identity, rebuilds → centered mirrored geometry. The
+  // mirrored SceneObject.transform = mirror(original TRS). Viewport3D applies
+  // it via pivot. This is correct and deterministic.
+
+  // Sync the new transform to the tree node (for future CSG/mirror/align ops)
+  syncNodeTransform(id, newTransform)
+  devLog('moveObject', { id, newTransform })
+
+  // Update SceneObject — vertices unchanged, only transform changes
+  // IMPORTANT: Also update cached AABB — it was computed from vertices (world-space)
+  // at object creation time, but after move the bbox needs to shift by the same delta.
+  const oldWorldAabb = obj.aabb ?? computeAABB(obj.vertices)
+  const newWorldAabb = {
+    min: {
+      x: oldWorldAabb.min.x + dx,
+      y: oldWorldAabb.min.y + dy,
+      z: oldWorldAabb.min.z + dz,
+    },
+    max: {
+      x: oldWorldAabb.max.x + dx,
+      y: oldWorldAabb.max.y + dy,
+      z: oldWorldAabb.max.z + dz,
+    },
+  }
+  return { ...obj, transform: newTransform, aabb: newWorldAabb }
+}
+
 function cacheSnapshotWithTree(index: number, objects: Record<string, SceneObject>): void {
   cacheSnapshot(index, objects)
   // Cache tree nodes (only the structure, not cached mesh/BBox/hash)
@@ -600,81 +686,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       return
     }
 
-    // FIX (BUG-CSG-POS-5/6): Do NOT rebuild the mesh on transform changes.
-    //
-    // The rendering model is:
-    // - obj.vertices = geometry centered at origin (from initial creation)
-    // - obj.transform = full TRS (position + rotation + scale)
-    // - Viewport3D centers vertices (no-op if already centered) and applies
-    //   transform via pivot (position + rotation + scale)
-    //
-    // handleBuildShape (worker) only applies TRANSLATION to the mesh, NOT
-    // rotation/scale — those are handled by Viewport3D's pivot. Rebuilding via
-    // rebuildNode/rebuildPrimitive would bake FULL TRS into vertices (via
-    // buildTransformMatrix), causing double-application when Viewport3D also
-    // applies the transform via pivot.
-    //
-    // For CSG results, moveTreeNode (old approach) recursed into children and
-    // only applied translation delta, leaving the boolean node's localTransform
-    // stale. This caused wrong positions when the result was used in subsequent
-    // CSG operations (workerSyncMesh received vertices at old centroid + new
-    // transform → double offset).
-    //
-    // Solution: just update obj.transform and sync the tree's localTransform.
-    // No mesh rebuild needed — vertices stay centered at origin.
-
-    // Ensure node exists in tree (may be missing after undo/redo tree restore)
-    const treeExists = getNode(id) !== undefined
-    if (!treeExists) {
-      // FIX (MIRROR-CSG-KEEPTYPE): CSG-результаты (shapeType='csg') и import_mesh
-      // регистрируются как baked-ноды (готовый меш), а не как primitive.
-      // FIX (8.5.12): зеркальный примитив (mirrored) тоже baked — vertices с зеркалом.
-      registerObjectInTree(id, obj)
-    }
-
-    // FIX (MIRROR-DOUBLE-TRANSLATE): Do NOT call moveTreeNode here.
-    //
-    // The previous code called moveTreeNode(id, delta) to shift child primitives
-    // in the tree by the translation delta. However, syncNodeTransform below
-    // ALSO sets the boolean root's localTransform to the full new TRS (including
-    // translation). This creates DOUBLE TRANSLATION when applyCSGMeshes rebuilds:
-    //   1. Children are shifted by accumulated delta (via moveTreeNode)
-    //   2. Root localTransform translation is applied again (via applyCSGMeshes)
-    //
-    // During normal rendering this is masked (Viewport3D uses cached centered
-    // vertices + pivot TRS, not tree rebuild). But during mirror, the clone's
-    // root is reset to identity — only the shifted children remain, producing
-    // broken, non-deterministic mirror results.
-    //
-    // Correct model: children keep their ORIGINAL world positions (from CSG
-    // creation). The boolean root's localTransform carries the full TRS.
-    // applyCSGMeshes centers the child geometry and applies root TRS → correct
-    // world position. Mirror clones the tree, mirrors children + root TRS,
-    // resets root to identity, rebuilds → centered mirrored geometry. The
-    // mirrored SceneObject.transform = mirror(original TRS). Viewport3D applies
-    // it via pivot. This is correct and deterministic.
-
-    // Sync the new transform to the tree node (for future CSG/mirror/align ops)
-    syncNodeTransform(id, newTransform)
-    devLog('moveObject', { id, newTransform })
-
-    // Update SceneObject — vertices unchanged, only transform changes
-    // IMPORTANT: Also update cached AABB — it was computed from vertices (world-space)
-    // at object creation time, but after move the bbox needs to shift by the same delta.
-    const oldWorldAabb = obj.aabb ?? computeAABB(obj.vertices)
-    const newWorldAabb = {
-      min: {
-        x: oldWorldAabb.min.x + dx,
-        y: oldWorldAabb.min.y + dy,
-        z: oldWorldAabb.min.z + dz,
-      },
-      max: {
-        x: oldWorldAabb.max.x + dx,
-        y: oldWorldAabb.max.y + dy,
-        z: oldWorldAabb.max.z + dz,
-      },
-    }
-    const newObj: SceneObject = { ...obj, transform: newTransform, aabb: newWorldAabb }
+    const newObj = liveTransformed(obj, newTransform)
     const newObjects = { ...objects, [id]: newObj }
     const delta: Vec3 = {
       x: newTransform.x - obj.transform.x,
@@ -862,6 +874,46 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       invalidateMirrorCache()
       devLog('ALIGN:done', { durationMs: performance.now() - t0, anchorId, targetIds })
     } catch (e) { set({ busy: false }); console.error('alignSelected:', e); notify(i18n.t('errors.alignFailed'), 'error') }
+  },
+
+  // ── ALIGN-PLANE-RESOLVE: выравнивание режимом «Выровнять» → шаг align с плоскостью ──
+  alignToPlane: async ({ targetId, plane, anchorId, pick }) => {
+    if (get().busy) return false
+    const { objects, operations, historyIndex } = get()
+    const obj = objects[targetId]
+    if (!obj) return false
+    const anchor = anchorId ? objects[anchorId] : undefined
+    if (anchorId && !anchor) return false
+    // плоскость A — в системе объекта A (следует за ним при правке прошлых шагов), без A — мировая;
+    // грань B — в системе цели. Решение — то же, что у каскада (`solvePlaneAlignMove`).
+    const a = anchor ? faceToLocal(anchor.transform, plane.normal, plane.point) : { normal: { ...plane.normal }, point: { ...plane.point } }
+    const f = faceToLocal(obj.transform, pick.normal, pick.point)
+    const spec: AlignPlane = {
+      normal: a.normal, point: a.point,
+      faces: { [targetId]: { ...f, ...(pick.triangleIndex !== undefined ? { triangleIndex: pick.triangleIndex } : {}) } },
+      moves: {},
+    }
+    const m = solvePlaneAlignMove(objects, spec, anchorId ?? '', targetId)
+    if (!m) return false
+    const eps = 1e-6
+    if ([m.delta.x, m.delta.y, m.delta.z, m.rotDelta.x, m.rotDelta.y, m.rotDelta.z].every((v) => Math.abs(v) < eps)) return false   // уже в плоскости
+    spec.moves[targetId] = m
+    const t = obj.transform
+    const nt: TransformNR = {
+      ...t,
+      x: t.x + m.delta.x, y: t.y + m.delta.y, z: t.z + m.delta.z,
+      rotX: t.rotX + m.rotDelta.x, rotY: t.rotY + m.rotDelta.y, rotZ: t.rotZ + m.rotDelta.z,
+    }
+    const newObjects = { ...objects, [targetId]: liveTransformed(obj, nt) }
+    const op: AlignOperation = {
+      type: 'align', ids: [targetId], axis: dominantAxis(plane.normal), anchor: 'min', anchorId: anchorId ?? '', deltas: {}, plane: spec,
+    }
+    devLog('ALIGN:plane', { op })
+    const newOps = [...operations.slice(0, historyIndex), op]
+    set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true })
+    cacheSnapshotWithTree(newOps.length, newObjects)
+    invalidateMirrorCache()
+    return true
   },
 
   // ── Undo ──

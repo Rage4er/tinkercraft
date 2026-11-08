@@ -158,8 +158,8 @@ describe('UX-AUDIT-32 — «Выровнять»: непараллельная �
     const after = worldTri(st().objects[prism], b.triangleIndex)
     expect(triNormal(after).z).toBeGreaterThan(COS1)                                  // dot > 0: в ту же сторону
     for (const v of after) expect(v.z).toBeCloseTo(10, 3)                             // грань B — в плоскости A
-    expect(lastOp().type).toBe('move')                                                 // один шаг истории
-    expect(opLabel(lastOp(), t)).toBe('Повернуть')
+    expect(lastOp().type).toBe('align')                                                // один шаг истории (ALIGN-PLANE-RESOLVE)
+    expect(opLabel(lastOp(), t)).toBe('Выровнять по грани')
     expect(useAlignModeStore.getState().alignMode).toBeNull()                          // режим закрыт (без «Множественного»)
   })
 

@@ -32,7 +32,7 @@ import { computeRSMatrix } from '../csg/worker-matrix'
 import { addTextObject } from '../store/add-text'
 import { displayName } from '../components/ComponentTree'
 import StepPanel from '../components/StepPanel'
-import type { MoveOperation, SceneObject, ShapeParams, ShapeType, TransformNR, TinkerCraftOperation } from '../csg/types'
+import type { AlignOperation, MoveOperation, SceneObject, ShapeParams, ShapeType, TransformNR, TinkerCraftOperation } from '../csg/types'
 import { alignRotationCenter, computeAABB, computeWorldAABB, continuousEuler } from '../store/helpers'
 
 const st = () => useDocumentStore.getState()
@@ -140,7 +140,7 @@ describe('UX-прогон 6 — K. «Множественное»: правил�
       expect([o.transform.x, o.transform.z], `θ ${c.theta}`).toEqual([c.x, 0])          // на месте
       expect(o.transform.y, `θ ${c.theta}`).toBeCloseTo(c.y, 4)                         // сдвиг только по Y
     })
-    expect(st().operations.slice(-3).every((op) => op.type === 'move')).toBe(true)     // три шага
+    expect(st().operations.slice(-3).every((op) => op.type === 'align')).toBe(true)    // три шага align (ALIGN-PLANE-RESOLVE)
   })
 })
 
@@ -223,7 +223,7 @@ describe('UX-AUDIT-42 — поворот шага через ±180°: дельт
   // («Исходно» — «поворот (0, 0, −330)°», в поле «Поворот Z» — −330; куб rotZ 90 → плоскость Y: −270).
   // Фикс (fix-all-6): углы после поворота — в записи, ближайшей к прежним (`continuousEuler`): 170 → 200,
   // тот же поворот, дельта 30; так же у гизмо (углы Three.js). Введённые в поля углы — как есть.
-  it('ожидание: куб rotZ 170, грань под −10° → плоскость A — бок куба rotZ 20 (20°) → шаг «Повернуть» с поворотом (0, 0, 30)°', async () => {
+  it('ожидание: куб rotZ 170, грань под −10° → плоскость A — бок куба rotZ 20 (20°) → шаг выравнивания с поворотом (0, 0, 30)°', async () => {
     const r = await shape('cube', { width: 20, height: 20, depth: 20 }, { ...at(0), rotZ: 20 })
     const k = await shape('cube', { width: 20, height: 20, depth: 20 }, { ...at(60), rotZ: 170 })
     const dir = (deg: number) => new THREE.Vector3(Math.cos(THREE.MathUtils.degToRad(deg)), Math.sin(THREE.MathUtils.degToRad(deg)), 0)
@@ -232,26 +232,28 @@ describe('UX-AUDIT-42 — поворот шага через ±180°: дельт
     const o = st().objects[k]
     expect(triNormal(worldTri(o, fB.triangleIndex)).dot(dir(20))).toBeGreaterThan(COS1)   // выравнивание — верно
     expect(o.transform.rotZ).toBeCloseTo(200, 6)                                           // 170 + 30 (≡ −160 — было)
-    const op = lastOp() as MoveOperation
-    expect(op.kind).toBe('rotate')
-    expect(op.rotDelta!.z).toBeCloseTo(30, 6)                                              // было −330
+    // ALIGN-PLANE-RESOLVE: шаг выравнивания — align с плоскостью; поворот цели — в plane.moves
+    const op = lastOp() as AlignOperation
+    expect(op.type).toBe('align')
+    expect(op.plane!.moves[k].rotDelta.z).toBeCloseTo(30, 6)                              // было −330
     // воспроизведение из истории (без кэша снимков) — тот же угол, что в живой сцене
     clearSnapshots()
     await st().undo(); await st().redo()
     expect(st().objects[k].transform.rotZ).toBeCloseTo(200, 6)
-    // «Исходно» панели шага — «… поворот (0, 0, 30)°»
+    // поворот полем — по-прежнему move, «Исходно» панели шага — «поворот (0, 0, 30)°»
+    await st().moveObject(k, { ...st().objects[k].transform, rotZ: 230 })
     useUiStore.setState({ selectedStep: st().historyIndex - 1 })
     const el = mount(<StepPanel />)
-    expect(el.querySelector('[data-testid=step-original]')!.textContent!.trim()).toMatch(/поворот \(0, 0, 30\)°$/)
+    expect(el.querySelector('[data-testid=step-original]')!.textContent!.trim()).toBe('поворот (0, 0, 30)°')
   })
 
   it('регресс: куб rotZ 90 гранью с мировой нормалью +X к плоскости Y — шаг «поворот (0, 0, 90)°» (было −270), угол 180', async () => {
     const k = await shape('cube', { width: 20, height: 20, depth: 20 }, { ...at(0, 40), rotZ: 90 })
     const fB = face(k, (n) => n.distanceTo(new THREE.Vector3(1, 0, 0)) < 1e-4)            // перпендикулярна плоскости Y
     await align('Y', fB)
-    const op = lastOp() as MoveOperation
-    expect(op.kind).toBe('rotate')
-    expect(op.rotDelta!.z).toBeCloseTo(90, 6)                                             // в ту же сторону (+90), не −270
+    const op = lastOp() as AlignOperation
+    expect([op.type, op.anchorId]).toEqual(['align', ''])                                  // плоскость по оси — без якоря
+    expect(op.plane!.moves[k].rotDelta.z).toBeCloseTo(90, 6)                              // в ту же сторону (+90), не −270
     expect(st().objects[k].transform.rotZ).toBeCloseTo(180, 6)
   })
 

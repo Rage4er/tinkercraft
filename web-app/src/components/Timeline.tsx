@@ -20,6 +20,7 @@ import {
   RotateIcon,
   MirrorYZIcon,
   AlignXMinIcon,
+  AlignToolIcon,
   AlignXCenterIcon,
   AlignXMaxIcon,
   AlignYMinIcon,
@@ -40,6 +41,9 @@ import {
 // ---- Icon map for align operations ----
 type AlignAxis = 'X' | 'Y' | 'Z';
 type AlignAnchor = 'min' | 'center' | 'max';
+
+/** Плоскость по оси (режим «Выровнять»: X — плоскость YZ, Y — XZ, Z — XY). */
+const AXIS_PLANE: Record<AlignAxis, string> = { X: 'YZ', Y: 'XZ', Z: 'XY' };
 
 const ALIGN_ICON_MAP: Record<AlignAxis, Record<AlignAnchor, React.ComponentType<{ size?: number }>>> = {
   X: { min: AlignXMinIcon, center: AlignXCenterIcon, max: AlignXMaxIcon },
@@ -95,6 +99,7 @@ export function opIcon(op: TinkerCraftOperation): React.ReactNode {
     case "mirror":
       return <MirrorYZIcon size={32} />;
     case "align": {
+      if (op.plane) return <AlignToolIcon size={32} />;          // ALIGN-PLANE-RESOLVE: режим «Выровнять»
       const axis = (op as { axis?: AlignAxis }).axis ?? 'X' as AlignAxis;
       const anchor = (op as { anchor?: AlignAnchor }).anchor ?? 'min' as AlignAnchor;
       const Icon = ALIGN_ICON_MAP[axis]?.[anchor] ?? AlignXMinIcon;
@@ -163,6 +168,8 @@ export function opLabel(op: TinkerCraftOperation, t: (key: string, opts?: Record
     case "mirror":
       return t('timeline.mirror', { plane: op.plane });
     case "align":
+      // ALIGN-PLANE-RESOLVE: режим «Выровнять» — по грани объекта A или по плоскости оси (X → YZ…)
+      if (op.plane) return op.anchorId ? t('timeline.alignFace') : t('timeline.alignAxisPlane', { plane: AXIS_PLANE[op.axis] });
       return t('timeline.align', { axis: op.axis, anchor: op.anchor });
     case "group":
       // Фаза 9.5.4: группа extrude (source) подписана как выдавливание (эффективная глубина)

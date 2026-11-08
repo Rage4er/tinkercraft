@@ -9,7 +9,7 @@ import { buildSRTMatrixAroundCenter, buildTransformMatrix, relativeTransformMatr
 // та же функция, что использует frontend (store/helpers реэкспортирует её).
 import { centerMassAtOrigin } from './geometry-utils'
 import type { RebuildTransform } from './rebuildOps'
-import { applyMoveDelta, applyMirrorToTransform, applyAlignToTransform } from './rebuildOps'
+import { applyMoveDelta, applyMirrorToTransform, applyAlignToTransform, expandForReplay } from './rebuildOps'
 import type { MirrorOperation } from './types'
 import { devLog, devLogCsg } from '../utils/debug'
 
@@ -822,7 +822,8 @@ export async function handleRebuildScene(msg: RebuildSceneMessage): Promise<void
     // объектов (примитивы, import_mesh) results-петля снимает запечённую
     // трансляцию и центрирует вершины по COM.
     const booleanResultIds = new Set<string>()
-    const ops = msg.operations as Record<string, unknown>[]
+    // ALIGN-PLANE-RESOLVE: выравнивание по плоскости воспроизводится как move каждой цели
+    const ops = (msg.operations as Record<string, unknown>[]).flatMap(expandForReplay) as Record<string, unknown>[]
 
     for (const op of ops) {
       if (op.type === 'add_shape') {

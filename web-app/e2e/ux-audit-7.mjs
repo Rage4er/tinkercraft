@@ -2,14 +2,15 @@
 // явная проверка фиксов fix-all-6 (часть 4). Новых багов прогон 7 не нашёл — `knownBug` нет.
 //  41. CSG (куб X 0 ∪ куб X 60) гранью +X к верху куба: центр тела (экспорт STL) на месте, X в панели
 //     0 → 30 (операнд A повернулся с телом); undo / redo, правка ребёнка (ширина 20 → 30 — растёт
-//     вверх), правка шага (ΔX + 5), `.3dtc` — то же; копия, зеркальная копия, вложенный CSG,
+//     вверх), правка шага куба плоскости A до выравнивания (ΔZ + 5 — выравнивание пересчитано, тело
+//     выше на 5, ALIGN-PLANE-RESOLVE), `.3dtc` — то же; копия, зеркальная копия, вложенный CSG,
 //     «Множественное» (две CSG) — центр тела на своих X/Y. Конус, пирамида, текст, импорт (клин) —
 //     поворот вокруг опорной точки (центр масс): Y/Z прежние.
-//  42. Поле «Поворот Z» 270 — 270, «поворот (0, 0, 270)°»; выравнивание 170 → 200: шаг «поворот (0, 0,
-//     30)°», поле 30, undo / redo / `.3dtc` — 200, правка шага на 40 — 210 и «Правка шага N: поворот
-//     (0, 0, 30)° → (0, 0, 40)°»; в en — «rotation (0, 0, 30)°»; 350 + 30 → 380 (решение 3: угол
-//     объекта продолжается). Гизмо: кольцо Z через 180° (175 → больше 180, шаг меньше 180°), кольцо Y
-//     через 90° (rotY 80 → (0, > 90, 0), а не (180, …, 180)).
+//  42. Поле «Поворот Z» 270 — 270, «поворот (0, 0, 270)°»; выравнивание 170 → 200, undo / redo / `.3dtc`
+//     — 200; шаг выравнивания — align «Выровнять по грани» / «Align to face», ✎ нет; правка поворота куба
+//     до выравнивания (170 → 175) — снова 200; 350 + 30 → 380 (решение 3: угол объекта продолжается).
+//     Гизмо: кольцо Z через 180° (175 → больше 180, шаг меньше 180°), кольцо Y через 90° (rotY 80 →
+//     (0, > 90, 0), а не (180, …, 180)).
 // Ошибок консоли нет (все сценарии).
 // Запуск: `pnpm dev` в одном терминале, `pnpm e2e:ux-audit-7` в другом.
 import fs from 'node:fs'
@@ -155,8 +156,8 @@ const close = (n, v, eps = 0.02) => Math.hypot(n[0] - v[0], n[1] - v[1], n[2] - 
 const same2 = (a, b, eps = 0.11) => near(a[0], b[0], eps) && near(a[1], b[1], eps)
 
 /** Панель шага по ✎ у последнего шага `label`: «Исходно» и поля поворота. */
-async function stepPanel(page, label) {
-  await page.locator('.tl-item', { hasText: label }).last().locator('.tl-edit').click()
+async function stepPanel(page, label, which = 'last') {
+  await page.locator('.tl-item', { hasText: label })[which]().locator('.tl-edit').click()
   const sp = page.locator('[data-testid=step-panel]'); await sp.waitFor({ timeout: 5000 })
   const original = ((await sp.locator('[data-testid=step-original]').textContent()) ?? '').trim()
   const rot = await sp.locator('[data-testid=step-rotDelta] input.props-input').evaluateAll((els) => els.map((e) => Number(e.value))).catch(() => [])
@@ -240,17 +241,18 @@ try {
     const bc = await exportBox(page, body)
     if (!same2(bc.c, b1.c) || !near(bc.lo[2], b1.lo[2], 0.11) || !near(bc.hi[2], 75, 0.11)) fail(`41: правка ребёнка — ${JSON.stringify(bc)}`)
     await page.locator(`.ct-item[data-object-id="${g}"] .ct-name`).click()
-    // правка шага выравнивания: ΔX + 5
-    const { sp, original } = await stepPanel(page, 'Повернуть')
-    const dx = sp.locator('[data-testid=step-delta] input.props-input').nth(0); const v0 = Number(await dx.inputValue())
-    n = await s.steps(); await dx.fill(String(v0 + 5)); await dx.press('Enter'); await s.waitSteps(n + 1); await page.waitForTimeout(300)
+    // ALIGN-PLANE-RESOLVE: правка шага «Переместить» куба C (плоскость A) до выравнивания — ΔZ + 5:
+    // выравнивание пересчитано — торец CSG снова на верху C, тело на 5 мм выше, X/Y на месте
+    const { sp } = await stepPanel(page, 'Переместить', 'first')
+    const dz = sp.locator('[data-testid=step-delta] input.props-input').nth(2)
+    n = await s.steps(); await dz.fill('5'); await dz.press('Enter'); await s.waitSteps(n + 1); await page.waitForTimeout(300)
     const edit = (await s.labels()).at(-1); await back(sp)
     const bs = await exportBox(page, body)
-    if (!near(bs.c[0], bc.c[0] + 5, 0.11) || !near(bs.c[1], bc.c[1], 0.11) || !near(bs.c[2], bc.c[2], 0.11)) fail(`41: правка шага — ${JSON.stringify(bs)} («${original}», «${edit}»)`)
+    if (!near(bs.c[0], bc.c[0], 0.11) || !near(bs.c[1], bc.c[1], 0.11) || !near(bs.c[2], bc.c[2] + 5, 0.11) || await s.toasts()) fail(`41: правка шага C — ${JSON.stringify(bs)} («${edit}», ${await s.toasts()})`)
     await s.saveReopen()
     const bo = await exportBox(page, body)
     if (JSON.stringify(bo) !== JSON.stringify(bs) || await locks(page)) fail(`41: .3dtc — ${JSON.stringify(bo)}`)
-    ok.push(`41: после выравнивания — undo / redo (X в панели 0 ↔ 30, тело то же), правка ребёнка (ширина 30: Z ${bc.lo[2]}…${bc.hi[2]}, X/Y на месте), правка шага («${edit}» — тело на 5 мм по X), .3dtc — то же, без замков`)
+    ok.push(`41: после выравнивания — undo / redo (X в панели 0 ↔ 30, тело то же), правка ребёнка (ширина 30: Z ${bc.lo[2]}…${bc.hi[2]}, X/Y на месте), правка шага куба плоскости A до выравнивания («${edit}» — выравнивание пересчитано: тело на 5 мм выше, X/Y на месте), .3dtc — то же, без замков`)
     if (s.errors.length) fail('41: ошибки консоли ' + s.errors.join(' | '))
     await s.browser.close()
   }
@@ -313,7 +315,7 @@ try {
       const c1 = await exportBox(page, f1), c2 = await exportBox(page, f2)
       await s.startAlign({ multiple: true }); await s.clickA(c, (n) => n[2] > 0.99); await s.clickB(g1, (n) => n[0] > 0.99); await s.clickB(g2, (n) => n[0] > 0.99); await s.exitAlign()
       const d1 = await exportBox(page, f1), d2 = await exportBox(page, f2)
-      if (!same2(d1.c, c1.c) || !same2(d2.c, c2.c) || (await s.labels()).slice(-2).join() !== 'Повернуть,Повернуть') fail(`41: «Множественное» — ${c1.c} → ${d1.c}; ${c2.c} → ${d2.c}`)
+      if (!same2(d1.c, c1.c) || !same2(d2.c, c2.c) || (await s.labels()).slice(-2).join() !== 'Выровнять по грани,Выровнять по грани') fail(`41: «Множественное» — ${c1.c} → ${d1.c}; ${c2.c} → ${d2.c}`)
       res.push(`«Множественное» (две CSG) ${c1.c[0]}, ${c1.c[1]} / ${c2.c[0]}, ${c2.c[1]} — на месте`)
     }
     ok.push('41: центр тела (STL) на своих X/Y — ' + res.join('; '))
@@ -351,7 +353,7 @@ try {
       const t0 = await s.tr(k)
       await s.startAlign(); await s.clickA(c, (n) => n[0] > 0.99); await s.clickB(k, accept); await s.exitAlign()
       const t1 = await s.tr(k)
-      if (!near(t1[1], t0[1]) || !near(t1[2], t0[2]) || (await s.labels()).at(-1) !== 'Повернуть') fail(`41: ${label} — ${t0.join(', ')} → ${t1.join(', ')}`)
+      if (!near(t1[1], t0[1]) || !near(t1[2], t0[2]) || (await s.labels()).at(-1) !== 'Выровнять по грани') fail(`41: ${label} — ${t0.join(', ')} → ${t1.join(', ')}`)
       res.push(`${label} Y/Z ${t0[1]}, ${t0[2]} → ${t1[1]}, ${t1[2]}`)
       await s.confirmClear()
     }
@@ -379,27 +381,30 @@ try {
     await s.blur(); await page.keyboard.press('Control+y'); await page.waitForTimeout(600); const tr2 = await s.tr(k)
     await s.saveReopen(); const to = await s.tr(k)
     if (!near(ta[5], 200, 0.11) || !near(tu[5], 170, 0.11) || !near(tr2[5], 200, 0.11) || !near(to[5], 200, 0.11)) fail(`42: 170 → ${ta[5]}, undo ${tu[5]}, redo ${tr2[5]}, .3dtc ${to[5]}`)
+    // ALIGN-PLANE-RESOLVE: шаг выравнивания — align «Выровнять по грани» (en «Align to face»), ✎ нет
+    const alignRow = page.locator('.tl-item').last()
+    const label = ((await alignRow.locator('.tl-label').textContent()) ?? '').trim(), edits = await alignRow.locator('.tl-edit').count()
+    await page.locator('.lang-switcher').click(); await page.waitForTimeout(300)
+    const en = ((await alignRow.locator('.tl-label').textContent()) ?? '').trim()
+    await page.locator('.lang-switcher').click(); await page.waitForTimeout(300)
+    if (label !== 'Выровнять по грани' || en !== 'Align to face' || edits !== 0) fail(`42: шаг выравнивания «${label}» / «${en}», ✎ ${edits}`)
+    // правка поворота куба до выравнивания (170 → 175) — выравнивание пересчитано: угол снова 200
     p = await stepPanel(page, 'Повернуть')
-    if (!p.original.endsWith('поворот (0, 0, 30)°') || p.rot[2] !== 30) fail(`42: «Исходно» «${p.original}», поле ${p.rot[2]}`)
-    await page.locator('.lang-switcher').click(); await page.waitForTimeout(300)
-    const en = ((await p.sp.locator('[data-testid=step-original]').textContent()) ?? '').trim()
-    await page.locator('.lang-switcher').click(); await page.waitForTimeout(300)
-    if (!en.endsWith('rotation (0, 0, 30)°')) fail(`42: en «Исходно» «${en}»`)
     const rz = p.sp.locator('[data-testid=step-rotDelta] input.props-input').nth(2)
-    let n = await s.steps(); await rz.fill('40'); await rz.press('Enter'); await s.waitSteps(n + 1)
+    let n = await s.steps(); await rz.fill('175'); await rz.press('Enter'); await s.waitSteps(n + 1)
     const edit = (await s.labels()).at(-1); await back(p.sp)
     const te = await s.tr(k)
-    if (!near(te[5], 210, 0.11) || !/^Правка шага \d+: поворот \(0, 0, 30\)° → \(0, 0, 40\)°$/.test(edit)) fail(`42: правка шага — ${te[5]}, «${edit}»`)
-    ok.push(`42: поле 270 — 270, «поворот (0, 0, 270)°»; выравнивание 170 → ${ta[5]} (undo ${tu[5]}, redo ${tr2[5]}, .3dtc ${to[5]}): «Исходно» «…поворот (0, 0, 30)°», поле 30, en «…rotation (0, 0, 30)°»; правка на 40 — ${te[5]}, «${edit}»`)
+    if (!near(te[5], 200, 0.11) || !/^Правка шага \d+: поворот \(0, 0, 170\)° → \(0, 0, 175\)°$/.test(edit)) fail(`42: правка поворота до выравнивания — ${te[5]}, «${edit}»`)
+    ok.push(`42: поле 270 — 270, «поворот (0, 0, 270)°»; выравнивание 170 → ${ta[5]} (undo ${tu[5]}, redo ${tr2[5]}, .3dtc ${to[5]}): шаг «${label}» / «${en}», ✎ нет; «${edit}» — выравнивание пересчитано, снова ${te[5]}`)
     await s.confirmClear()
     // решение 3: 350 + 30 → 380
     const r2 = await s.add('Куб'); await s.setF(r2, 'num-input-rot-Z', 20)
     const k2 = await s.add('Куб'); await s.setF(k2, 'num-input-pos-X', 60); await s.setF(k2, 'num-input-rot-Z', 350)
     await s.startAlign(); await s.clickA(r2, (n) => close(n, dirXY(20))); await s.clickB(k2, (n) => close(n, dirXY(-10))); await s.exitAlign()
     const t3 = await s.tr(k2)
-    p = await stepPanel(page, 'Повернуть'); await back(p.sp)
-    if (!near(t3[5], 380, 0.11) || !p.original.endsWith('поворот (0, 0, 30)°')) fail(`42: 350 + 30 — ${t3[5]}, «${p.original}»`)
-    ok.push(`42: решение 3 — угол объекта продолжается: 350 + 30 → ${t3[5]}, шаг «поворот (0, 0, 30)°»`)
+    const l3 = ((await page.locator('.tl-item').last().locator('.tl-label').textContent()) ?? '').trim()
+    if (!near(t3[5], 380, 0.11) || l3 !== 'Выровнять по грани') fail(`42: 350 + 30 — ${t3[5]}, «${l3}»`)
+    ok.push(`42: решение 3 — угол объекта продолжается: 350 + 30 → ${t3[5]}, шаг «${l3}»`)
     await s.confirmClear()
     // гизмо: кольцо Z через 180°
     const gz = await s.add('Куб'); await s.setF(gz, 'num-input-rot-Z', 175)

@@ -9,14 +9,15 @@
 // плоскость). Esc / правый клик / «Готово» — выход.
 //
 // Геометрия — `helpers.solvePlaneAlignTransform` (реальная геометрия, как у ALIGN-REVIT);
-// запись в историю — обычный шаг move (`moveObject`), он воспроизводится и правится ✎.
+// запись в историю — шаг `align` с плоскостью (`alignToPlane`, ALIGN-PLANE-RESOLVE): плоскость A и
+// грань B — в системах своих объектов, правка прошлого шага пересчитывает выравнивание (каскад 9.5).
 
 import { create } from 'zustand'
 import type { Vec3 } from '../csg/types'
 import { useDocumentStore } from './document-store'
 import { useUiStore } from './ui-store'
 import { notify } from './notifications'
-import { axisPlane, solvePlaneAlignTransform, type WorldPlane } from './helpers'
+import { axisPlane, type WorldPlane } from './helpers'
 import i18n from '../i18n'
 
 /** Плоскость режима: грань объекта A (мировая нормаль + точка) или ось X/Y/Z. */
@@ -110,10 +111,15 @@ export const useAlignModeStore = create<AlignModeStore>((set, get) => ({
       notify(i18n.t('alignMode.locked'), 'warning')
       return false
     }
-    // UX-AUDIT-32: непараллельная грань B — поворот (в ту же сторону, что нормаль A) + сдвиг;
-    // параллельная — только сдвиг, как раньше. Один шаг move (moveObject пропускает нулевой).
-    const next = solvePlaneAlignTransform(obj, resolvePlane(m.plane), { normal: pick.normal, point: pick.point, triangleIndex: pick.triangleIndex })
-    await doc.moveObject(pick.objectId, next)
+    // UX-AUDIT-32: непараллельная грань B — поворот на месте + сдвиг; параллельная — только сдвиг.
+    // ALIGN-PLANE-RESOLVE: шаг align с плоскостью (не move) — правка прошлого шага пересчитывает
+    // выравнивание. Уже в плоскости — шага нет (как раньше у move).
+    await doc.alignToPlane({
+      targetId: pick.objectId,
+      plane: resolvePlane(m.plane),
+      ...('objectId' in m.plane ? { anchorId: m.plane.objectId } : {}),
+      pick: { normal: pick.normal, point: pick.point, triangleIndex: pick.triangleIndex },
+    })
     const after = get().alignMode
     if (!after) return true
     if (after.multiple) set({ alignMode: { ...after, alignedCount: after.alignedCount + 1, hoveredFace: null } })

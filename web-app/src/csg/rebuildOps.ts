@@ -27,6 +27,20 @@ export interface ShapeMeta {
 }
 
 /**
+ * ALIGN-PLANE-RESOLVE: для воспроизведения шаг выравнивания по плоскости (`align` с `plane`) — это
+ * move каждой цели (сдвиг + дельта углов из `plane.moves`, масштаб не меняется). Остальные шаги —
+ * как есть. Циклы воспроизведения (rebuild.ts — мета и дерево, воркер) идут по развёрнутым шагам —
+ * одна ветка move, одна семантика. Нетипизированный вход — для воркера (операции из сообщения).
+ */
+export function expandForReplay<T extends { type?: unknown }>(op: T): Array<T | TinkerCraftOperation> {
+  const a = op as unknown as { type?: unknown; plane?: { moves?: Record<string, { delta: Vec3; rotDelta: Vec3 }> } }
+  if (a.type !== 'align' || !a.plane?.moves) return [op]
+  return Object.entries(a.plane.moves).map(([id, m]) => ({
+    type: 'move' as const, ids: [id], delta: { ...m.delta }, rotDelta: { ...m.rotDelta }, scaleDelta: { x: 0, y: 0, z: 0 },
+  }))
+}
+
+/**
  * Apply delta transform to current transform.
  * ADDITIVE application — correct because delta = newScale - oldScale.
  * FIX (MED-18-26): Clamp scale to prevent drift from accumulated floating-point errors.

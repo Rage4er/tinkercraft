@@ -14,7 +14,7 @@
 - **manifold-3d** (WASM) — CSG операции в Web Worker
 - **Zustand 5** — стейт-менеджмент
 - **Vite 6** — сборка
-- **Vitest 4** — тесты (844 теста, 68 файлов; `it.fails` открытых багов нет — UX-прогон 7 нашёл 0 новых, цикл закрыт; UX-AUDIT-1…10 исправлены в `fix-all`, 11…20 — в `fix-all-2`, 21…31 — в `fix-all-3`, 32…35 — в `fix-all-4`, 32-followup и 36…40 — в `fix-all-5`, 41, 42 — в `fix-all-6`)
+- **Vitest 4** — тесты (858 тестов, 69 файлов; `it.fails` открытых багов нет — UX-прогон 7 нашёл 0 новых, цикл закрыт; UX-AUDIT-1…10 исправлены в `fix-all`, 11…20 — в `fix-all-2`, 21…31 — в `fix-all-3`, 32…35 — в `fix-all-4`, 32-followup и 36…40 — в `fix-all-5`, 41, 42 — в `fix-all-6`)
 - **pnpm** — пакетный менеджер
 
 ## Команды
@@ -23,7 +23,7 @@
 cd web-app
 pnpm dev          # dev-сервер (порт 5000)
 pnpm build        # production-сборка
-pnpm test         # запуск тестов (844 теста, 68 файлов)
+pnpm test         # запуск тестов (858 тестов, 69 файлов)
 pnpm typecheck    # tsc --noEmit
 pnpm e2e:smoke    # дымовой тест в браузере (Playwright; нужен запущенный pnpm dev; см. web-app/e2e/helpers.mjs). В CI все e2e — job `e2e` в ci-web.yml (CI-E2E)
 pnpm e2e:tree     # Фаза 9.1: раскрытие CSG в дереве, выбор ребёнка
@@ -43,6 +43,7 @@ pnpm e2e:ux-audit-6  # UX-прогон 6: явная проверка фиксо
 pnpm e2e:ux-audit-7  # UX-прогон 7 (0 новых): явная проверка фиксов fix-all-6 — 41: CSG после выравнивания с поворотом (undo/redo, правка ребёнка и шага, .3dtc, копия, зеркальная копия, вложенный, «Множественное» — центр тела по STL на месте), конус/пирамида/текст/импорт — вокруг опорной точки; 42: поле 270, 170 → 200 и «поворот (0, 0, 30)°» (ru/en, правка шага), 350 + 30 → 380, гизмо через 180° (Z) и 90° (Y) — кольцо по цвету на снимке
 pnpm e2e:align-ui-revit  # ALIGN-UI-REVIT: «Выровнять» → Z → верх B в 0; грань A → B; «Множественное»; Esc; правый клик
 pnpm e2e:align-obb  # ALIGN-REVIT: режимом «Выровнять» — повёрнутый цилиндр боковой (гладкой) гранью к грани куба — касание по реальной геометрии; повёрнутый куб плоской гранью к плоскости XY — поворот (UX-AUDIT-32)
+pnpm e2e:align-plane-resolve  # ALIGN-PLANE-RESOLVE: режим «Выровнять» → шаг align («Выровнять по грани», ✎ нет) → правка «Переместить» якоря до выравнивания → снова заподлицо; undo/redo, .3dtc; призма с поворотом; плоскость по оси
 ```
 
 ## Текущий статус
@@ -95,7 +96,7 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 | **Store** | |
 | `src/store/document-store.ts` | Zustand store — действия (create), 500 строк |
 | `src/store/ui-store.ts` | Zustand store — UI state (gizmo, theme, camera, modals, etc.) |
-| `src/store/helpers.ts` | Утилиты store (extractAndCenter, extractAndCenterGetAABB, computeAABB, makeObject, nextId, colorForIndex; `computeWorldAABB` — мировая рамка по реальной геометрии с полным TRS (вершины; без вершин — OBB `obbCorners`/`obbWorldAABB` из `localParamsBox`, ALIGN-REVIT), `worldVerticesAABB`, `solveAlignDeltas` — решатель выравнивания, общий для `alignSelected` и re-solve 9.5.2; `solvePlaneAlignDelta`/`worldProjectionRange`/`axisPlane` — выравнивание грани по плоскости (ALIGN-UI-REVIT); `solvePlaneAlignTransform` — то же с поворотом непараллельной плоской грани на месте (вокруг центра тела `alignRotationCenter`: у примитивов — опорная точка, UX-AUDIT-32-followup; у CSG — центр рамки, UX-AUDIT-41), `isSmoothSurfaceAt` — грань гладкой поверхности (порог = затенению), `eulerXYZFromMatrix` (UX-AUDIT-32), `continuousEuler` — углы в записи, ближайшей к прежним (дельта шага в ±180°; выравнивание и гизмо, UX-AUDIT-42); `extrudeSlab` — плита extrude по мировой рамке базы, 9.5.4) |
+| `src/store/helpers.ts` | Утилиты store (extractAndCenter, extractAndCenterGetAABB, computeAABB, makeObject, nextId, colorForIndex; `computeWorldAABB` — мировая рамка по реальной геометрии с полным TRS (вершины; без вершин — OBB `obbCorners`/`obbWorldAABB` из `localParamsBox`, ALIGN-REVIT), `worldVerticesAABB`, `solveAlignDeltas` — решатель выравнивания, общий для `alignSelected` и re-solve 9.5.2; `solvePlaneAlignDelta`/`worldProjectionRange`/`axisPlane` — выравнивание грани по плоскости (ALIGN-UI-REVIT); `solvePlaneAlignTransform` — то же с поворотом непараллельной плоской грани на месте (вокруг центра тела `alignRotationCenter`: у примитивов — опорная точка, UX-AUDIT-32-followup; у CSG — центр рамки, UX-AUDIT-41), `isSmoothSurfaceAt` — грань гладкой поверхности (порог = затенению), `eulerXYZFromMatrix` (UX-AUDIT-32), `continuousEuler` — углы в записи, ближайшей к прежним (дельта шага в ±180°; выравнивание и гизмо, UX-AUDIT-42); `faceToLocal`/`faceToWorld` — грань в системе объекта и обратно, `solvePlaneAlignMove` — решение шага выравнивания по плоскости (живое `alignToPlane` и каскад, ALIGN-PLANE-RESOLVE); `extrudeSlab` — плита extrude по мировой рамке базы, 9.5.4) |
 | `src/store/types.ts` | DocumentStore interface |
 | `src/store/rebuild.ts` | rebuildFromHistory — восстановление объектов из истории операций |
 | `src/store/snapshots.ts` | Snapshot cache для мгновенного undo/redo (PERF-1) |
@@ -113,8 +114,8 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 | `src/store/edit-child.ts` | Пересчёт CSG после смены params ребёнка: калибровка дерева ↔ меш, un-bake в локальную систему корня (`computeEditedChild`, `unbakeToLocal`, `findCreationTransform` — в т.ч. система создания копий: зеркало — отражённая, вставка — `copyTree.origin`) — Фаза 9.3 |
 | `src/store/project-history.ts` | **Эффективная история** (Фаза 9.5.0): `projectHistory` подставляет `edit_step` (патч шага N + `replacements` замороженных шагов) и выбрасывает их; идемпотентна, вызывается на входе `rebuild.ts` и `findCreationTransform`. `computeCascade` — замыкание зависимостей правки |
 | `src/store/csg-result.ts` | Общее ядро CSG `computeCsgResult` (sync → boolean → pivot = transformA → un-bake RS) для `csgBoolean` и каскада 9.5; `syncObjectsForOperation`, `groupOperationFromResult`, `groupReplacementFromResult` |
-| `src/store/edit-step.ts` | **Правка прошлого шага** (Фаза 9.5.2): `computeStepEdit` — гипотетическая проекция + каскад (`group` через `computeCsgResult`, `edit_child_params` путём 9.3, `align` re-solve); атомарный отказ; `isStepEditable` / `SUPPORTED_KINDS` — какие шаги правятся (move, mirror, extrude — группа с `source`); плита extrude пересчитывается по рамке базы (`extrudeSlab`) |
-| `src/store/align-mode.ts` | **Режим выравнивания** (ALIGN-UI-REVIT): `alignMode` (плоскость A — грань или ось, «Множественное», грань под курсором), `clickFace` (A, затем B), `applyAlignB` → `solvePlaneAlignTransform` (UX-AUDIT-32: плоская непараллельная грань B — поворот на месте (CSG — вокруг центра рамки, UX-AUDIT-41) + сдвиг: угол с нормалью A ≤ 90° — в ту же сторону, > 90° — встречно, UX-AUDIT-37; параллельная и грань гладкой поверхности — сдвиг) → `moveObject` (один шаг move) |
+| `src/store/edit-step.ts` | **Правка прошлого шага** (Фаза 9.5.2): `computeStepEdit` — гипотетическая проекция + каскад (`group` через `computeCsgResult`, `edit_child_params` путём 9.3, `align` re-solve (по плоскости — `solvePlaneAlignMove`, ALIGN-PLANE-RESOLVE)); атомарный отказ; `isStepEditable` / `SUPPORTED_KINDS` — какие шаги правятся (move, mirror, extrude — группа с `source`); плита extrude пересчитывается по рамке базы (`extrudeSlab`) |
+| `src/store/align-mode.ts` | **Режим выравнивания** (ALIGN-UI-REVIT): `alignMode` (плоскость A — грань или ось, «Множественное», грань под курсором), `clickFace` (A, затем B), `applyAlignB` → `solvePlaneAlignTransform` (UX-AUDIT-32: плоская непараллельная грань B — поворот на месте (CSG — вокруг центра рамки, UX-AUDIT-41) + сдвиг: угол с нормалью A ≤ 90° — в ту же сторону, > 90° — встречно, UX-AUDIT-37; параллельная и грань гладкой поверхности — сдвиг) → `alignToPlane` (один шаг `align` с плоскостью — ALIGN-PLANE-RESOLVE: плоскость A и грань B в системах своих объектов, правка прошлого шага пересчитывает) |
 | `src/components/AlignPanel.tsx` | Панель режима выравнивания (вместо свойств): подсказка, X/Y/Z, текущая плоскость, «Множественное», «Готово» |
 | `src/components/align-picking.ts` | Raycast по треугольнику (`pickFace` — мировые нормаль и точка) и плоская грань для подсветки (`planarFaceTriangles`) |
 | `src/hooks/useAlignModeKeys.ts` | Esc → выход из режима выравнивания (capture, раньше общего обработчика App) |
@@ -125,7 +126,7 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 | `src/hooks/useSelectedStepGuard.ts` | Сброс выбора шага (undo до шага, выделение в сцене, выбор ребёнка CSG) — Фаза 9.5.2 |
 | `src/components/ChildPropertiesPanel.tsx` | Панель свойств выбранного ребёнка CSG (вместо `PropertiesPanel`, пока `ui-store.selectedChild` задан) — Фаза 9.2 |
 | `src/components/ComponentTree.tsx` | Дерево объектов сцены; CSG-результат раскрывается в детей из Build Tree, выбор ребёнка → `ui-store.selectedChild` — Фаза 9.1 |
-| `src/csg/rebuildOps.ts` | `applyMoveDelta`, `applyMirrorToTransform`, `applyAlignToTransform` |
+| `src/csg/rebuildOps.ts` | `applyMoveDelta`, `applyMirrorToTransform`, `applyAlignToTransform`; `expandForReplay` — шаг `align` с плоскостью (режим «Выровнять») воспроизводится как move каждой цели (мета, дерево, воркер — ALIGN-PLANE-RESOLVE) |
 | `src/csg/worker.ts` | WASM worker — manifold-3d операции, типобезопасные интерфейсы |
 | `src/csg/worker-client.ts` | Promise-обёртка над воркером |
 | `src/csg/worker-handlers.ts` | Индивидуальные handlers для каждой операции |
@@ -281,8 +282,8 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 
 - Импортированные меши (STL) не параметризуются (IMPORT-MESH-PARAMETRIC: не требуется); трансформации и CSG работают — CSG допускает замкнутый STL (проверка по manifold в воркере, IMPORT-MESH-CSG), незамкнутый → уведомление `errors.csgNonManifold`; «починка» незамкнутого меша не делается; старые extrude без `group.source` не редактируются как extrude (EXTRUDE-LEGACY: не мигрируем); `extrudeSelected` — движок правки 9.5.4, не UI-инструмент: это «растянуть по оси», а не extrude 2D→3D, кнопку не возвращать (EXTRUDE-3D-SCALE; настоящий extrude — Фаза 11)
 - Скругления (fillet) нет: прежний параметр куба удалён (remove-fillet) до инструмента на B-Rep; старые шаги `fillet` вырезаются при загрузке (`io/legacy-fillet.ts`) — новых не создавать
-- После v1.3.1 открыто: связанное зеркало (linked mirror) не делали — копия CSG всегда независимая; «починка» незамкнутого STL. CI — один workflow `ci-web.yml` (CI-DEDUP ✅): job `ci` (install + typecheck + test + build) и job `e2e` — все 18 e2e (CI-E2E ✅)
-- Выравнивание режимом «Выровнять» (ALIGN-UI-REVIT) пишется шагом move (с поворотом — «Повернуть», UX-AUDIT-32; грань гладкой поверхности — цилиндр, сфера — не поворачивает, только касание): при правке прошлого шага объект не перевыравнивается по плоскости (ALIGN-PLANE-RESOLVE); шаги `align` старых проектов — с re-solve, как раньше
+- После v1.3.1 открыто: связанное зеркало (linked mirror) не делали — копия CSG всегда независимая; «починка» незамкнутого STL. CI — один workflow `ci-web.yml` (CI-DEDUP ✅): job `ci` (install + typecheck + test + build) и job `e2e` — все 19 e2e (CI-E2E ✅)
+- Выравнивание режимом «Выровнять» (ALIGN-UI-REVIT) пишется шагом `align` с плоскостью (ALIGN-PLANE-RESOLVE ✅; с поворотом — UX-AUDIT-32; грань гладкой поверхности — цилиндр, сфера — не поворачивает, только касание): правка прошлого шага пересчитывает его; ✎ у самого шага нет (как у обычного align). Плоскость A следует за системой объекта A (TRS), а не за гранью при правке формы A (правка ребёнка CSG A)
 - Дерево живой сессии, начатой до v1.3.2 (boolean-узлы без `originTransform`), для вложенного CSG, сдвинутого до объединения, остаётся под замком `nested_moved` (предохранитель); после перезагрузки/загрузки проекта дерево перестраивается из истории с TRS₀ — правка работает
 - `.doodle` (legacy) в UI не открывается: `parseDoodle` не вызывается
 - 3D-текст, созданный до `fix-all` (в истории — несшитый меш), в CSG не участвует — пересоздать (UX-AUDIT-3 не мигрирует старые шаги); «Отменить» после «Очистить сцену» работает только сразу после очистки (до нового действия)

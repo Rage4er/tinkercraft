@@ -33,7 +33,7 @@ import {
 import { rebuildFromHistory, rebuildBuildTree, buildRebuildMeta } from './rebuild'
 import { computeCsgResult, bakeResultRS, groupReplacementFromResult } from './csg-result'
 import { computeEditedChild, type EditChildFailure } from './edit-child'
-import { solveAlignDeltas, extrudeSlab, worldVerticesAABB, nextId } from './helpers'
+import { solveAlignDeltas, solvePlaneAlignMove, extrudeSlab, worldVerticesAABB, nextId } from './helpers'
 import { getNode } from '../csg/history-tree'
 
 /**
@@ -235,8 +235,19 @@ export async function computeStepEdit(args: {
       // Re-solve (В2): цели, чья рамка или рамка якоря изменилась, — заново по рамкам
       // на этом шаге; у прочих записанная delta верна (их рамка и якорь прежние).
       const a = cur[j] as AlignOperation
-      const resolved = solveAlignDeltas(before, plan.alignResolve[j] ?? [], a.axis, a.anchor, a.anchorId)
-      r = { stepIndex: rawJ, kind: 'align', deltas: { ...a.deltas, ...resolved } }
+      if (a.plane) {
+        // ALIGN-PLANE-RESOLVE: выравнивание режимом — грань B заново в плоскость A по объектам на
+        // этом шаге (плоскость и грань — в системах своих объектов): объект остаётся выровненным
+        const moves = { ...a.plane.moves }
+        for (const id of plan.alignResolve[j] ?? []) {
+          const m = solvePlaneAlignMove(before, a.plane, a.anchorId, id)
+          if (m) moves[id] = m
+        }
+        r = { stepIndex: rawJ, kind: 'align', alignMoves: moves }
+      } else {
+        const resolved = solveAlignDeltas(before, plan.alignResolve[j] ?? [], a.axis, a.anchor, a.anchorId)
+        r = { stepIndex: rawJ, kind: 'align', deltas: { ...a.deltas, ...resolved } }
+      }
     } else {
       const e = cur[j] as EditChildParamsOperation
       // params узла до правки: исходные (по старой истории) и новые (по каскаду)
