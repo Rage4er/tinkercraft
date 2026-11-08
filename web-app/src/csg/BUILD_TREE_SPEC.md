@@ -1375,7 +1375,7 @@ export async function workerRebuildNode(
 - [x] `rebuildBuildTree` в `rebuild.ts` для sync дерева при undo/redo
 - [x] Расширить типы операций для хранения структуры дерева (`treeOperation` в GroupOperation)
 - [x] Обновить `rebuildFromHistory` для работы с деревом (через rebuildBuildTree)
-- [x] Обновить `snapshot` кэш для учёта дерева (`cacheTreeSnapshot`, `restoreTreeFromSnapshot`)
+- [x] Обновить `snapshot` кэш для учёта дерева (`cacheTreeSnapshot`; восстановление дерева из снимка удалено как мёртвый код — CLEANUP-DEAD-CODE: undo/redo строят дерево через `rebuildBuildTree`)
 - [x] Финальное тестирование всех сценариев (141 тест, все прошли)
 
 ---
