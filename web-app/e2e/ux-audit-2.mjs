@@ -9,11 +9,13 @@
 //  N.   светлая и тёмная темы: модалки (подтверждение, текст, проекты), тост, панели — фон
 //       меняется с темой, текст читается (контраст ≥ 3).
 // Ошибок консоли нет (все сценарии). Логика тех же сценариев в сторе — __tests__/ux-audit-2.test.ts.
+// Пороги производительности (J — время вычитания 100k, L — FPS) — `assertPerf`: локально строго, в CI (`E2E_SOFT_PERF=1`) —
+// предупреждение `[SOFT PERF]`, проверки дальше выполняются (helpers.mjs).
 // Запуск: `pnpm dev` в одном терминале, `pnpm e2e:ux-audit-2` в другом.
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { openApp, panelButton, toolbarButton, spaceShapeClick } from './helpers.mjs'
+import { openApp, panelButton, toolbarButton, spaceShapeClick, assertPerf, waitToastsSettled } from './helpers.mjs'
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ux-audit-2-'))
 const ok = []
@@ -164,7 +166,7 @@ try {
     const stl = path.join(tmp, 'e.stl'); await (await dl).saveAs(stl)
     const n = fs.readFileSync(stl).readUInt32LE(80)
     if (String(n) !== inScene) fail(`J: в STL ${n} треугольников, в сцене ${inScene}`)
-    if (tCsg > 15000) fail(`J: вычитание 100k ${tCsg} мс`)
+    assertPerf(tCsg <= 15000, `J: вычитание 100k ${tCsg} мс`)
     ok.push(`J: STL ${tris.length} − куб (X) за ${tCsg} мс → в истории «Вычитание» (UX-AUDIT-11) → экспорт ${n} треугольников = сцене`)
 
     await s.confirmClear()
@@ -195,7 +197,7 @@ try {
     }
     await page.waitForTimeout(400)
     if ((await s.rows.count()) !== 35) fail('L: после переключений объектов ' + (await s.rows.count()))
-    if (fps < 30) fail('L: FPS ' + fps)
+    assertPerf(fps >= 30, 'L: FPS ' + fps)
     ok.push(`L: 35 фигур, ${total} шагов — ${Date.now() - t} мс с undo/redo всего; FPS ${fps}; переключения ×8 без ошибок`)
     if (s.errors.length) fail('J/L: ошибки консоли ' + s.errors.join(' | '))
     await s.browser.close()
@@ -268,7 +270,7 @@ try {
       // ✅ UX-AUDIT-19: тост не закрывает правую панель и тулбар — в правом верхнем углу вьюпорта
       if (!toastChecked) {
         toastChecked = true
-        await page.waitForTimeout(400)                       // анимация появления (translateX) закончилась
+        await page.waitForTimeout(400); await waitToastsSettled(page)   // анимация появления (translateX) закончилась
         const r = await page.evaluate(() => ['.toast', '.panel-right', '[role=toolbar]', '.main > .viewport'].map((q) => { const b = document.querySelector(q).getBoundingClientRect(); return { left: b.left, right: b.right, top: b.top, bottom: b.bottom } }))
         const bad = [...(overlap(r[0], r[1]) ? ['правую панель'] : []), ...(overlap(r[0], r[2]) ? ['тулбар'] : [])]
         if (bad.length) fail('UX-AUDIT-19: тост перекрывает ' + bad.join(' и '))

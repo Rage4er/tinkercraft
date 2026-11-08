@@ -54,11 +54,16 @@ jobs:
   # CI-E2E: все 18 e2e (`web-app/e2e/*.mjs` — скрипты Playwright, не @playwright/test) в headless
   # Chromium с WebGL против `pnpm dev` (порт 5000, как локально). Параллельно с `ci`, 4 группы —
   # по локальному времени (~15 мин подряд; ux-audit-5…7 — ~13 мин). Повтор: до 2 раз на скрипт,
-  # с предупреждением в сводке (нестабильность не прячется). Логи e2e и dev-сервера — артефакт.
+  # с предупреждением в сводке (нестабильность не прячется). Пороги производительности — мягко
+  # (E2E_SOFT_PERF, предупреждение в сводке). Логи e2e и dev-сервера — артефакт.
   e2e:
     name: e2e (${{ matrix.group }})
     runs-on: ubuntu-24.04
     timeout-minutes: 120
+    env:
+      # пороги производительности e2e (FPS, долгие задачи, время CSG — e2e/helpers.mjs › assertPerf)
+      # на раннере без GPU не выполнимы: в CI — предупреждение `[SOFT PERF]`, локально — строго
+      E2E_SOFT_PERF: '1'
     strategy:
       fail-fast: false
       matrix:
@@ -152,6 +157,7 @@ jobs:
               echo "::group::e2e:$t — попытка $attempt — $([ $passed = 1 ] && echo OK || echo "FAIL (exit $rc)") — $(( $(date +%s) - start )) с"
               cat "$log"
               echo "::endgroup::"
+              grep -F '[SOFT PERF]' "$log" | while IFS= read -r line; do echo "::warning title=e2e:$t — порог производительности (E2E_SOFT_PERF)::${line#\[SOFT PERF\] }"; done || true
               if [ $passed = 1 ]; then
                 [ $attempt -gt 1 ] && echo "::warning title=e2e:$t нестабилен::прошёл с попытки $attempt (логи — артефакт)"
                 break

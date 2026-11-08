@@ -18,12 +18,14 @@
 //     в фокусе), UX-AUDIT-24 (плашка линейки — во вьюпорте, не на тулбаре и «Привязке»),
 //     UX-AUDIT-30 (на 768 тост — под «Привязкой» и плашкой линейки). `knownBug` сейчас нет.
 // Ошибок консоли нет (все сценарии). Логика — __tests__/ux-audit-3.test.tsx (`it.fails`).
+// Пороги производительности (UX-AUDIT-21 — долгие задачи, L — FPS) — `assertPerf`: локально строго, в CI (`E2E_SOFT_PERF=1`) —
+// предупреждение `[SOFT PERF]`, проверки дальше выполняются (helpers.mjs).
 // Запуск: `pnpm dev` в одном терминале, `pnpm e2e:ux-audit-3` в другом.
 // Необязательный аргумент — каталог для скриншотов: `node e2e/ux-audit-3.mjs /tmp/ux3`.
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { openApp, panelButton, toolbarButton, findAlignFace, spaceShapeClick } from './helpers.mjs'
+import { openApp, panelButton, toolbarButton, findAlignFace, spaceShapeClick, assertPerf, waitToastsSettled } from './helpers.mjs'
 
 const shotDir = process.argv[2]
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ux-audit-3-'))
@@ -290,7 +292,7 @@ try {
     await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))))
     const long = await page.evaluate(() => window.__lt.filter((d) => d >= 120))
     // было: каждая правка — долгая задача 155–194 мс (пересборка нормалей и рёбер импорта); GC — допускаем одну
-    if (long.length > 1) fail(`UX-AUDIT-21: правки куба при импорте 100k — долгие задачи ${long.join(', ')} мс`)
+    assertPerf(long.length <= 1, `UX-AUDIT-21: правки куба при импорте 100k — долгие задачи ${long.join(', ')} мс`)
     if (s.errors.length) fail('UX-AUDIT-21: ошибки консоли ' + s.errors.join(' | '))
     ok.push(`UX-AUDIT-21: импорт ${tris.length} в сцене — 4 правки куба без долгих задач ≥ 120 мс (${long.length ? long.join(', ') + ' мс' : 'нет'})`)
     await s.browser.close()
@@ -330,7 +332,7 @@ try {
     }
     await page.waitForTimeout(400)
     if ((await s.rows.count()) !== 52) fail('L: после переключений объектов ' + (await s.rows.count()))
-    if (fps < 30) fail('L: FPS ' + fps)
+    assertPerf(fps >= 30, 'L: FPS ' + fps)
     if (s.errors.length) fail('L: ошибки консоли ' + s.errors.join(' | '))
     ok.push(`L: 52 фигуры, ${total} шагов — ${Math.round((Date.now() - t0) / 1000)} с с undo/redo всего; FPS ${fps}; переключения ×8; консоль чистая`)
     await s.browser.close()
@@ -358,7 +360,7 @@ try {
 
     // R. тост: не поверх панели/тулбара; над модалкой; исчезает через ~5 с
     await s.pair(a, b); await panelButton(page, 'Пересечение').click()
-    await page.locator('.toast').first().waitFor({ timeout: 5000 }); await page.waitForTimeout(400)
+    await page.locator('.toast').first().waitFor({ timeout: 5000 }); await page.waitForTimeout(400); await waitToastsSettled(page)
     const [toast, right, tb] = [await s.rect('.toast'), await s.rect('.panel-right'), await s.rect('[role=toolbar]')]
     if (overlap(toast, right) || overlap(toast, tb)) fail('R: тост перекрывает правую панель или тулбар')
     await s.dismissToasts()
@@ -452,7 +454,7 @@ try {
     await page.mouse.click(vp.left + (vp.right - vp.left) * 0.7, vp.top + (vp.bottom - vp.top) * 0.85)
     await page.locator('.ruler-display').waitFor({ timeout: 5000 })
     await s.pair(a, b); await panelButton(page, 'Пересечение').click()     // линейка включена — плашка видна
-    await page.locator('.toast').first().waitFor({ timeout: 5000 }); await page.waitForTimeout(400)
+    await page.locator('.toast').first().waitFor({ timeout: 5000 }); await page.waitForTimeout(400); await waitToastsSettled(page)
     await s.shot('toast-768.png')
     const [t, snap, ruler, right, tb] = [await s.rect('.toast'), await s.rect('.snap-selector'), await s.rect('.ruler-display'), await s.rect('.panel-right'), await s.rect('[role=toolbar]')]
     if (!ruler) fail('UX-AUDIT-30 (768): плашки линейки нет')

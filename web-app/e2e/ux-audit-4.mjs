@@ -13,12 +13,14 @@
 //     UX-AUDIT-32 «Выровнять»: боковая грань призмы к верху куба — призма поворачивается;
 //     UX-AUDIT-35 линейка над импортом 100k — наведение без долгих задач. `knownBug` сейчас нет.
 // Ошибок консоли нет (все сценарии). Логика — __tests__/ux-audit-4.test.tsx (`it.fails`).
+// Пороги производительности (UX-AUDIT-35 — долгие задачи) — `assertPerf`: локально строго, в CI (`E2E_SOFT_PERF=1`) —
+// предупреждение `[SOFT PERF]`, проверки дальше выполняются (helpers.mjs).
 // Запуск: `pnpm dev` в одном терминале, `pnpm e2e:ux-audit-4` в другом.
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { createRequire } from 'node:module'
-import { openApp, panelButton, toolbarButton, findAlignFace, spaceShapeClick } from './helpers.mjs'
+import { openApp, panelButton, toolbarButton, findAlignFace, spaceShapeClick, assertPerf, waitToastsSettled } from './helpers.mjs'
 
 const JSZip = createRequire(import.meta.url)('jszip')
 const shotDir = process.argv[2]
@@ -264,7 +266,7 @@ try {
     // ✅ UX-AUDIT-35: наведение плавное — после первого движения (сетка треугольников строится один
     // раз) долгих задач ≥ 50 мс нет; было 63–113 мс на каждое движение
     const after = lt.slice(1)
-    if (after.length > 1) fail(`UX-AUDIT-35: 12 движений над импортом ${n} — долгие задачи ${lt.join(', ')} мс`)
+    assertPerf(after.length <= 1, `UX-AUDIT-35: 12 движений над импортом ${n} — долгие задачи ${lt.join(', ')} мс`)
     ok.push(`W: линейка над импортом ${n} — 12 движений: долгие задачи ${lt.length ? lt.join(', ') + ' мс' : 'нет'} (первое — сборка сетки; UX-AUDIT-35)`)
     if (s.errors.length) fail('W: ошибки консоли ' + s.errors.join(' | '))
     await s.browser.close()
@@ -291,7 +293,7 @@ try {
     await page.mouse.click(vp.left + (vp.right - vp.left) * 0.6, vp.top + (vp.bottom - vp.top) * 0.85)
     await page.locator('.ruler-display').waitFor({ timeout: 5000 }); await page.waitForTimeout(300)
     await s.pair(a, b); await panelButton(page, 'Пересечение').click()
-    await page.locator('.toast').first().waitFor({ timeout: 5000 }); await page.waitForTimeout(400)
+    await page.locator('.toast').first().waitFor({ timeout: 5000 }); await page.waitForTimeout(400); await waitToastsSettled(page)
     await s.shot('y-1280.png')
     const [r, t, tb, right, snap] = [await s.rect('.ruler-display'), await s.rect('.toast'), await s.rect('[role=toolbar]'), await s.rect('.panel-right'), await s.rect('.snap-selector')]
     const bad = [...(overlap(r, tb) ? ['плашка ∩ тулбар'] : []), ...(overlap(t, tb) ? ['тост ∩ тулбар'] : []), ...(overlap(t, right) ? ['тост ∩ панель'] : []), ...(overlap(t, snap) ? ['тост ∩ «Привязка»'] : [])]
