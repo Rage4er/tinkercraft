@@ -13,6 +13,7 @@ import { openApp, panelButton, toolbarButton, spaceShapeClick } from './helpers.
 
 const shot = process.argv[2]
 const { browser, page, errors } = await openApp()
+let stage = 'старт'
 const fail = (msg) => { throw new Error(msg) }
 const right = page.locator('.panel-right')
 const objRows = page.locator('.ct-item[data-object-id]')
@@ -30,6 +31,11 @@ async function add(label) {
   await spaceShapeClick(page, label)                       // UX-AUDIT-9: подряд та же фигура — не «двойной клик»
   await page.getByText(label, { exact: true }).first().click()
   await waitRows(before.size + 1)
+  // UX-AUDIT-9 считает 200 мс по времени ОБРАБОТКИ клика в странице, а spaceShapeClick — по
+  // часам скрипта: на CPU-рендере (CI) обработка запаздывает, и следующий клик той же фигуры
+  // попадал в окно «двойного клика» (31 куб подряд, раздел C). Строка появляется после
+  // обработки — выдерживаем паузу от неё.
+  await page.waitForTimeout(250)
   return (await ids()).find((id) => !before.has(id))
 }
 async function pick(id) {
@@ -82,6 +88,7 @@ try {
   await page.locator('button.tab-btn', { hasText: 'Дерево' }).click()
 
   // ── A. union 10 ──
+  stage = 'A. union 10'
   const cubes = []
   for (let i = 0; i < 10; i++) cubes.push(await add('Куб'))
   await select(cubes)
@@ -98,6 +105,7 @@ try {
   console.log('✅ A. 10 кубов → «Объединение» → один CSG, 10 детей плоским списком, без замков и уведомлений')
 
   // правка 5-го ребёнка (9.2/9.3) — ребёнок из плоского списка
+  stage = 'A. правка ребёнка'
   const fifth = page.locator('.ct-child').nth(4)
   await fifth.click()
   const form = page.locator('[data-testid=child-form]')
@@ -116,6 +124,7 @@ try {
   console.log('✅ A. правка ширины 5-го ребёнка 20 → 30: новый шаг, W30 только у него, без уведомлений')
 
   // undo/redo: правка → CSG → обратно
+  stage = 'A. undo/redo'
   await page.locator('.props-header').click(); await blur()
   await page.keyboard.press('Control+z')
   await page.waitForFunction(() => !/W30/.test(document.body.innerText), null, { timeout: 15000 })
@@ -129,6 +138,7 @@ try {
   console.log('✅ A. undo → 10 объектов, redo → один CSG с правкой W30')
 
   // ── B. subtract / intersect: группа A (5 кубов) против группы B (5 сфер) ──
+  stage = 'B. вычитание 5 vs 5'
   await clearScene()
   const A = [], B = []
   for (let i = 0; i < 5; i++) A.push(await add('Куб'))
@@ -168,12 +178,14 @@ try {
   await page.locator('.props-header').click(); await blur()
   await page.keyboard.press('Control+z')
   await waitRows(10)
+  stage = 'B. пересечение 5 vs 5'
   await assignGroups()
   await panelButton(page, 'Пересечение').click()
   await checkGroupsTree('пересечение 5 vs 5')
   console.log('✅ B. undo → группы заново → «Пересечение» → один CSG с группами A и B')
 
   // ── C. мягкий лимит 30 ──
+  stage = 'C. лимит 30'
   await clearScene()
   for (let i = 0; i < 31; i++) await add('Куб')
   await page.locator('.props-header').click(); await blur()
@@ -191,7 +203,7 @@ try {
   if (errors.length) fail('ошибки консоли: ' + errors.join(' | '))
   console.log('N-ARY-CSG e2e: OK')
 } catch (e) {
-  console.error('N-ARY-CSG e2e FAIL:', e.message)
+  console.error(`N-ARY-CSG e2e FAIL [${stage}]:`, e.message)
   if (errors.length) console.error(errors.join('\n'))
   await page.screenshot({ path: '/tmp/n-ary-csg-fail.png' }).catch(() => {})
   process.exitCode = 1
