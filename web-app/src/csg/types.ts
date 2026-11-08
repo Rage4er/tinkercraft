@@ -92,11 +92,41 @@ export type MirrorPlane = 'XY' | 'XZ' | 'YZ'
 export interface AlignOperation {
   type: 'align'
   ids: string[]
+  /** Ось (9 кнопок выравнивания). У выравнивания по плоскости (`plane`) — ось, ближайшая к нормали A (подпись) */
   axis: 'X' | 'Y' | 'Z'
   anchor: 'min' | 'center' | 'max'
-  anchorId: string  // ID of the anchor object (last selected, the one others align to)
-  deltas: Record<string, number>  // { targetId: delta } — movement for each non-anchor object
+  /** Объект-якорь. У выравнивания по плоскости — объект грани A, '' — плоскость по оси X/Y/Z */
+  anchorId: string
+  deltas: Record<string, number>  // { targetId: delta } — movement for each non-anchor object; у `plane` — пусто
+  /** ALIGN-PLANE-RESOLVE: выравнивание режимом «Выровнять» — грань B в плоскость A (произвольная нормаль) */
+  plane?: AlignPlane
 }
+
+/** Грань (нормаль + точка) в системе объекта: v_мир = pos + R·S·v, n_мир ∝ R·S⁻¹·n. */
+export interface AlignFace {
+  normal: Vec3
+  point: Vec3
+  /** Треугольник грани (гладкая поверхность — без поворота, `isSmoothSurfaceAt`) */
+  triangleIndex?: number
+}
+
+/**
+ * ALIGN-PLANE-RESOLVE: шаг выравнивания режимом. Хранит и вход решателя (плоскость A, грани B — в
+ * системах своих объектов: следуют за объектами при правке прошлых шагов), и результат (сдвиг и
+ * дельта углов каждой цели — воспроизведение как у move). Каскад правки шага (9.5) пересчитывает
+ * `moves` по плоскости и граням на этом шаге — объект остаётся выровненным.
+ */
+export interface AlignPlane {
+  /** Плоскость A: в системе объекта `anchorId` (грань A), без якоря — мировая (ось X/Y/Z) */
+  normal: Vec3
+  point: Vec3
+  /** Грань B каждой цели — в системе цели */
+  faces: Record<string, AlignFace>
+  /** Результат: сдвиг и дельта углов каждой цели */
+  moves: Record<string, AlignMove>
+}
+
+export interface AlignMove { delta: Vec3; rotDelta: Vec3 }
 
 export interface GroupOperation {
   type: 'group'
@@ -227,6 +257,8 @@ export interface StepReplacement {
   originalBboxSize?: Vec3
   /** align: пересчитанные смещения (политика re-solve, решение В2) */
   deltas?: Record<string, number>
+  /** align по плоскости (ALIGN-PLANE-RESOLVE): пересчитанные сдвиг и поворот целей */
+  alignMoves?: Record<string, AlignMove>
   /** add_shape (плита extrude, 9.5.4): новые размеры и положение */
   params?: ShapeParams
   transform?: TransformNR

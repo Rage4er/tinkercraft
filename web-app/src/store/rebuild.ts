@@ -14,6 +14,7 @@ import {
   applyMoveDelta,
   applyMirrorToTransform,
   applyAlignToTransform,
+  expandForReplay,
   makeDefaultTransform,
   type RebuildTransform,
 } from '../csg/rebuildOps'
@@ -73,7 +74,8 @@ export function buildRebuildMeta(rawOps: TinkerCraftOperation[]): {
   const transforms: Record<string, TransformNR> = {}
   const csgResultIds = new Set<string>()
 
-  for (const op of ops) {
+  // ALIGN-PLANE-RESOLVE: выравнивание по плоскости воспроизводится как move каждой цели
+  for (const op of ops.flatMap(expandForReplay)) {
     if (op.type === 'add_shape') {
       meta[op.id] = { color: op.color, shapeType: op.shapeType, params: op.params, transform: { ...op.transform }, visible: true }
       transforms[op.id] = { ...op.transform }
@@ -377,7 +379,7 @@ export function rebuildBuildTree(
   const ops = projectHistory(rawOps)
   const transforms: Record<string, TransformNR> = {}
 
-  for (const op of ops) {
+  for (const op of ops.flatMap(expandForReplay)) {
     if (op.type === 'add_shape') {
       const existing = getNode(op.id)
       if (!existing) {

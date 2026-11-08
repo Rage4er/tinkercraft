@@ -223,7 +223,7 @@ try {
     await page.mouse.click(sideB.x, sideB.y); await s.waitSteps(n0 + 1)
     await page.waitForTimeout(300); await s.shot('align-32.png')
     // ✅ UX-AUDIT-32: призма повёрнута на 90° (боковая грань смотрит вверх, как верх куба), центр —
-    // z = 10 − апофема 12·cos 30° ≈ −0,4; один шаг «Повернуть»; режим закрыт
+    // z = 10 − апофема 12·cos 30° ≈ −0,4; один шаг «Выровнять по грани» (ALIGN-PLANE-RESOLVE); режим закрыт
     if (await panel.count()) fail('UX-AUDIT-32: режим не закрылся после грани B')
     await s.pick(prism)
     const rot = await Promise.all(['X', 'Y', 'Z'].map(async (a) => Number(await page.locator(`.panel-right #num-input-rot-${a}`).inputValue())))
@@ -231,8 +231,8 @@ try {
     const steps = await s.steps()
     if (Math.max(Math.abs(rot[0]), Math.abs(rot[1])) < 89.9 || Math.max(Math.abs(rot[0]), Math.abs(rot[1])) > 90.1) fail(`UX-AUDIT-32: поворот призмы ${rot.join(', ')}°`)
     if (Math.abs(z + 0.4) > 0.11) fail(`UX-AUDIT-32: призма Z = ${z} (ожидалось ≈ −0,4)`)
-    if (steps !== n0 + 1 || (await page.locator('.tl-label').last().innerText()).trim() !== 'Повернуть') fail('UX-AUDIT-32: шаг истории — ' + (await page.locator('.tl-label').last().innerText()))
-    ok.push(`K: «Выровнять» — верх куба (A), боковая грань призмы (B) → призма повёрнута (${rot.join(', ')}°), грань B в плоскости A (Z ${z}), один шаг «Повернуть» (UX-AUDIT-32)`)
+    if (steps !== n0 + 1 || (await page.locator('.tl-label').last().innerText()).trim() !== 'Выровнять по грани') fail('UX-AUDIT-32: шаг истории — ' + (await page.locator('.tl-label').last().innerText()))
+    ok.push(`K: «Выровнять» — верх куба (A), боковая грань призмы (B) → призма повёрнута (${rot.join(', ')}°), грань B в плоскости A (Z ${z}), один шаг «Выровнять по грани» (UX-AUDIT-32)`)
     if (s.errors.length) fail('UX-AUDIT-32: ошибки консоли ' + s.errors.join(' | '))
     await s.browser.close()
   }

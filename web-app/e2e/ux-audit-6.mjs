@@ -12,7 +12,8 @@
 //  __tests__/ux-audit-6.test.tsx):
 //     UX-AUDIT-41 CSG при выравнивании с поворотом поворачивается вокруг центра рамки — центр тела по
 //     экспорту STL на месте (было: вокруг опорной точки — операнда A, тело уходило вбок);
-//     UX-AUDIT-42 шаг выравнивания через ±180° — «поворот (0, 0, 30)°», поле «Поворот Z» 30 (было −330).
+//     UX-AUDIT-42 выравнивание через ±180° — угол 200 (было −160), rotZ 90 → 180; шаг выравнивания — align
+//     «Выровнять по грани / по плоскости XZ», ✎ нет (ALIGN-PLANE-RESOLVE); поворот полем — move, ✎ (38/40).
 //  `knownBug` сейчас нет.
 // Ошибок консоли нет (все сценарии).
 // Запуск: `pnpm dev` в одном терминале, `pnpm e2e:ux-audit-6` в другом.
@@ -186,8 +187,8 @@ try {
       const tt = await s.tr(p)
       if (!near(tt[0], x) || !near(tt[1], 0) || !near(tt[2], -0.4, 0.11)) fail(`32-followup: «Множественное» — призма X ${x}: ${tt.join(', ')}`)
     }
-    if ((await s.labels()).slice(-3).join() !== 'Повернуть,Повернуть,Повернуть') fail('32-followup: шаги ' + (await s.labels()).slice(-3).join(' / '))
-    ok.push('32-followup: «Множественное» — три призмы (X 40, −40, 80): каждая на своём X/Y, Z −0,4, три шага «Повернуть»')
+    if ((await s.labels()).slice(-3).join() !== 'Выровнять по грани,Выровнять по грани,Выровнять по грани') fail('32-followup: шаги ' + (await s.labels()).slice(-3).join(' / '))
+    ok.push('32-followup: «Множественное» — три призмы (X 40, −40, 80): каждая на своём X/Y, Z −0,4, три шага «Выровнять по грани»')
 
     // UX-AUDIT-41: CSG куб X 0 ∪ куб X 60 — опорная точка X 0, центр тела X 30
     await s.confirmClear()
@@ -221,16 +222,15 @@ try {
       await s.clickB(k, accept)
       res.push([theta, ...(await s.tr(k))])
       if (theta === 90) {
-        // ✅ UX-AUDIT-42: куб rotZ 90 гранью +X к плоскости Y — шаг «поворот (0, 0, 90)°» (было −270)
-        await page.locator('.tl-item', { hasText: 'Повернуть' }).last().locator('.tl-edit').click()
-        const sp90 = page.locator('[data-testid=step-panel]'); await sp90.waitFor({ timeout: 5000 })
-        rot90 = ((await sp90.locator('[data-testid=step-original]').textContent()) ?? '').trim()
-        await sp90.getByRole('button', { name: /Назад/ }).click()
+        // ✅ UX-AUDIT-42: куб rotZ 90 гранью +X к плоскости Y — угол 180 (+90, было −270 / −180);
+        // шаг — align «Выровнять по плоскости XZ», ✎ у него нет (ALIGN-PLANE-RESOLVE)
+        const row = page.locator('.tl-item').last()
+        rot90 = `${((await row.locator('.tl-label').textContent()) ?? '').trim()}; rotZ ${res.at(-1)[6]}; ✎ ${await row.locator('.tl-edit').count()}`
       }
       await s.confirmClear()
     }
-    if (!rot90.endsWith('поворот (0, 0, 90)°')) fail(`UX-AUDIT-42: θ 90 — «Исходно» «${rot90}»`)
-    ok.push(`UX-AUDIT-42: куб rotZ 90 гранью +X к плоскости Y — «Исходно» «${rot90}»`)
+    if (rot90 !== 'Выровнять по плоскости XZ; rotZ 180; ✎ 0') fail(`UX-AUDIT-42: θ 90 — ${rot90}`)
+    ok.push(`UX-AUDIT-42: куб rotZ 90 гранью +X к плоскости Y — ${rot90}`)
     // θ 5 — угол 175° (встречно: Y 10, rotZ 0); θ 95 / 90 / 85 — углы 85° / 90° / 95°
     const want = { 5: 10, 95: -10, 90: -10, 85: 10 }
     for (const r of res) if (!near(r[2], want[r[0]]) || !near(r[1], 0)) fail(`37: θ ${r[0]} → X ${r[1]}, Y ${r[2]} (ожидалось Y ${want[r[0]]})`)
@@ -244,12 +244,11 @@ try {
     await s.startAlign(); await s.clickA(r, (n) => close(n, dirXY(20))); await s.clickB(k, (n) => close(n, dirXY(-10)))
     const tk = await s.tr(k)
     if (!near(tk[5], 200, 0.11)) fail('UX-AUDIT-42: rotZ ' + tk[5])
-    await page.locator('.tl-item', { hasText: 'Повернуть' }).last().locator('.tl-edit').click()
-    const sp = page.locator('[data-testid=step-panel]'); await sp.waitFor({ timeout: 5000 })
-    const original = ((await sp.locator('[data-testid=step-original]').textContent()) ?? '').trim()
-    const fieldZ = await sp.locator('[data-testid=step-rotDelta] input.props-input').nth(2).inputValue()
-    if (!original.endsWith('поворот (0, 0, 30)°') || Number(fieldZ) !== 30) fail(`UX-AUDIT-42: «Исходно» — «${original}», поле «Поворот Z» ${fieldZ} (куб rotZ 170 → ${tk[5]})`)
-    ok.push(`UX-AUDIT-42: куб rotZ 170 повёрнут выравниванием на +30° через 180° — rotZ ${tk[5]}, «Исходно» — «${original}», поле «Поворот Z» ${fieldZ}`)
+    const lastRow = page.locator('.tl-item').last()
+    const label = ((await lastRow.locator('.tl-label').textContent()) ?? '').trim()
+    const edits = await lastRow.locator('.tl-edit').count()
+    if (label !== 'Выровнять по грани' || edits !== 0) fail(`UX-AUDIT-42: шаг «${label}», ✎ ${edits}`)
+    ok.push(`UX-AUDIT-42: куб rotZ 170 повёрнут выравниванием на +30° через 180° — rotZ ${tk[5]} (было −160); шаг «${label}» — align, ✎ нет (ALIGN-PLANE-RESOLVE)`)
     if (s.errors.length) fail('37: ошибки консоли ' + s.errors.join(' | '))
     await s.browser.close()
   }

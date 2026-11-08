@@ -156,6 +156,8 @@
     "resizeDims": "Изменить размер",
     "mirror": "Зеркало {{plane}}",
     "align": "Выровнять {{axis}} → {{anchor}}",
+    "alignFace": "Выровнять по грани",
+    "alignAxisPlane": "Выровнять по плоскости {{plane}}",
     "groupUnion": "Объединение",
     "groupSubtract": "Вычитание",
     "groupIntersect": "Пересечение",

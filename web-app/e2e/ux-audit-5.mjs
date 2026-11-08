@@ -1,7 +1,8 @@
 // e2e/ux-audit-5.mjs — UX-прогон 5: H–N, O–T, U–Y повторно (`pnpm e2e:ux-audit-2`, `e2e:ux-audit-3`,
 // `e2e:ux-audit-4`) + новые сценарии по фиксам 32–35 + UX-AUDIT-32-followup.
 //  K. «Выровнять» с поворотом: A — бок повёрнутого куба (наклонная плоскость), B — верх CSG → поворот
-//     по трём осям; правка ребёнка, правка шага «Повернуть», копия, .3dtc — CSG на месте, без замков.
+//     по трём осям, шаг «Выровнять по грани»; правка ребёнка — на месте; правка поворота куба A до
+//     выравнивания — CSG доворачивается к новой плоскости (ALIGN-PLANE-RESOLVE); копия, .3dtc — без замков.
 //     «Множественное» — две призмы, обе повёрнуты. B на объекте A — уведомление, шага нет (R).
 //  O/U. Текст: зеркало зеркала, вставка зеркального текста, вложенный CSG и его зеркальная копия,
 //     .3dtc — везде «Текст» / «Текст: Дом».
@@ -10,7 +11,8 @@
 //     UX-AUDIT-32-followup «Множественное» — призмы повёрнуты на месте, X/Y прежние;
 //     UX-AUDIT-36 английский интерфейс — строка текста «Text: Дом»;
 //     UX-AUDIT-37 грань под 5° к встречной — доворот встречно, куб на плоскости (Y 10);
-//     UX-AUDIT-38 панель «Шаг N» шага выравнивания — «Повернуть», в «Исходно» — углы;
+//     UX-AUDIT-38 панель «Шаг N» шага поворота — «Повернуть», в «Исходно» — углы (шаг выравнивания —
+//     align, ✎ нет — ALIGN-PLANE-RESOLVE);
 //     UX-AUDIT-39 «Вписать в экран» на 768 — сцена целиком;
 //     UX-AUDIT-40 правка поворота шага — «Правка шага 2: поворот (0, 0, 30)° → (0, 0, 45)°».
 //  `knownBug` сейчас нет. Логика — __tests__/ux-audit-5.test.tsx.
@@ -159,23 +161,27 @@ try {
     const t1 = await s.tr(g)
     // поворот по трём осям: верх (+Z) → нормаль A (cos 30°, sin 30°, 0) — (−90, 60, 60)
     if (!near(t1[3], -90, 0.11) || !near(t1[4], 60, 0.11) || !near(t1[5], 60, 0.11)) fail('K: поворот CSG ' + t1.join(', '))
-    if ((await s.labels()).at(-1) !== 'Повернуть') fail('K: шаг — ' + (await s.labels()).at(-1))
+    if ((await s.labels()).at(-1) !== 'Выровнять по грани') fail('K: шаг — ' + (await s.labels()).at(-1))   // ALIGN-PLANE-RESOLVE: шаг align
     // правка ребёнка (сфера R12 → R15) — CSG на месте
     await page.locator(`.ct-item[data-object-id="${g}"] .ct-chevron`).click()
     await page.locator('.ct-child', { hasText: 'Сфера' }).first().click()
     const cp = page.locator('[data-testid=child-props]'); await cp.waitFor({ timeout: 5000 })
     let n0 = await s.steps(); const r15 = cp.locator('input.props-input').first(); await r15.fill('15'); await r15.press('Enter'); await s.waitSteps(n0 + 1)
     if ((await s.tr(g)).join() !== t1.join()) fail('K: правка ребёнка сдвинула CSG ' + (await s.tr(g)).join(', '))
-    // правка шага «Повернуть» (выравнивание): ΔX + 5 → CSG X + 5
-    const row = page.locator('.tl-item', { hasText: 'Повернуть' }).last()
+    // ALIGN-PLANE-RESOLVE: правка шага «Повернуть» куба плоскости A (rotZ 30 → 40) — выравнивание
+    // пересчитано: верх CSG доворачивается к новой плоскости, нормаль (cos 40°, sin 40°, 0)
+    const row = page.locator('.tl-item', { hasText: 'Повернуть' }).first()
     await row.locator('.tl-edit').click()
     const sp = page.locator('[data-testid=step-panel]'); await sp.waitFor({ timeout: 5000 })
     const title = ((await sp.locator('.props-section-title').first().textContent()) ?? '').trim()   // innerText — в верхнем регистре (CSS)
     const original = (await sp.locator('[data-testid=step-original]').innerText()).trim()
-    const dx = sp.locator('[data-testid=step-delta] input.props-input').first()
-    n0 = await s.steps(); await dx.fill(String(Number(await dx.inputValue()) + 5)); await dx.press('Enter'); await s.waitSteps(n0 + 1)
+    const rz0 = sp.locator('[data-testid=step-rotDelta] input.props-input').nth(2)
+    n0 = await s.steps(); await rz0.fill('40'); await rz0.press('Enter'); await s.waitSteps(n0 + 1)
+    await sp.getByRole('button', { name: /Назад/ }).click()
     const t2 = await s.tr(g)
-    if (!near(t2[0], t1[0] + 5, 0.11) || t2.slice(1).join() !== t1.slice(1).join()) fail('K: правка шага — ' + t2.join(', ') + ' (до: ' + t1.join(', ') + ')')
+    const rad = (d) => d * Math.PI / 180, top = [Math.sin(rad(t2[4])), -Math.sin(rad(t2[3])) * Math.cos(rad(t2[4])), Math.cos(rad(t2[3])) * Math.cos(rad(t2[4]))]
+    if (!near(top[0], Math.cos(rad(40)), 0.005) || !near(top[1], Math.sin(rad(40)), 0.005) || !near(top[2], 0, 0.005)) fail('K: правка шага до выравнивания — верх CSG ' + top.map((v) => v.toFixed(3)).join(', ') + ' (CSG ' + t2.join(', ') + ')')
+    if (await s.toasts()) fail('K: уведомления после правки шага ' + (await s.toasts()))
     // копия CSG → правка ребёнка копии; оригинал не меняется
     const c2 = await s.copyPaste(g)
     await page.locator(`.ct-item[data-object-id="${c2}"] .ct-chevron`).click()
@@ -188,12 +194,12 @@ try {
     if (JSON.stringify([await s.tr(g), await s.tr(c2)]) !== before) fail('K: .3dtc — ' + JSON.stringify([await s.tr(g), await s.tr(c2)]) + ' ≠ ' + before)
     if (await locks(page)) fail('K: замки в дереве')
     if (await s.toasts()) fail('K: уведомления ' + (await s.toasts()))
-    ok.push(`K: наклонная плоскость A (бок куба rotZ 30) → верх CSG: поворот (${t1.slice(3).join(', ')})°, «Повернуть»; правка ребёнка, правка шага (ΔX + 5), копия, .3dtc — CSG на месте, без замков`)
+    ok.push(`K: наклонная плоскость A (бок куба rotZ 30) → верх CSG: поворот (${t1.slice(3).join(', ')})°, «Выровнять по грани»; правка ребёнка — на месте; правка поворота куба A до выравнивания (30 → 40°) — CSG довернулась (${t2.slice(3).join(', ')})°; копия, .3dtc — на месте, без замков`)
 
-    // ✅ UX-AUDIT-38: панель шага «Повернуть» (выравнивание) — «Шаг N: Повернуть», «Исходно» — сдвиг
-    // и углы (было «Перемещение», только сдвиг)
-    if (!title.endsWith(': Повернуть') || !/^Δ \(.+\), поворот \(-90, 60, 60\)°$/.test(original)) fail(`UX-AUDIT-38: заголовок «${title}», исходно «${original}»`)
-    ok.push(`UX-AUDIT-38: панель шага выравнивания — «${title}», исходно «${original}»`)
+    // ✅ UX-AUDIT-38: панель шага поворота полем — «Шаг N: Повернуть», «Исходно» — углы (было
+    // «Перемещение», только сдвиг). Шаг выравнивания — align (ALIGN-PLANE-RESOLVE), ✎ у него нет
+    if (!title.endsWith(': Повернуть') || original !== 'поворот (0, 0, 30)°') fail(`UX-AUDIT-38: заголовок «${title}», исходно «${original}»`)
+    ok.push(`UX-AUDIT-38: панель шага поворота — «${title}», исходно «${original}»`)
     // UX-AUDIT-40: правка поворота шага → в истории «сдвиг (…) → (…)» без изменений
     await s.confirmClear()
     const c = await s.add('Куб'); await s.setF(c, 'num-input-rot-Z', 30)
@@ -228,9 +234,9 @@ try {
     await s.clickB(p2, (n) => Math.abs(n[2]) < 0.05)
     await s.exitAlign()
     const [t1, t2] = [await s.tr(p1), await s.tr(p2)]
-    if ((await s.labels()).slice(-2).join() !== 'Повернуть,Повернуть') fail('K: «Множественное» — шаги ' + (await s.labels()).slice(-2).join(' / '))
+    if ((await s.labels()).slice(-2).join() !== 'Выровнять по грани,Выровнять по грани') fail('K: «Множественное» — шаги ' + (await s.labels()).slice(-2).join(' / '))
     for (const tt of [t1, t2]) if (Math.max(Math.abs(tt[3]), Math.abs(tt[4])) < 89.9 || !near(tt[2], -0.4, 0.11)) fail('K: «Множественное» — призма ' + tt.join(', '))
-    ok.push('K: «Множественное» — две призмы боковой гранью к верху куба: обе повёрнуты, грань в плоскости (Z −0,4), два шага «Повернуть»; R: B на объекте A — уведомление, шага нет')
+    ok.push('K: «Множественное» — две призмы боковой гранью к верху куба: обе повёрнуты, грань в плоскости (Z −0,4), два шага «Выровнять по грани»; R: B на объекте A — уведомление, шага нет')
     // ✅ UX-AUDIT-32-followup: поворот на месте — X/Y призм прежние (было: вокруг точки клика,
     // Y −11,1 и −5,1 — от того, куда кликнули)
     if (!near(t1[0], 40) || !near(t1[1], 0) || !near(t2[0], -40) || !near(t2[1], 0)) fail(`UX-AUDIT-32-followup: призмы X/Y ${t1[0]}, ${t1[1]} и ${t2[0]}, ${t2[1]} (были 40, 0 и −40, 0)`)

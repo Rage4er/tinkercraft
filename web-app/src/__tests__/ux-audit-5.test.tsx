@@ -128,7 +128,7 @@ describe('UX-прогон 5 — K. «Выровнять» с поворотом:
     const after = worldTri(o, fB.triangleIndex)
     expect(triNormal(after).dot(nA)).toBeGreaterThan(COS1)                              // в ту же сторону
     for (const v of after) expect(v.dot(nA)).toBeCloseTo(10, 3)                           // грань B — в плоскости A
-    expect(opLabel(lastOp(), t)).toBe('Повернуть')
+    expect(opLabel(lastOp(), t)).toBe('Выровнять по грани')                             // шаг align (ALIGN-PLANE-RESOLVE)
     const tr0 = { ...o.transform }
     await st().editChildParams(g, b, { radius: 15, segments: 32 })
     expect(st().objects[g].transform).toEqual(tr0)                                        // CSG на месте

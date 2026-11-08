@@ -156,6 +156,8 @@
     "resizeDims": "Resize",
     "mirror": "Mirror {{plane}}",
     "align": "Align {{axis}} → {{anchor}}",
+    "alignFace": "Align to face",
+    "alignAxisPlane": "Align to {{plane}} plane",
     "groupUnion": "Union",
     "groupSubtract": "Subtract",
     "groupIntersect": "Intersect",

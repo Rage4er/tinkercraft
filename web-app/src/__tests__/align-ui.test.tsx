@@ -44,7 +44,7 @@ import { clearSnapshots } from '../store/snapshots'
 import { clearTree } from '../csg/history-tree'
 import { rebuildFromHistory } from '../store/rebuild'
 import { worldVerticesAABB, solvePlaneAlignDelta, solveAlignDeltas, worldProjectionRange, computeWorldAABB, axisPlane } from '../store/helpers'
-import type { SceneObject, ShapeParams, ShapeType, TransformNR, MoveOperation } from '../csg/types'
+import type { SceneObject, ShapeParams, ShapeType, TransformNR, AlignOperation } from '../csg/types'
 
 const st = () => useDocumentStore.getState()
 const am = () => useAlignModeStore.getState()
@@ -204,7 +204,7 @@ describe('ALIGN-UI-REVIT — raycast по грани', () => {
 })
 
 describe('ALIGN-UI-REVIT — выравнивание B (реальный WASM)', () => {
-  it('5. грань A (верх куба) → клик по нижней грани B → B стоит на A (шаг move), уведомлений нет', async () => {
+  it('5. грань A (верх куба) → клик по нижней грани B → B стоит на A (шаг align — ALIGN-PLANE-RESOLVE), уведомлений нет', async () => {
     const a = await shape('cube', CUBE10, at(0, 0, 0))
     const b = await shape('cube', CUBE10, at(30, 0, 17))
     am().startAlignMode()
@@ -219,9 +219,9 @@ describe('ALIGN-UI-REVIT — выравнивание B (реальный WASM)'
     expect(box(st().objects[b]).min.z).toBeCloseTo(5, 4)
     expect(st().objects[b].transform.z).toBeCloseTo(17 + expected.z, 6)
     expect(st().operations).toHaveLength(n + 1)
-    const op = st().operations[n] as MoveOperation
-    expect(op.type).toBe('move')
-    expect(op.delta.z).toBeCloseTo(-7, 4)
+    const op = st().operations[n] as AlignOperation
+    expect([op.type, op.anchorId]).toEqual(['align', a])                                    // шаг align по грани A
+    expect(op.plane!.moves[b].delta.z).toBeCloseTo(-7, 4)
     const replay = await rebuildFromHistory(st().operations)                               // воспроизведение — то же
     expect(box(replay[b]).min.z).toBeCloseTo(5, 4)
   })

@@ -34,7 +34,10 @@ import { addTextObject } from '../store/add-text'
 import { rebuildFromHistory } from '../store/rebuild'
 import StepPanel from '../components/StepPanel'
 import { alignRotationCenter, computeAABB, computeWorldAABB, continuousEuler } from '../store/helpers'
-import type { MoveOperation, SceneObject, ShapeParams, ShapeType, TransformNR, TinkerCraftOperation } from '../csg/types'
+import type { AlignOperation, MoveOperation, SceneObject, ShapeParams, ShapeType, TransformNR, TinkerCraftOperation } from '../csg/types'
+import { isStepEditable } from '../store/edit-step'
+import { projectHistory } from '../store/project-history'
+import { opLabel } from '../components/Timeline'
 
 const st = () => useDocumentStore.getState()
 const ID: TransformNR = { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
@@ -154,17 +157,20 @@ describe('UX-прогон 7 — 41. CSG, повёрнутая выравнива
     expect(box.max.z - box0.max.z).toBeCloseTo(5, 3)                                       // куб B — с 50…70 на 45…75
   })
 
-  it('K3: правка шага выравнивания (ΔX + 5) — тело сдвигается на 5 мм по X, поворот прежний', async () => {
+  it('K3 (ALIGN-PLANE-RESOLVE): шаг выравнивания не правится ✎; правка шага move куба C (плоскость A) до него — торец снова в плоскости, центр X/Y на месте', async () => {
     const { c, g } = await scene()
-    await align(top(c), plusX(g))
-    const step = st().historyIndex - 1
-    const op = lastOp() as MoveOperation
+    const fB = plusX(g)
+    await align(top(c), fB)
+    const alignStep = st().historyIndex - 1
+    expect(isStepEditable(st().operations[alignStep])).toBe(false)                          // связь, а не сдвиг
     const c0 = center(g)
-    expect(await st().editStepParams(step, { kind: 'move', delta: { ...op.delta, x: op.delta.x + 5 }, rotDelta: { ...op.rotDelta! } })).toBe(true)
+    const moveC = st().operations.findIndex((op) => op.type === 'move' && op.ids[0] === c)
+    expect(await st().editStepParams(moveC, { kind: 'move', delta: { x: -80, y: 0, z: 5 }, rotDelta: { x: 0, y: 0, z: 0 } })).toBe(true)
+    for (const v of worldTri(st().objects[g], fB.triangleIndex)) expect(v.z).toBeCloseTo(15, 3)   // верх C — 15
     const c1 = center(g)
-    expect(c1[0] - c0[0]).toBeCloseTo(5, 3)
+    expect(c1[0]).toBeCloseTo(c0[0], 3)
     expect(c1[1]).toBeCloseTo(c0[1], 3)
-    expect(c1[2]).toBeCloseTo(c0[2], 3)
+    expect(c1[2] - c0[2]).toBeCloseTo(5, 3)
     expect(st().objects[g].transform.rotY).toBeCloseTo(-90, 4)
   })
 
@@ -247,25 +253,25 @@ describe('UX-прогон 7 — 42. Углы поворота: правка ша
     return { k, step: st().historyIndex - 1 }
   }
 
-  it('A1: выравнивание 170 → 200 (шаг 30°); правка шага на 40° — угол 210, воспроизведение истории — то же', async () => {
+  it('A1: выравнивание 170 → 200 (шаг 30°); правка поворота куба до выравнивания (170 → 175) — выравнивание пересчитано: снова 200, шаг 25°', async () => {
     const { k, step } = await rot170()
     expect(st().objects[k].transform.rotZ).toBeCloseTo(200, 6)
-    const op = lastOp() as MoveOperation
-    expect(op.rotDelta!.z).toBeCloseTo(30, 6)
-    expect(await st().editStepParams(step, { kind: 'move', delta: { ...op.delta }, rotDelta: { x: 0, y: 0, z: 40 } })).toBe(true)
-    expect(st().objects[k].transform.rotZ).toBeCloseTo(210, 6)
+    expect((lastOp() as AlignOperation).plane!.moves[k].rotDelta.z).toBeCloseTo(30, 6)
+    const moveK = st().operations.findIndex((op) => op.type === 'move' && op.ids[0] === k)
+    expect(await st().editStepParams(moveK, { kind: 'move', delta: { x: 60, y: 0, z: 0 }, rotDelta: { x: 0, y: 0, z: 175 } })).toBe(true)
+    expect(st().objects[k].transform.rotZ).toBeCloseTo(200, 6)                              // грань снова в плоскости A
+    const eff = projectHistory(st().operations.slice(0, st().historyIndex))[step] as AlignOperation
+    expect(eff.plane!.moves[k].rotDelta.z).toBeCloseTo(25, 6)
     clearSnapshots(); clearTree()
     const rebuilt = (await rebuildFromHistory(st().operations.slice(0, st().historyIndex)))[k]
-    expect(rebuilt.transform.rotZ).toBeCloseTo(210, 4)
+    expect(rebuilt.transform.rotZ).toBeCloseTo(200, 4)
   })
 
-  it('A2: решение 3 — угол объекта продолжается от прежнего: 350 + 30 → 380, шаг — «поворот (0, 0, 30)°»', async () => {
-    const { k, step } = await rot170(350)
+  it('A2: решение 3 — угол объекта продолжается от прежнего: 350 + 30 → 380, шаг «Выровнять по грани» с поворотом 30°', async () => {
+    const { k } = await rot170(350)
     expect(st().objects[k].transform.rotZ).toBeCloseTo(380, 6)
-    expect((lastOp() as MoveOperation).rotDelta!.z).toBeCloseTo(30, 6)
-    useUiStore.setState({ selectedStep: step })
-    const h = mount(<StepPanel />)
-    expect(h.querySelector('[data-testid=step-original]')!.textContent!.trim()).toMatch(/поворот \(0, 0, 30\)°$/)
+    expect((lastOp() as AlignOperation).plane!.moves[k].rotDelta.z).toBeCloseTo(30, 6)
+    expect(opLabel(lastOp(), (key: string, o?: Record<string, unknown>) => i18n.t(key, o))).toBe('Выровнять по грани')
   })
 
   it('A3: гизмо — rotY 80 повернуть вокруг Y на +40,5° (Three.js отдаёт (180; 59,5; 180)) → (0; 120,5; 0), шаг (0; 40,5; 0)', async () => {

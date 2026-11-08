@@ -3,7 +3,7 @@
 // ============================================================
 
 import type {
-  SceneObject, ShapeType, ShapeParams, TransformNR, Vec3, MirrorPlane,
+  SceneObject, ShapeType, ShapeParams, TransformNR, Vec3, MirrorPlane, AlignPlane, AlignMove,
 } from '../csg/types'
 import { OBJECT_COLORS } from '../constants'
 import { computeRSMatrix } from '../csg/worker-matrix'
@@ -433,6 +433,85 @@ export function solvePlaneAlignTransform(
   const q1 = around(pick.point)
   const s = dot3(n, q1) - dot3(n, plane.point)
   return { ...t, ...rot, x: p1.x - s * n.x, y: p1.y - s * n.y, z: p1.z - s * n.z }
+}
+
+// ---- ALIGN-PLANE-RESOLVE: шаг выравнивания по плоскости ----
+
+/** Матрица поворота (без масштаба) трансформа — по строкам. */
+const rotOnly = (t: TransformNR): number[] =>
+  computeRSMatrix({ rotX: t.rotX, rotY: t.rotY, rotZ: t.rotZ }, { scaleX: 1, scaleY: 1, scaleZ: 1 })
+const safeScale = (k: number): number => (Math.abs(k) > 1e-12 ? k : 1e-12)
+
+/**
+ * Грань (мировые нормаль и точка) → система объекта с трансформом `t`:
+ * p = S⁻¹·Rᵀ·(p_мир − pos), n ∝ S·Rᵀ·n_мир (нормаль — обратная транспонированная к R·S).
+ */
+export function faceToLocal(t: TransformNR, normal: Vec3, point: Vec3): { normal: Vec3; point: Vec3 } {
+  const r = rotOnly(t)
+  const rt = (v: Vec3): Vec3 => ({
+    x: r[0] * v.x + r[3] * v.y + r[6] * v.z,
+    y: r[1] * v.x + r[4] * v.y + r[7] * v.z,
+    z: r[2] * v.x + r[5] * v.y + r[8] * v.z,
+  })
+  const q = rt({ x: point.x - t.x, y: point.y - t.y, z: point.z - t.z })
+  const n = rt(normal)
+  return {
+    point: { x: q.x / safeScale(t.scaleX), y: q.y / safeScale(t.scaleY), z: q.z / safeScale(t.scaleZ) },
+    normal: unit({ x: n.x * t.scaleX, y: n.y * t.scaleY, z: n.z * t.scaleZ }),
+  }
+}
+
+/** Грань в системе объекта → мир: p_мир = pos + R·S·p, n_мир ∝ R·S⁻¹·n. */
+export function faceToWorld(t: TransformNR, normal: Vec3, point: Vec3): { normal: Vec3; point: Vec3 } {
+  const r = rotOnly(t)
+  const rv = (v: Vec3): Vec3 => ({
+    x: r[0] * v.x + r[1] * v.y + r[2] * v.z,
+    y: r[3] * v.x + r[4] * v.y + r[5] * v.z,
+    z: r[6] * v.x + r[7] * v.y + r[8] * v.z,
+  })
+  const q = rv({ x: point.x * t.scaleX, y: point.y * t.scaleY, z: point.z * t.scaleZ })
+  return {
+    point: { x: t.x + q.x, y: t.y + q.y, z: t.z + q.z },
+    normal: unit(rv({ x: normal.x / safeScale(t.scaleX), y: normal.y / safeScale(t.scaleY), z: normal.z / safeScale(t.scaleZ) })),
+  }
+}
+
+/** Мировая плоскость A шага выравнивания: грань объекта-якоря (следует за ним) или ось X/Y/Z. */
+export function planeAlignWorldPlane(
+  objects: Record<string, SceneObject>, plane: AlignPlane, anchorId: string,
+): WorldPlane | null {
+  if (!anchorId) return { normal: { ...plane.normal }, point: { ...plane.point } }
+  const a = objects[anchorId]
+  return a ? faceToWorld(a.transform, plane.normal, plane.point) : null
+}
+
+/**
+ * ALIGN-PLANE-RESOLVE: решение шага выравнивания по плоскости для цели `id` по объектам на этом
+ * шаге — грань B цели в плоскость A (`solvePlaneAlignTransform`: поворот на месте + сдвиг вдоль
+ * нормали A, правило 37, углы — непрерывно). Одно решение у живого «Выровнять» и у каскада
+ * правки прошлого шага: плоскость и грань — в системах своих объектов, поэтому после правки
+ * шага до выравнивания объект снова ложится в плоскость. `null` — нет цели, грани или якоря.
+ */
+export function solvePlaneAlignMove(
+  objects: Record<string, SceneObject>, plane: AlignPlane, anchorId: string, id: string,
+): AlignMove | null {
+  const obj = objects[id]
+  const face = plane.faces[id]
+  const wp = planeAlignWorldPlane(objects, plane, anchorId)
+  if (!obj || !face || !wp) return null
+  const wf = faceToWorld(obj.transform, face.normal, face.point)
+  const t = obj.transform
+  const next = solvePlaneAlignTransform(obj, wp, { normal: wf.normal, point: wf.point, triangleIndex: face.triangleIndex })
+  return {
+    delta: { x: next.x - t.x, y: next.y - t.y, z: next.z - t.z },
+    rotDelta: { x: next.rotX - t.rotX, y: next.rotY - t.rotY, z: next.rotZ - t.rotZ },
+  }
+}
+
+/** Ось, ближайшая к нормали (подпись шага и иконка). */
+export function dominantAxis(n: Vec3): 'X' | 'Y' | 'Z' {
+  const ax = Math.abs(n.x), ay = Math.abs(n.y), az = Math.abs(n.z)
+  return ax >= ay && ax >= az ? 'X' : ay >= az ? 'Y' : 'Z'
 }
 
 /** Returns bbox center for a vertex buffer (no mutation). */
