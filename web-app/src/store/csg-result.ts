@@ -19,10 +19,10 @@ import type {
   GroupOperation, StepReplacement,
 } from '../csg/types'
 import {
-  workerCsgBoolean, workerCsgBooleanWithSync, workerSyncObjects, workerSyncMesh,
+  workerCsgBoolean, workerCsgBooleanWithSync, workerCsgBooleanMulti, workerSyncObjects, workerSyncMesh,
 } from '../csg/worker-client'
 import type { MeshResult } from '../csg/worker-handlers'
-import { NON_MANIFOLD_ERROR } from '../csg/worker-handlers'
+import { NON_MANIFOLD_ERROR, clampGroupA } from '../csg/worker-handlers'
 import { computeAABB, centerMassAtOrigin } from './helpers'
 import { computeInverseRSMatrix, transposeRSMatrix, computeRSMatrix } from '../csg/worker-matrix'
 import { devLogCsg } from '../utils/debug'
@@ -150,6 +150,14 @@ export async function computeCsgResult(
     )
   }
 
+  return toLocalOfA(mesh, tA0, tB0)
+}
+
+/**
+ * Мировой меш boolean → конвенция единого источника: pivot = TRS операнда A (PIVOT-TRANSFORMA),
+ * вершины — в локальной системе A (CSG-PRESERVE-RS). Общая часть бинарного и N-арного CSG.
+ */
+function toLocalOfA(mesh: MeshResult, tA0: TransformNR, tB0?: TransformNR): CsgResult {
   // FIX (PIVOT-TRANSFORMA, Bug 3): pivot CSG = transformA (позиция первого
   // операнда) — стандарт CAD. centerMassAtOrigin центрирует вершины по COM:
   // v_COM = v_world − COM. После сдвига на (COM − transformA):
@@ -198,7 +206,7 @@ export async function computeCsgResult(
     assignedLocal: fmtPoint(tA0),
     com: { x: comX, y: comY, z: comZ },
     transformA: fmtTransform(tA0),
-    transformB: fmtTransform(tB0),
+    transformB: tB0 ? fmtTransform(tB0) : undefined,
     centeredAabb: { min: fmtPoint(aabb.min), max: fmtPoint(aabb.max) },
   })
 
@@ -210,6 +218,36 @@ export async function computeCsgResult(
     originalBboxSize,
     transform: tA0,
   }
+}
+
+const isPrimitiveOperand = (o: SceneObject) => o.shapeType !== 'csg' && o.shapeType !== 'import_mesh' && !o.mirrored
+
+/**
+ * N-ARY-CSG: CSG N объектов сцены (union N; subtract/intersect A vs B — `objs[0..groupA)` —
+ * группа A, остальные — B). Ровно 2 операнда с группой A = 1 — прежний бинарный путь
+ * `computeCsgResult` (без изменений). Иначе: sync в воркер → `csgBooleanMulti` (общее ядро
+ * `combineOperands`) → pivot = TRS первого операнда группы A → un-bake RS.
+ */
+export async function computeCsgResultN(
+  objs: SceneObject[],
+  op: CsgBooleanOp,
+  resultId: string,
+  groupA?: number,
+): Promise<CsgResult> {
+  if (objs.length < 2) throw new Error(`CSG needs at least 2 operands, got ${objs.length}`)
+  const k = clampGroupA(groupA, objs.length)
+  if (objs.length === 2 && k === 1) return computeCsgResult(objs[0], objs[1], op, resultId)
+  const byId: Record<string, SceneObject> = {}
+  for (const o of objs) byId[o.id] = o
+  await syncObjectsForOperation(objs.map((o) => o.id), byId)
+  const operands = objs.map((o) => ({
+    id: o.id,
+    transform: copyTRS(o.transform),
+    ...(isPrimitiveOperand(o) ? { shape: { shapeType: o.shapeType, params: o.params } } : {}),
+  }))
+  devLogCsg('sendMulti', { n: objs.length, op, groupA: k, resultId, transformA: fmtTransform(objs[0].transform) })
+  const mesh = await workerCsgBooleanMulti(operands, op, resultId, op === 'union' ? undefined : k)
+  return toLocalOfA(mesh, copyTRS(objs[0].transform))
 }
 
 /** Поля результата для операции `group` (pivot, меш, габарит). */
@@ -226,14 +264,20 @@ function resultFields(r: CsgResult) {
   }
 }
 
-/** Операция истории для живого объединения (то, что пишет csgBoolean). */
+/**
+ * Операция истории для живого объединения (то, что пишет csgBoolean). N-ARY-CSG: `ids` — все
+ * операнды; `groupA` пишется только для subtract/intersect с группой A > 1 (бинарные и
+ * «первый против остальных» — как раньше, без поля).
+ */
 export function groupOperationFromResult(
-  r: CsgResult, idA: string, idB: string, resultId: string, op: CsgBooleanOp, color: string,
+  r: CsgResult, ids: string[], resultId: string, op: CsgBooleanOp, color: string, groupA?: number,
 ): GroupOperation {
+  const k = clampGroupA(groupA, ids.length)
   return {
-    type: 'group', ids: [idA, idB], resultId,
+    type: 'group', ids: [...ids], resultId,
     ...resultFields(r),
     treeOperation: op, shapeType: 'csg', color,
+    ...(op !== 'union' && k > 1 ? { groupA: k } : {}),
   }
 }
 

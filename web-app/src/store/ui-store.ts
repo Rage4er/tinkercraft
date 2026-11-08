@@ -8,6 +8,7 @@ import { create } from 'zustand/react'
 import type { GizmoMode } from '../components/Viewport3D'
 import type { SceneObject } from '../csg/types'
 import { DEFAULT_FILTERS } from '../constants'
+import { EMPTY_CSG_GROUPS, type CsgGroups } from './csg-operands'
 
 export interface UiStore {
   // Performance
@@ -72,6 +73,12 @@ export interface UiStore {
   // которому принадлежит узел (он же выделен в selectedIds для подсветки).
   expandedTreeIds: Record<string, boolean>
   toggleTreeExpanded: (id: string) => void
+  /**
+   * N-ARY-CSG: группы A/B для subtract/intersect (кнопки «Группа A»/«Группа B»):
+   * union(A) op union(B). Пустые — «первый выбранный против остальных».
+   */
+  csgGroups: CsgGroups
+  setCsgGroups: (g: CsgGroups) => void
   selectedChild: { rootId: string; nodeId: string } | null
   setSelectedChild: (v: { rootId: string; nodeId: string } | null) => void
   /** Фаза 9.5.2: выбранный в Timeline прошлый шаг (сырой индекс) — панель «Шаг N» */
@@ -135,6 +142,8 @@ export const useUiStore = create<UiStore>((set) => ({
   expandedTreeIds: {},
   toggleTreeExpanded: (id) =>
     set((s) => ({ expandedTreeIds: { ...s.expandedTreeIds, [id]: !s.expandedTreeIds[id] } })),
+  csgGroups: EMPTY_CSG_GROUPS,
+  setCsgGroups: (g) => set({ csgGroups: g }),
   selectedChild: null,
   setSelectedChild: (v) => set({ selectedChild: v }),
   selectedStep: null,

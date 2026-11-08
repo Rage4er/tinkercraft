@@ -158,6 +158,12 @@ export interface GroupOperation {
   /** Operation type for tree (union/subtract/intersect) */
   treeOperation?: 'union' | 'subtract' | 'intersect'
   /**
+   * N-ARY-CSG: число операндов группы A (`ids[0..groupA)`), остальные — группа B:
+   * результат = union(A) op union(B) (union — объединение всех `ids`). Нет — 1
+   * (старые бинарные `ids: [a, b]` → a op b; первый операнд против остальных).
+   */
+  groupA?: number
+  /**
    * Фаза 9.5.4: группа — результат extrude (пара `add_shape` плиты + эта `group`).
    * Пишет `extrudeSelected`; по нему шаг правится как extrude (глубина). `depth` —
    * исходная глубина (сырая операция не меняется; эффективная — через edit_step).
@@ -411,7 +417,7 @@ export interface ExtractedMesh {
 /**
  * Node in the parameterized build tree.
  * - `primitive` (leaves): cube, sphere, cylinder, etc. with params + localTransform
- * - `boolean` (internal): union, subtract, intersect with children (exactly 2)
+ * - `boolean` (internal): union, subtract, intersect with N children (N-ARY-CSG; старые — 2)
  * - `baked` (leaves): imported STL / non-manifold with raw vertices/indices
  */
 export interface TreeNode {
@@ -481,8 +487,16 @@ export interface TreeNode {
   // ── Boolean operations (internal nodes) ──
   /** Boolean operation type */
   operation?: 'union' | 'subtract' | 'intersect'
-  /** IDs of child nodes (exactly 2 for boolean) */
+  /**
+   * IDs of child nodes — N-ARY-CSG: N ≥ 2 (плоский список). Старые бинарные — `[a, b]`.
+   */
   children?: string[]
+  /**
+   * N-ARY-CSG: subtract/intersect — число детей группы A (`children[0..groupA)`), остальные —
+   * группа B: результат = union(A) op union(B). union — объединение всех детей (поле не нужно).
+   * Нет — 1: первый ребёнок против остальных (старые бинарные `[a, b]` → a op b).
+   */
+  groupA?: number
   /** Parent node ID — used for O(depth) cascade cache invalidation */
   parentId?: string
 

@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import NumInput from "./NumInput";
 import CsgButtons from "./CsgButtons";
+import CsgGroupsRow from "./CsgGroupsRow";
+import { useUiStore } from "../store/ui-store";
 import type { ShapeParams, SceneObject } from "../csg/types";
 import { EyeIcon, EyeOffIcon, FolderIcon, SaveIcon } from "./icons";
 import { isTextObject } from '../store/text-object'
@@ -52,6 +54,8 @@ export default function PropertiesPanel({
   onSaveToProject: (name: string) => void;
 }) {
   const { t } = useTranslation();
+  // N-ARY-CSG: заданы группы A/B — кнопки CSG видны и при одном выбранном (группа B)
+  const csgGroupsActive = useUiStore((s) => s.csgGroups.a.length + s.csgGroups.b.length > 0);
   // FIX: Draft color state — preview in real-time (no history), commit once
   // on blur or object switch.
   //
@@ -449,8 +453,14 @@ export default function PropertiesPanel({
       {/* Mirror — скрыто в свойствах, доступно на панели инструментов */}
 
       {/* CSG (выравнивание — режим «Выровнять» в тулбаре, ALIGN-UI-REVIT) */}
-      {selectedIds.length === 2 && (
-        <CsgButtons disabled={!canCsg} onCsg={onCsg} variant="full" />
+      {/* N-ARY-CSG: union — 2+ выбранных; subtract/intersect — ещё и группы A/B */}
+      {(selectedIds.length >= 2 || csgGroupsActive) && (
+        <CsgButtons
+          disabled={!canCsg}
+          onCsg={onCsg}
+          variant="full"
+          extra={<CsgGroupsRow disabled={busy} />}
+        />
       )}
     </>
   );

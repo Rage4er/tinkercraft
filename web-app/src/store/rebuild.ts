@@ -560,12 +560,11 @@ export function rebuildBuildTree(
         }
 
         // FIX (CYCLE-CSG): Verify children exist in tree before creating boolean node.
-        const childAId = op.ids[0]
-        const childBId = op.ids[1]
-        const childA = getNode(childAId)
-        const childB = getNode(childBId)
+        // N-ARY-CSG: все N операндов (старые бинарные — 2)
+        const children = op.ids.map((id) => getNode(id))
+        const missing = op.ids.filter((_, k) => !children[k])
 
-        if (!childA || !childB) {
+        if (missing.length > 0 || op.ids.length < 2) {
           // FIX (CSG-MISSING-CHILD): If child is missing but we have stored mesh data,
           // register as baked node instead of skipping entirely.
           if (objects && objects[op.resultId]) {
@@ -574,8 +573,7 @@ export function rebuildBuildTree(
           } else {
             console.warn(
               `[rebuildBuildTree] Skipping group ${op.resultId}: children not in tree. ` +
-              `childA=${childAId} (${childA ? 'found' : 'missing'}), ` +
-              `childB=${childBId} (${childB ? 'found' : 'missing'})`,
+              `missing=${missing.join(',')}`,
             )
           }
           continue
@@ -585,18 +583,17 @@ export function rebuildBuildTree(
         // During jumpToHistory / loadFromProject, children may already have parentId
         // pointing to a previous tree node. Without reset, isAncestor() returns true
         // and createBooleanNode throws "Cannot create cycle in tree".
-        childA.parentId = undefined
-        childB.parentId = undefined
+        for (const child of children) if (child) child.parentId = undefined
 
         try {
           // Pass the transform to the boolean node creation
-          createBooleanNode(op.resultId, treeOp, childAId, childBId, startT)
+          createBooleanNode(op.resultId, treeOp, [...op.ids], startT, op.groupA)
         } catch (e) {
           // Tree creation failed (e.g., orphaned CSG, cycle detection) — skip
           console.warn(
             `[rebuildBuildTree] Failed to create boolean node ${op.resultId}:`,
             e,
-            '\n  children:', { childA: childAId, childB: childBId },
+            '\n  children:', op.ids,
             '\n  operation:', treeOp,
           )
           // FIX (MED-18-8): Notify user about boolean node creation failure

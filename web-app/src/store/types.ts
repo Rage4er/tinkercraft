@@ -7,6 +7,7 @@ import type {
   TransformNR, CsgBooleanOp, StepPatch, Vec3,
 } from '../csg/types'
 import type { ClipEntry } from './helpers'
+import type { CsgGroups } from './csg-operands'
 
 /**
  * UX-AUDIT-2: документ до «Очистить сцену» — первая отмена после очистки возвращает его.
@@ -45,7 +46,12 @@ export interface DocumentStore {
   deleteSelected: () => Promise<void>
   selectObjects: (ids: string[], add: boolean) => void
   clearSelection: () => void
-  csgBoolean: (op: CsgBooleanOp) => Promise<void>
+  /**
+   * N-ARY-CSG: union — N операндов → один CSG; subtract/intersect — union(A) op union(B).
+   * Операнды — `resolveCsgOperands(selectedIds, groups)`: группы A/B (ui-store) либо
+   * «первый выбранный против остальных».
+   */
+  csgBoolean: (op: CsgBooleanOp, groups?: CsgGroups) => Promise<void>
   moveObject: (id: string, transform: TransformNR) => Promise<void>
   resizeObject: (id: string, params: ShapeParams) => Promise<void>
   /** Фаза 9.3: правка params ребёнка CSG (примитива в Build Tree) → пересчёт меша корня. */

@@ -274,6 +274,31 @@ describe('3dtc-io round-trip', () => {
     expect(k.mirroredPlane).toBe('XZ')
   })
 
+  it('N-ARY-CSG: N-арный group (ids × 10, groupA) и N-арный узел снимка копии переживают round-trip', async () => {
+    const T: TransformNR = { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
+    const ids = Array.from({ length: 10 }, (_, i) => `o${i}`)
+    const ops: TinkerCraftOperation[] = [
+      {
+        type: 'group', ids, resultId: 'r', treeOperation: 'subtract', groupA: 5, shapeType: 'csg',
+        resultVertices: [0, 0, 0, 1, 0, 0, 0, 1, 0], resultIndices: [0, 1, 2], resultCenter: { x: 1, y: 2, z: 3 },
+      },
+      {
+        type: 'group', ids: [], resultId: 'p', resultVertices: [0, 0, 0, 1, 0, 0, 0, 1, 0], resultIndices: [0, 1, 2],
+        copyTree: {
+          sourceRootId: 'r', origin: T,
+          nodes: [{ id: 'r', type: 'boolean', operation: 'intersect', children: ['a', 'b', 'c'], groupA: 2, relativeToParent: null, localTransform: T }],
+        },
+      },
+    ]
+    const parsed = await parse3dtc(await serialize3dtc({ objects: {}, operations: ops, operationsTrimmed: false }))
+    const [g, p] = parsed.operations
+    if (g.type !== 'group' || p.type !== 'group' || !p.copyTree) throw new Error('group expected')
+    expect(g.ids).toEqual(ids)
+    expect(g.groupA).toBe(5)
+    expect(g.treeOperation).toBe('subtract')
+    expect(p.copyTree.nodes[0]).toMatchObject({ children: ['a', 'b', 'c'], groupA: 2, operation: 'intersect' })
+  })
+
   it('rejects unsupported version', async () => {
     // Создаём ZIP с version "1.0.0" (старый .doodle)
     const zip = new JSZip()

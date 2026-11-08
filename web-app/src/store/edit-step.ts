@@ -5,7 +5,7 @@
 // Строит операцию `edit_step` (docs/PHASE_9_5_DESIGN.md §3): история «как если бы
 // шаг N сразу был с новыми значениями» (projectHistory с гипотетической правкой),
 // затем по порядку пересчитываются шаги ниже по течению (computeCascade):
-//   - group             → computeCsgResult над операндами из состояния ДО этого шага
+//   - group             → computeCsgResultN над операндами (N-ARY-CSG: все N) из состояния ДО этого шага
 //                         (в конвенции шага: pivot = TRS A либо legacy с запечённым RS);
 //                         новый pivot = новый TRS операнда A (R8). Группа extrude
 //                         (`source`) сначала заново строит плиту по мировой рамке базы
@@ -31,7 +31,7 @@ import {
   stepFingerprint, patchKindFor, MAX_CASCADE_STEPS,
 } from './project-history'
 import { rebuildFromHistory, rebuildBuildTree, buildRebuildMeta } from './rebuild'
-import { computeCsgResult, bakeResultRS, groupReplacementFromResult } from './csg-result'
+import { computeCsgResultN, bakeResultRS, groupReplacementFromResult } from './csg-result'
 import { computeEditedChild, type EditChildFailure } from './edit-child'
 import { solveAlignDeltas, solvePlaneAlignMove, extrudeSlab, worldVerticesAABB, nextId } from './helpers'
 import { getNode } from '../csg/history-tree'
@@ -202,9 +202,10 @@ export async function computeStepEdit(args: {
     if (kind === 'group') {
       const g = cur[j] as GroupOperation
       if (!g.resultCenter) return fail('legacy')
-      const a = before[g.ids[0]]
-      let b = before[g.ids[1]]
-      if (!a || !b) return fail('missing_operand')
+      // N-ARY-CSG: все N операндов в состоянии ДО шага (старые бинарные — 2)
+      const operands = g.ids.map((id) => before[id])
+      if (operands.length < 2 || operands.some((o) => !o)) return fail('missing_operand')
+      let b = operands[1]
       if (g.source?.kind === 'extrude') {
         // Плита — по мировой рамке базы на этом шаге (как живое extrudeSelected); рамка —
         // по согласованной паре вершины + pivot воспроизведения (до точных pivot примитивов)
@@ -218,10 +219,11 @@ export async function computeStepEdit(args: {
           cur[k] = applyReplacement(cur[k], rs) ?? cur[k]
         }
         b = { ...b, params: slab.params, transform: slab.transform }
+        operands[1] = b
       }
       let res
       try {
-        res = await computeCsgResult(a, b, g.treeOperation ?? 'union', g.resultId ?? nextId('csg'))
+        res = await computeCsgResultN(operands, g.treeOperation ?? 'union', g.resultId ?? nextId('csg'), g.groupA)
       } catch (e) {
         console.error('[edit-step] CSG failed:', e)
         return fail('failed')
