@@ -1233,6 +1233,32 @@ body {
   outline-offset: -1px;
 }
 
+/* N-ARY-CSG: заголовки групп A/B у детей вычитания/пересечения (не выбираются) */
+.ct-group-header {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-muted);
+  margin-left: 6px;
+  cursor: default;
+}
+
+.ct-group-header:hover {
+  background: none;
+}
+
+/* N-ARY-CSG: метка «A»/«B» у объекта, назначенного группой */
+.ct-csg-group {
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 2px 4px;
+  border-radius: 3px;
+  background: var(--accent);
+  color: var(--bg-deep);
+  flex-shrink: 0;
+}
+
 /* ---- Ruler display ---- */
 /* UX-AUDIT-24: было `fixed; top: 54px` по центру окна — при тулбаре в 2–3 строки (≤ 1280) плашка
    лежала на его кнопках. Теперь — в левом верхнем углу вьюпорта (ниже тулбара любой высоты; справа

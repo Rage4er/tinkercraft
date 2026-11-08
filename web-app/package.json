@@ -29,7 +29,8 @@
     "e2e:ux-audit-5": "node e2e/ux-audit-5.mjs",
     "e2e:ux-audit-6": "node e2e/ux-audit-6.mjs",
     "e2e:ux-audit-7": "node e2e/ux-audit-7.mjs",
-    "e2e:align-plane-resolve": "node e2e/align-plane-resolve.mjs"
+    "e2e:align-plane-resolve": "node e2e/align-plane-resolve.mjs",
+    "e2e:n-ary-csg": "node e2e/n-ary-csg.mjs"
   },
   "dependencies": {
     "i18next": "^26.3.6",

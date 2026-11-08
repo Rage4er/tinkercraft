@@ -28,7 +28,14 @@
     "subtract": "Subtract",
     "intersect": "Intersect",
     "result": "CSG result",
-    "operations": "CSG operations"
+    "operations": "CSG operations",
+    "groupA": "Group A",
+    "groupB": "Group B",
+    "groupATip": "Assign the selected objects to group A (the one subtracted from / intersected)",
+    "groupBTip": "Assign the selected objects to group B (subtracted from A / intersected with A)",
+    "groupsClear": "Clear groups A and B",
+    "groupsHint": "Subtract and intersect: the first selected object against the rest. For groups use “Group A”, “Group B”.",
+    "groupsHintActive": "Subtract and intersect: group A against group B (the selection, if B is not set)."
   },
   "mirror": {
     "title": "Mirror",
@@ -329,7 +336,8 @@
       "empty": "Step {{step}} became empty — edit rejected",
       "childFailed": "Step {{step}}: the CSG component edit could not be replayed — edit rejected",
       "failed": "Could not recompute the history (step {{step}})"
-    }
+    },
+    "csgTooMany": "Many objects in one CSG operation ({{count}}, more than {{limit}}) — it may be slow; consider splitting it into several operations"
   },
   "confirmClear": {
     "title": "Clear the scene?",
@@ -384,9 +392,9 @@
     "mirrorYz": "Mirrors the object relative to the YZ plane",
     "mirrorXz": "Mirrors the object relative to the XZ plane",
     "mirrorXy": "Mirrors the object relative to the XY plane",
-    "csgUnion": "Combines two objects into one (union)",
-    "csgSubtract": "Subtracts one object from another (subtract)",
-    "csgIntersect": "Keeps the common part of two objects (intersect)",
+    "csgUnion": "Combines the selected objects into one (union)",
+    "csgSubtract": "Subtracts the rest (group B) from the first object (group A) (subtract)",
+    "csgIntersect": "Keeps the common part of the first object (group A) and the rest (group B) (intersect)",
     "themeToggle": "Switches between dark and light theme",
     "clearScene": "Removes all objects from the scene",
     "alignTool": "Align mode: pick a plane (a face of object A or X / Y / Z), then click face B — it moves into plane A. With “Multiple” checked you can align several objects in a row. Esc or right click exits."

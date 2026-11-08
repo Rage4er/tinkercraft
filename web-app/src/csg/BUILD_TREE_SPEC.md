@@ -153,8 +153,10 @@ export interface TreeNode {
   // ── Булевы операции (внутренние узлы) ──
   /** Тип булевой операции */
   operation?: 'union' | 'subtract' | 'intersect'
-  /** ID дочерних узлов (для boolean — ровно 2) */
+  /** ID дочерних узлов (для boolean — N ≥ 2, N-ARY-CSG; старые — 2) */
   children?: string[]
+  /** N-ARY-CSG: subtract/intersect — число детей группы A (union(A) op union(B)); нет — 1 */
+  groupA?: number
   /** ID родительской ноды (для каскадной инвалидации — O(глубина) вместо O(n)) */
   parentId?: string
 

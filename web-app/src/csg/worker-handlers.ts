@@ -58,6 +58,8 @@ export interface ManifoldConstructor {
     center: boolean,
   ): ManifoldObject
   revolve(crossSection: CrossSection, segments: number): ManifoldObject
+  /** N-ARY-CSG: пакетное объединение (одна операция manifold, а не цепочка add). */
+  union(manifolds: readonly ManifoldObject[]): ManifoldObject
 }
 
 export interface CrossSectionConstructor {
@@ -97,6 +99,51 @@ export async function initWasm(): Promise<void> {
   _wasm = rawApi as unknown as ManifoldAPI
   _wasm.setup()
   self.postMessage({ type: 'ready' })
+}
+
+/**
+ * N-ARY-CSG: число операндов группы A в [1, n−1] (нет / вне диапазона — 1: первый против
+ * остальных, как старый бинарный `[a, b]`).
+ */
+export function clampGroupA(groupA: number | undefined, n: number): number {
+  if (groupA === undefined || !Number.isFinite(groupA) || n < 2) return 1
+  return Math.min(Math.max(1, Math.floor(groupA)), n - 1)
+}
+
+/**
+ * N-ARY-CSG: булева операция над N операндами в мировых координатах — ОДНО ядро для живого
+ * CSG (`csgBooleanMulti`), перестроения дерева (`rebuildTreeNode`) и воспроизведения истории
+ * (`rebuildScene`): дерево и меш совпадают по построению (замки 9.9 не ложные).
+ *   union            — объединение всех операндов (пакетный `Manifold.union`);
+ *   subtract/intersect — union(A) op union(B), A = `parts[0..groupA)`, B — остальные.
+ * Ровно 2 операнда с группой A = 1 — прежний бинарный путь (`a.add/subtract/intersect(b)`),
+ * старые документы не меняются ни на треугольник. Операнды НЕ освобождает (это делает
+ * вызывающий), промежуточные объединения групп — освобождает.
+ */
+export function combineOperands(
+  parts: readonly ManifoldObject[],
+  op: string,
+  groupA?: number,
+): ManifoldObject {
+  if (parts.length < 2) throw new Error(`CSG needs at least 2 operands, got ${parts.length}`)
+  const k = clampGroupA(groupA, parts.length)
+  if (parts.length === 2 && k === 1) {
+    const [a, b] = parts
+    if (op === 'subtract') return a.subtract(b)
+    if (op === 'intersect') return a.intersect(b)
+    return a.add(b)
+  }
+  const { Manifold } = getWasm()
+  if (op !== 'subtract' && op !== 'intersect') return Manifold.union(parts)
+  const groupOf = (g: readonly ManifoldObject[]) => (g.length === 1 ? g[0] : Manifold.union(g))
+  const a = groupOf(parts.slice(0, k))
+  const b = groupOf(parts.slice(k))
+  try {
+    return op === 'subtract' ? a.subtract(b) : a.intersect(b)
+  } finally {
+    if (k > 1) a.delete()
+    if (parts.length - k > 1) b.delete()
+  }
 }
 
 /** Кэш manifold-объектов по id (null = non-manifold import, CSG not supported) */
@@ -600,6 +647,8 @@ export interface RebuildTreeNodeMessage {
     normals?: number[]
     operation?: 'union' | 'subtract' | 'intersect'
     children?: string[]
+    /** N-ARY-CSG: число детей группы A (subtract/intersect); нет — 1 */
+    groupA?: number
     /** Фаза 9.8: плоскости зеркала примитива (применяются в origin до TRS) */
     mirrored?: Array<'XY' | 'XZ' | 'YZ'>
   }>
@@ -696,18 +745,18 @@ export async function handleRebuildTreeNode(msg: RebuildTreeNodeMessage): Promis
       }
 
     } else if (nd.type === 'boolean' && nd.children && nd.operation) {
-      const childA = rebuildNode(nd.children[0], rootId)
-      const childB = rebuildNode(nd.children[1], rootId)
-      if (childA && childB) {
-        if (nd.operation === 'subtract') {
-          m = childA.subtract(childB)
-        } else if (nd.operation === 'intersect') {
-          m = childA.intersect(childB)
-        } else {
-          m = childA.add(childB)
+      // N-ARY-CSG: N детей (старые бинарные — 2) — общее ядро combineOperands
+      const parts: ManifoldObject[] = []
+      for (const childId of nd.children) {
+        const child = rebuildNode(childId, rootId)
+        if (child) parts.push(child)
+      }
+      if (parts.length === nd.children.length && parts.length >= 2) {
+        try {
+          m = combineOperands(parts, nd.operation, nd.groupA)
+        } finally {
+          for (const p of parts) p.delete()
         }
-        childA.delete()
-        childB.delete()
 
         // Children have their transforms applied (world coordinates), so the boolean result
         // is also in world coordinates.
@@ -764,6 +813,9 @@ export async function handleRebuildTreeNode(msg: RebuildTreeNodeMessage): Promis
         }
         // Inner boolean без originTransform (старое дерево): результат как есть в мировых
         // координатах системы создания — корень центрирует итог (см. комментарий выше).
+      } else {
+        // ребёнок не перестроился — узел пустой (как прежде `childA && childB`)
+        for (const p of parts) p.delete()
       }
     }
 
@@ -1056,32 +1108,27 @@ export async function handleRebuildScene(msg: RebuildSceneMessage): Promise<void
                 m = m.transform(tm)
               }
             }
-            disposeCached(ids[0])
-            disposeCached(ids[1])
+            // N-ARY-CSG: операнды поглощены результатом — все N (старые бинарные — 2)
+            for (const id of ids) disposeCached(id)
             setCached(resultId, m)
           } catch (me) {
             // Non-manifold — cache as null
             console.warn('[Worker] Non-manifold CSG result:', me)
-            disposeCached(ids[0])
-            disposeCached(ids[1])
+            for (const id of ids) disposeCached(id)
             setCached(resultId, null)
           }
         } else if (ids.length >= 2) {
-          // Fallback: rebuild CSG from operands (legacy path for pre-fix operations)
-          let a = cache.get(ids[0])
-          let b = cache.get(ids[1])
-          if (a && b) {
-            const tA = currentTransforms.get(ids[0])
-            const tB = currentTransforms.get(ids[1])
-            if (tA && hasSR(tA)) a = applySRAroundCenter(a, tA)
-            if (tB && hasSR(tB)) b = applySRAroundCenter(b, tB)
-            let result: ManifoldObject
-            const treeOp = op.treeOperation ?? 'union'
-            if (treeOp === 'intersect') result = a.intersect(b)
-            else if (treeOp === 'subtract') result = a.subtract(b)
-            else result = a.add(b)
-            disposeCached(ids[0])
-            disposeCached(ids[1])
+          // Fallback: rebuild CSG from operands (legacy path for pre-fix operations).
+          // N-ARY-CSG: N операндов — общее ядро combineOperands (2 — прежний бинарный путь)
+          const src = ids.map((id) => cache.get(id))
+          if (src.every((m): m is ManifoldObject => !!m)) {
+            const parts = src.map((m, i) => {
+              const t = currentTransforms.get(ids[i])
+              return t && hasSR(t) ? applySRAroundCenter(m, t) : m
+            })
+            const treeOp = (op.treeOperation as string | undefined) ?? 'union'
+            const result = combineOperands(parts, treeOp, op.groupA as number | undefined)
+            for (const id of ids) disposeCached(id)
             setCached(resultId as string, result)
           }
         }
@@ -1421,6 +1468,81 @@ export async function handleCsgBooleanSync(msg: CsgBooleanSyncMessage): Promise<
 
   const mesh = extractMesh(result)
   result.delete()
+
+  safePostMessage(
+    {
+      reqId: msg.reqId,
+      type: 'mesh',
+      objId: msg.resultId,
+      vertices: mesh.vertices,
+      indices: mesh.indices,
+      normals: mesh.normals,
+      tris: mesh.tris,
+      ms: performance.now() - t0,
+    },
+    buildTransferList(mesh),
+  )
+}
+
+// --- N-ARY-CSG: sync + boolean над N операндами (union N, subtract/intersect A vs B) ---
+
+export interface CsgBooleanMultiMessage {
+  reqId: string
+  type: 'csgBooleanMulti'
+  /** Операнды по порядку: группа A (`[0..groupA)`), затем группа B; `shape` — примитив */
+  operands: Array<{
+    id: string
+    transform: RebuildTransform
+    shape?: { shapeType: string; params: Record<string, number> }
+  }>
+  op: string
+  /** Число операндов группы A (subtract/intersect); нет — 1 */
+  groupA?: number
+  resultId: string
+}
+
+/**
+ * N-ARY-CSG: как `csgBooleanSync`, но для N операндов. Примитивы строятся в origin из
+ * params, CSG/импорт/зеркальные — из кэша (`syncMesh` перед вызовом); TRS каждого
+ * применяется ОДИН раз; boolean — общее ядро `combineOperands`. Кэш результата —
+ * COM-центрированная копия, ответ — мировой меш (pivot считает фронтенд).
+ */
+export async function handleCsgBooleanMulti(msg: CsgBooleanMultiMessage): Promise<void> {
+  const t0 = performance.now()
+  for (const o of msg.operands) {
+    if (o.shape) setCached(o.id, buildPrimitive(o.shape.shapeType, sanitizeParams(o.shape.params)))
+  }
+  assertManifoldOperands(...msg.operands.map((o) => o.id))
+  const parts: ManifoldObject[] = []
+  let result: ManifoldObject
+  try {
+    for (const o of msg.operands) {
+      const src = cache.get(o.id)
+      if (!src) throw new Error(`Objects not found: ${o.id}`)
+      const t = o.transform
+      parts.push(src.transform(buildTransformMatrix(
+        { x: t.x, y: t.y, z: t.z },
+        { rotX: t.rotX, rotY: t.rotY, rotZ: t.rotZ },
+        { scaleX: t.scaleX, scaleY: t.scaleY, scaleZ: t.scaleZ },
+      )))
+    }
+    result = combineOperands(parts, msg.op, msg.groupA)
+  } finally {
+    for (const p of parts) p.delete()
+  }
+  for (const o of msg.operands) disposeCached(o.id)
+
+  const resultMeshData = result.getMesh()
+  const { cx, cy, cz } = centerMassAtOrigin(
+    new Float32Array(resultMeshData.vertProperties),
+    new Uint32Array(resultMeshData.triVerts),
+  )
+  const centered = result.transform([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -cx, -cy, -cz, 1])
+  setCached(msg.resultId, centered)
+
+  const mesh = extractMesh(result)
+  result.delete()
+  devLogCsg('multi', { id: msg.resultId, op: msg.op, operands: msg.operands.length, groupA: msg.groupA, tris: mesh.tris, ms: performance.now() - t0 })
 
   safePostMessage(
     {

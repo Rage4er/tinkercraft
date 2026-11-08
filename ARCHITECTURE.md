@@ -69,6 +69,8 @@ Web Worker с manifold-3d (WASM). Воркер кэширует manifold-объ�
 
 **worker.ts** — обрабатывает сообщения: `buildShape`, `csgOp`, `rebuildScene`.
 
+**N-ARY-CSG:** CSG — N-арный. Union N объектов — один CSG с N детьми; subtract/intersect — union(A) op union(B) (группы A/B — `groupA` у операции `group` и boolean-узла). Boolean над N операндами считает одна функция воркера `combineOperands` — для живого CSG (`csgBooleanMulti`), перестроения дерева (`rebuildTreeNode`) и воспроизведения истории (`rebuildScene`), поэтому дерево и меш совпадают по построению. 2 операнда — прежний бинарный путь.
+
 **Правило:** Worker НЕ центрирует геометрию. Центрирование — ответственность store.
 
 ### 4. I/O Layer — `io/`

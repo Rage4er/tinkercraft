@@ -30,10 +30,12 @@ import { resolveHotkey, NO_REPEAT, mirrorPlaneOf, csgOpOf, isTextEntry, tabToggl
 import { useSelectedChildGuard } from "./hooks/useSelectedChildGuard";
 import { useSelectedStepGuard } from "./hooks/useSelectedStepGuard";
 import { useTimelineEdit } from "./hooks/useTimelineEdit";
+import { resolveCsgOperands, aliveGroups } from "./store/csg-operands";
 import type {
   TransformNR,
   ShapeParams,
   ShapeType,
+  CsgBooleanOp,
 } from "./csg/types";
 
 // ---- App ----
@@ -229,7 +231,8 @@ export default function App() {
       }
       const csgOp = csgOpOf(action);
       if (csgOp) {
-        if (kb.selectedIds.length === 2 && !kb.busy) void kb.csgBoolean(csgOp);
+        // N-ARY-CSG: операнды (N, группы A/B) разбирает стор; нечего считать — ничего
+        if (!kb.busy) void kb.csgBoolean(csgOp, useUiStore.getState().csgGroups);
         return;
       }
       switch (action) {
@@ -322,6 +325,18 @@ export default function App() {
   const handleTimelineEdit = useTimelineEdit();
   const hasSelectedChild = useUiStore((s) => s.selectedChild !== null);
 
+  // N-ARY-CSG: группы A/B — без поглощённых/удалённых объектов (после CSG, undo, удаления)
+  const csgGroups = useUiStore((s) => s.csgGroups);
+  const setCsgGroups = useUiStore((s) => s.setCsgGroups);
+  useEffect(() => {
+    const alive = aliveGroups(csgGroups, objects);
+    if (alive.a.length !== csgGroups.a.length || alive.b.length !== csgGroups.b.length) setCsgGroups(alive);
+  }, [objects, csgGroups, setCsgGroups]);
+  const runCsg = useCallback(
+    (op: CsgBooleanOp) => csgBoolean(op, useUiStore.getState().csgGroups),
+    [csgBoolean],
+  );
+
   const objectList = useMemo(() => Object.values(objects), [objects]);
   const selSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const firstSelected = selectedIds.length > 0 ? objects[selectedIds[0]] : null;
@@ -336,7 +351,8 @@ export default function App() {
   // CSG недоступен, если среди выбранных объектов есть non-manifold (import_mesh)
   // IMPORT-MESH-CSG: импорт (STL, 3D-текст) не блокируется по типу — замкнутость проверяет
   // воркер; незамкнутый меш → уведомление errors.csgNonManifold.
-  const canCsg = selectedIds.length === 2 && !busy;
+  // N-ARY-CSG: union — N выбранных; subtract/intersect — группы A/B или «первый против остальных»
+  const canCsg = !busy && resolveCsgOperands(selectedIds, csgGroups, objects) !== null;
   const canMirror = selectedIds.length > 0 && !busy;
   // ALIGN-UI-REVIT: «Выровнять» — режим (плоскость → грань B), нужен хотя бы один объект
   const canAlign = objectList.length > 0 && !busy;
@@ -494,7 +510,7 @@ export default function App() {
         onPreviewMirror={handlePreviewMirror}
         onPreviewMirrorEnd={handlePreviewMirrorEnd}
         onAlignMode={() => (alignActive ? exitAlignMode() : startAlignMode())}
-        onCsg={csgBoolean}
+        onCsg={runCsg}
         onToggleTheme={() => setTheme(theme === "dark" ? "light" : "dark")}
         onClearScene={() => {
           if (objectList.length > 0 || operations.length > 0) setShowClearConfirm(true);
@@ -625,7 +641,7 @@ export default function App() {
             onScaleAxis={handleScaleAxis}
             onResizeDim={handleResizeDim}
             onResizeObject={resizeObject}
-            onCsg={csgBoolean}
+            onCsg={runCsg}
             onSetColor={setColor}
             onToggleVisible={toggleVisible}
             onShowProjects={() => setShowPM(true)}

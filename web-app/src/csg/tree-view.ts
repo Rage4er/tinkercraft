@@ -56,6 +56,11 @@ export interface TreeViewNode {
   shapeType?: ShapeType
   params?: ShapeParams
   operation?: TreeNode['operation']
+  /**
+   * N-ARY-CSG: subtract/intersect с группами — число детей группы A (`children[0..groupA)`),
+   * остальные — группа B. Нет — бинарный/«первый против остальных» (группа A = 1).
+   */
+  groupA?: number
   /** Зеркальная копия: запечённая (params нет) либо зеркальный примитив (params редактируются, 9.8). */
   mirrored: boolean
   /** Статически можно ли править params (9.2): живой примитив с params. Согласованность корня — отдельно. */
@@ -94,11 +99,24 @@ function buildView(id: string, depth: number, seen: Set<string>): TreeViewNode |
     // копия: UI не должен мутировать params дерева (снимки хранят ссылки)
     params: node.params ? { ...node.params } : undefined,
     operation: node.operation,
+    ...(node.groupA !== undefined ? { groupA: node.groupA } : {}),
     mirrored,
     editable,
     notEditableReason,
     children,
   }
+}
+
+/**
+ * N-ARY-CSG: делить ли детей узла на «Группа A» / «Группа B» в дереве — вычитание и
+ * пересечение больше чем двух детей (бинарное `a op b` показывается как раньше).
+ * Возвращает число детей группы A или null.
+ */
+export function viewGroupSplit(node: Pick<TreeViewNode, 'type' | 'operation' | 'groupA' | 'children'>): number | null {
+  if (node.type !== 'boolean' || node.operation === 'union' || node.operation === undefined) return null
+  const n = node.children.length
+  if (n <= 2 && (node.groupA ?? 1) === 1) return null
+  return Math.min(Math.max(1, node.groupA ?? 1), n - 1)
 }
 
 /**

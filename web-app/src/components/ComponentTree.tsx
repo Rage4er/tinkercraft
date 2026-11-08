@@ -10,7 +10,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { SceneObject, ShapeType } from '../csg/types'
-import { getTreeView, formatParams, reasonFromRootFailure, type TreeViewNode, type NotEditableReason } from '../csg/tree-view'
+import { getTreeView, formatParams, reasonFromRootFailure, viewGroupSplit, type TreeViewNode, type NotEditableReason } from '../csg/tree-view'
 import { useRootConsistency } from '../hooks/useRootConsistency'
 import { useUiStore } from '../store/ui-store'
 import {
@@ -93,6 +93,13 @@ export default function ComponentTree({ objects, selectedIds, onSelect, onRename
   const expanded = useUiStore((s) => s.expandedTreeIds)
   const toggleExpanded = useUiStore((s) => s.toggleTreeExpanded)
   const selectedChild = useUiStore((s) => s.selectedChild)
+  const csgGroups = useUiStore((s) => s.csgGroups)
+  const groupOfId = useMemo(() => {
+    const m = new Map<string, 'a' | 'b'>()
+    for (const id of csgGroups.b) m.set(id, 'b')
+    for (const id of csgGroups.a) m.set(id, 'a')
+    return m
+  }, [csgGroups])
   const setSelectedChild = useUiStore((s) => s.setSelectedChild)
   // UX-AUDIT-34: какие запечённые дети CSG — 3D-текст (по истории; объект-текст поглощён CSG)
   const operations = useDocumentStore((s) => s.operations)
@@ -158,8 +165,26 @@ export default function ComponentTree({ objects, selectedIds, onSelect, onRename
     return node.mirrored ? `${base} (${t('componentTree.mirroredShort')})` : base
   }
 
+  // N-ARY-CSG: вычитание/пересечение больше двух детей — заголовки «Группа A» / «Группа B»
+  // перед первым ребёнком каждой группы (дети остаются плоским списком одного узла)
+  function groupHeader(node: TreeViewNode, index: number, depth: number): React.ReactNode {
+    const split = viewGroupSplit(node)
+    if (split === null || (index !== 0 && index !== split)) return null
+    const which = index === 0 ? 'a' : 'b'
+    return (
+      <div
+        className="ct-item ct-group-header"
+        style={{ paddingLeft: 6 + depth * 14 }}
+        data-group={which}
+        data-testid={`ct-group-${which}`}
+      >
+        {t(which === 'a' ? 'csg.groupA' : 'csg.groupB')}
+      </div>
+    )
+  }
+
   function renderChildren(node: TreeViewNode, rootId: string, depth: number): React.ReactNode {
-    return node.children.map((child) => {
+    return node.children.map((child, index) => {
       const isSel = selectedChild?.nodeId === child.id
       const hasKids = child.children.length > 0
       const isOpen = !!expanded[child.id]
@@ -170,6 +195,7 @@ export default function ComponentTree({ objects, selectedIds, onSelect, onRename
       const lockTitle = locked ? `${t('tree.child_not_editable')}: ${t(`tree.reason.${reason}`)}` : undefined
       return (
         <div key={child.id}>
+          {groupHeader(node, index, depth)}
           <div
             className={`ct-item ct-child${isSel ? ' ct-selected ct-child-selected' : ''}${reason === null ? '' : ' ct-readonly'}`}
             style={{ paddingLeft: 6 + depth * 14 }}
@@ -214,6 +240,7 @@ export default function ComponentTree({ objects, selectedIds, onSelect, onRename
         const isEd = editingId === obj.id
         const view = views.get(obj.id)
         const isOpen = !!expanded[obj.id]
+        const group = groupOfId.get(obj.id)
         return (
           <div key={obj.id}>
             <div
@@ -266,6 +293,13 @@ export default function ComponentTree({ objects, selectedIds, onSelect, onRename
                   title={t("componentTree.doubleClickRename")}
                 >
                   {displayName(obj, t)}
+                </span>
+              )}
+
+              {/* N-ARY-CSG: объект назначен группой A/B для вычитания/пересечения */}
+              {group && (
+                <span className="ct-csg-group" data-testid="ct-csg-group" data-group={group} title={t(group === 'a' ? 'csg.groupA' : 'csg.groupB')}>
+                  {group === 'a' ? 'A' : 'B'}
                 </span>
               )}
 

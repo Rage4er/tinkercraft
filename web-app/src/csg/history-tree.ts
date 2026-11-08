@@ -106,34 +106,67 @@ export function createPrimitiveNode(
 }
 
 /**
- * Create a boolean operation node.
+ * Create a boolean operation node (N-ARY-CSG: N детей, плоский список).
  * Sets parentId on children and checks for cycles.
- */
-/**
- * Create a boolean node with optional transform.
+ *
+ * - `createBooleanNode(id, op, childIds, transform?, groupA?)` — N ≥ 2 детей; `groupA` —
+ *   число детей группы A для subtract/intersect (union(A) op union(B)); нет — 1.
+ * - `createBooleanNode(id, op, childA, childB, transform?)` — прежняя бинарная форма
+ *   (= `[childA, childB]`), старые вызовы и документы совместимы.
+ *
  * Boolean nodes can have their own transform to position/rotate/scale the result.
  */
+export function createBooleanNode(
+  id: string,
+  operation: 'union' | 'subtract' | 'intersect',
+  childIds: string[],
+  transform?: TransformNR,
+  groupA?: number,
+): TreeNode
 export function createBooleanNode(
   id: string,
   operation: 'union' | 'subtract' | 'intersect',
   childA: string,
   childB: string,
   transform?: TransformNR,
+): TreeNode
+export function createBooleanNode(
+  id: string,
+  operation: 'union' | 'subtract' | 'intersect',
+  childrenOrA: string[] | string,
+  bOrTransform?: string | TransformNR,
+  transformOrGroupA?: TransformNR | number,
 ): TreeNode {
+  const binary = typeof childrenOrA === 'string'
+  const children = binary ? [childrenOrA, bOrTransform as string] : [...childrenOrA]
+  const transform = (binary ? transformOrGroupA : bOrTransform) as TransformNR | undefined
+  const groupA = binary ? undefined : transformOrGroupA as number | undefined
+  if (children.length < 2) {
+    throw new Error(`Boolean node needs at least 2 children: ${id}`)
+  }
+  if (new Set(children).size !== children.length) {
+    throw new Error(`Boolean node has duplicate children: ${id}`)
+  }
   // Guard: self-reference
-  if (childA === id || childB === id) {
+  if (children.includes(id)) {
     throw new Error(`Boolean node cannot reference itself: ${id}`)
   }
   // Guard: cycle detection
-  if (isAncestor(childA, id) || isAncestor(childB, id)) {
-    throw new Error(`Cannot create cycle in tree: ${childA} → ${id} or ${childB} → ${id}`)
+  const cyc = children.find((c) => isAncestor(c, id))
+  if (cyc !== undefined) {
+    throw new Error(`Cannot create cycle in tree: ${cyc} → ${id}`)
   }
+  // N-ARY-CSG: группа A хранится только если она не «первый против остальных»
+  const k = operation === 'union' || groupA === undefined
+    ? 1
+    : Math.min(Math.max(1, Math.floor(groupA)), children.length - 1)
 
   const node: TreeNode = {
     id,
     type: 'boolean',
     operation,
-    children: [childA, childB],
+    children,
+    ...(k > 1 ? { groupA: k } : {}),
     // Корневая нода при создании: relativeToParent = null (Фаза 8)
     relativeToParent: null,
     localTransform: transform ? { ...transform } : undefined,
@@ -149,16 +182,15 @@ export function createBooleanNode(
   // relativeToParent = childWorld − parentWorld.
   // localTransform ребёнка НЕ трогаем — обратная совместимость до Этапа 8.
   const parentWorld: TransformNR = transform ?? IDENTITY_TRANSFORM
-  const childANode = treeStore.getNode(childA)
-  const childBNode = treeStore.getNode(childB)
-  for (const childNode of [childANode, childBNode]) {
+  for (const childId of children) {
+    const childNode = treeStore.getNode(childId)
     if (!childNode) continue
     childNode.parentId = id
     const childWorld: TransformNR = childNode.localTransform ?? IDENTITY_TRANSFORM
     childNode.relativeToParent = subtractTransform(childWorld, parentWorld)
   }
 
-  devLog('TREE', { action: 'createBoolean', id, operation, children: [childA, childB], transform })
+  devLog('TREE', { action: 'createBoolean', id, operation, children, groupA: k > 1 ? k : undefined, transform })
   return node
 }
 
@@ -376,7 +408,9 @@ function computeNodeHash(node: TreeNode): string {
         const child = treeStore.getNode(id)
         return child ? computeNodeHash(child) : '?'
       })
-    return `${node.operation}|${tStr}|${childHashes.join('|')}`
+    // N-ARY-CSG: граница групп A/B меняет результат subtract/intersect
+    const gStr = node.groupA !== undefined ? `|g${node.groupA}` : ''
+    return `${node.operation}${gStr}|${tStr}|${childHashes.join('|')}`
   }
   return ''
 }
@@ -515,6 +549,8 @@ interface WorkerNode {
   normals?: number[]
   operation?: 'union' | 'subtract' | 'intersect'
   children?: string[]
+  /** N-ARY-CSG: число детей группы A (subtract/intersect) */
+  groupA?: number
   mirrored?: MirrorPlane[]
 }
 
@@ -549,6 +585,7 @@ function collectSubtreeForWorker(rootId: string): WorkerNode[] {
     if (node.normals !== undefined) workerNode.normals = Array.from(node.normals || [])
     if (node.operation !== undefined) workerNode.operation = node.operation
     if (node.children !== undefined) workerNode.children = node.children
+    if (node.groupA !== undefined) workerNode.groupA = node.groupA
     if (node.mirrored !== undefined) workerNode.mirrored = node.mirrored
 
     nodes.push(workerNode)
@@ -574,8 +611,8 @@ function collectSubtreeForWorker(rootId: string): WorkerNode[] {
  * so boolean result is also in world coordinates. We must center it and apply localTransform.
  */
 async function applyCSGMeshes(node: TreeNode, parentWorld: TransformNR): Promise<ExtractedMesh> {
-  if (!node.children || node.children.length !== 2) {
-    throw new Error(`Boolean node needs exactly 2 children`)
+  if (!node.children || node.children.length < 2) {
+    throw new Error(`Boolean node needs at least 2 children`)
   }
 
   // Collect all nodes in the subtree INCLUDING the target node
@@ -608,6 +645,7 @@ async function applyCSGMeshes(node: TreeNode, parentWorld: TransformNR): Promise
       normals: n.normals ? Array.from(n.normals) : undefined,
       operation: n.operation,
       children: n.children,
+      groupA: n.groupA,
       mirrored: n.mirrored,
     })
   }
@@ -1439,6 +1477,7 @@ function cloneRecursive(
 
   if (source.type === 'boolean' && source.children) {
     clone.operation = source.operation
+    if (source.groupA !== undefined) clone.groupA = source.groupA
     // Boolean nodes carry their own transform (especially intermediate CSG
     // results). Omitting it makes the mirrored clone lose the intermediate
     // result's centroid/rotation/scale before mirrorNodeRecursive can mirror
@@ -1498,6 +1537,7 @@ function copyNodeData(n: TreeNode): TreeNode {
   if (n.mirroredPlane) c.mirroredPlane = n.mirroredPlane
   if (n.operation) c.operation = n.operation
   if (n.children) c.children = [...n.children]
+  if (n.groupA !== undefined) c.groupA = n.groupA
   if (n.parentId) c.parentId = n.parentId
   return c
 }

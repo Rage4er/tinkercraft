@@ -38,11 +38,12 @@ import type { ClipEntry } from './helpers'
 import type { DocumentStore } from './types'
 import { rebuildFromHistory, rebuildBuildTree } from './rebuild'
 import { isTextObject, textFromName } from './text-object'
-import { computeCsgResult, groupOperationFromResult, isNonManifoldError } from './csg-result'
+import { computeCsgResultN, groupOperationFromResult, isNonManifoldError } from './csg-result'
+import { resolveCsgOperands } from './csg-operands'
 import { computeEditedChild, editFailureKey, findCreationTransform } from './edit-child'
 import { computeStepEdit, editStepFailureKey } from './edit-step'
 import { cacheSnapshot, getCachedSnapshot, clearSnapshots, cacheTreeSnapshot } from './snapshots'
-import { OBJECT_SPACING, PASTE_OFFSET } from '../constants'
+import { OBJECT_SPACING, PASTE_OFFSET, CSG_SOFT_LIMIT } from '../constants'
 import {
   createPrimitiveNode,
   createBooleanNode,
@@ -539,12 +540,20 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   clearSelection: () => set({ selectedIds: [] }),
 
   // ── CSG ──
-  csgBoolean: async (op) => {
+  csgBoolean: async (op, groups) => {
     if (get().busy) return
     const { selectedIds, objects, operations, historyIndex } = get()
-    if (selectedIds.length !== 2) return
-    const [idA, idB] = selectedIds
-    if (!objects[idA] || !objects[idB]) return
+    // N-ARY-CSG: union — N выбранных → ОДИН CSG с N детьми (плоско, без вложенности);
+    // subtract/intersect — union(A) op union(B), группы — кнопками «Группа A»/«Группа B»
+    // (иначе A — первый выбранный, B — остальные; ровно 2 — прежний бинарный a op b).
+    const operands = resolveCsgOperands(selectedIds, groups, objects)
+    if (!operands) return
+    const { ids, groupA } = operands
+    const idA = ids[0]
+    // Мягкий лимит: много операндов — предупреждение, операция выполняется (не блокирует)
+    if (ids.length > CSG_SOFT_LIMIT) {
+      notify(i18n.t('errors.csgTooMany', { count: ids.length, limit: CSG_SOFT_LIMIT }), 'warning')
+    }
 
     // IMPORT-MESH-CSG: импортированный меш (STL, 3D-текст) допускается к CSG, если он
     // замкнут — это решает воркер (manifold построился). Незамкнутый → ошибка с маркером
@@ -556,9 +565,9 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const t0 = performance.now()
       // Фаза 9.5.0: общее ядро CSG (sync → boolean → pivot = transformA → un-bake RS)
       // вынесено в computeCsgResult — тем же кодом считает каскад правки прошлого шага.
-      syncNodeTransform(idA, objects[idA].transform)
-      syncNodeTransform(idB, objects[idB].transform)
-      const res = await computeCsgResult(objects[idA], objects[idB], op, resultId)
+      // N-ARY-CSG: computeCsgResultN — 2 операнда идут прежним бинарным путём.
+      for (const id of ids) syncNodeTransform(id, objects[id].transform)
+      const res = await computeCsgResultN(ids.map((id) => objects[id]), op, resultId, groupA)
       const ms = performance.now() - t0
       // UX-AUDIT-4: пустой результат (пересечение непересекающихся, вычитание «всего») —
       // невидимый объект и шаг истории не создаём: объекты не трогаем, сообщаем.
@@ -574,40 +583,35 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       devLogCsg('children', {
         id: resultId,
         op,
+        groupA,
         csgTransform: resultTransform,
-        childA: { id: idA, rel: objects[idA].transform, abs: objects[idA].transform },
-        childB: { id: idB, rel: objects[idB].transform, abs: objects[idB].transform },
+        children: ids.map((id) => ({ id, abs: objects[id].transform })),
       })
 
-      const newObj: SceneObject = { id: resultId, shapeType: 'csg', params: {}, operation: op, children: [idA, idB], color: objects[idA].color, transform: resultTransform, visible: true, locked: false, vertices: res.vertices, indices: res.indices, normals: res.normals, aabb: res.aabb, originalBboxSize: res.originalBboxSize }
-      const newObjects = { ...objects }; delete newObjects[idA]; delete newObjects[idB]; newObjects[resultId] = newObj
+      const newObj: SceneObject = { id: resultId, shapeType: 'csg', params: {}, operation: op, children: [...ids], color: objects[idA].color, transform: resultTransform, visible: true, locked: false, vertices: res.vertices, indices: res.indices, normals: res.normals, aabb: res.aabb, originalBboxSize: res.originalBboxSize }
+      const newObjects = { ...objects }
+      for (const id of ids) delete newObjects[id]
+      newObjects[resultId] = newObj
       // Store result vertices/indices AND pivot (resultCenter/Rotation/Scale = TRS
       // операнда A, PIVOT-TRANSFORMA + CSG-PRESERVE-RS) in GroupOperation so
       // rebuildFromHistory can reconstruct the CSG result geometry at the correct position.
-      const histOp: GroupOperation = groupOperationFromResult(res, idA, idB, resultId, op, objects[idA].color)
+      const histOp: GroupOperation = groupOperationFromResult(res, ids, resultId, op, objects[idA].color, groupA)
       const newOps = [...operations.slice(0, historyIndex), histOp]
       // Ensure children are registered in build tree.
       // CSG results (shapeType='csg') and import_mesh are registered as BAKED nodes
       // (carrying their actual mesh + transform). Primitives are registered with
       // their shapeType + params for parametric rebuild.
-      const ensureInTree = (id: string) => {
-        if (!getNode(id)) {
-          const obj = objects[id]
-          if (obj) {
-            // Фаза 9.8: зеркальный примитив — primitive + mirrored (params редактируемы);
-            // CSG/import → baked.
-            registerObjectInTree(id, obj)
-          }
-        }
+      // Фаза 9.8: зеркальный примитив — primitive + mirrored (params редактируемы); CSG/import → baked.
+      for (const id of ids) {
+        if (!getNode(id) && objects[id]) registerObjectInTree(id, objects[id])
       }
-      ensureInTree(idA)
-      ensureInTree(idB)
       // Register CSG result as a boolean node (parametric CSG) - allows future parametric editing
       // 1. rebuildNode returns the pre-computed mesh directly (no re-extraction)
       // 2. syncObjectsForOperation routes to workerSyncMesh (correct for CSG results)
       // 3. mirror/align operations work correctly with the geometry
       // 4. Enables parametric editing in future (edit operands, operation type)
-      createBooleanNode(resultId, op as 'union' | 'subtract' | 'intersect', idA, idB, resultTransform)
+      // N-ARY-CSG: один узел, N детей (плоский список), группа A — для subtract/intersect
+      createBooleanNode(resultId, op, ids, resultTransform, op === 'union' ? undefined : groupA)
       set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, selectedIds: [resultId], modified: true, busy: false, lastCsgMs: ms })
       cacheSnapshotWithTree(newOps.length, newObjects)
       invalidateMirrorCache()

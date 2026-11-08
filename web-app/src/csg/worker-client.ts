@@ -264,6 +264,21 @@ export async function workerCsgBooleanWithSync(
   return result
 }
 
+/**
+ * N-ARY-CSG: sync + boolean над N операндами за один поход (union N, subtract/intersect
+ * A vs B: `operands[0..groupA)` — группа A). `shape` — у примитивов (строятся из params),
+ * у CSG/импорта/зеркальных — нет (меш уже в кэше после `workerSyncMesh`).
+ */
+export async function workerCsgBooleanMulti(
+  operands: Array<{ id: string; transform: TransformNR; shape?: { shapeType: ShapeType; params: ShapeParams } }>,
+  op: CsgBooleanOp, resultId: string, groupA?: number,
+): Promise<MeshResult> {
+  await waitReady()
+  const result = await send<MeshResult>('csgBooleanMulti', { operands, op, resultId, groupA })
+  devLogWorker('receive', 'csgBooleanMulti', { n: operands.length, op, resultId, groupA, tris: result.tris }, result.ms)
+  return result
+}
+
 export async function workerMirrorObject(
   objId: string, plane: 'XY' | 'XZ' | 'YZ', shapeType?: string, params?: Record<string, number>, transform?: TransformNR,
   mirrorCenter?: { x: number; y: number; z: number },
@@ -314,6 +329,8 @@ export async function workerRebuildNode(
     normals?: number[]
     operation?: 'union' | 'subtract' | 'intersect'
     children?: string[]
+    /** N-ARY-CSG: число детей группы A (subtract/intersect) */
+    groupA?: number
     mirrored?: Array<'XY' | 'XZ' | 'YZ'>
   }>,
   options?: { worldSpace?: boolean },

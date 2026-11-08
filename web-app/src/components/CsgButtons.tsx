@@ -15,12 +15,15 @@ export default function CsgButtons({
   onCsg,
   variant = "compact",
   maxRows,
+  extra,
 }: {
   disabled: boolean;
   onCsg: (op: CsgOp) => void;
   variant?: "compact" | "full";
   /** Количество строк для группы (из алгоритма layout) */
   maxRows?: number;
+  /** N-ARY-CSG: строка под кнопками (группы A/B) — только `full` */
+  extra?: React.ReactNode;
 }) {
   const { t } = useTranslation();
   const ops: { op: CsgOp; icon: React.ReactNode; labelKey: string; tooltipKey: string }[] = [
@@ -60,6 +63,7 @@ export default function CsgButtons({
             ))}
           </div>
         ))}
+        {extra}
       </div>
     );
   }

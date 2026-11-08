@@ -41,6 +41,7 @@ interface SnapshotTree {
     normals?: ArrayLike<number>
     operation?: 'union' | 'subtract' | 'intersect'
     children?: string[]
+    groupA?: number
     parentId?: string
   }>
 }
@@ -86,6 +87,7 @@ function serializeTree(nodes: TreeNode[]): SnapshotTree {
       normals: node.normals ? (node.normals as Float32Array) : undefined,
       operation: node.operation,
       children: node.children,
+      groupA: node.groupA,
       parentId: node.parentId,
     })
   }
