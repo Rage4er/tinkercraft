@@ -25,7 +25,7 @@ pnpm dev          # dev-сервер (порт 5000)
 pnpm build        # production-сборка
 pnpm test         # запуск тестов (844 теста, 68 файлов)
 pnpm typecheck    # tsc --noEmit
-pnpm e2e:smoke    # дымовой тест в браузере (Playwright; нужен запущенный pnpm dev; см. web-app/e2e/helpers.mjs)
+pnpm e2e:smoke    # дымовой тест в браузере (Playwright; нужен запущенный pnpm dev; см. web-app/e2e/helpers.mjs). В CI все e2e — job `e2e` в ci-web.yml (CI-E2E)
 pnpm e2e:tree     # Фаза 9.1: раскрытие CSG в дереве, выбор ребёнка
 pnpm e2e:edit-child  # Фаза 9.2/9.3: правка параметра ребёнка CSG, undo
 pnpm e2e:edit-step-move  # Фаза 9.5.2: ✎ у шага move → ΔX → CSG пересчитан, undo/redo
@@ -203,6 +203,7 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 - Имена: `describe('FunctionName')` → `it('описание')`
 - Известный, но ещё не исправленный баг: `it.fails('ID ожидание: …')` + `it('ID реальность: …')` (а не `skip`): тест подтверждает баг на каждом прогоне и краснеет после фикса; в e2e — `knownBug(...)` (см. `e2e/ux-audit.mjs`). После фикса: `it.fails` → `it`, «реальность» удалить, `knownBug` → обычная проверка. Реестр — `DEVELOPMENT_PLAN.md` › «UX-AUDIT», «UX-AUDIT-2», «UX-AUDIT-3», «UX-AUDIT-4», «UX-AUDIT-5», «UX-AUDIT-6», «UX-AUDIT-7»
 - Строки интерфейса — только через i18n (`t('…')`, ru и en): `i18n/i18n-coverage.test.ts` (AST-скан) падает на кириллице в литералах/JSX вне `console`/`devLog` и на расхождении ключей ru/en
+- e2e в CI (CI-E2E): раннер без GPU (WebGL — Mesa llvmpipe на CPU), язык — `LANG=ru_RU`. Порог производительности (FPS, долгие задачи, время) — только через `assertPerf` (`e2e/helpers.mjs`), не `fail`: локально строго, в CI (`E2E_SOFT_PERF=1`) — предупреждение `[SOFT PERF]`. Рамку тоста мерить после `waitToastsSettled` (анимация появления), а не по паузе
 - e2e, добавляющие одну и ту же фигуру подряд, — через `spaceShapeClick` (`e2e/helpers.mjs`): повтор той же фигуры <200 мс — «двойной клик» (UX-AUDIT-9)
 
 ### CSS
@@ -280,7 +281,7 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 
 - Импортированные меши (STL) не параметризуются (IMPORT-MESH-PARAMETRIC: не требуется); трансформации и CSG работают — CSG допускает замкнутый STL (проверка по manifold в воркере, IMPORT-MESH-CSG), незамкнутый → уведомление `errors.csgNonManifold`; «починка» незамкнутого меша не делается; старые extrude без `group.source` не редактируются как extrude (EXTRUDE-LEGACY: не мигрируем); `extrudeSelected` — движок правки 9.5.4, не UI-инструмент: это «растянуть по оси», а не extrude 2D→3D, кнопку не возвращать (EXTRUDE-3D-SCALE; настоящий extrude — Фаза 11)
 - Скругления (fillet) нет: прежний параметр куба удалён (remove-fillet) до инструмента на B-Rep; старые шаги `fillet` вырезаются при загрузке (`io/legacy-fillet.ts`) — новых не создавать
-- После v1.3.1 открыто: связанное зеркало (linked mirror) не делали — копия CSG всегда независимая; «починка» незамкнутого STL; CI-E2E (e2e не в CI; CI — один workflow `ci-web.yml`, CI-DEDUP ✅)
+- После v1.3.1 открыто: связанное зеркало (linked mirror) не делали — копия CSG всегда независимая; «починка» незамкнутого STL. CI — один workflow `ci-web.yml` (CI-DEDUP ✅): job `ci` (install + typecheck + test + build) и job `e2e` — все 18 e2e (CI-E2E ✅)
 - Выравнивание режимом «Выровнять» (ALIGN-UI-REVIT) пишется шагом move (с поворотом — «Повернуть», UX-AUDIT-32; грань гладкой поверхности — цилиндр, сфера — не поворачивает, только касание): при правке прошлого шага объект не перевыравнивается по плоскости (ALIGN-PLANE-RESOLVE); шаги `align` старых проектов — с re-solve, как раньше
 - Дерево живой сессии, начатой до v1.3.2 (boolean-узлы без `originTransform`), для вложенного CSG, сдвинутого до объединения, остаётся под замком `nested_moved` (предохранитель); после перезагрузки/загрузки проекта дерево перестраивается из истории с TRS₀ — правка работает
 - `.doodle` (legacy) в UI не открывается: `parseDoodle` не вызывается

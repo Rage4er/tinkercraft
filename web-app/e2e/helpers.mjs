@@ -22,6 +22,33 @@ export async function openApp({ width = 1400, height = 850 } = {}) {
   return { browser, page, errors }
 }
 
+// CI-E2E: пороги производительности (FPS, долгие задачи, время CSG) зависят от железа. Локально
+// (GPU) — строго: не выполнен — падение, как `fail`. В CI (`E2E_SOFT_PERF=1`, только job e2e в
+// ci-web.yml: раннер без GPU, WebGL — Mesa llvmpipe на CPU) — предупреждение `[SOFT PERF] …` в
+// stderr, скрипт идёт дальше: функциональные проверки после порога выполняются.
+/** Мягкий режим порогов производительности (CI без GPU). */
+export function isSoftPerf() {
+  return process.env.E2E_SOFT_PERF === '1'
+}
+/** Порог производительности: локально — ошибка `message`, в мягком режиме — предупреждение. */
+export function assertPerf(condition, message) {
+  if (condition) return
+  if (isSoftPerf()) console.warn(`[SOFT PERF] ${message}`)
+  else throw new Error(message)
+}
+
+/**
+ * CI-E2E: тост въезжает анимацией (`toastIn`, 0,2 с, translateX 20px). Без GPU кадры медленные, и
+ * рамка, снятая через фиксированную паузу, — середина анимации (тост сдвинут и задевает панель).
+ * Ждёт, пока анимации всех тостов закончатся; с GPU — сразу.
+ */
+export async function waitToastsSettled(page, timeout = 10000) {
+  await page.waitForFunction(
+    () => [...document.querySelectorAll('.toast')].every((t) => t.getAnimations().every((a) => a.playState === 'finished')),
+    null, { timeout },
+  )
+}
+
 // ALIGN-REVIT: кнопки — по доступному имени (aria-label = подпись тултипа), а не по
 // индексу: перестановка кнопок тулбара больше не ломает e2e. Имена — ru (язык по умолчанию).
 /** Кнопка тулбара по aria-label (точное совпадение), напр. 'Зеркало YZ', 'Импорт', 'X мин'. */

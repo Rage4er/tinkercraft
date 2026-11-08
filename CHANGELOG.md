@@ -9,6 +9,9 @@
 
 ## [Unreleased]
 
+### Added
+- **CI-E2E — все 18 e2e в CI:** job `e2e` в `.github/workflows/ci-web.yml`, параллельно с `ci` (install + typecheck + test + build): 4 группы скриптов, сбалансированные по времени (~15 мин); Playwright Chromium + Mesa EGL / llvmpipe (у раннера нет GPU: без системного EGL `--use-angle=gl-egl` откатывается на SwiftShader — в 2–2,5 раза медленнее), проверка WebGL с флагами `openApp`, `pnpm dev` на :5000, `LANG=ru_RU` (язык интерфейса — из `navigator.language`), до 2 повторов на скрипт (с предупреждением в сводке), логи e2e и dev-сервера — артефакт. Пороги производительности (FPS, долгие задачи, время CSG 100k) на CPU-рендере не выполнимы: `e2e/helpers.mjs` › `assertPerf` — локально строго (падение), в CI (`E2E_SOFT_PERF=1`, только job `e2e`) — предупреждение `[SOFT PERF]` в сводке, проверки дальше выполняются (`ux-audit-2` J / L, `ux-audit-3` UX-AUDIT-21 / L, `ux-audit-4` UX-AUDIT-35). Проверки «тост не перекрывает панель» (`ux-audit-2` M, `ux-audit-3` R / UX-AUDIT-30, `ux-audit-4` Y) ждут конца анимации появления тоста (`waitToastsSettled`): без GPU через 400 мс тост ещё въезжал и задевал панель
+
 ---
 
 ## [1.3.3] — 2026-11-08
