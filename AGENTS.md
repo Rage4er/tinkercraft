@@ -69,7 +69,7 @@ pnpm e2e:align-obb  # ALIGN-REVIT: режимом «Выровнять» — п�
 | `<задача>` | Короткие ветки задач от `main` → PR в `main` (merge-коммит после зелёного CI), ветка удаляется. Push в `main` → деплой GitHub Pages. До v1.3.1 задачи Фазы 9 шли через `phase-9` (PR #1–#17) |
 | `yandex-games` | Версия для Яндекс.Игр (экономика, реклама, токены); отдельно, Фазу 9 ещё не содержит |
 
-Цепочка: `main` (v1.3.2) → ветки задач → PR в `main`. `yandex-games` — отдельно.
+Цепочка: `main` (v1.3.3) → ветки задач → PR в `main`. `yandex-games` — отдельно.
 
 **`main` — production.** Любой push в `main` (merge PR) сразу выкладывает GitHub Pages (`deploy.yml`). Поэтому: в `main` — только через PR после зелёного CI, ничего «в процессе»; версия в `web-app/package.json` и `APP_VERSION` (`src/constants.ts`) должна соответствовать коду — значимый merge (фича, фикс) сопровождается patch-релизом: версия + CHANGELOG `[x.y.z]` + тег `vX.Y.Z` после зелёного деплоя.
 
