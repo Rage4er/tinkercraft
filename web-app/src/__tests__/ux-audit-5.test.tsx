@@ -204,11 +204,13 @@ describe('UX-AUDIT-32-followup — «Выровнять» с поворотом:
   })
 })
 
-describe('UX-AUDIT-36 — имя 3D-текста не переводится при смене языка', () => {
-  // Имя текста («Текст: Дом») записывается в объект на языке создания (add-text); имена по умолчанию
-  // остальных объектов — по id при показе («Куб 1» → «Cube 1», «CSG результат 3» → «CSG result 3»),
-  // ребёнок CSG — «Text: Дом» (UX-AUDIT-34). В английском интерфейсе список/дерево — «Текст: Дом».
-  it.fails('ожидание: текст «Дом», созданный в ru, в en — «Text: Дом» (как ребёнок CSG и шаг истории «Add Text: Дом»)', async () => {
+describe('UX-AUDIT-36 — имя 3D-текста — на языке интерфейса', () => {
+  // Было: имя текста («Текст: Дом») записывается в объект на языке создания (add-text), а имена по
+  // умолчанию остальных объектов — по id при показе («Куб 1» → «Cube 1», «CSG результат 3» → «CSG
+  // result 3»), ребёнок CSG — «Text: Дом» (UX-AUDIT-34): в английском интерфейсе список/дерево —
+  // «Текст: Дом». Исправлено в fix-all-5: `displayName` — имя текста по умолчанию (`defaultTextName`)
+  // на языке интерфейса; переименованный — своё имя.
+  it('текст «Дом», созданный в ru, в en — «Text: Дом» (как ребёнок CSG и шаг истории «Add Text: Дом»)', async () => {
     await addTextObject('Дом', { size: 10, depth: 2 })
     const id = Object.keys(st().objects)[0]
     await st().addShape('cube')
@@ -216,9 +218,24 @@ describe('UX-AUDIT-36 — имя 3D-текста не переводится п�
     const cube = Object.values(st().objects).find((o) => o.shapeType === 'cube')!
     expect(displayName(cube, t)).toMatch(/^Cube/)                                      // фигура — переведена
     expect(opLabel(st().operations[0], t)).toBe('Add Text: Дом')                       // шаг — переведён
-    expect(displayName(st().objects[id], t)).toBe('Text: Дом')                          // ← сейчас «Текст: Дом»
+    expect(displayName(st().objects[id], t)).toBe('Text: Дом')                          // было «Текст: Дом»
   })
-  it('переименованный текст — своё имя на любом языке (это не баг, граница фикса)', async () => {
+  it('дерево в en: строка текста — «Text: Дом»; двойной клик + Enter без правки — не переименование (имя на диске — «Текст: Дом»)', async () => {
+    await addTextObject('Дом', { size: 10, depth: 2 })
+    const id = Object.keys(st().objects)[0]
+    await i18n.changeLanguage('en')
+    const renamed: string[] = []
+    const h = mount(<ComponentTree objects={Object.values(st().objects)} selectedIds={new Set()} onSelect={noop} onRename={(_, n) => renamed.push(n)} onToggleVis={noop} onDelete={noop} />)
+    const name = h.querySelector(`.ct-item[data-object-id="${id}"] .ct-name`)!
+    expect(name.textContent).toBe('Text: Дом')
+    act(() => { name.dispatchEvent(new MouseEvent('dblclick', { bubbles: true })) })
+    const input = h.querySelector<HTMLInputElement>('.ct-name-input')!
+    expect(input.value).toBe('Text: Дом')
+    act(() => { input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })) })
+    expect(renamed).toEqual([])
+    expect(st().objects[id].name).toBe('Текст: Дом')
+  })
+  it('переименованный текст — своё имя на любом языке (граница фикса)', async () => {
     await addTextObject('Дом', { size: 10, depth: 2 })
     const id = Object.keys(st().objects)[0]
     st().renameObject(id, 'Логотип')

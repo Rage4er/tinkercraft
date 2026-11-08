@@ -89,7 +89,7 @@ export default function StepPanel() {
     // mirror — что зеркалится; extrude — что выдавливается (база)
     const ids = raw.type === 'mirror' ? raw.originalIds : raw.type === 'group' ? [raw.source!.baseId] : raw.ids
     return {
-      names: ids.map((id) => (meta[id] ? displayName({ id, shapeType: meta[id].shapeType, name: meta[id].name }, t) : id)).join(', '),
+      names: ids.map((id) => (meta[id] ? displayName({ id, shapeType: meta[id].shapeType, name: meta[id].name, text: meta[id].text }, t) : id)).join(', '),
       original: raw.type === 'move' ? `Δ ${fmtVec(raw.delta)}`
         : raw.type === 'mirror' ? raw.plane
           : `${fmtNum(raw.source!.depth)} (${raw.source!.axis})`,

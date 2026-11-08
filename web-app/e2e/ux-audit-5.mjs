@@ -9,7 +9,7 @@
 //  Баги прогона 5 (`knownBug`, логика — __tests__/ux-audit-5.test.tsx, `it.fails`); исправленные в
 //  fix-all-5 — обычные проверки: UX-AUDIT-32-followup (поворот на месте, X/Y прежние);
 //     UX-AUDIT-37 (угол > 90° — встречно: наклон 5° — доворот, куб на плоскости);
-//     UX-AUDIT-36 в английском интерфейсе имя текста — «Текст: Дом»;
+//     UX-AUDIT-36 (имя текста по умолчанию — на языке интерфейса: «Text: Дом» в en);
 //     UX-AUDIT-38 панель «Шаг N» шага «Повернуть» — «Перемещение»;
 //     UX-AUDIT-39 «Вписать в экран» на 768 — сцена обрезана по ширине;
 //     UX-AUDIT-40 правка поворота шага — в истории «сдвиг (…) → (…)» без изменений.
@@ -277,15 +277,14 @@ try {
     if (!n2.includes('Текст: Дом') || !nm.includes('Текст: Дом (зеркало)')) fail('O: дерево после .3dtc — ' + JSON.stringify([n2, nm]))
     for (const id of [t1, m2, pm]) if (!(await typeOf(id)).includes('Текст')) fail(`O: после .3dtc ${id} — ${await typeOf(id)}`)
     ok.push('O/U: текст → зеркало → зеркало зеркала → вставка — «Текст», «Вставить текст»; во вложенном CSG и его зеркальной копии — «Текст: Дом» / «Текст: Дом (зеркало)»; после .3dtc — так же')
-    // UX-AUDIT-36: английский интерфейс — имя текста в списке осталось русским
     await page.locator('.lang-switcher').click(); await page.waitForTimeout(400)
     const rowName = (await page.locator(`.ct-item[data-object-id="${t1}"] .ct-name`).first().innerText()).trim()
     const cubeName = (await page.locator(`.ct-item[data-object-id="${g2}"] .ct-name`).first().innerText()).trim()
     const enTree = await s.treeNames(g2)
     if (!cubeName.startsWith('CSG result') || !enTree.includes('Text: Дом')) fail('UX-AUDIT-36: en — ' + JSON.stringify([cubeName, enTree]))
-    await knownBug('UX-AUDIT-36', 'в английском интерфейсе имя текста — «Текст: Дом»', async () => {
-      if (rowName !== 'Text: Дом') throw new Error(`строка списка «${rowName}» (CSG — «${cubeName}», ребёнок CSG — «Text: Дом»)`)
-    })
+    // ✅ UX-AUDIT-36: имя текста по умолчанию — на языке интерфейса (было «Текст: Дом» в en)
+    if (rowName !== 'Text: Дом') fail(`UX-AUDIT-36: строка списка «${rowName}» (CSG — «${cubeName}», ребёнок CSG — «Text: Дом»)`)
+    ok.push('UX-AUDIT-36: английский интерфейс — строка текста «Text: Дом», как «CSG result …» и ребёнок CSG «Text: Дом»')
     await page.locator('.lang-switcher').click(); await page.waitForTimeout(300)
     if (await s.toasts()) fail('O: уведомления ' + (await s.toasts()))
     if (s.errors.length) fail('O: ошибки консоли ' + s.errors.join(' | '))
