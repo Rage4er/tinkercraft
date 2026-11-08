@@ -33,7 +33,7 @@ import { addTextObject } from '../store/add-text'
 import { displayName } from '../components/ComponentTree'
 import StepPanel from '../components/StepPanel'
 import type { MoveOperation, SceneObject, ShapeParams, ShapeType, TransformNR, TinkerCraftOperation } from '../csg/types'
-import { alignRotationCenter, computeAABB, computeWorldAABB } from '../store/helpers'
+import { alignRotationCenter, computeAABB, computeWorldAABB, continuousEuler } from '../store/helpers'
 
 const st = () => useDocumentStore.getState()
 const ID: TransformNR = { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
@@ -217,13 +217,13 @@ describe('UX-AUDIT-41 — «Выровнять» с поворотом: CSG по
   })
 })
 
-describe('UX-AUDIT-42 — поворот шага выравнивания через ±180°: −330° вместо 30° (разность углов Эйлера)', () => {
-  // moveObject пишет дельту поворота как «углы после − углы до», без приведения к ±180°. Выравнивание
-  // поворачивает куб rotZ 170 на +30° (по кратчайшей дуге), углы — 170 → −160 (eulerXYZFromMatrix,
-  // (−180°, 180°]), шаг — rotDelta z −330. После UX-AUDIT-38 это видно: «Исходно» — «поворот (0, 0,
-  // −330)°», в поле «Поворот Z» — −330 (в браузере и куб rotZ 90 → плоскость Y: −270 вместо 90).
-  // Ожидание: дельта углов шага — в (−180°, 180°]: «поворот (0, 0, 30)°».
-  it.fails('ожидание: куб rotZ 170, грань под −10° → плоскость A — бок куба rotZ 20 (20°) → шаг «Повернуть» с поворотом (0, 0, 30)°', async () => {
+describe('UX-AUDIT-42 — поворот шага через ±180°: дельта в ±180° — 30°, а не −330° (✅ fix-all-6)', () => {
+  // moveObject пишет дельту поворота как «углы после − углы до». Выравнивание поворачивало куб rotZ 170 на
+  // +30° (по кратчайшей дуге), а углы из матрицы — в (−180°, 180°]: 170 → −160, шаг — rotDelta z −330
+  // («Исходно» — «поворот (0, 0, −330)°», в поле «Поворот Z» — −330; куб rotZ 90 → плоскость Y: −270).
+  // Фикс (fix-all-6): углы после поворота — в записи, ближайшей к прежним (`continuousEuler`): 170 → 200,
+  // тот же поворот, дельта 30; так же у гизмо (углы Three.js). Введённые в поля углы — как есть.
+  it('ожидание: куб rotZ 170, грань под −10° → плоскость A — бок куба rotZ 20 (20°) → шаг «Повернуть» с поворотом (0, 0, 30)°', async () => {
     const r = await shape('cube', { width: 20, height: 20, depth: 20 }, { ...at(0), rotZ: 20 })
     const k = await shape('cube', { width: 20, height: 20, depth: 20 }, { ...at(60), rotZ: 170 })
     const dir = (deg: number) => new THREE.Vector3(Math.cos(THREE.MathUtils.degToRad(deg)), Math.sin(THREE.MathUtils.degToRad(deg)), 0)
@@ -231,9 +231,63 @@ describe('UX-AUDIT-42 — поворот шага выравнивания че�
     await align(face(r, (n) => n.distanceTo(dir(20)) < 1e-4), fB)
     const o = st().objects[k]
     expect(triNormal(worldTri(o, fB.triangleIndex)).dot(dir(20))).toBeGreaterThan(COS1)   // выравнивание — верно
-    expect(o.transform.rotZ).toBeCloseTo(-160, 6)                                          // 170 + 30 = 200 ≡ −160
+    expect(o.transform.rotZ).toBeCloseTo(200, 6)                                           // 170 + 30 (≡ −160 — было)
     const op = lastOp() as MoveOperation
     expect(op.kind).toBe('rotate')
-    expect(op.rotDelta!.z).toBeCloseTo(30, 6)                                              // ← сейчас −330
+    expect(op.rotDelta!.z).toBeCloseTo(30, 6)                                              // было −330
+    // воспроизведение из истории (без кэша снимков) — тот же угол, что в живой сцене
+    clearSnapshots()
+    await st().undo(); await st().redo()
+    expect(st().objects[k].transform.rotZ).toBeCloseTo(200, 6)
+    // «Исходно» панели шага — «… поворот (0, 0, 30)°»
+    useUiStore.setState({ selectedStep: st().historyIndex - 1 })
+    const el = mount(<StepPanel />)
+    expect(el.querySelector('[data-testid=step-original]')!.textContent!.trim()).toMatch(/поворот \(0, 0, 30\)°$/)
+  })
+
+  it('регресс: куб rotZ 90 гранью с мировой нормалью +X к плоскости Y — шаг «поворот (0, 0, 90)°» (было −270), угол 180', async () => {
+    const k = await shape('cube', { width: 20, height: 20, depth: 20 }, { ...at(0, 40), rotZ: 90 })
+    const fB = face(k, (n) => n.distanceTo(new THREE.Vector3(1, 0, 0)) < 1e-4)            // перпендикулярна плоскости Y
+    await align('Y', fB)
+    const op = lastOp() as MoveOperation
+    expect(op.kind).toBe('rotate')
+    expect(op.rotDelta!.z).toBeCloseTo(90, 6)                                             // в ту же сторону (+90), не −270
+    expect(st().objects[k].transform.rotZ).toBeCloseTo(180, 6)
+  })
+
+  it('регресс: continuousEuler — тот же поворот, дельта каждого угла в ±180°; углы без перехода через ±180° — как есть', () => {
+    const R = (e: { rotX: number; rotY: number; rotZ: number }) => computeRSMatrix(e, { scaleX: 1, scaleY: 1, scaleZ: 1 })
+    const same = (a: { rotX: number; rotY: number; rotZ: number }, b: { rotX: number; rotY: number; rotZ: number }) =>
+      R(a).forEach((v, i) => expect(v).toBeCloseTo(R(b)[i], 9))
+    const cases: [{ rotX: number; rotY: number; rotZ: number }, { rotX: number; rotY: number; rotZ: number }, { rotX: number; rotY: number; rotZ: number }][] = [
+      [{ rotX: 0, rotY: 0, rotZ: -160 }, { rotX: 0, rotY: 0, rotZ: 170 }, { rotX: 0, rotY: 0, rotZ: 200 }],
+      [{ rotX: 0, rotY: 0, rotZ: 10 }, { rotX: 0, rotY: 0, rotZ: 0 }, { rotX: 0, rotY: 0, rotZ: 10 }],
+      [{ rotX: 0, rotY: 0, rotZ: -90 }, { rotX: 0, rotY: 0, rotZ: 270 }, { rotX: 0, rotY: 0, rotZ: 270 }],      // запись 270 сохраняется
+      [{ rotX: 30, rotY: -20, rotZ: 45 }, { rotX: 30, rotY: -20, rotZ: 45 }, { rotX: 30, rotY: -20, rotZ: 45 }],
+      // rotY 80 → +20° вокруг Y: из матрицы (180, 80, 180); ближайшая запись — (0, 100, 0)
+      [{ rotX: 180, rotY: 80, rotZ: 180 }, { rotX: 0, rotY: 80, rotZ: 0 }, { rotX: 0, rotY: 100, rotZ: 0 }],
+    ]
+    for (const [next, prev, want] of cases) {
+      const got = continuousEuler(next, prev)
+      expect([got.rotX, got.rotY, got.rotZ].map((v) => +v.toFixed(9))).toEqual([want.rotX, want.rotY, want.rotZ])
+      same(got, next)
+      for (const k of ['rotX', 'rotY', 'rotZ'] as const) expect(Math.abs(got[k] - prev[k])).toBeLessThanOrEqual(180)
+    }
+  })
+
+  it('регресс: гизмо — поворот куба rotZ 170 на +30° (Three.js отдаёт −160) → шаг «поворот (0, 0, 30)°»; поле rotZ 270 — 270', async () => {
+    const k = await shape('cube', { width: 20, height: 20, depth: 20 }, { ...at(0), rotZ: 170 })
+    // как гизмо: кватернион повёрнут на +30° вокруг Z, углы — из Three.js (в (−180°, 180°])
+    const pivot = new THREE.Object3D()
+    pivot.rotation.set(0, 0, THREE.MathUtils.degToRad(170))
+    pivot.quaternion.premultiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), THREE.MathUtils.degToRad(30)))
+    const gz = { rotX: THREE.MathUtils.radToDeg(pivot.rotation.x), rotY: THREE.MathUtils.radToDeg(pivot.rotation.y), rotZ: THREE.MathUtils.radToDeg(pivot.rotation.z) }
+    expect(gz.rotZ).toBeCloseTo(-160, 6)
+    const prev = st().objects[k].transform
+    await st().moveObject(k, { ...prev, ...continuousEuler(gz, prev) })                       // App.handleTransformEnd
+    expect((lastOp() as MoveOperation).rotDelta!.z).toBeCloseTo(30, 6)
+    // поле «Поворот Z» 270 — не гизмо: запись как введена, шаг — 270 − 200
+    await st().moveObject(k, { ...st().objects[k].transform, rotZ: 270 })
+    expect(st().objects[k].transform.rotZ).toBe(270)
   })
 })

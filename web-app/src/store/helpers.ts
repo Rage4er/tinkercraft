@@ -298,6 +298,27 @@ export function eulerXYZFromMatrix(m: number[]): { rotX: number; rotY: number; r
 }
 
 /**
+ * UX-AUDIT-42: углы Эйлера XYZ `next` (как из `eulerXYZFromMatrix` или Three.js — в (−180°, 180°]) в
+ * записи, ближайшей к прежним `prev`: тот же поворот, но дельта каждого угла — в [−180°, 180°].
+ * Кандидаты — (x, y, z) и равносильная (x + 180, 180 − y, z + 180), каждый угол ± k·360 к прежнему;
+ * берётся запись с меньшей суммой |дельт|. Было: дельта шага — «после − до» как есть: куб rotZ 170,
+ * повёрнутый на +30°, получал −160 и шаг «поворот (0, 0, −330)°».
+ */
+export function continuousEuler(
+  next: { rotX: number; rotY: number; rotZ: number },
+  prev: { rotX: number; rotY: number; rotZ: number },
+): { rotX: number; rotY: number; rotZ: number } {
+  const near = (a: number, ref: number) => a + 360 * Math.round((ref - a) / 360)
+  const fit = (x: number, y: number, z: number) => {
+    const r = { rotX: near(x, prev.rotX), rotY: near(y, prev.rotY), rotZ: near(z, prev.rotZ) }
+    return { r, cost: Math.abs(r.rotX - prev.rotX) + Math.abs(r.rotY - prev.rotY) + Math.abs(r.rotZ - prev.rotZ) }
+  }
+  const a = fit(next.rotX, next.rotY, next.rotZ)
+  const b = fit(next.rotX + 180, 180 - next.rotY, next.rotZ + 180)
+  return b.cost < a.cost - 1e-9 ? b.r : a.r
+}
+
+/**
  * UX-AUDIT-41: центр поворота объекта при выравнивании — точка, вокруг которой он поворачивается
  * «на месте». У примитивов и импорта — опорная точка (X/Y/Z в свойствах: вершины вокруг неё, у
  * конуса и пирамиды это центр масс). У CSG опорная точка — позиция операнда A (Фаза 8.5), а не
@@ -392,7 +413,8 @@ export function solvePlaneAlignTransform(
   const k = unit(ax)
   const rd = axisAngleMatrix(k, Math.acos(Math.max(-1, Math.min(1, dot3(nb, target)))))
   const r0 = computeRSMatrix({ rotX: t.rotX, rotY: t.rotY, rotZ: t.rotZ }, { scaleX: 1, scaleY: 1, scaleZ: 1 })
-  const rot = eulerXYZFromMatrix(mul3(rd, r0))
+  // UX-AUDIT-42: углы — в записи, ближайшей к прежним (дельта шага в ±180°, а не −330°)
+  const rot = continuousEuler(eulerXYZFromMatrix(mul3(rd, r0)), t)
   // UX-AUDIT-32-followup: поворот — на месте, а не вокруг точки клика. UX-AUDIT-41: центр поворота c
   // — центр тела (`alignRotationCenter`): у примитивов это опорная точка, у CSG — центр рамки (раньше —
   // опорная точка, т. е. операнд A: тело уходило вбок). Опорная точка и точка клика после поворота:
