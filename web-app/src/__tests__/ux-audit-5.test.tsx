@@ -227,13 +227,12 @@ describe('UX-AUDIT-36 — имя 3D-текста не переводится п�
   })
 })
 
-describe('UX-AUDIT-37 — «Выровнять»: почти встречная грань переворачивается на ~180°', () => {
+describe('UX-AUDIT-37 — «Выровнять»: почти встречная грань доворачивается встречно, а не переворачивается', () => {
   // Строго встречная грань B (|cos| ≥ cos 1°) — только сдвиг: объект встаёт на плоскость (как раньше).
-  // Та же грань, наклонённая на 5°, — уже «не параллельна» → поворот по правилу UX-AUDIT-32 (нормаль
-  // B → нормаль A, dot > 0) на 175°: объект переворачивается и уходит на другую сторону плоскости.
-  // Разрыв: 5° наклона меняют результат целиком. Ожидание (как у строго встречной): доворот на 5°
-  // встречно, объект — на той же стороне. Правило dot > 0 решено для перпендикулярной грани (призма,
-  // 90°); для граней > 90° — нужно решение (см. DEVELOPMENT_PLAN › UX-AUDIT-37).
+  // Было: та же грань, наклонённая на 5°, — «не параллельна» → поворот по правилу UX-AUDIT-32 (нормаль
+  // B → нормаль A, dot > 0) на 175°: объект переворачивался и уходил на другую сторону плоскости.
+  // Исправлено в fix-all-5 (решение пользователя, как SolidWorks): угол < 90° и = 90° — в ту же
+  // сторону, > 90° — встречно (на меньший угол).
   const side = (n: THREE.Vector3) => n.y < -0.99
   it('строго встречная (куб Y 40, плоскость Y) — сдвиг: куб стоит на плоскости, Y 10, без поворота', async () => {
     const c = await shape('cube', { width: 20, height: 20, depth: 20 }, at(0, 40))
@@ -242,14 +241,30 @@ describe('UX-AUDIT-37 — «Выровнять»: почти встречная 
     expect([tr.rotX, tr.rotY, tr.rotZ]).toEqual([0, 0, 0])
     expect(tr.y).toBeCloseTo(10, 6)
   })
-  it.fails('ожидание: наклон 5° (rotZ 5) — доворот на 5° встречно, куб на той же стороне (Y > 0), не переворот', async () => {
+  it('наклон 5° (rotZ 5) — доворот на 5° встречно, куб на той же стороне (Y 10), не переворот', async () => {
     const c = await shape('cube', { width: 20, height: 20, depth: 20 }, { ...at(0, 40), rotZ: 5 })
     const b = face(c, side)
     await align('Y', b)
     const o = st().objects[c]
-    expect(triNormal(worldTri(o, b.triangleIndex)).y).toBeLessThan(-COS1)              // ← встречно плоскости (сейчас нормаль +Y — переворот)
-    expect(Math.abs(o.transform.rotZ)).toBeLessThan(0.01)                              // ← сейчас rotZ 180
-    expect(o.transform.y).toBeGreaterThan(0)                                           // ← сейчас Y −10
+    expect(triNormal(worldTri(o, b.triangleIndex)).y).toBeLessThan(-COS1)              // встречно плоскости (было: нормаль +Y — переворот)
+    expect(Math.abs(o.transform.rotZ)).toBeLessThan(0.01)                              // было rotZ 180
+    expect(o.transform.y).toBeCloseTo(10, 6)                                           // было Y −10
+    expect(o.transform.x).toBeCloseTo(0, 6)                                            // на месте (UX-AUDIT-32-followup)
+  })
+  it('правило (плоскость Y, нормаль +Y): угол 85° и 90° — в ту же сторону (куб за плоскостью, Y −10), 95° — встречно (куб на плоскости, Y 10)', async () => {
+    // грань куба −Y после rotZ θ: нормаль (sin θ, −cos θ, 0), угол с +Y — 180° − θ
+    for (const [angle, theta, dir, y] of [[85, 95, 1, -10], [90, 90, 1, -10], [95, 85, -1, 10]] as const) {
+      useDocumentStore.setState({ objects: {}, operations: [], historyIndex: 0, selectedIds: [] }); clearSnapshots(); clearTree()
+      const c = await shape('cube', { width: 20, height: 20, depth: 20 }, { ...at(0, 40), rotZ: theta })
+      const th = THREE.MathUtils.degToRad(theta)
+      const b = face(c, (n) => n.distanceTo(new THREE.Vector3(Math.sin(th), -Math.cos(th), 0)) < 1e-4)
+      await align('Y', b)
+      const o = st().objects[c]
+      expect(triNormal(worldTri(o, b.triangleIndex)).y * dir, `${angle}°`).toBeGreaterThan(COS1)
+      expect(o.transform.y, `${angle}°`).toBeCloseTo(y, 4)
+      expect(o.transform.x, `${angle}°`).toBeCloseTo(0, 6)
+      for (const v of worldTri(o, b.triangleIndex)) expect(v.y, `${angle}°`).toBeCloseTo(0, 4)
+    }
   })
 })
 

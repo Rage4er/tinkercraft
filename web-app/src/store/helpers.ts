@@ -236,6 +236,8 @@ export function worldProjectionRange(obj: SceneObject, n: Vec3): { min: number; 
 
 /** Порог «грань параллельна плоскости»: |cos| ≥ cos 1°. */
 export const ALIGN_PARALLEL_COS = Math.cos((1 * Math.PI) / 180)
+/** UX-AUDIT-37: грань B перпендикулярна плоскости A, если |cos| ≤ sin 1° (90° ± 1°) — поворот в ту же сторону. */
+export const ALIGN_PERP_SIN = Math.sin((1 * Math.PI) / 180)
 
 /**
  * Сдвиг объекта B (мировой вектор вдоль нормали плоскости), чтобы его грань легла в
@@ -338,7 +340,8 @@ export function isSmoothSurfaceAt(obj: Pick<SceneObject, 'vertices' | 'indices'>
  *   грань гладкой поверхности (`isSmoothSurfaceAt`: цилиндр, сфера — нормаль грани — артефакт
  *   разбиения) — как раньше, только сдвиг (`solvePlaneAlignDelta`: касание крайней точкой).
  * - Не параллельна — сначала ПОВОРОТ по кратчайшей дуге: мировая нормаль грани B → нормаль
- *   плоскости A (в ту же сторону, dot > 0), на месте — вокруг опорной точки объекта
+ *   плоскости A — в ту же сторону (угол ≤ 90°) или встречно (> 90°, UX-AUDIT-37), на меньший угол;
+ *   на месте — вокруг опорной точки объекта
  *   (UX-AUDIT-32-followup: было — вокруг точки клика, объект уходил вбок); затем сдвиг только
  *   вдоль нормали A, чтобы грань легла в плоскость. Раньше поворота не было: объект сдвигался до
  *   касания крайней точкой, а если она уже в плоскости — не происходило ничего.
@@ -358,10 +361,16 @@ export function solvePlaneAlignTransform(
     return { ...t, x: t.x + d.x, y: t.y + d.y, z: t.z + d.z }
   }
   const nb = unit(pick.normal)
-  // ось поворота nb × n (не ноль: грань не параллельна), угол — между нормалями
-  const ax = { x: nb.y * n.z - nb.z * n.y, y: nb.z * n.x - nb.x * n.z, z: nb.x * n.y - nb.y * n.x }
+  // UX-AUDIT-37: куда повернуть нормаль B — на меньший угол, как «совпадение» граней в SolidWorks:
+  // угол между нормалями ≤ 90° (перпендикулярная — с допуском 1°) — в ту же сторону, что нормаль A
+  // (решение UX-AUDIT-32); > 90° — встречно (−n): грань почти встречная доворачивается и объект
+  // остаётся на своей стороне плоскости, как строго встречная. Было: всегда в ту же сторону —
+  // грань под 5° к встречной переворачивалась на 175° на другую сторону плоскости.
+  const target = c < -ALIGN_PERP_SIN ? { x: -n.x, y: -n.y, z: -n.z } : n
+  // ось поворота nb × target (не ноль: грань не параллельна), угол — между нормалями
+  const ax = { x: nb.y * target.z - nb.z * target.y, y: nb.z * target.x - nb.x * target.z, z: nb.x * target.y - nb.y * target.x }
   const k = unit(ax)
-  const rd = axisAngleMatrix(k, Math.acos(Math.max(-1, Math.min(1, c))))
+  const rd = axisAngleMatrix(k, Math.acos(Math.max(-1, Math.min(1, dot3(nb, target)))))
   const r0 = computeRSMatrix({ rotX: t.rotX, rotY: t.rotY, rotZ: t.rotZ }, { scaleX: 1, scaleY: 1, scaleZ: 1 })
   const rot = eulerXYZFromMatrix(mul3(rd, r0))
   // UX-AUDIT-32-followup: поворот — вокруг опорной точки объекта (его X/Y/Z, как поворот полями),
