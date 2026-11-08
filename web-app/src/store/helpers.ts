@@ -297,6 +297,46 @@ export function eulerXYZFromMatrix(m: number[]): { rotX: number; rotY: number; r
   return { rotX: Math.atan2(m[7], m[4]) * deg, rotY: ry * deg, rotZ: 0 }
 }
 
+/**
+ * UX-AUDIT-42: углы Эйлера XYZ `next` (как из `eulerXYZFromMatrix` или Three.js — в (−180°, 180°]) в
+ * записи, ближайшей к прежним `prev`: тот же поворот, но дельта каждого угла — в [−180°, 180°].
+ * Кандидаты — (x, y, z) и равносильная (x + 180, 180 − y, z + 180), каждый угол ± k·360 к прежнему;
+ * берётся запись с меньшей суммой |дельт|. Было: дельта шага — «после − до» как есть: куб rotZ 170,
+ * повёрнутый на +30°, получал −160 и шаг «поворот (0, 0, −330)°».
+ */
+export function continuousEuler(
+  next: { rotX: number; rotY: number; rotZ: number },
+  prev: { rotX: number; rotY: number; rotZ: number },
+): { rotX: number; rotY: number; rotZ: number } {
+  const near = (a: number, ref: number) => a + 360 * Math.round((ref - a) / 360)
+  const fit = (x: number, y: number, z: number) => {
+    const r = { rotX: near(x, prev.rotX), rotY: near(y, prev.rotY), rotZ: near(z, prev.rotZ) }
+    return { r, cost: Math.abs(r.rotX - prev.rotX) + Math.abs(r.rotY - prev.rotY) + Math.abs(r.rotZ - prev.rotZ) }
+  }
+  const a = fit(next.rotX, next.rotY, next.rotZ)
+  const b = fit(next.rotX + 180, 180 - next.rotY, next.rotZ + 180)
+  return b.cost < a.cost - 1e-9 ? b.r : a.r
+}
+
+/**
+ * UX-AUDIT-41: центр поворота объекта при выравнивании — точка, вокруг которой он поворачивается
+ * «на месте». У примитивов и импорта — опорная точка (X/Y/Z в свойствах: вершины вокруг неё, у
+ * конуса и пирамиды это центр масс). У CSG опорная точка — позиция операнда A (Фаза 8.5), а не
+ * центр тела, поэтому — центр его рамки (OBB: центр локальной рамки вершин через полный TRS).
+ */
+export function alignRotationCenter(obj: Pick<SceneObject, 'shapeType' | 'vertices' | 'transform'>): Vec3 {
+  const t = obj.transform
+  if (obj.shapeType !== 'csg' || obj.vertices.length === 0) return { x: t.x, y: t.y, z: t.z }
+  const b = computeAABB(obj.vertices)
+  const cx = (b.min.x + b.max.x) / 2, cy = (b.min.y + b.max.y) / 2, cz = (b.min.z + b.max.z) / 2
+  const m = computeRSMatrix({ rotX: t.rotX, rotY: t.rotY, rotZ: t.rotZ }, { scaleX: t.scaleX, scaleY: t.scaleY, scaleZ: t.scaleZ })
+  return {
+    x: t.x + m[0] * cx + m[1] * cy + m[2] * cz,
+    y: t.y + m[3] * cx + m[4] * cy + m[5] * cz,
+    z: t.z + m[6] * cx + m[7] * cy + m[8] * cz,
+  }
+}
+
 /** Порог «гладкая поверхность» для выравнивания (°) — тот же, что у затенения по излому
  *  (`components/object-geometry` CREASE_ANGLE_DEG): что выглядит гладким, то и считается кривым. */
 export const ALIGN_SMOOTH_DEG = 30
@@ -341,8 +381,9 @@ export function isSmoothSurfaceAt(obj: Pick<SceneObject, 'vertices' | 'indices'>
  *   разбиения) — как раньше, только сдвиг (`solvePlaneAlignDelta`: касание крайней точкой).
  * - Не параллельна — сначала ПОВОРОТ по кратчайшей дуге: мировая нормаль грани B → нормаль
  *   плоскости A — в ту же сторону (угол ≤ 90°) или встречно (> 90°, UX-AUDIT-37), на меньший угол;
- *   на месте — вокруг опорной точки объекта
- *   (UX-AUDIT-32-followup: было — вокруг точки клика, объект уходил вбок); затем сдвиг только
+ *   на месте — вокруг центра тела (`alignRotationCenter`: у примитивов — опорная точка,
+ *   UX-AUDIT-32-followup: было — вокруг точки клика, объект уходил вбок; у CSG — центр рамки,
+ *   UX-AUDIT-41: было — вокруг операнда A, тело уходило вбок); затем сдвиг только
  *   вдоль нормали A, чтобы грань легла в плоскость. Раньше поворота не было: объект сдвигался до
  *   касания крайней точкой, а если она уже в плоскости — не происходило ничего.
  * Поворот — слева к текущему (R' = ΔR·R): масштаб остаётся в локальных осях. Результат — обычный
@@ -372,19 +413,26 @@ export function solvePlaneAlignTransform(
   const k = unit(ax)
   const rd = axisAngleMatrix(k, Math.acos(Math.max(-1, Math.min(1, dot3(nb, target)))))
   const r0 = computeRSMatrix({ rotX: t.rotX, rotY: t.rotY, rotZ: t.rotZ }, { scaleX: 1, scaleY: 1, scaleZ: 1 })
-  const rot = eulerXYZFromMatrix(mul3(rd, r0))
-  // UX-AUDIT-32-followup: поворот — вокруг опорной точки объекта (его X/Y/Z, как поворот полями),
-  // а не вокруг точки клика: объект поворачивается на месте. Точка клика после поворота:
-  // q' = p + ΔR·(q − p); грань B (через q', нормаль ±n) — в плоскость A сдвигом только вдоль n.
-  const q = pick.point
-  const qx = q.x - t.x, qy = q.y - t.y, qz = q.z - t.z
-  const q1 = {
-    x: t.x + rd[0] * qx + rd[1] * qy + rd[2] * qz,
-    y: t.y + rd[3] * qx + rd[4] * qy + rd[5] * qz,
-    z: t.z + rd[6] * qx + rd[7] * qy + rd[8] * qz,
+  // UX-AUDIT-42: углы — в записи, ближайшей к прежним (дельта шага в ±180°, а не −330°)
+  const rot = continuousEuler(eulerXYZFromMatrix(mul3(rd, r0)), t)
+  // UX-AUDIT-32-followup: поворот — на месте, а не вокруг точки клика. UX-AUDIT-41: центр поворота c
+  // — центр тела (`alignRotationCenter`): у примитивов это опорная точка, у CSG — центр рамки (раньше —
+  // опорная точка, т. е. операнд A: тело уходило вбок). Опорная точка и точка клика после поворота:
+  // p' = c + ΔR·(p − c), q' = c + ΔR·(q − c); грань B (через q', нормаль ±n) — в плоскость A сдвигом
+  // только вдоль n.
+  const c0 = alignRotationCenter(obj)
+  const around = (v: Vec3): Vec3 => {
+    const dx = v.x - c0.x, dy = v.y - c0.y, dz = v.z - c0.z
+    return {
+      x: c0.x + rd[0] * dx + rd[1] * dy + rd[2] * dz,
+      y: c0.y + rd[3] * dx + rd[4] * dy + rd[5] * dz,
+      z: c0.z + rd[6] * dx + rd[7] * dy + rd[8] * dz,
+    }
   }
+  const p1 = around({ x: t.x, y: t.y, z: t.z })
+  const q1 = around(pick.point)
   const s = dot3(n, q1) - dot3(n, plane.point)
-  return { ...t, ...rot, x: t.x - s * n.x, y: t.y - s * n.y, z: t.z - s * n.z }
+  return { ...t, ...rot, x: p1.x - s * n.x, y: p1.y - s * n.y, z: p1.z - s * n.z }
 }
 
 /** Returns bbox center for a vertex buffer (no mutation). */

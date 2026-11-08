@@ -18,6 +18,7 @@ import AlignPanel from "./components/AlignPanel";
 import { useAlignModeStore } from "./store/align-mode";
 import { useAlignModeKeys } from "./hooks/useAlignModeKeys";
 import { useDocumentStore, canUndoClear } from "./store/document-store";
+import { continuousEuler } from "./store/helpers";
 import { useUiStore } from "./store/ui-store";
 import { useShallow } from "zustand/shallow";
 import { isWorkerReady } from "./csg/worker-client";
@@ -264,7 +265,10 @@ export default function App() {
 
   const handleTransformEnd = useCallback(
     (id: string, t: TransformNR) => {
-      moveObject(id, t);
+      // UX-AUDIT-42: гизмо отдаёт углы Three.js — в (−180°, 180°]; поворот через ±180° (rotZ 170 → +30°)
+      // давал −160 и шаг «поворот −330°». Углы — в записи, ближайшей к прежним (170 → 200).
+      const prev = useDocumentStore.getState().objects[id]?.transform;
+      moveObject(id, prev ? { ...t, ...continuousEuler(t, prev) } : t);
     },
     [moveObject],
   );
