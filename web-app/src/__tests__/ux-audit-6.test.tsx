@@ -33,7 +33,7 @@ import { addTextObject } from '../store/add-text'
 import { displayName } from '../components/ComponentTree'
 import StepPanel from '../components/StepPanel'
 import type { MoveOperation, SceneObject, ShapeParams, ShapeType, TransformNR, TinkerCraftOperation } from '../csg/types'
-import { computeWorldAABB } from '../store/helpers'
+import { alignRotationCenter, computeAABB, computeWorldAABB } from '../store/helpers'
 
 const st = () => useDocumentStore.getState()
 const ID: TransformNR = { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
@@ -148,13 +148,13 @@ describe('UX-прогон 6 — K. «Множественное»: правил�
 // 🐞 Новые баги прогона 6 (логика) — it.fails «ожидание»
 // ════════════════════════════════════════════════════════════
 
-describe('UX-AUDIT-41 — «Выровнять» с поворотом: CSG поворачивается вокруг опорной точки, а не центра — уходит вбок', () => {
+describe('UX-AUDIT-41 — «Выровнять» с поворотом: CSG поворачивается на месте — вокруг центра рамки, а не опорной точки (✅ fix-all-6)', () => {
   // UX-AUDIT-32-followup (fix-all-5): поворот — вокруг опорной точки объекта (X/Y/Z в свойствах). У
   // примитивов это центр, у CSG — позиция операнда A (Фаза 8.5): CSG куб X 0 ∪ куб X 60 (центр X 30)
-  // торцом +X к верху куба поворачивается вокруг X 0 — X в панели прежний, а тело уходит на 30 мм вбок
-  // (e2e, экспорт STL: центр X 42,5 → 25). Ожидание: CSG, как примитив, поворачивается на месте —
-  // центр тела в плоскости A не смещается.
-  it.fails('ожидание: CSG (куб X 0 ∪ куб X 60) торцом +X к верху куба C — центр тела X 30, Y 0 (сдвиг только по Z)', async () => {
+  // торцом +X к верху куба поворачивался вокруг X 0 — тело уходило на 30 мм вбок (e2e, экспорт STL).
+  // Фикс (fix-all-6): центр поворота CSG — центр её рамки (`alignRotationCenter`); у примитивов —
+  // по-прежнему опорная точка. Опорная точка CSG (операнд A) поворачивается вместе с телом.
+  it('ожидание: CSG (куб X 0 ∪ куб X 60) торцом +X к верху куба C — центр тела X 30, Y 0 (сдвиг только по Z)', async () => {
     const c = await shape('cube', { width: 20, height: 20, depth: 20 }, at(-80))
     const a = await shape('cube', { width: 20, height: 20, depth: 20 }, at(0))
     const b = await shape('cube', { width: 20, height: 20, depth: 20 }, at(60))
@@ -168,8 +168,52 @@ describe('UX-AUDIT-41 — «Выровнять» с поворотом: CSG по
     for (const v of worldTri(o, fB.triangleIndex)) expect(v.z).toBeCloseTo(10, 3)      // торец — в плоскости A
     expect(triNormal(worldTri(o, fB.triangleIndex)).z).toBeGreaterThan(COS1)          // поворот — есть
     const box = computeWorldAABB(o)
-    expect((box.min.x + box.max.x) / 2).toBeCloseTo(30, 3)                            // ← сейчас 0 (вокруг опорной точки A)
+    expect((box.min.x + box.max.x) / 2).toBeCloseTo(30, 3)                            // было 0 (вокруг опорной точки A)
     expect((box.min.y + box.max.y) / 2).toBeCloseTo(0, 3)
+    // кубы не пересекаются: грань B — +X куба A (x 10); тело встало вертикально, A — внизу, под центром,
+    // его верх — в плоскости A: опорная точка (операнд A) повернулась вместе с телом — X 0 → 30, Z 0
+    expect([o.transform.x, o.transform.y, o.transform.z].map((v) => +v.toFixed(3))).toEqual([30, 0, 0])
+    expect(o.transform.rotY).toBeCloseTo(-90, 4)
+  })
+
+  it('регресс: уже повёрнутая и растянутая CSG — поворот вокруг центра рамки через полный TRS (центр X/Y на месте)', async () => {
+    const c = await shape('cube', { width: 20, height: 20, depth: 20 }, at(-80))
+    const a = await shape('cube', { width: 20, height: 20, depth: 20 }, at(0))
+    const b = await shape('cube', { width: 20, height: 20, depth: 20 }, at(60))
+    st().selectObjects([a, b], false); await st().csgBoolean('union')
+    const g = Object.keys(st().objects).find((k) => st().objects[k].shapeType === 'csg')!
+    await st().moveObject(g, { ...at(0, 0), rotZ: 90, scaleX: 1.5 })                   // тело вдоль Y: Y −15…105
+    const box0 = computeWorldAABB(st().objects[g])
+    const c0 = [(box0.min.x + box0.max.x) / 2, (box0.min.y + box0.max.y) / 2]
+    expect(c0.map((v) => +v.toFixed(3))).toEqual([0, 45])
+    const fB = face(g, (n) => n.y > 0.9999)                                             // бывший торец +X
+    await align(face(c, (n) => n.z > 0.99), fB)
+    const o = st().objects[g]
+    for (const v of worldTri(o, fB.triangleIndex)) expect(v.z).toBeCloseTo(10, 3)
+    const box = computeWorldAABB(o)
+    expect((box.min.x + box.max.x) / 2).toBeCloseTo(c0[0], 3)
+    expect((box.min.y + box.max.y) / 2).toBeCloseTo(c0[1], 3)
+    expect([o.transform.scaleX, o.transform.scaleY, o.transform.scaleZ]).toEqual([1.5, 1, 1])   // масштаб — в локальных осях
+  })
+
+  it('регресс (32-followup): примитивы — центр поворота = опорная точка; конус и пирамида (центр масс ≠ центр рамки) — тоже', async () => {
+    const cube = await shape('cube', { width: 20, height: 20, depth: 20 }, { ...at(5, 6, 7), rotZ: 33, scaleX: 2 })
+    const cone = await shape('cone', undefined, { ...at(-30, 4, 2), rotX: 40 })
+    const pyr = await shape('pyramid', undefined, { ...at(30, -4, 1), rotY: 25 })
+    for (const id of [cube, cone, pyr]) {
+      const o = st().objects[id]
+      expect(alignRotationCenter(o)).toEqual({ x: o.transform.x, y: o.transform.y, z: o.transform.z })
+    }
+    // центр рамки конуса не в опорной точке — у примитива он не используется
+    const cb = computeAABB(st().objects[cone].vertices)
+    expect((cb.min.z + cb.max.z) / 2).toBeGreaterThan(1)
+    // конус гранью основания к плоскости X: поворот вокруг опорной точки — Y/Z опорной точки на месте
+    const k = await shape('cone', undefined, { ...at(0, 40, 0), rotX: 30 })
+    const base = face(k, (n) => n.dot(new THREE.Vector3(0, Math.sin(THREE.MathUtils.degToRad(30)), -Math.cos(THREE.MathUtils.degToRad(30)))) > 0.9999)
+    await align('X', base)
+    const o = st().objects[k]
+    expect([o.transform.y, o.transform.z].map((v) => +v.toFixed(4))).toEqual([40, 0])
+    expect(triNormal(worldTri(o, base.triangleIndex)).x).toBeGreaterThan(COS1)
   })
 })
 

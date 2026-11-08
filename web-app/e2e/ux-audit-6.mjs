@@ -8,10 +8,10 @@
 //  38/40. Поворот полем → ✎: «Шаг 2: Повернуть», «Исходно» — поворот (0, 0, 30)°; правка на 45° —
 //     «Правка шага 2: поворот (0, 0, 30)° → (0, 0, 45)°»; масштаб → «Масштаб».
 //  39. «Вписать в экран» на 768×1024 (перспектива и ортография) и 1400 — у краёв вьюпорта объектов нет.
-//  Баги прогона 6 (`knownBug`, логика — __tests__/ux-audit-6.test.tsx, `it.fails`):
-//     UX-AUDIT-41 CSG при выравнивании с поворотом уходит вбок (центр тела по экспорту STL 42,5 → 25:
-//     поворот вокруг опорной точки — операнда A, а не центра);
-//     UX-AUDIT-42 шаг выравнивания через ±180° — «поворот (0, 0, −330)°» вместо 30°.
+//  Баги прогона 6 (логика — __tests__/ux-audit-6.test.tsx):
+//     ✅ UX-AUDIT-41 (fix-all-6) CSG при выравнивании с поворотом поворачивается вокруг центра рамки —
+//     центр тела по экспорту STL на месте (было: вокруг опорной точки — операнда A, уходила вбок);
+//     🐞 UX-AUDIT-42 (`knownBug`) шаг выравнивания через ±180° — «поворот (0, 0, −330)°» вместо 30°.
 // Ошибок консоли нет (все сценарии).
 // Запуск: `pnpm dev` в одном терминале, `pnpm e2e:ux-audit-6` в другом.
 import fs from 'node:fs'
@@ -163,7 +163,7 @@ const close = (n, v, eps = 0.02) => Math.hypot(n[0] - v[0], n[1] - v[1], n[2] - 
 
 try {
   // ── ✅ 32-followup: призма → верх куба на месте; «Множественное» — три призмы ──
-  // ── 🐞 UX-AUDIT-41: CSG — поворот вокруг опорной точки (операнда A), тело уходит вбок ──
+  // ── ✅ UX-AUDIT-41: CSG поворачивается вокруг центра рамки — тело не уходит вбок (fix-all-6) ──
   {
     const s = await session()
     const { page } = s
@@ -199,10 +199,10 @@ try {
     await s.startAlign(); await s.clickA(c, (n) => n[2] > 0.99); await s.clickB(g, (n) => n[0] > 0.99)
     const after = await exportCenter(page, body)
     const pivot1 = await s.tr(g)
-    if (!near(pivot1[0], pivot0[0]) || !near(pivot1[1], pivot0[1]) || !near(pivot1[4], -90, 0.11)) fail(`UX-AUDIT-41: CSG ${pivot1.join(', ')}`)
-    await knownBug('UX-AUDIT-41', 'CSG при выравнивании с поворотом уходит вбок', async () => {
-      if (!near(after[0], before[0], 0.11) || !near(after[1], before[1], 0.11)) throw new Error(`центр тела (экспорт STL) X/Y ${before[0]}, ${before[1]} → ${after[0]}, ${after[1]}; опорная точка X ${pivot0[0]} → ${pivot1[0]}`)
-    })
+    if (!near(pivot1[4], -90, 0.11)) fail(`UX-AUDIT-41: CSG ${pivot1.join(', ')}`)
+    // ✅ UX-AUDIT-41 (fix-all-6): поворот CSG — вокруг центра рамки; опорная точка (операнд A) — вместе с телом
+    if (!near(after[0], before[0], 0.11) || !near(after[1], before[1], 0.11)) fail(`UX-AUDIT-41: центр тела (экспорт STL) X/Y ${before[0]}, ${before[1]} → ${after[0]}, ${after[1]}; опорная точка X ${pivot0[0]} → ${pivot1[0]}`)
+    ok.push(`UX-AUDIT-41: CSG (куб X 0 ∪ куб X 60) торцом +X к верху куба — повёрнута на месте: центр тела (экспорт STL) X/Y ${before[0]}, ${before[1]} → ${after[0]}, ${after[1]}; опорная точка (операнд A) X ${pivot0[0]} → ${pivot1[0]}, rotY ${pivot1[4]}`)
     if (s.errors.length) fail('32-followup: ошибки консоли ' + s.errors.join(' | '))
     await s.browser.close()
   }
