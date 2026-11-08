@@ -30,7 +30,7 @@ import {
   IntersectIcon,
   TextIcon,
 } from './icons'
-import { isTextObject, textsByObjectId, textOfNode } from '../store/text-object'
+import { isTextObject, textsByObjectId, textOfNode, defaultTextName } from '../store/text-object'
 import { useDocumentStore } from '../store/document-store'
 
 interface Props {
@@ -46,7 +46,10 @@ interface Props {
 const INPUT_SELECT_DELAY_MS = 30
 
 /** Имя объекта как в дереве (своё имя или «Фигура N»); также панель шага 9.5.2. */
-export function displayName(obj: Pick<SceneObject, 'id' | 'shapeType' | 'name'>, t: (key: string, opts?: Record<string, unknown>) => string): string {
+export function displayName(obj: Pick<SceneObject, 'id' | 'shapeType' | 'name' | 'text'>, t: (key: string, opts?: Record<string, unknown>) => string): string {
+  // UX-AUDIT-36: имя 3D-текста по умолчанию — на языке интерфейса (переименованный — своё имя)
+  const text = defaultTextName(obj)
+  if (text !== undefined) return t('textModal.objectName', { text })
   if (obj.name) return obj.name
   const num = obj.id.split('_')[1] ?? ''
   if (obj.shapeType === 'csg') return t('csg.result') + (num ? ` ${num}` : '')
@@ -81,6 +84,9 @@ export default function ComponentTree({ objects, selectedIds, onSelect, onRename
   const { t } = useTranslation()
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editValue, setEditValue] = useState('')
+  // значение поля при начале правки: без изменений — шаг «Переименовать» не пишется (имя текста по
+  // умолчанию показывается на языке интерфейса — UX-AUDIT-36 — и может отличаться от сохранённого)
+  const editStartRef = useRef('')
   const inputRef = useRef<HTMLInputElement>(null)
   const selectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -123,14 +129,15 @@ export default function ComponentTree({ objects, selectedIds, onSelect, onRename
 
   function startEdit(obj: SceneObject) {
     setEditingId(obj.id)
-    setEditValue(obj.name ?? displayName(obj, t))
+    editStartRef.current = displayName(obj, t)
+    setEditValue(editStartRef.current)
     if (selectTimerRef.current !== null) clearTimeout(selectTimerRef.current)
     selectTimerRef.current = setTimeout(() => inputRef.current?.select(), INPUT_SELECT_DELAY_MS)
   }
 
   function commitEdit(id: string) {
     const trimmed = editValue.trim()
-    if (trimmed) onRename(id, trimmed)
+    if (trimmed && trimmed !== editStartRef.current) onRename(id, trimmed)
     setEditingId(null)
   }
 

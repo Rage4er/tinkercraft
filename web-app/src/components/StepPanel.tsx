@@ -35,6 +35,24 @@ const decimalsOf = (step: number) => (step < 1 ? Math.ceil(-Math.log10(step)) : 
 const nonZero = (v: Vec3 | undefined): boolean =>
   !!v && (Math.abs(v.x) > 1e-9 || Math.abs(v.y) > 1e-9 || Math.abs(v.z) > 1e-9)
 
+/**
+ * UX-AUDIT-38: название шага move в заголовке панели — как в истории (UX-AUDIT-29): поворот —
+ * «Повернуть», масштаб — «Масштаб» (вид шага `kind`), иначе — «Перемещение».
+ */
+function moveTitleKey(op: MoveOperation): string {
+  return op.kind === 'rotate' ? 'timeline.rotate' : op.kind === 'scale' ? 'timeline.scale' : 'stepPanel.move'
+}
+
+/** UX-AUDIT-38: «Исходно» шага move — сдвиг, а также поворот и масштаб, если шаг их меняет. */
+function moveOriginal(op: MoveOperation, t: (key: string) => string): string {
+  const rot = nonZero(op.rotDelta), scale = nonZero(op.scaleDelta)
+  const parts: string[] = []
+  if (nonZero(op.delta) || (!rot && !scale)) parts.push(`Δ ${fmtVec(op.delta)}`)
+  if (rot) parts.push(`${t('stepPanel.rotation').toLowerCase()} ${fmtVec(op.rotDelta)}°`)
+  if (scale) parts.push(`${t('stepPanel.scale').toLowerCase()} ${fmtVec(op.scaleDelta)}`)
+  return parts.join(', ')
+}
+
 /** Число для подписи: до 0.001, без «-0». */
 export function fmtNum(n: number): string {
   const r = Math.round(n * 1000) / 1000
@@ -89,8 +107,8 @@ export default function StepPanel() {
     // mirror — что зеркалится; extrude — что выдавливается (база)
     const ids = raw.type === 'mirror' ? raw.originalIds : raw.type === 'group' ? [raw.source!.baseId] : raw.ids
     return {
-      names: ids.map((id) => (meta[id] ? displayName({ id, shapeType: meta[id].shapeType, name: meta[id].name }, t) : id)).join(', '),
-      original: raw.type === 'move' ? `Δ ${fmtVec(raw.delta)}`
+      names: ids.map((id) => (meta[id] ? displayName({ id, shapeType: meta[id].shapeType, name: meta[id].name, text: meta[id].text }, t) : id)).join(', '),
+      original: raw.type === 'move' ? moveOriginal(raw, t)
         : raw.type === 'mirror' ? raw.plane
           : `${fmtNum(raw.source!.depth)} (${raw.source!.axis})`,
       eff,
@@ -110,7 +128,7 @@ export default function StepPanel() {
         </button>
       </div>
       <div className="props-section-title">
-        {t('stepPanel.title', { step: stepIndex + 1, name: t(eff.type === 'mirror' ? 'stepPanel.mirror' : eff.type === 'group' ? 'stepPanel.extrude' : 'stepPanel.move') })}
+        {t('stepPanel.title', { step: stepIndex + 1, name: t(eff.type === 'mirror' ? 'stepPanel.mirror' : eff.type === 'group' ? 'stepPanel.extrude' : moveTitleKey(eff)) })}
       </div>
       <div className="props-row">
         <span className="props-label">{t('stepPanel.target')}</span>

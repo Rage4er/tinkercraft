@@ -5,14 +5,15 @@
 //     «Множественное» — две призмы, обе повёрнуты. B на объекте A — уведомление, шага нет (R).
 //  O/U. Текст: зеркало зеркала, вставка зеркального текста, вложенный CSG и его зеркальная копия,
 //     .3dtc — везде «Текст» / «Текст: Дом».
-//  M/Y. Панель выравнивания на 768 и 1024 — в панели, без прокрутки.
-//  Баги прогона 5 (`knownBug`, логика — __tests__/ux-audit-5.test.tsx, `it.fails`):
-//     UX-AUDIT-32-followup поворот при выравнивании — со смещением вбок (Y −19,4);
-//     UX-AUDIT-36 в английском интерфейсе имя текста — «Текст: Дом»;
-//     UX-AUDIT-37 почти встречная грань (5°) — переворот на 175° на другую сторону плоскости;
-//     UX-AUDIT-38 панель «Шаг N» шага «Повернуть» — «Перемещение»;
-//     UX-AUDIT-39 «Вписать в экран» на 768 — сцена обрезана по ширине;
-//     UX-AUDIT-40 правка поворота шага — в истории «сдвиг (…) → (…)» без изменений.
+//  M/Y. Панель выравнивания на 768 и 1024 — в панели, без прокрутки; «Вписать в экран» — сцена целиком.
+//  Баги прогона 5 (были `knownBug`), исправлены в fix-all-5 — обычные проверки:
+//     UX-AUDIT-32-followup «Множественное» — призмы повёрнуты на месте, X/Y прежние;
+//     UX-AUDIT-36 английский интерфейс — строка текста «Text: Дом»;
+//     UX-AUDIT-37 грань под 5° к встречной — доворот встречно, куб на плоскости (Y 10);
+//     UX-AUDIT-38 панель «Шаг N» шага выравнивания — «Повернуть», в «Исходно» — углы;
+//     UX-AUDIT-39 «Вписать в экран» на 768 — сцена целиком;
+//     UX-AUDIT-40 правка поворота шага — «Правка шага 2: поворот (0, 0, 30)° → (0, 0, 45)°».
+//  `knownBug` сейчас нет. Логика — __tests__/ux-audit-5.test.tsx.
 // Ошибок консоли нет (все сценарии).
 // Запуск: `pnpm dev` в одном терминале, `pnpm e2e:ux-audit-5` в другом.
 import fs from 'node:fs'
@@ -144,7 +145,7 @@ const locks = (page) => page.locator('[data-testid=ct-lock]').count()
 
 try {
   // ── K: наклонная плоскость A → верх CSG; правка ребёнка, правка шага, копия, .3dtc ──
-  // ── UX-AUDIT-38/40: панель «Шаг N» шага «Повернуть» и подпись правки поворота ──
+  // ── ✅ UX-AUDIT-38/40: панель «Шаг N» шага «Повернуть» и подпись правки поворота ──
   {
     const s = await session()
     const { page } = s
@@ -174,7 +175,7 @@ try {
     const dx = sp.locator('[data-testid=step-delta] input.props-input').first()
     n0 = await s.steps(); await dx.fill(String(Number(await dx.inputValue()) + 5)); await dx.press('Enter'); await s.waitSteps(n0 + 1)
     const t2 = await s.tr(g)
-    if (!near(t2[0], t1[0] + 5) || t2.slice(1).join() !== t1.slice(1).join()) fail('K: правка шага — ' + t2.join(', '))
+    if (!near(t2[0], t1[0] + 5, 0.11) || t2.slice(1).join() !== t1.slice(1).join()) fail('K: правка шага — ' + t2.join(', ') + ' (до: ' + t1.join(', ') + ')')
     // копия CSG → правка ребёнка копии; оригинал не меняется
     const c2 = await s.copyPaste(g)
     await page.locator(`.ct-item[data-object-id="${c2}"] .ct-chevron`).click()
@@ -189,10 +190,10 @@ try {
     if (await s.toasts()) fail('K: уведомления ' + (await s.toasts()))
     ok.push(`K: наклонная плоскость A (бок куба rotZ 30) → верх CSG: поворот (${t1.slice(3).join(', ')})°, «Повернуть»; правка ребёнка, правка шага (ΔX + 5), копия, .3dtc — CSG на месте, без замков`)
 
-    // UX-AUDIT-38: панель шага «Повернуть» — «Перемещение», «Исходно» — только сдвиг
-    await knownBug('UX-AUDIT-38', 'панель «Шаг N» шага «Повернуть» — «Перемещение»', async () => {
-      if (!title.endsWith('Повернуть')) throw new Error(`заголовок «${title}», исходно «${original}»`)
-    })
+    // ✅ UX-AUDIT-38: панель шага «Повернуть» (выравнивание) — «Шаг N: Повернуть», «Исходно» — сдвиг
+    // и углы (было «Перемещение», только сдвиг)
+    if (!title.endsWith(': Повернуть') || !/^Δ \(.+\), поворот \(-90, 60, 60\)°$/.test(original)) fail(`UX-AUDIT-38: заголовок «${title}», исходно «${original}»`)
+    ok.push(`UX-AUDIT-38: панель шага выравнивания — «${title}», исходно «${original}»`)
     // UX-AUDIT-40: правка поворота шага → в истории «сдвиг (…) → (…)» без изменений
     await s.confirmClear()
     const c = await s.add('Куб'); await s.setF(c, 'num-input-rot-Z', 30)
@@ -203,9 +204,9 @@ try {
     const rotNow = (await s.tr(c))[5]
     const editLabel = (await s.labels()).at(-1)
     if (!near(rotNow, 45)) fail('UX-AUDIT-40: правка поворота шага не применилась — rotZ ' + rotNow)
-    await knownBug('UX-AUDIT-40', 'правка поворота шага — в истории «сдвиг» без изменений', async () => {
-      if (!/поворот/i.test(editLabel) || !editLabel.includes('45')) throw new Error(`«${editLabel}»`)
-    })
+    // ✅ UX-AUDIT-40: правка поворота шага подписана поворотом (было «сдвиг (0, 0, 0) → (0, 0, 0)»)
+    if (editLabel !== 'Правка шага 2: поворот (0, 0, 30)° → (0, 0, 45)°') fail(`UX-AUDIT-40: «${editLabel}»`)
+    ok.push(`UX-AUDIT-40: правка поворота шага — «${editLabel}»`)
     if (s.errors.length) fail('K: ошибки консоли ' + s.errors.join(' | '))
     await s.browser.close()
   }
@@ -230,10 +231,10 @@ try {
     if ((await s.labels()).slice(-2).join() !== 'Повернуть,Повернуть') fail('K: «Множественное» — шаги ' + (await s.labels()).slice(-2).join(' / '))
     for (const tt of [t1, t2]) if (Math.max(Math.abs(tt[3]), Math.abs(tt[4])) < 89.9 || !near(tt[2], -0.4, 0.11)) fail('K: «Множественное» — призма ' + tt.join(', '))
     ok.push('K: «Множественное» — две призмы боковой гранью к верху куба: обе повёрнуты, грань в плоскости (Z −0,4), два шага «Повернуть»; R: B на объекте A — уведомление, шага нет')
-    // UX-AUDIT-32-followup: поворот — со смещением вбок (зависит от точки клика)
-    await knownBug('UX-AUDIT-32-followup', 'поворот при выравнивании — со смещением вбок', async () => {
-      if (!near(t1[0], 40) || !near(t1[1], 0) || !near(t2[0], -40) || !near(t2[1], 0)) throw new Error(`призмы X/Y ${t1[0]}, ${t1[1]} и ${t2[0]}, ${t2[1]} (были 40, 0 и −40, 0)`)
-    })
+    // ✅ UX-AUDIT-32-followup: поворот на месте — X/Y призм прежние (было: вокруг точки клика,
+    // Y −11,1 и −5,1 — от того, куда кликнули)
+    if (!near(t1[0], 40) || !near(t1[1], 0) || !near(t2[0], -40) || !near(t2[1], 0)) fail(`UX-AUDIT-32-followup: призмы X/Y ${t1[0]}, ${t1[1]} и ${t2[0]}, ${t2[1]} (были 40, 0 и −40, 0)`)
+    ok.push('UX-AUDIT-32-followup: «Множественное» — призмы повёрнуты на месте, X/Y прежние (40, 0 и −40, 0), только Z −0,4')
     // UX-AUDIT-37: строго встречная грань — куб встаёт на плоскость; наклонённая на 5° — переворот
     await s.confirmClear()
     const res = []
@@ -245,9 +246,11 @@ try {
     }
     if (!near(res[0][1], 10) || res[0].slice(3).some((v) => v !== 0)) fail('K: строго встречная грань — ' + res[0].join(', '))
     ok.push('K: плоскость Y, строго встречная грань куба (Y 40) — куб встаёт на плоскость (Y 10), без поворота')
-    await knownBug('UX-AUDIT-37', 'почти встречная грань (5°) — переворот на другую сторону плоскости', async () => {
-      if (!near(res[1][5], 0, 0.11) || res[1][1] <= 0) throw new Error(`наклон 5° → Y ${res[1][1]}, rotZ ${res[1][5]} (строго встречная — Y ${res[0][1]}, rotZ 0)`)
-    })
+    // ✅ UX-AUDIT-37: наклон 5° (угол 175° > 90°) — доворот встречно, куб на плоскости, как строго
+    // встречная (было: переворот на 175°, Y −10, rotZ 180)
+    if (!near(res[1][5], 0, 0.11) || !near(res[1][1], 10) || !near(res[1][0], 0)) fail(`UX-AUDIT-37: наклон 5° → X ${res[1][0]}, Y ${res[1][1]}, rotZ ${res[1][5]} (строго встречная — Y ${res[0][1]}, rotZ 0)`)
+    if ((await s.labels()).length) fail('UX-AUDIT-37: история не очищена')
+    ok.push(`UX-AUDIT-37: наклон 5° — доворот встречно на 5°, куб на плоскости (Y ${res[1][1]}, rotZ ${res[1][5]}), как строго встречная`)
     if (s.errors.length) fail('K: ошибки консоли ' + s.errors.join(' | '))
     await s.browser.close()
   }
@@ -275,15 +278,14 @@ try {
     if (!n2.includes('Текст: Дом') || !nm.includes('Текст: Дом (зеркало)')) fail('O: дерево после .3dtc — ' + JSON.stringify([n2, nm]))
     for (const id of [t1, m2, pm]) if (!(await typeOf(id)).includes('Текст')) fail(`O: после .3dtc ${id} — ${await typeOf(id)}`)
     ok.push('O/U: текст → зеркало → зеркало зеркала → вставка — «Текст», «Вставить текст»; во вложенном CSG и его зеркальной копии — «Текст: Дом» / «Текст: Дом (зеркало)»; после .3dtc — так же')
-    // UX-AUDIT-36: английский интерфейс — имя текста в списке осталось русским
     await page.locator('.lang-switcher').click(); await page.waitForTimeout(400)
     const rowName = (await page.locator(`.ct-item[data-object-id="${t1}"] .ct-name`).first().innerText()).trim()
     const cubeName = (await page.locator(`.ct-item[data-object-id="${g2}"] .ct-name`).first().innerText()).trim()
     const enTree = await s.treeNames(g2)
     if (!cubeName.startsWith('CSG result') || !enTree.includes('Text: Дом')) fail('UX-AUDIT-36: en — ' + JSON.stringify([cubeName, enTree]))
-    await knownBug('UX-AUDIT-36', 'в английском интерфейсе имя текста — «Текст: Дом»', async () => {
-      if (rowName !== 'Text: Дом') throw new Error(`строка списка «${rowName}» (CSG — «${cubeName}», ребёнок CSG — «Text: Дом»)`)
-    })
+    // ✅ UX-AUDIT-36: имя текста по умолчанию — на языке интерфейса (было «Текст: Дом» в en)
+    if (rowName !== 'Text: Дом') fail(`UX-AUDIT-36: строка списка «${rowName}» (CSG — «${cubeName}», ребёнок CSG — «Text: Дом»)`)
+    ok.push('UX-AUDIT-36: английский интерфейс — строка текста «Text: Дом», как «CSG result …» и ребёнок CSG «Text: Дом»')
     await page.locator('.lang-switcher').click(); await page.waitForTimeout(300)
     if (await s.toasts()) fail('O: уведомления ' + (await s.toasts()))
     if (s.errors.length) fail('O: ошибки консоли ' + s.errors.join(' | '))
@@ -316,11 +318,9 @@ try {
       if (s.errors.length) fail(`M/Y ${size.width}: ошибки консоли ` + s.errors.join(' | '))
       await s.browser.close()
     }
-    if (edges[0].hits || edges[1].hits) fail('M/Y: «Вписать в экран» на 1400/1024 — объекты у края ' + JSON.stringify(edges))
-    ok.push('M/Y: панель выравнивания на 1400 / 1024 / 768 — в панели, без прокрутки; «Вписать в экран» на 1400 и 1024 — сцена целиком')
-    await knownBug('UX-AUDIT-39', '«Вписать в экран» на 768 — сцена обрезана по ширине', async () => {
-      if (edges[2].hits) throw new Error(`вьюпорт ${edges[2].vp} px — объект у края в ${edges[2].hits} точках из 46`)
-    })
+    // ✅ UX-AUDIT-39: «Вписать в экран» — сцена целиком и на 768 (вьюпорт 248 px; было: объект у края в 9 точках)
+    if (edges.some((e) => e.hits)) fail('UX-AUDIT-39: «Вписать в экран» — объекты у края вьюпорта ' + JSON.stringify(edges))
+    ok.push(`M/Y: панель выравнивания на 1400 / 1024 / 768 — в панели, без прокрутки; «Вписать в экран» — сцена целиком на всех трёх (768 — вьюпорт ${edges[2].vp} px, UX-AUDIT-39)`)
   }
 
   console.log('e2e ux-audit-5 OK')

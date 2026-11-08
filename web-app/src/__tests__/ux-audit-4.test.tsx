@@ -145,6 +145,9 @@ describe('UX-AUDIT-32 — «Выровнять»: непараллельная �
     await useAlignModeStore.getState().clickFace(b)
   }
   const COS1 = Math.cos(THREE.MathUtils.degToRad(1))
+  /** UX-AUDIT-37: куда смотрит грань B после выравнивания — +1 в ту же сторону, что нормаль A (угол ≤ 90°), −1 встречно (> 90°). */
+  const sideOf = (nb: { x: number; y: number; z: number }, nA: { x: number; y: number; z: number }) =>
+    nb.x * nA.x + nb.y * nA.y + nb.z * nA.z < -Math.sin(THREE.MathUtils.degToRad(1)) ? -1 : 1
 
   it('куб — верхняя грань (A), призма — боковая грань (B) → призма повёрнута, нормаль B = нормаль A (в ту же сторону), грань B — в плоскости A', async () => {
     const cube = await shape('cube', { width: 20, height: 20, depth: 20 }, at(0))
@@ -167,7 +170,8 @@ describe('UX-AUDIT-32 — «Выровнять»: непараллельная �
     await align(face(cube, (n) => n.x > 0.99), b)
     const o = st().objects[prism]
     const after = worldTri(o, b.triangleIndex)
-    expect(triNormal(after).x).toBeGreaterThan(COS1)
+    // UX-AUDIT-37 (fix-all-5): угол с нормалью A ≤ 90° — в ту же сторону, > 90° — встречно
+    expect(triNormal(after).x * sideOf(b.normal, { x: 1, y: 0, z: 0 })).toBeGreaterThan(COS1)
     for (const v of after) expect(v.x).toBeCloseTo(10, 3)
     expect([o.transform.scaleX, o.transform.scaleY, o.transform.scaleZ]).toEqual([2, 1, 1])  // масштаб — в локальных осях
   })
@@ -212,12 +216,13 @@ describe('UX-AUDIT-32 — «Выровнять»: непараллельная �
     let o = st().objects[cyl]
     expect([o.transform.rotX, o.transform.rotY, o.transform.rotZ]).toEqual([0, 45, 0])
     expect(worldProjectionRange(o, { x: 0, y: 0, z: 1 }).min).toBeCloseTo(10, 3)
-    // торец (плоский, нормаль под 45°) → поворот: торец смотрит вверх в z = 10
+    // торец (плоский, нормаль под 45° или 135° к +Z) → поворот: торец в z = 10 — смотрит вверх
+    // (45°) или вниз (135° — встречно, UX-AUDIT-37)
     const cap = face(cyl, (n) => Math.abs(n.dot(new THREE.Vector3(Math.SQRT1_2, 0, Math.SQRT1_2))) > 0.999)
     await align(face(cube, (n) => n.z > 0.99), cap)
     o = st().objects[cyl]
     const after = worldTri(o, cap.triangleIndex)
-    expect(triNormal(after).z).toBeGreaterThan(COS1)
+    expect(triNormal(after).z * sideOf(cap.normal, { x: 0, y: 0, z: 1 })).toBeGreaterThan(COS1)
     for (const v of after) expect(v.z).toBeCloseTo(10, 3)
     // повёрнутый куб (rotX 45) к плоскости XY по грани, смотрящей вверх → куб выпрямлен, грань — в z = 0
     const k2 = await shape('cube', { width: 20, height: 20, depth: 20 }, { ...at(-40, 0, 20), rotX: 45 })

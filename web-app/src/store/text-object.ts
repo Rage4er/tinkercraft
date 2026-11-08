@@ -25,6 +25,18 @@ export function textFromName(name: string | undefined): string {
   return name
 }
 
+/**
+ * UX-AUDIT-36: строка текста, если имя 3D-текста — имя по умолчанию («Текст: Дом» / «Text: Дом» —
+ * шаблон `textModal.objectName` на языке, на котором текст создан); переименованный — undefined.
+ * По ней имя показывается на языке интерфейса, как имена по умолчанию остальных объектов.
+ */
+export function defaultTextName(obj: Pick<SceneObject, 'id' | 'shapeType' | 'name' | 'text'>): string | undefined {
+  if (!obj.name || !isTextObject(obj)) return undefined
+  const text = textFromName(obj.name)
+  if (text === obj.name) return undefined                        // не по шаблону — переименован
+  return obj.text === undefined || obj.text === text ? text : undefined
+}
+
 /** Исходная строка 3D-текста шага импорта; не текст (STL) — undefined. */
 export function textOfOp(op: Pick<ImportMeshOperation, 'id' | 'name' | 'text'>): string | undefined {
   if (op.text !== undefined) return op.text
