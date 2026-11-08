@@ -285,27 +285,39 @@ describe('UX-AUDIT-37 — «Выровнять»: почти встречная 
   })
 })
 
-describe('UX-AUDIT-38 — панель «Шаг N» у шага поворота / масштаба — «Перемещение»', () => {
+describe('UX-AUDIT-38 — панель «Шаг N» у шага поворота / масштаба — «Повернуть» / «Масштаб»', () => {
   // UX-AUDIT-29 развёл шаги move в истории: «Переместить» / «Повернуть» / «Масштаб». Панель правки шага
-  // (✎) по-прежнему называет любой move «Шаг N: Перемещение», а «Исходно» показывает только сдвиг:
-  // у поворота полем — «Δ (0, 0, 0)», у выравнивания с поворотом — сдвиг без углов.
-  it.fails('ожидание: поворот куба на 30° → ✎ → «Шаг 2: Повернуть», в «Исходно» — 30°', async () => {
+  // (✎) называла любой move «Шаг N: Перемещение», а «Исходно» показывала только сдвиг: у поворота
+  // полем — «Δ (0, 0, 0)», у выравнивания с поворотом — сдвиг без углов. Исправлено в fix-all-5:
+  // заголовок — по виду шага (`kind`), как в истории; «Исходно» — сдвиг, поворот и масштаб шага.
+  it('поворот куба на 30° → ✎ → «Шаг 2: Повернуть», в «Исходно» — поворот (0, 0, 30)°', async () => {
     const c = await shape('cube', { width: 20, height: 20, depth: 20 }, at(0))
     await st().moveObject(c, { ...st().objects[c].transform, rotZ: 30 })
     const step = st().historyIndex - 1
     expect(opLabel(lastOp(), t)).toBe('Повернуть')
     useUiStore.setState({ selectedStep: step })
     const h = mount(<StepPanel />)
-    expect(h.querySelector('.props-section-title')?.textContent).toBe(`Шаг ${step + 1}: Повернуть`)   // ← сейчас «Перемещение»
-    expect(h.querySelector('[data-testid=step-original]')?.textContent).toContain('30')                // ← сейчас «Δ (0, 0, 0)»
+    expect(h.querySelector('.props-section-title')?.textContent).toBe(`Шаг ${step + 1}: Повернуть`)   // было «Перемещение»
+    expect(h.querySelector('[data-testid=step-original]')?.textContent).toBe('поворот (0, 0, 30)°')    // было «Δ (0, 0, 0)»
   })
-  it.fails('ожидание: масштаб куба ×2 → ✎ → «Шаг 2: Масштаб»', async () => {
+  it('масштаб куба ×2 → ✎ → «Шаг 2: Масштаб», в «Исходно» — масштаб; сдвиг — «Перемещение», «Δ (…)» как раньше', async () => {
     const c = await shape('cube', { width: 20, height: 20, depth: 20 }, at(0))
     await st().moveObject(c, { ...st().objects[c].transform, scaleX: 2 })
     const step = st().historyIndex - 1
     useUiStore.setState({ selectedStep: step })
     const h = mount(<StepPanel />)
-    expect(h.querySelector('.props-section-title')?.textContent).toBe(`Шаг ${step + 1}: Масштаб`)       // ← сейчас «Перемещение»
+    expect(h.querySelector('.props-section-title')?.textContent).toBe(`Шаг ${step + 1}: Масштаб`)       // было «Перемещение»
+    expect(h.querySelector('[data-testid=step-original]')?.textContent).toBe('масштаб (1, 0, 0)')
+    // сдвиг + поворот одним шагом (выравнивание с поворотом) — и то и другое
+    await st().moveObject(c, { ...st().objects[c].transform, x: 5, rotX: -90 })
+    act(() => useUiStore.setState({ selectedStep: st().historyIndex - 1 }))
+    expect(h.querySelector('.props-section-title')?.textContent).toBe(`Шаг ${st().historyIndex}: Повернуть`)
+    expect(h.querySelector('[data-testid=step-original]')?.textContent).toBe('Δ (5, 0, 0), поворот (-90, 0, 0)°')
+    // обычный сдвиг — как раньше
+    await st().moveObject(c, { ...st().objects[c].transform, y: 3 })
+    act(() => useUiStore.setState({ selectedStep: st().historyIndex - 1 }))
+    expect(h.querySelector('.props-section-title')?.textContent).toBe(`Шаг ${st().historyIndex}: Перемещение`)
+    expect(h.querySelector('[data-testid=step-original]')?.textContent).toBe('Δ (0, 3, 0)')
   })
 })
 
