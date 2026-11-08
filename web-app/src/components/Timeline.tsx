@@ -1,6 +1,6 @@
 import { useRef, useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import type { TinkerCraftOperation, StepPatch } from "../csg/types";
+import type { TinkerCraftOperation, StepPatch, Vec3 } from "../csg/types";
 import { effectivePatches, applyStepPatch } from "../store/project-history";
 import { textOfOp } from "../store/text-object";
 import { isStepEditable } from "../store/edit-step";
@@ -190,11 +190,41 @@ export function opLabel(op: TinkerCraftOperation, t: (key: string, opts?: Record
 }
 
 /** Фаза 9.5: «сдвиг (0, 0, 0) → (3, 0, 0)» / «зеркало YZ → XZ» / «выдавливание (глубина 5 → 10)». */
+const ZERO: Vec3 = { x: 0, y: 0, z: 0 };
+const sameVec = (a: Vec3 | undefined, b: Vec3 | undefined): boolean => {
+  const u = a ?? ZERO, v = b ?? ZERO;
+  return Math.abs(u.x - v.x) < 1e-9 && Math.abs(u.y - v.y) < 1e-9 && Math.abs(u.z - v.z) < 1e-9;
+};
+
+/**
+ * UX-AUDIT-40: подпись правки шага move — группы, которые правка меняет: «сдвиг (8, 0, 0) → (12, 0, 0)»,
+ * «поворот (0, 0, 30)° → (0, 0, 45)°», «масштаб …». Было: всегда только сдвиг — правка поворота шага
+ * читалась «сдвиг (0, 0, 0) → (0, 0, 0)». Без прежних значений (`before`) — сдвиг и ненулевые поворот /
+ * масштаб; ничего не изменилось — сдвиг, как раньше.
+ */
+function movePatchDetail(
+  p: Extract<StepPatch, { kind: "move" }>,
+  before: Extract<StepPatch, { kind: "move" }> | undefined,
+  t: (key: string, opts?: Record<string, unknown>) => string,
+): string {
+  const groups: Array<{ key: string; from: Vec3 | undefined; to: Vec3 | undefined; unit: string }> = [
+    { key: "stepPanel.offset", from: before?.delta, to: p.delta, unit: "" },
+    { key: "stepPanel.rotation", from: before?.rotDelta, to: p.rotDelta, unit: "°" },
+    { key: "stepPanel.scale", from: before?.scaleDelta, to: p.scaleDelta, unit: "" },
+  ];
+  const changed = before
+    ? groups.filter((g) => !sameVec(g.from, g.to))
+    : groups.filter((g, i) => i === 0 || !sameVec(g.to, ZERO));
+  return (changed.length ? changed : groups.slice(0, 1))
+    .map((g) => {
+      const from = before ? `${fmtVec(g.from ?? ZERO)}${g.unit} → ` : "";
+      return `${t(g.key).toLowerCase()} ${from}${fmtVec(g.to ?? ZERO)}${g.unit}`;
+    })
+    .join(", ");
+}
+
 function patchDetail(p: StepPatch, before: StepPatch | undefined, t: (key: string, opts?: Record<string, unknown>) => string): string {
-  if (p.kind === "move") {
-    const from = before?.kind === "move" ? `${fmtVec(before.delta)} → ` : "";
-    return `${t("stepPanel.offset").toLowerCase()} ${from}${fmtVec(p.delta)}`;
-  }
+  if (p.kind === "move") return movePatchDetail(p, before?.kind === "move" ? before : undefined, t);
   if (p.kind === "extrude") {
     const from = before?.kind === "extrude" ? `${fmtNum(before.depth)} → ` : "";
     return `${t("stepPanel.extrude").toLowerCase()} (${t("stepPanel.depth").toLowerCase()} ${from}${fmtNum(p.depth)})`;
