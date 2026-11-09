@@ -4,7 +4,7 @@
 // уведомлений об отказе нет; undo возвращает YZ (−30), redo — XZ.
 // Запуск: `pnpm dev` в одном терминале, `pnpm e2e:edit-step-mirror` в другом.
 // Необязательный аргумент — путь для скриншота: `node e2e/edit-step-mirror.mjs /tmp/mirror.png`.
-import { openApp, toolbarButton, panelButton } from './helpers.mjs'
+import { openApp, toolbarButton, panelButton, placeShape } from './helpers.mjs'
 
 const shot = process.argv[2]
 const { browser, page, errors } = await openApp()
@@ -18,7 +18,7 @@ try {
   await page.locator('button.tab-btn', { hasText: 'Дерево' }).click()
 
   // призма в (30, 3)
-  await page.getByText('Призма', { exact: true }).first().click()
+  await placeShape(page, 'Призма')
   await page.waitForTimeout(800)
   await objRows.nth(0).click()
   await prop('X').fill('30'); await prop('X').press('Enter')
@@ -32,7 +32,7 @@ try {
   await page.locator('.tl-item', { hasText: 'Зеркало YZ' }).waitFor({ timeout: 10000 })
 
   // сфера; объединить зеркальную копию (2-я строка) со сферой (3-я)
-  await page.getByText('Сфера', { exact: true }).first().click()
+  await placeShape(page, 'Сфера')
   await page.waitForTimeout(800)
   await objRows.nth(1).click()
   await objRows.nth(2).click({ modifiers: ['Shift'] })

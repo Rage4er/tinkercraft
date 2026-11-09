@@ -25,7 +25,7 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { openApp, panelButton, toolbarButton, findAlignFace, spaceShapeClick, assertPerf, waitToastsSettled, csgAB } from './helpers.mjs'
+import { openApp, panelButton, toolbarButton, findAlignFace, assertPerf, waitToastsSettled, csgAB, placeShape } from './helpers.mjs'
 
 const shotDir = process.argv[2]
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ux-audit-3-'))
@@ -61,8 +61,7 @@ async function session(size) {
   const blur = () => page.evaluate(() => document.activeElement?.blur())
   const add = async (label) => {
     const b = new Set(await ids())
-    await spaceShapeClick(page, label)
-    await page.getByText(label, { exact: true }).first().click()
+    await placeShape(page, label)
     await waitRows(b.size + 1)
     return (await ids()).find((i) => !b.has(i))
   }
@@ -306,8 +305,7 @@ try {
     const LABELS = ['Куб', 'Сфера', 'Цилиндр', 'Конус', 'Тор', 'Призма', 'Пирамида']
     const t0 = Date.now()
     for (let i = 0; i < 52; i++) {
-      await spaceShapeClick(page, LABELS[i % 7])
-      await page.getByText(LABELS[i % 7], { exact: true }).first().click(); await s.waitRows(i + 1)
+      await placeShape(page, LABELS[i % 7]); await s.waitRows(i + 1)
     }
     const all = await s.ids()
     for (let i = 0; i < all.length; i++) {

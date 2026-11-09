@@ -48,8 +48,8 @@ import { useAutosave } from '../hooks/useAutosave'
 import { restoreSession } from '../io/autosave'
 import { buildTextMesh } from '../io/text-mesh'
 import { addTextObject } from '../store/add-text'
-import { createAddShapeGate, addShapeWhenIdle } from '../store/add-shape-queue'
-import { ADD_SHAPE_DEBOUNCE_MS } from '../constants'
+import { addShapeWhenIdle } from '../store/add-shape-queue'
+import { usePlacementModeStore } from '../store/placement-mode'
 import type { SceneObject, ShapeParams, ShapeType, TransformNR } from '../csg/types'
 
 const st = () => useDocumentStore.getState()
@@ -431,18 +431,21 @@ describe('UX-AUDIT-8 — целое поле «Граней» без «.0»', ()
   })
 })
 
-describe('UX-AUDIT-9 — двойной клик по фигуре: <200 мс — одна, позже — две', () => {
-  it('фильтр: повтор той же фигуры через 100 мс отброшен, через 300 мс — принят; разные фигуры независимы', () => {
-    expect(ADD_SHAPE_DEBOUNCE_MS).toBe(200)
-    const gate = createAddShapeGate()                      // время — клика (DOUBLE-CLICK-TIMING)
-    expect(gate('cube', 1000)).toBe(true)
-    expect(gate('cube', 1100)).toBe(false)                 // случайный двойной клик
-    expect(gate('sphere', 1110)).toBe(true)                // другая фигура — не мешает
-    expect(gate('cube', 1300)).toBe(true)                  // осознанный второй клик
-    expect(gate('cube', 1450)).toBe(false)                 // тройной 300/450/600: отсчёт от принятого
-    expect(gate('cube', 1600)).toBe(true)
+describe('UX-AUDIT-9 — двойной клик по фигуре: одна фигура, следующая — не теряется', () => {
+  // PLUG-AND-PLAY: клик по иконке включает режим размещения, фигура — только при размещении;
+  // двойной клик по иконке — тот же один режим (фильтр 200 мс по времени клика не нужен — удалён).
+  it('двойной клик по иконке → один режим, фигур нет; поставить — ровно одна', async () => {
+    const pm = () => usePlacementModeStore.getState()
+    pm().startPlacement('cube')
+    pm().startPlacement('cube')                             // двойной клик
+    expect(pm().placementMode?.shapeType).toBe('cube')
+    expect(Object.keys(st().objects)).toHaveLength(0)
+    expect(await pm().confirmPlacement()).toBe(true)        // Enter без превью — рядом с прошлыми
+    expect(await pm().confirmPlacement()).toBe(false)       // режима уже нет — вторая не появится
+    expect(Object.keys(st().objects)).toHaveLength(1)
+    expect(notes()).toEqual([])
   })
-  it('клик во время занятого стора не теряется: фигуры добавляются по очереди, когда стор свободен', async () => {
+  it('фигура, поставленная во время занятого стора, не теряется: фигуры добавляются по очереди, когда стор свободен', async () => {
     useDocumentStore.setState({ busy: true })              // идёт долгая операция (CSG)
     const p1 = addShapeWhenIdle('cube')
     const p2 = addShapeWhenIdle('sphere')
@@ -454,9 +457,9 @@ describe('UX-AUDIT-9 — двойной клик по фигуре: <200 мс �
     expect(Object.values(st().objects).map((o) => o.shapeType)).toEqual(['cube', 'sphere'])
     expect(notes()).toEqual([])                             // без уведомлений
   })
-  it('стор занят дольше срока ожидания — клик отменяется без фигуры', async () => {
+  it('стор занят дольше срока ожидания — фигура отменяется без уведомления', async () => {
     useDocumentStore.setState({ busy: true })
-    expect(await addShapeWhenIdle('cube', 60)).toBe(false)
+    expect(await addShapeWhenIdle('cube', { timeoutMs: 60 })).toBe(false)
     useDocumentStore.setState({ busy: false })
     expect(Object.keys(st().objects)).toHaveLength(0)
   })

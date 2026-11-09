@@ -1,15 +1,15 @@
 // e2e/edit-child.mjs — Фаза 9.2/9.3: правка параметра ребёнка CSG пересобирает результат.
 // Запуск: `pnpm dev` в одном терминале, `pnpm e2e:edit-child` в другом.
 // Необязательный аргумент — путь для скриншота: `node e2e/edit-child.mjs /tmp/edit.png`.
-import { openApp, toolbarButton, panelButton } from './helpers.mjs'
+import { openApp, toolbarButton, panelButton, placeShape } from './helpers.mjs'
 
 const shot = process.argv[2]
 const { browser, page, errors } = await openApp()
 const fail = (msg) => { throw new Error(msg) }
 try {
-  await page.getByText('Куб', { exact: true }).first().click()
+  await placeShape(page, 'Куб')
   await page.waitForTimeout(800)
-  await page.getByText('Сфера', { exact: true }).first().click()
+  await placeShape(page, 'Сфера')
   await page.waitForTimeout(800)
 
   await page.locator('button.tab-btn', { hasText: 'Дерево' }).click()
@@ -79,9 +79,9 @@ try {
   await page.waitForFunction(() => !document.body.innerText.includes('Загрузка CSG'), null, { timeout: 30000 })
   await page.locator('button.tab-btn', { hasText: 'Дерево' }).click()
 
-  await page.getByText('Призма', { exact: true }).first().click()
+  await placeShape(page, 'Призма')
   await page.waitForTimeout(800)
-  await page.getByText('Сфера', { exact: true }).first().click()
+  await placeShape(page, 'Сфера')
   await page.waitForTimeout(800)
   const objRows = page.locator('.ct-item[data-object-id]')
   if ((await objRows.count()) !== 2) fail('ожидалось 2 объекта (призма, сфера), получено ' + (await objRows.count()))

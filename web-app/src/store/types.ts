@@ -39,7 +39,8 @@ export interface DocumentStore {
   clearedDocument: ClearedDocument | null
 
   // Actions
-  addShape: (shapeType: ShapeType, params?: ShapeParams) => Promise<void>
+  /** `at` — мировой трансформ фигуры (режим размещения, PLUG-AND-PLAY); без него — рядом с прошлыми */
+  addShape: (shapeType: ShapeType, params?: ShapeParams, at?: TransformNR) => Promise<void>
   /** Меш 3D-текста (`text` — исходная строка, UX-AUDIT-31) */
   addRawMesh: (name: string, vertices: number[], indices: number[], text?: string) => Promise<void>
   importStl: () => Promise<void>

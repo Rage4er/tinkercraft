@@ -4,7 +4,7 @@
 // уведомлений об отказе нет; undo возвращает pivot 8, redo — 12.
 // Запуск: `pnpm dev` в одном терминале, `pnpm e2e:edit-step-move` в другом.
 // Необязательный аргумент — путь для скриншота: `node e2e/edit-step-move.mjs /tmp/step.png`.
-import { openApp, panelButton } from './helpers.mjs'
+import { openApp, panelButton, placeShape } from './helpers.mjs'
 
 const shot = process.argv[2]
 const { browser, page, errors } = await openApp()
@@ -17,7 +17,7 @@ try {
   await page.locator('button.tab-btn', { hasText: 'Дерево' }).click()
 
   // куб, сдвиг X 0 → 8 через панель свойств (шаг «Переместить»)
-  await page.getByText('Куб', { exact: true }).first().click()
+  await placeShape(page, 'Куб')
   await page.waitForTimeout(800)
   await objRows.nth(0).click()
   const x = right.locator('#num-input-pos-X')
@@ -25,7 +25,7 @@ try {
   await page.locator('.tl-item', { hasText: 'Переместить' }).waitFor({ timeout: 10000 })
 
   // сфера, затем объединение
-  await page.getByText('Сфера', { exact: true }).first().click()
+  await placeShape(page, 'Сфера')
   await page.waitForTimeout(800)
   await objRows.nth(0).click()
   await objRows.nth(1).click({ modifiers: ['Shift'] })

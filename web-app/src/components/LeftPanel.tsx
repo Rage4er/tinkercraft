@@ -5,7 +5,8 @@ import Timeline from "./Timeline";
 import ComponentTree, { displayName } from "./ComponentTree";
 import { OP_FILTER_LABELS } from "../constants";
 import { ALL_SHAPES } from "../constants.tsx";
-import type { ShapeType, TinkerCraftOperation, SceneObject } from "../csg/types";
+import type { TinkerCraftOperation, SceneObject } from "../csg/types";
+import { usePlacementModeStore, type PlaceableShape } from "../store/placement-mode";
 import { ChevronUpIcon, ChevronDownIcon } from "./icons";
 
 export default function LeftPanel({
@@ -34,8 +35,8 @@ export default function LeftPanel({
   onShapeSearchChange: (v: string) => void;
   workerOk: boolean;
   busy: boolean;
-  /** `at` — время клика (`event.timeStamp`), фильтр двойного клика (DOUBLE-CLICK-TIMING) */
-  onAddShape: (type: ShapeType, at: number) => void;
+  /** PLUG-AND-PLAY: клик по фигуре — режим размещения (фигура — после клика по грани / сетке) */
+  onAddShape: (type: PlaceableShape) => void;
   onShowTextModal: () => void;
   objectList: SceneObject[];
   selSet: Set<string>;
@@ -53,6 +54,7 @@ export default function LeftPanel({
   onTimelineEdit?: (op: import("../csg/types").TinkerCraftOperation, index: number) => void;
 }) {
   const { t } = useTranslation();
+  const placing = usePlacementModeStore((st) => st.placementMode?.shapeType ?? null);
 
   // FIX (LOW-18-31): Remove useMemo — ALL_SHAPES has only 8 elements, memo overhead > benefit
   const filteredShapes = shapeSearch.trim()
@@ -86,15 +88,16 @@ export default function LeftPanel({
           {filteredShapes.map((s) => (
             <button
               key={s.type}
-              className="shape-btn"
-              title={t('leftPanel.addShape', { label: t(`shapesAcc.${s.type}`) })}
-              // UX-AUDIT-9: не блокируется на время busy — клик ждёт очереди (add-shape-queue);
-              // DOUBLE-CLICK-TIMING: время клика — от события, а не от обработки
+              className={s.type === placing ? "shape-btn active" : "shape-btn"}
+              title={t(s.type === "text" ? "leftPanel.addShape" : "leftPanel.placeShape", { label: t(`shapesAcc.${s.type}`) })}
+              aria-pressed={s.type === "text" ? undefined : s.type === placing}
+              // UX-AUDIT-9: не блокируется на время busy — поставленная фигура ждёт очереди (add-shape-queue);
+              // PLUG-AND-PLAY: клик — режим размещения, фигура — после клика по грани / сетке или Enter
               disabled={!workerOk}
-              onClick={(e) =>
+              onClick={() =>
                 s.type === "text"
                   ? onShowTextModal()
-                  : onAddShape(s.type as ShapeType, e.nativeEvent.timeStamp)
+                  : onAddShape(s.type as PlaceableShape)
               }
             >
               <span className="shape-icon">{s.icon({ size: 32 })}</span>

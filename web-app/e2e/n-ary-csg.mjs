@@ -9,7 +9,7 @@
 // Ошибок консоли нет. Логика тех же сценариев в сторе — __tests__/n-ary-csg.test.ts (WASM).
 // Запуск: `pnpm dev` в одном терминале, `pnpm e2e:n-ary-csg` в другом.
 // Необязательный аргумент — путь для скриншота: `node e2e/n-ary-csg.mjs /tmp/n-ary.png`.
-import { openApp, panelButton, toolbarButton, spaceShapeClick, csgModeStart, csgModeConfirm } from './helpers.mjs'
+import { openApp, panelButton, toolbarButton, csgModeStart, csgModeConfirm, placeShape } from './helpers.mjs'
 
 const shot = process.argv[2]
 const { browser, page, errors } = await openApp()
@@ -28,14 +28,8 @@ const blur = () => page.evaluate(() => document.activeElement?.blur())
 
 async function add(label) {
   const before = new Set(await ids())
-  await spaceShapeClick(page, label)                       // UX-AUDIT-9: подряд та же фигура — не «двойной клик»
-  await page.getByText(label, { exact: true }).first().click()
+  await placeShape(page, label)
   await waitRows(before.size + 1)
-  // UX-AUDIT-9 считает 200 мс по времени ОБРАБОТКИ клика в странице, а spaceShapeClick — по
-  // часам скрипта: на CPU-рендере (CI) обработка запаздывает, и следующий клик той же фигуры
-  // попадал в окно «двойного клика» (31 куб подряд, раздел C). Строка появляется после
-  // обработки — выдерживаем паузу от неё.
-  await page.waitForTimeout(250)
   return (await ids()).find((id) => !before.has(id))
 }
 async function pick(id) {

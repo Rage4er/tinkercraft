@@ -33,7 +33,7 @@ import { migrateLegacyFillet, type LegacyFilletMigration } from '../io/legacy-fi
 import i18n from '../i18n'
 
 export { computeAABB, extractAndCenterInPlace, extractAndCenterGetAABB, computeWorldAABB, extractCenteredAt } from './helpers'
-import { computeAABB, extractAndCenterInPlace, extractAndCenterGetAABB, centerMassAtOrigin, solveAlignDeltas, extrudeSlab, worldVerticesAABB, makeObject, nextId, colorForIndex, faceToLocal, solvePlaneAlignMove, dominantAxis } from './helpers'
+import { computeAABB, extractAndCenterInPlace, extractAndCenterGetAABB, centerMassAtOrigin, solveAlignDeltas, extrudeSlab, worldVerticesAABB, makeObject, nextId, colorForIndex, faceToLocal, solvePlaneAlignMove, dominantAxis, defaultShapeParams } from './helpers'
 import type { ClipEntry } from './helpers'
 import type { DocumentStore } from './types'
 import { rebuildFromHistory, rebuildBuildTree } from './rebuild'
@@ -254,24 +254,15 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   clearedDocument: null,
 
   // ── Добавить фигуру ──
-  addShape: async (shapeType, params) => {
+  addShape: async (shapeType, params, at) => {
     if (get().busy) return
     const { objects, operations, historyIndex } = get()
     const idx = Object.keys(objects).length
     const id = nextId('obj')
-    const transform: TransformNR = { x: idx * OBJECT_SPACING, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
+    // PLUG-AND-PLAY: `at` — место из режима размещения (на плоскости); без него — рядом с прошлыми
+    const transform: TransformNR = at ? { ...at } : { x: idx * OBJECT_SPACING, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
     const color = colorForIndex(idx)
-    // UX-AUDIT-14: у цилиндра — свои параметры (раньше падал в ветку куба: width/height/depth;
-    // геометрия та же — радиус 10 и 48 сегментов по умолчанию воркера, высота 20)
-    const defaultParams: ShapeParams =
-      shapeType === 'sphere' ? { radius: 12, segments: 32 }
-      : shapeType === 'cylinder' ? { radius: 10, height: 20 }
-        : shapeType === 'cone' ? { radius: 10, height: 24, segments: 32 }
-          : shapeType === 'torus' ? { torusRadius: 15, tubeRadius: 4, segments: 32, tubeSegments: 16 }
-            : shapeType === 'prism' ? { radius: 12, height: 20, sides: 6 }
-              : shapeType === 'pyramid' ? { radius: 12, height: 20, sides: 4 }
-                : { width: 20, height: 20, depth: 20 }
-    const finalParams = params ?? defaultParams
+    const finalParams = params ?? defaultShapeParams(shapeType)
     const op: AddShapeOperation = { type: 'add_shape', id, shapeType, params: finalParams, color, transform }
     set({ busy: true })
     try {

@@ -10,7 +10,7 @@
 // старая вставка (запечённый меш, не раскрывается) падают с понятной причиной.
 // Запуск: `pnpm dev` в одном терминале, `pnpm e2e:independent-copy` в другом.
 // Необязательный аргумент — путь для скриншота: `node e2e/independent-copy.mjs /tmp/copy.png`.
-import { openApp, toolbarButton, panelButton } from './helpers.mjs'
+import { openApp, toolbarButton, panelButton, placeShape } from './helpers.mjs'
 
 const shot = process.argv[2]
 const { browser, page, errors } = await openApp()
@@ -58,9 +58,9 @@ try {
   await page.locator('button.tab-btn', { hasText: 'Дерево' }).click()
 
   // куб + сфера, сфера сдвинута в куб (X = 12) — тогда радиус меняет линию пересечения
-  await page.getByText('Куб', { exact: true }).first().click()
+  await placeShape(page, 'Куб')
   await page.waitForTimeout(800)
-  await page.getByText('Сфера', { exact: true }).first().click()
+  await placeShape(page, 'Сфера')
   await page.waitForTimeout(800)
   const [cube, sphere] = await ids()
   await row(sphere).click()

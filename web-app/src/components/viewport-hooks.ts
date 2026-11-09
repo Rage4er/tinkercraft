@@ -16,9 +16,10 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { TransformControls } from "three/examples/jsm/controls/TransformControls.js";
 import type { SceneObject, TransformNR } from "../csg/types";
-import { computeAABB } from "../store/helpers";
+import { computeAABB, colorForIndex, defaultShapeParams } from "../store/helpers";
 import { buildObjectGeometry } from "./object-geometry";
 import { useCsgGroupModeStore } from "../store/csg-group-mode";
+import { usePlacementModeStore } from "../store/placement-mode";
 import {
     findNearestSnap,
     createSnapIndicator,
@@ -1059,4 +1060,66 @@ export function useMirrorPreview(
         mirrorPreviewRef,
         mirrorPlaneRef,
     };
+}
+
+// ============================================================
+// PLUG-AND-PLAY: превью размещаемой фигуры
+// ============================================================
+
+/** Прозрачность превью размещения. */
+export const PLACEMENT_PREVIEW_OPACITY = 0.5;
+
+/**
+ * Полупрозрачное превью фигуры в режиме размещения: меш той же фигуры (из воркера, параметры по
+ * умолчанию), цвет — как у следующего объекта; трансформ — место под курсором (стоит на
+ * плоскости). Вне raycast (не мешает выбору грани под собой). Нет места под курсором — скрыто.
+ */
+export function usePlacementPreview(
+    sceneRef: React.MutableRefObject<THREE.Scene | null>,
+    nextIndex: number,
+): void {
+    const shapeType = usePlacementModeStore((s) => s.placementMode?.shapeType ?? null);
+    const meshData = usePlacementModeStore((s) => s.placementMode?.mesh ?? null);
+    const transform = usePlacementModeStore((s) => s.placementMode?.preview?.transform ?? null);
+    const ref = useRef<THREE.Object3D | null>(null);
+
+    useEffect(() => {
+        const scene = sceneRef.current;
+        if (!scene || !shapeType || !meshData) return;
+        const geometry = buildObjectGeometry({
+            shapeType, params: defaultShapeParams(shapeType),
+            vertices: meshData.vertices, indices: meshData.indices, normals: meshData.normals,
+        });
+        const material = new THREE.MeshStandardMaterial({
+            color: colorForIndex(nextIndex),
+            transparent: true,
+            opacity: PLACEMENT_PREVIEW_OPACITY,
+            roughness: 0.4,
+            metalness: 0,
+            depthWrite: false,
+        });
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.raycast = () => { };
+        mesh.renderOrder = 998;
+        const pivot = new THREE.Object3D();
+        pivot.userData.placementPreview = true;
+        pivot.visible = false;
+        pivot.add(mesh);
+        scene.add(pivot);
+        ref.current = pivot;
+        return () => {
+            scene.remove(pivot);
+            geometry.dispose();
+            material.dispose();
+            ref.current = null;
+        };
+    }, [sceneRef, shapeType, meshData, nextIndex]);
+
+    useEffect(() => {
+        const pivot = ref.current;
+        if (!pivot) return;
+        if (!transform) { pivot.visible = false; return; }
+        applyTransformToPivot(pivot, transform);
+        pivot.visible = true;
+    }, [transform, shapeType, meshData, nextIndex]);
 }

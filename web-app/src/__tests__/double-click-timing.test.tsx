@@ -1,16 +1,14 @@
 // ============================================================
-// double-click-timing.test.tsx — DOUBLE-CLICK-TIMING: двойной клик по фигуре палитры
+// double-click-timing.test.tsx — двойной клик по фигуре палитры и неподвижная палитра
 // ============================================================
-// Фильтр двойного клика (UX-AUDIT-9: повтор той же фигуры раньше 200 мс отбрасывается) мерил
-// интервал по времени ОБРАБОТКИ клика (`performance.now()` в обработчике). На медленном CPU
-// главный поток занят — клики ждут в очереди: клики через 300 мс обрабатываются подряд (слипались
-// в одну фигуру), а двойной клик через 100 мс — с разрывом больше 200 мс (давал две). Теперь —
-// по времени КЛИКА (`event.timeStamp`). Медленный CPU здесь — время клика, не совпадающее с
-// временем обработки: клики с `timeStamp` через 300 мс обрабатываются подряд и т. п.
-// Палитра → `createShapeClickHandler` (тот же обработчик, что в App) → стор → реальный WASM.
-// Второе: палитра не уезжает из-под курсора — история (Timeline) прокручивает к текущему шагу
-// только свой список (`scrollListToItem`), а не всю левую панель (`scrollIntoView` двигал
-// `.panel-left` на строку с каждой фигурой: второй клик через 300 мс попадал мимо «Куба»).
+// DOUBLE-CLICK-TIMING (v1.3.6) мерил фильтр двойного клика по иконке (200 мс) по времени клика
+// (`event.timeStamp`): на медленном CPU клики ждут в очереди и обрабатываются подряд.
+// PLUG-AND-PLAY: клик по иконке только включает режим размещения — фигура появляется, когда её
+// ставят (клик по грани / сетке, Enter). Фильтр не нужен и удалён; здесь — что клики по иконке,
+// в т. ч. пришедшие из очереди подряд, дают один режим и ни одной лишней фигуры.
+// Второе (TIMELINE-SCROLL-FIX): палитра не уезжает из-под курсора — история (Timeline) прокручивает
+// к текущему шагу только свой список (`scrollListToItem`), а не всю левую панель (`scrollIntoView`
+// двигал `.panel-left` на строку с каждой фигурой: второй клик через 300 мс попадал мимо «Куба»).
 // Браузер (очередь ввода при занятом главном потоке, неподвижная палитра) — e2e/double-click-timing.mjs.
 
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest'
@@ -47,9 +45,8 @@ import { useDocumentStore } from '../store/document-store'
 import { useNotifications } from '../store/notifications'
 import { clearSnapshots } from '../store/snapshots'
 import { clearTree } from '../csg/history-tree'
-import { createAddShapeGate, createShapeClickHandler } from '../store/add-shape-queue'
-import { ADD_SHAPE_DEBOUNCE_MS } from '../constants'
-import type { ShapeType, TinkerCraftOperation, TransformNR } from '../csg/types'
+import { usePlacementModeStore, type PlaceableShape } from '../store/placement-mode'
+import type { TinkerCraftOperation, TransformNR } from '../csg/types'
 
 const st = () => useDocumentStore.getState()
 const cubes = () => Object.values(st().objects).filter((o) => o.shapeType === 'cube').length
@@ -66,6 +63,7 @@ beforeEach(async () => {
   useDocumentStore.setState({ objects: {}, operations: [], historyIndex: 0, selectedIds: [], busy: false, modified: false, clipboard: [], clearedDocument: null })
   useNotifications.setState({ notifications: [] })
   clearSnapshots(); clearTree(); _resetMockIndexedDB()
+  usePlacementModeStore.getState().cancelPlacement()
   await i18n.changeLanguage('ru')
 })
 
@@ -78,7 +76,7 @@ afterEach(() => {
 })
 
 /** Палитра (LeftPanel) с обработчиком клика по фигуре; кнопка «Куб». */
-function mountPalette(onAddShape: (type: ShapeType, at: number) => void): HTMLButtonElement {
+function mountPalette(onAddShape: (type: PlaceableShape) => void): HTMLButtonElement {
   host = document.createElement('div')
   document.body.appendChild(host)
   root = createRoot(host)
@@ -108,60 +106,43 @@ async function expectCubes(n: number): Promise<void> {
   expect(cubes()).toBe(n)
 }
 
-describe('DOUBLE-CLICK-TIMING — двойной клик по времени клика (event.timeStamp), не обработки', () => {
-  it('медленный CPU: клики через 300 мс обработаны подряд (поток был занят) — две фигуры', async () => {
-    expect(ADD_SHAPE_DEBOUNCE_MS).toBe(200)                 // срок не менялся
-    const btn = mountPalette(createShapeClickHandler())     // как в App
+describe('PLUG-AND-PLAY — клики по иконке (и из очереди) — один режим, фигура — только при размещении', () => {
+  const pm = () => usePlacementModeStore.getState()
+  const place = (t: PlaceableShape) => pm().startPlacement(t)
+
+  it('медленный CPU: клики по «Кубу» через 300 мс обработаны подряд — один режим, фигур нет; поставить — одна', async () => {
+    const btn = mountPalette(place)                         // как в App
     clickAt(btn, 10_000)
-    clickAt(btn, 10_300)                                    // обработан сразу за первым: performance.now() — ~0 мс
-    await expectCubes(2)
-    expect(st().operations.map((o) => o.type)).toEqual(['add_shape', 'add_shape'])
+    clickAt(btn, 10_300)                                    // из очереди — сразу за первым
+    expect(pm().placementMode?.shapeType).toBe('cube')
+    await act(async () => { await sleep(200) })
+    expect(cubes()).toBe(0)                                 // клик по иконке фигуру не создаёт
+    await act(async () => { await pm().confirmPlacement() })   // Enter
+    await expectCubes(1)
+    expect(pm().placementMode).toBeNull()
     expect(notes()).toEqual([])
   })
 
-  it('медленный CPU: двойной клик через 100 мс, обработанный через 400 мс, — одна фигура (защита)', async () => {
-    const btn = mountPalette(createShapeClickHandler())
+  it('двойной клик по иконке и поставить дважды подряд — ровно одна фигура', async () => {
+    const btn = mountPalette(place)
     clickAt(btn, 20_000)
-    await act(async () => { await sleep(400) })             // второй клик ждал в очереди: обработка — +400 мс
     clickAt(btn, 20_100)
+    const first = pm().confirmPlacement()
+    const second = pm().confirmPlacement()                  // второй Enter / клик до конца первого
+    expect(await first).toBe(true)
+    expect(await second).toBe(false)
     await expectCubes(1)
+  })
+
+  it('клик, поставить, клик, поставить (через 300 мс) — две фигуры по очереди, ни одна не теряется', async () => {
+    const btn = mountPalette(place)
+    clickAt(btn, 30_000)
+    const a = pm().confirmPlacement()                        // стор занят первым кубом
+    clickAt(btn, 30_300)
+    const b = pm().confirmPlacement()                        // ждёт очереди
+    expect([await a, await b]).toEqual([true, true])
+    await expectCubes(2)
     expect(notes()).toEqual([])
-  })
-
-  it('быстрый CPU (время клика ≈ время обработки): 100 мс — одна, 300 мс — ещё одна', async () => {
-    const btn = mountPalette(createShapeClickHandler())
-    const t0 = performance.now()
-    clickAt(btn, t0)
-    clickAt(btn, t0 + 100)                                  // двойной клик
-    await expectCubes(1)
-    clickAt(btn, t0 + 1000)
-    clickAt(btn, t0 + 1300)                                 // осознанный второй клик
-    await expectCubes(3)
-  })
-
-  it('палитра передаёт event.timeStamp; решение — по нему, часы обработки не читаются', () => {
-    const got: Array<[ShapeType, number]> = []
-    const btn = mountPalette((type, at) => { got.push([type, at]) })
-    clickAt(btn, 777.5)
-    expect(got).toEqual([['cube', 777.5]])
-
-    // фильтр: время обработки (handledAt) не совпадает с временем клика — решает время клика
-    const handledAt = vi.fn(() => 5000)
-    const gate = createAddShapeGate(handledAt)
-    expect(gate('cube', 1000)).toBe(true)
-    expect(gate('cube', 1300)).toBe(true)                   // обработаны в один момент — обе
-    expect(gate('cube', 1400)).toBe(false)                  // 100 мс от принятого
-    expect(gate('sphere', 1410)).toBe(true)                 // другая фигура — независимо
-    expect(handledAt).not.toHaveBeenCalled()
-  })
-
-  it('событие без времени (timeStamp 0) — запасные часы; время раньше прошлого (другие часы) — клик принят', () => {
-    let now = 1000
-    const gate = createAddShapeGate(() => now)
-    expect(gate('cube', 0)).toBe(true)                      // запасные часы: 1000
-    now = 1100; expect(gate('cube', 0)).toBe(false)         // 100 мс — двойной клик
-    now = 1300; expect(gate('cube', Number.NaN)).toBe(true) // 300 мс
-    expect(gate('cube', 50)).toBe(true)                     // 50 < 1300: часы не те — не отбрасываем
   })
 })
 

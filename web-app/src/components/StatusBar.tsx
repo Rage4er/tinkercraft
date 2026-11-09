@@ -3,6 +3,27 @@ import { APP_VERSION } from "../constants";
 import { useAlignModeStore, alignHintKey } from "../store/align-mode";
 import { useCsgGroupModeStore, groupBOf } from "../store/csg-group-mode";
 import { useDocumentStore } from "../store/document-store";
+import { usePlacementModeStore, type PlacementModeState } from "../store/placement-mode";
+import { AXIS_PLANE_NAME } from "../store/placement";
+import { displayName } from "./ComponentTree";
+import type { SceneObject } from "../csg/types";
+
+type TFn = (key: string, opts?: Record<string, unknown>) => string;
+
+/** Число для подсказки: без лишних нулей и «−0». */
+const fmt = (v: number) => String(Math.round(v * 100) / 100 + 0);
+
+/** PLUG-AND-PLAY: где встанет фигура — плоскость и место (или «рядом с прошлыми» без превью). */
+function placementWhere(m: PlacementModeState, objects: Record<string, SceneObject>, t: TFn): string {
+  const p = m.preview;
+  if (!p) return t(m.lock ? "placement.whereAxisOnly" : "placement.whereDefault", { plane: m.lock ? AXIS_PLANE_NAME[m.lock] : "" });
+  const plane = p.plane.kind === "face"
+    ? t("placement.planeFace", { name: objects[p.plane.objectId] ? displayName(objects[p.plane.objectId], t) : p.plane.objectId })
+    : p.plane.kind === "axis"
+      ? t("placement.planeAxis", { plane: AXIS_PLANE_NAME[p.plane.axis], axis: p.plane.axis })
+      : t("placement.planeGrid");
+  return t("placement.where", { plane, x: fmt(p.transform.x), y: fmt(p.transform.y), z: fmt(p.transform.z) });
+}
 
 export default function StatusBar({
   workerOk,
@@ -37,6 +58,10 @@ export default function StatusBar({
   const objects = useDocumentStore((s) => s.objects);
   const busy = useDocumentStore((s) => s.busy);
   const csgB = csgMode ? groupBOf(csgMode, selectedIds, objects).length : 0;
+  // PLUG-AND-PLAY: режим размещения — подсказка, плоскость и место, «Поставить» (= Enter), «Отмена» (= Esc)
+  const placement = usePlacementModeStore((s) => s.placementMode);
+  const confirmPlacement = usePlacementModeStore((s) => s.confirmPlacement);
+  const cancelPlacement = usePlacementModeStore((s) => s.cancelPlacement);
   const currentLang = i18n.language?.startsWith("ru") ? "ru" : "en";
   const toggleLanguage = () => {
     const next = currentLang === "en" ? "ru" : "en";
@@ -49,6 +74,40 @@ export default function StatusBar({
       role="status"
       aria-live="polite"
     >
+      {placement && (
+        <span
+          className="status-item status-csg-mode status-placement"
+          data-testid="placement-mode"
+          data-shape={placement.shapeType}
+          data-plane={placement.preview ? (placement.preview.plane.kind === "axis" ? placement.preview.plane.axis : placement.preview.plane.kind) : ""}
+          data-lock={placement.lock ?? ""}
+        >
+          <span className="status-csg-hint" data-testid="placement-hint">
+            {t("placement.hint", { shape: t(`shapesAcc.${placement.shapeType}`) })}
+          </span>
+          <span className="status-placement-where" data-testid="placement-where">
+            {placementWhere(placement, objects, t)}
+          </span>
+          <button
+            type="button"
+            className="btn btn-compact status-btn primary"
+            data-testid="placement-ok"
+            title={t("placement.okTip")}
+            onClick={() => void confirmPlacement()}
+          >
+            {t("placement.ok")}
+          </button>
+          <button
+            type="button"
+            className="btn btn-compact status-btn"
+            data-testid="placement-cancel"
+            title={t("placement.cancelTip")}
+            onClick={() => cancelPlacement()}
+          >
+            {t("actions.cancel")}
+          </button>
+        </span>
+      )}
       {csgMode && (
         <span className="status-item status-csg-mode" data-testid="csg-mode" data-operation={csgMode.operation}>
           <span className="status-csg-hint" data-testid="csg-mode-hint">

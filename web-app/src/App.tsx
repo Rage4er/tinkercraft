@@ -25,7 +25,8 @@ import { isWorkerReady } from "./csg/worker-client";
 import { SNAP_VALUES } from "./constants";
 import { useAutosave } from "./hooks/useAutosave";
 import { addTextObject } from "./store/add-text";
-import { createShapeClickHandler } from "./store/add-shape-queue";
+import { usePlacementModeStore } from "./store/placement-mode";
+import { usePlacementMode } from "./hooks/usePlacementMode";
 import { resolveHotkey, NO_REPEAT, mirrorPlaneOf, csgOpOf, isTextEntry, tabTogglesCamera } from "./hotkeys";
 import { useSelectedChildGuard } from "./hooks/useSelectedChildGuard";
 import { useSelectedStepGuard } from "./hooks/useSelectedStepGuard";
@@ -296,10 +297,10 @@ export default function App() {
     if (await addTextObject(textInput, { size: textSize, depth: textDepth })) setShowTextModal(false);
   }, [textInput, textSize, textDepth]);
 
-  // UX-AUDIT-9: клик по фигуре — двойной клик (<200 мс) даёт одну фигуру, позже — ещё одну
-  // (клик во время занятого стора ждёт очереди, а не теряется). DOUBLE-CLICK-TIMING: интервал —
-  // по времени кликов (event.timeStamp), а не обработки
-  const handleAddShape = useMemo(() => createShapeClickHandler(), []);
+  // PLUG-AND-PLAY: клик по фигуре палитры — режим размещения (превью → клик по грани / сетке,
+  // X / Y / Z — плоскость оси, Enter — поставить, Esc / правый клик — отмена)
+  const handleAddShape = usePlacementModeStore((s) => s.startPlacement);
+  usePlacementMode(showTextModal || showPM || showClearConfirm);
 
   // Фаза 9.1: сброс выбора ребёнка CSG, если узел/выделение исчезли
   useSelectedChildGuard();

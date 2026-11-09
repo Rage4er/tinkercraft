@@ -20,7 +20,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { createRequire } from 'node:module'
-import { openApp, panelButton, toolbarButton, findAlignFace, spaceShapeClick, assertPerf, waitToastsSettled, csgAB } from './helpers.mjs'
+import { openApp, panelButton, toolbarButton, findAlignFace, assertPerf, waitToastsSettled, csgAB, placeShape } from './helpers.mjs'
 
 const JSZip = createRequire(import.meta.url)('jszip')
 const shotDir = process.argv[2]
@@ -63,8 +63,7 @@ async function session(size) {
   const blur = () => page.evaluate(() => document.activeElement?.blur())
   const add = async (label) => {
     const b = new Set(await ids())
-    await spaceShapeClick(page, label)
-    await page.getByText(label, { exact: true }).first().click()
+    await placeShape(page, label)
     await waitRows(b.size + 1)
     return (await ids()).find((i) => !b.has(i))
   }

@@ -439,6 +439,13 @@ body {
   cursor: not-allowed;
 }
 
+/* PLUG-AND-PLAY: фигура, которая сейчас размещается */
+.shape-btn.active {
+  background: var(--bg-selected);
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
 .shape-icon {
   font-size: 20px;
   line-height: 1;
@@ -994,6 +1001,17 @@ body {
   align-items: center;
   gap: 6px;
   color: var(--accent-yellow);
+}
+
+/* PLUG-AND-PLAY: режим размещения — как режим CSG, свой цвет; место — моноширинно */
+.status-item.status-placement {
+  color: var(--accent);
+}
+
+.status-placement-where {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  opacity: 0.9;
 }
 
 .status-csg-hint {
