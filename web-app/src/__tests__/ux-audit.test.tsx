@@ -434,14 +434,13 @@ describe('UX-AUDIT-8 — целое поле «Граней» без «.0»', ()
 describe('UX-AUDIT-9 — двойной клик по фигуре: <200 мс — одна, позже — две', () => {
   it('фильтр: повтор той же фигуры через 100 мс отброшен, через 300 мс — принят; разные фигуры независимы', () => {
     expect(ADD_SHAPE_DEBOUNCE_MS).toBe(200)
-    let now = 0
-    const gate = createAddShapeGate(() => now)
-    expect(gate('cube')).toBe(true)
-    now = 100; expect(gate('cube')).toBe(false)            // случайный двойной клик
-    now = 110; expect(gate('sphere')).toBe(true)           // другая фигура — не мешает
-    now = 300; expect(gate('cube')).toBe(true)             // осознанный второй клик
-    now = 450; expect(gate('cube')).toBe(false)            // тройной 300/450/600: отсчёт от принятого
-    now = 600; expect(gate('cube')).toBe(true)
+    const gate = createAddShapeGate()                      // время — клика (DOUBLE-CLICK-TIMING)
+    expect(gate('cube', 1000)).toBe(true)
+    expect(gate('cube', 1100)).toBe(false)                 // случайный двойной клик
+    expect(gate('sphere', 1110)).toBe(true)                // другая фигура — не мешает
+    expect(gate('cube', 1300)).toBe(true)                  // осознанный второй клик
+    expect(gate('cube', 1450)).toBe(false)                 // тройной 300/450/600: отсчёт от принятого
+    expect(gate('cube', 1600)).toBe(true)
   })
   it('клик во время занятого стора не теряется: фигуры добавляются по очереди, когда стор свободен', async () => {
     useDocumentStore.setState({ busy: true })              // идёт долгая операция (CSG)

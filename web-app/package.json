@@ -31,7 +31,8 @@
     "e2e:ux-audit-7": "node e2e/ux-audit-7.mjs",
     "e2e:align-plane-resolve": "node e2e/align-plane-resolve.mjs",
     "e2e:n-ary-csg": "node e2e/n-ary-csg.mjs",
-    "e2e:csg-group-fix": "node e2e/csg-group-fix.mjs"
+    "e2e:csg-group-fix": "node e2e/csg-group-fix.mjs",
+    "e2e:double-click-timing": "node e2e/double-click-timing.mjs"
   },
   "dependencies": {
     "i18next": "^26.3.6",

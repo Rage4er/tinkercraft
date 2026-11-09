@@ -14,7 +14,7 @@
 - **manifold-3d** (WASM) — CSG операции в Web Worker
 - **Zustand 5** — стейт-менеджмент
 - **Vite 6** — сборка
-- **Vitest 4** — тесты (899 тестов, 72 файла; `it.fails` открытых багов нет — UX-прогон 7 нашёл 0 новых, цикл закрыт; UX-AUDIT-1…10 исправлены в `fix-all`, 11…20 — в `fix-all-2`, 21…31 — в `fix-all-3`, 32…35 — в `fix-all-4`, 32-followup и 36…40 — в `fix-all-5`, 41, 42 — в `fix-all-6`)
+- **Vitest 4** — тесты (906 тестов, 73 файла; `it.fails` открытых багов нет — UX-прогон 7 нашёл 0 новых, цикл закрыт; UX-AUDIT-1…10 исправлены в `fix-all`, 11…20 — в `fix-all-2`, 21…31 — в `fix-all-3`, 32…35 — в `fix-all-4`, 32-followup и 36…40 — в `fix-all-5`, 41, 42 — в `fix-all-6`)
 - **pnpm** — пакетный менеджер
 
 ## Команды
@@ -23,7 +23,7 @@
 cd web-app
 pnpm dev          # dev-сервер (порт 5000)
 pnpm build        # production-сборка
-pnpm test         # запуск тестов (899 тестов, 72 файла)
+pnpm test         # запуск тестов (906 тестов, 73 файла)
 pnpm typecheck    # tsc --noEmit
 pnpm e2e:smoke    # дымовой тест в браузере (Playwright; нужен запущенный pnpm dev; см. web-app/e2e/helpers.mjs). В CI все e2e — job `e2e` в ci-web.yml (CI-E2E)
 pnpm e2e:tree     # Фаза 9.1: раскрытие CSG в дереве, выбор ребёнка
@@ -46,6 +46,7 @@ pnpm e2e:align-obb  # ALIGN-REVIT: режимом «Выровнять» — п�
 pnpm e2e:align-plane-resolve  # ALIGN-PLANE-RESOLVE: режим «Выровнять» → шаг align («Выровнять по грани», ✎ нет) → правка «Переместить» якоря до выравнивания → снова заподлицо; undo/redo, .3dtc; призма с поворотом; плоскость по оси
 pnpm e2e:n-ary-csg  # N-ARY-CSG: 10 кубов → «Объединение» → один CSG, 10 детей плоско, правка 5-го ребёнка, undo/redo; A (5) → «Вычитание» → B (5) → Enter / «Пересечение» → «ОК» → один CSG с группами A и B; 31 куб → предупреждение «много объектов», CSG создан
 pnpm e2e:csg-group-fix  # CSG-GROUP-FIX: кнопок групп нет; A (5) → «Вычитание» → режим (статус-бар «A: 5, B: 0», метки «A») → B → Esc — без изменений; X → B → Enter / «Пересечение» → «ОК» / кнопка ещё раз → один CSG; «Объединение» — сразу
+pnpm e2e:double-click-timing  # DOUBLE-CLICK-TIMING: главный поток занят → клики через 300 мс (в очереди, обработаны подряд) — две фигуры, через 100 мс — одна; долгая задача после клика → 100 мс — одна; без нагрузки 100 / 300 мс; палитра на месте до 14 фигур (история прокручивает только свой список)
 ```
 
 ## Текущий статус
@@ -105,7 +106,7 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 | `src/store/notifications.ts` | Toast-уведомления (замена alert) |
 | `src/store/add-text.ts` | 3D-текст в сцену (`addTextObject`): меш `io/text-mesh.ts`, имя «Текст: …», ошибка → уведомление (UX-AUDIT-3/6/10) |
 | `src/store/text-object.ts` | 3D-текст как объект (UX-AUDIT-31): `textOfOp` (строка текста шага `import_mesh`: поле `text`, у старых — по id `txt_N` и имени), `isTextObject` — история «Добавить текст: …», «Тип: Текст», иконка текста; `textsByObjectId`/`textOfNode` — текст запечённых узлов дерева CSG по истории (import_mesh с текстом, зеркальные копии, узлы копий CSG — UX-AUDIT-34); `defaultTextName` — имя по умолчанию «Текст: …» → строка, `displayName` показывает его на языке интерфейса (UX-AUDIT-36) |
-| `src/store/add-shape-queue.ts` | Клик по фигуре палитры (UX-AUDIT-9): повтор той же фигуры <200 мс отбрасывается, позже — ждёт освобождения стора (`createAddShapeGate`, `addShapeWhenIdle`) |
+| `src/store/add-shape-queue.ts` | Клик по фигуре палитры (UX-AUDIT-9): повтор той же фигуры <200 мс отбрасывается, позже — ждёт освобождения стора (`createAddShapeGate`, `addShapeWhenIdle`); интервал — по времени клика `event.timeStamp`, не обработки (`createShapeClickHandler(type, at)` — обработчик App, DOUBLE-CLICK-TIMING) |
 | `src/store/mirror-store.ts` | Store для зеркальных операций; зеркало CSG — независимая копия дерева (`copySubtree` с плоскостью) |
 | **CSG / Build Tree** | |
 | `src/csg/history-tree.ts` | **Build Tree** — параметрическое дерево (primitive/boolean/baked; boolean — N детей + `groupA`, `createBooleanNode(id, op, childIds, transform?, groupA?)`, N-ARY-CSG), `rebuildNode`, `mirrorNodeRecursive`, `cloneSubtree`; независимая копия CSG (`copySubtree`, `snapshotSubtree`, `instantiateSubtree`, id узлов `${idКопии}:${idИсточника}`); у boolean-узла `originTransform` (TRS₀ — система листьев; вложенный boolean воркер переносит на `Mat(localTransform)·Mat(originTransform)⁻¹`, NESTED-MOVED-EDIT) |
@@ -149,7 +150,8 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 | `src/components/StatusBar.tsx` | Статус-бар |
 | `src/components/NumInput.tsx` | Numeric input с draft-редактированием; единица по умолчанию — «мм»/«mm» по языку; `integer` — целое поле (UX-AUDIT-7/8) |
 | `src/components/Section.tsx` | Collapsible section |
-| `src/components/Timeline.tsx` | История операций + opIcon/opLabel; `filterKeyOf` — категория шага для фильтра («Вставить», «Повернуть», «Масштаб» — UX-AUDIT-29); подпись правки шага move — группы, которые правка меняет: сдвиг / поворот / масштаб (UX-AUDIT-40) |
+| `src/components/Timeline.tsx` | История операций + opIcon/opLabel; `filterKeyOf` — категория шага для фильтра («Вставить», «Повернуть», «Масштаб» — UX-AUDIT-29); подпись правки шага move — группы, которые правка меняет: сдвиг / поворот / масштаб (UX-AUDIT-40); к текущему шагу прокручивается только `.tl-list`, не левая панель (`scrollListToItem`, DOUBLE-CLICK-TIMING) |
+| `src/components/list-scroll.ts` | `scrollListToItem` — прокрутить список к элементу (как `block: 'nearest'`) без прокрутки предков; `scrollIntoView` двигал `.panel-left` — палитра уезжала из-под курсора (DOUBLE-CLICK-TIMING) |
 | **IO** | |
 | `src/io/stl-import.ts` | Импорт STL (бинарный + ASCII) |
 | `src/io/stl-export.ts` | Экспорт в бинарный STL |
@@ -288,7 +290,7 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 
 - Импортированные меши (STL) не параметризуются (IMPORT-MESH-PARAMETRIC: не требуется); трансформации и CSG работают — CSG допускает замкнутый STL (проверка по manifold в воркере, IMPORT-MESH-CSG), незамкнутый → уведомление `errors.csgNonManifold`; «починка» незамкнутого меша не делается; старые extrude без `group.source` не редактируются как extrude (EXTRUDE-LEGACY: не мигрируем); `extrudeSelected` — движок правки 9.5.4, не UI-инструмент: это «растянуть по оси», а не extrude 2D→3D, кнопку не возвращать (EXTRUDE-3D-SCALE; настоящий extrude — Фаза 11)
 - Скругления (fillet) нет: прежний параметр куба удалён (remove-fillet) до инструмента на B-Rep; старые шаги `fillet` вырезаются при загрузке (`io/legacy-fillet.ts`) — новых не создавать
-- После v1.3.1 открыто: связанное зеркало (linked mirror) не делали — копия CSG всегда независимая; «починка» незамкнутого STL. CI — один workflow `ci-web.yml` (CI-DEDUP ✅): job `ci` (install + typecheck + test + build) и job `e2e` — все 21 e2e (CI-E2E ✅)
+- После v1.3.1 открыто: связанное зеркало (linked mirror) не делали — копия CSG всегда независимая; «починка» незамкнутого STL. CI — один workflow `ci-web.yml` (CI-DEDUP ✅): job `ci` (install + typecheck + test + build) и job `e2e` — все 22 e2e (CI-E2E ✅)
 - Выравнивание режимом «Выровнять» (ALIGN-UI-REVIT) пишется шагом `align` с плоскостью (ALIGN-PLANE-RESOLVE ✅; с поворотом — UX-AUDIT-32; грань гладкой поверхности — цилиндр, сфера — не поворачивает, только касание): правка прошлого шага пересчитывает его; ✎ у самого шага нет (как у обычного align). Плоскость A следует за системой объекта A (TRS), а не за гранью при правке формы A (правка ребёнка CSG A)
 - Дерево живой сессии, начатой до v1.3.2 (boolean-узлы без `originTransform`), для вложенного CSG, сдвинутого до объединения, остаётся под замком `nested_moved` (предохранитель); после перезагрузки/загрузки проекта дерево перестраивается из истории с TRS₀ — правка работает
 - `.doodle` (legacy) в UI не открывается: `parseDoodle` не вызывается

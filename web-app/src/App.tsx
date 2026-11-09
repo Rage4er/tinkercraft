@@ -25,7 +25,7 @@ import { isWorkerReady } from "./csg/worker-client";
 import { SNAP_VALUES } from "./constants";
 import { useAutosave } from "./hooks/useAutosave";
 import { addTextObject } from "./store/add-text";
-import { createAddShapeGate, addShapeWhenIdle } from "./store/add-shape-queue";
+import { createShapeClickHandler } from "./store/add-shape-queue";
 import { resolveHotkey, NO_REPEAT, mirrorPlaneOf, csgOpOf, isTextEntry, tabTogglesCamera } from "./hotkeys";
 import { useSelectedChildGuard } from "./hooks/useSelectedChildGuard";
 import { useSelectedStepGuard } from "./hooks/useSelectedStepGuard";
@@ -35,7 +35,6 @@ import { useCsgGroupMode } from "./hooks/useCsgGroupMode";
 import type {
   TransformNR,
   ShapeParams,
-  ShapeType,
   CsgBooleanOp,
 } from "./csg/types";
 
@@ -298,14 +297,9 @@ export default function App() {
   }, [textInput, textSize, textDepth]);
 
   // UX-AUDIT-9: клик по фигуре — двойной клик (<200 мс) даёт одну фигуру, позже — ещё одну
-  // (клик во время занятого стора ждёт очереди, а не теряется)
-  const addShapeGate = useMemo(() => createAddShapeGate(), []);
-  const handleAddShape = useCallback(
-    (type: ShapeType) => {
-      if (addShapeGate(type)) void addShapeWhenIdle(type);
-    },
-    [addShapeGate],
-  );
+  // (клик во время занятого стора ждёт очереди, а не теряется). DOUBLE-CLICK-TIMING: интервал —
+  // по времени кликов (event.timeStamp), а не обработки
+  const handleAddShape = useMemo(() => createShapeClickHandler(), []);
 
   // Фаза 9.1: сброс выбора ребёнка CSG, если узел/выделение исчезли
   useSelectedChildGuard();

@@ -10,23 +10,40 @@
 //    двойной клик, отбрасывается (без уведомления);
 //  • позже — ещё одна фигура: если стор занят, клик ждёт освобождения (до ADD_SHAPE_WAIT_MS),
 //    фигуры добавляются по очереди, ни одна не теряется.
+// DOUBLE-CLICK-TIMING: интервал меряется между МОМЕНТАМИ КЛИКОВ (`event.timeStamp`), а не между
+// моментами обработки (`performance.now()` в обработчике). На медленном CPU главный поток занят
+// (кадр, сборка фигуры) — клики ждут в очереди и обрабатываются позже и неравномерно: клики через
+// 300 мс обрабатывались подряд (слипались в один), а двойной клик через 100 мс — с разрывом > 200 мс
+// (давал две фигуры). Время клика браузер ставит при вводе — от занятости потока не зависит.
 
 import type { ShapeType } from '../csg/types'
 import { ADD_SHAPE_DEBOUNCE_MS, ADD_SHAPE_WAIT_MS } from '../constants'
 import { useDocumentStore } from './document-store'
 
 /**
- * Фильтр двойного клика: true — клик принять. Отсчёт — от последнего ПРИНЯТОГО клика той же
- * фигуры (тройной клик 0 / 150 / 300 мс → две фигуры). Разные фигуры не мешают друг другу.
+ * Фильтр двойного клика: true — клик принять. `at` — время клика (`event.timeStamp`, мс), не время
+ * обработки. Отсчёт — от последнего ПРИНЯТОГО клика той же фигуры (тройной клик 0 / 150 / 300 мс →
+ * две фигуры). Разные фигуры не мешают друг другу. `now` — запасные часы, только если у события нет
+ * времени (`at` не > 0); время раньше прошлого клика (другие часы) — клик принимается.
  */
-export function createAddShapeGate(now: () => number = () => performance.now()): (type: ShapeType) => boolean {
+export function createAddShapeGate(now: () => number = () => performance.now()): (type: ShapeType, at: number) => boolean {
   const last = new Map<ShapeType, number>()
-  return (type) => {
-    const t = now()
+  return (type, at) => {
+    const t = Number.isFinite(at) && at > 0 ? at : now()
     const prev = last.get(type)
-    if (prev !== undefined && t - prev < ADD_SHAPE_DEBOUNCE_MS) return false
+    if (prev !== undefined && t >= prev && t - prev < ADD_SHAPE_DEBOUNCE_MS) return false
     last.set(type, t)
     return true
+  }
+}
+
+/**
+ * Обработчик клика по фигуре палитры (App → LeftPanel): фильтр двойного клика по времени клика,
+ * принятый клик — фигура, когда стор свободен (`addShapeWhenIdle`).
+ */
+export function createShapeClickHandler(gate = createAddShapeGate()): (type: ShapeType, at: number) => void {
+  return (type, at) => {
+    if (gate(type, at)) void addShapeWhenIdle(type)
   }
 }
 

@@ -5,6 +5,7 @@ import { effectivePatches, applyStepPatch } from "../store/project-history";
 import { textOfOp } from "../store/text-object";
 import { isStepEditable } from "../store/edit-step";
 import { fmtVec, fmtNum } from "./StepPanel";
+import { scrollListToItem } from "./list-scroll";
 import {
   CubeIcon,
   SphereIcon,
@@ -259,11 +260,12 @@ export default function Timeline({
 }) {
   const { t } = useTranslation();
   const listRef = useRef<HTMLDivElement>(null);
+  // DOUBLE-CLICK-TIMING: прокручивается только список истории, не вся левая панель
+  // (scrollIntoView двигал .panel-left — палитра уезжала из-под курсора)
   useEffect(() => {
-    if (!listRef.current) return;
-    listRef.current
-      .querySelector(".tl-item.current")
-      ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    const list = listRef.current;
+    const current = list?.querySelector<HTMLElement>(".tl-item.current");
+    if (list && current) scrollListToItem(list, current);
   }, [historyIndex]);
 
   // PERF-R8-4: Мемоизация вычисления видимых операций

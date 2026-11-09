@@ -34,7 +34,8 @@ export default function LeftPanel({
   onShapeSearchChange: (v: string) => void;
   workerOk: boolean;
   busy: boolean;
-  onAddShape: (type: ShapeType) => void;
+  /** `at` — время клика (`event.timeStamp`), фильтр двойного клика (DOUBLE-CLICK-TIMING) */
+  onAddShape: (type: ShapeType, at: number) => void;
   onShowTextModal: () => void;
   objectList: SceneObject[];
   selSet: Set<string>;
@@ -87,12 +88,13 @@ export default function LeftPanel({
               key={s.type}
               className="shape-btn"
               title={t('leftPanel.addShape', { label: t(`shapesAcc.${s.type}`) })}
-              // UX-AUDIT-9: не блокируется на время busy — клик ждёт очереди (add-shape-queue)
+              // UX-AUDIT-9: не блокируется на время busy — клик ждёт очереди (add-shape-queue);
+              // DOUBLE-CLICK-TIMING: время клика — от события, а не от обработки
               disabled={!workerOk}
-              onClick={() =>
+              onClick={(e) =>
                 s.type === "text"
                   ? onShowTextModal()
-                  : onAddShape(s.type as ShapeType)
+                  : onAddShape(s.type as ShapeType, e.nativeEvent.timeStamp)
               }
             >
               <span className="shape-icon">{s.icon({ size: 32 })}</span>
