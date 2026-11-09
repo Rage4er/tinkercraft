@@ -7,6 +7,7 @@ import IconButton from "./IconButton";
 import { useTranslation } from "react-i18next";
 import { TOOLTIP_DATA } from "../constants";
 import { UnionIcon, SubtractIcon, IntersectIcon } from "./icons";
+import type { CsgOpButtonStates } from "../store/csg-group-mode";
 
 type CsgOp = "union" | "subtract" | "intersect";
 
@@ -15,15 +16,19 @@ export default function CsgButtons({
   onCsg,
   variant = "compact",
   maxRows,
-  extra,
+  opStates,
 }: {
   disabled: boolean;
   onCsg: (op: CsgOp) => void;
   variant?: "compact" | "full";
   /** Количество строк для группы (из алгоритма layout) */
   maxRows?: number;
-  /** N-ARY-CSG: строка под кнопками (группы A/B) — только `full` */
-  extra?: React.ReactNode;
+  /**
+   * CSG-GROUP-FIX: доступность и «нажатость» каждой операции (`csgButtonStates`):
+   * объединение — от 2 выбранных, вычитание / пересечение — от 1 (режим A → B → Enter),
+   * в режиме кнопка его операции нажата. Нет — все по общему `disabled`.
+   */
+  opStates?: CsgOpButtonStates;
 }) {
   const { t } = useTranslation();
   const ops: { op: CsgOp; icon: React.ReactNode; labelKey: string; tooltipKey: string }[] = [
@@ -31,6 +36,9 @@ export default function CsgButtons({
     { op: "subtract", icon: <SubtractIcon size={32} />, labelKey: "csg.subtract", tooltipKey: "csg_subtract" },
     { op: "intersect", icon: <IntersectIcon size={32} />, labelKey: "csg.intersect", tooltipKey: "csg_intersect" },
   ];
+
+  const isDisabled = (op: CsgOp) => disabled || (opStates?.[op].disabled ?? false);
+  const variantOf = (op: CsgOp) => (opStates?.[op].active ? "active" : "primary");
 
   // Распределяем кнопки по строкам
   const rows = maxRows ?? 1;
@@ -56,14 +64,13 @@ export default function CsgButtons({
                 icon={icon}
                 label={t(labelKey)}
                 onClick={() => onCsg(op)}
-                disabled={disabled}
+                disabled={isDisabled(op)}
                 tooltip={TOOLTIP_DATA[tooltipKey]}
-                buttonVariant="primary"
+                buttonVariant={variantOf(op)}
               />
             ))}
           </div>
         ))}
-        {extra}
       </div>
     );
   }
@@ -77,9 +84,9 @@ export default function CsgButtons({
               key={op}
               icon={icon}
               onClick={() => onCsg(op)}
-              disabled={disabled}
+              disabled={isDisabled(op)}
               tooltip={TOOLTIP_DATA[tooltipKey]}
-              buttonVariant="primary"
+              buttonVariant={variantOf(op)}
             />
           ))}
         </div>

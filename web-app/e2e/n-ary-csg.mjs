@@ -2,14 +2,14 @@
 //  A. 10 кубов → выделить все → «Объединение» → ОДИН объект, в дереве 10 детей плоским списком
 //     (без вложенных CSG, без заголовков групп, без замков), уведомлений нет; правка ширины
 //     5-го ребёнка (9.2/9.3) → W30 в дереве, шаг истории; undo/redo (правка, CSG).
-//  B. 5 кубов (A) + 5 сфер в их центрах (B) → «Группа A» (5) → «Группа B» (5) → «Вычитание» →
-//     ОДИН объект; в дереве «Группа A» (5 детей), «Группа B» (5 детей); уведомлений нет;
-//     undo → группы заново → «Пересечение» → ОДИН объект с теми же группами.
+//  B. 5 кубов (A) + 5 сфер в их центрах (B): выделить A → «Вычитание» → режим (метки «A»,
+//     CSG-GROUP-FIX) → выделить B → Enter → ОДИН объект; в дереве «Группа A» (5 детей),
+//     «Группа B» (5 детей); уведомлений нет; undo → A → «Пересечение» → B → «ОК» → то же.
 //  C. 31 куб → Ctrl+A → U → предупреждение «много объектов» (мягкий лимит 30), CSG создан: 31 ребёнок.
 // Ошибок консоли нет. Логика тех же сценариев в сторе — __tests__/n-ary-csg.test.ts (WASM).
 // Запуск: `pnpm dev` в одном терминале, `pnpm e2e:n-ary-csg` в другом.
 // Необязательный аргумент — путь для скриншота: `node e2e/n-ary-csg.mjs /tmp/n-ary.png`.
-import { openApp, panelButton, toolbarButton, spaceShapeClick } from './helpers.mjs'
+import { openApp, panelButton, toolbarButton, spaceShapeClick, csgModeStart, csgModeConfirm } from './helpers.mjs'
 
 const shot = process.argv[2]
 const { browser, page, errors } = await openApp()
@@ -149,15 +149,18 @@ try {
     await setField(B[i], 'num-input-pos-Y', p.Y)
     await setField(B[i], 'num-input-pos-Z', p.Z)
   }
-  const assignGroups = async () => {
+  // CSG-GROUP-FIX: выделил A → кнопка операции (панель: 5 выбранных) → режим → выделил B
+  const pickGroups = async (op) => {
     await select(A)
-    await page.locator('[data-testid=csg-group-a]').click()
-    await page.waitForFunction(() => document.querySelector('[data-testid=csg-group-a]')?.textContent === 'Группа A · 5', null, { timeout: 5000 })
+    await csgModeStart(page, op, 'panel')
+    const badgesA = await page.locator('[data-testid=ct-csg-group]').evaluateAll((els) => els.map((e) => e.getAttribute('data-group')).join(''))
+    if (badgesA !== 'aaaaa') fail('метки группы A в режиме: ' + badgesA)
     await select(B)
-    await page.locator('[data-testid=csg-group-b]').click()
-    await page.waitForFunction(() => document.querySelector('[data-testid=csg-group-b]')?.textContent === 'Группа B · 5', null, { timeout: 5000 })
+    const hint = await page.locator('[data-testid=csg-mode-hint]').textContent()
+    if (!hint.includes('(A: 5, B: 5)')) fail('подсказка режима: ' + hint)
     const badges = await page.locator('[data-testid=ct-csg-group]').evaluateAll((els) => els.map((e) => e.getAttribute('data-group')).sort().join(''))
     if (badges !== 'aaaaabbbbb') fail('метки групп в списке: ' + badges)
+    if ((await page.locator('[data-testid^=csg-group]').count()) !== 0) fail('кнопки групп в интерфейсе')
   }
   const checkGroupsTree = async (op) => {
     await waitRows(1)
@@ -170,19 +173,19 @@ try {
     if ((await page.locator('[data-testid=ct-csg-group]').count()) !== 0) fail(`${op}: метки групп остались после CSG`)
     await noToasts(op)
   }
-  await assignGroups()
-  await panelButton(page, 'Вычитание').click()
+  await pickGroups('subtract')
+  await csgModeConfirm(page)
   await checkGroupsTree('вычитание 5 vs 5')
-  console.log('✅ B. «Группа A» (5) → «Группа B» (5) → «Вычитание» → один CSG: «Группа A» 5 детей, «Группа B» 5 детей, без уведомлений')
+  console.log('✅ B. A (5) → «Вычитание» → B (5) → Enter → один CSG: «Группа A» 5 детей, «Группа B» 5 детей, без уведомлений')
 
   await page.locator('.props-header').click(); await blur()
   await page.keyboard.press('Control+z')
   await waitRows(10)
   stage = 'B. пересечение 5 vs 5'
-  await assignGroups()
-  await panelButton(page, 'Пересечение').click()
+  await pickGroups('intersect')
+  await csgModeConfirm(page, 'ok')
   await checkGroupsTree('пересечение 5 vs 5')
-  console.log('✅ B. undo → группы заново → «Пересечение» → один CSG с группами A и B')
+  console.log('✅ B. undo → A (5) → «Пересечение» → B (5) → «ОК» → один CSG с группами A и B')
 
   // ── C. мягкий лимит 30 ──
   stage = 'C. лимит 30'

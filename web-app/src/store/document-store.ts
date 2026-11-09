@@ -544,7 +544,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     if (get().busy) return
     const { selectedIds, objects, operations, historyIndex } = get()
     // N-ARY-CSG: union — N выбранных → ОДИН CSG с N детьми (плоско, без вложенности);
-    // subtract/intersect — union(A) op union(B), группы — кнопками «Группа A»/«Группа B»
+    // subtract/intersect — union(A) op union(B), группы — из режима A → B → Enter (CSG-GROUP-FIX)
     // (иначе A — первый выбранный, B — остальные; ровно 2 — прежний бинарный a op b).
     const operands = resolveCsgOperands(selectedIds, groups, objects)
     if (!operands) return

@@ -3,26 +3,23 @@
 // ============================================================
 //
 // Какие объекты и в каком порядке идут в одну CSG-операцию:
-//   union              — все выбранные (или группы A ∪ B) → ОДИН CSG, N детей;
+//   union              — все выбранные → ОДИН CSG, N детей;
 //   subtract/intersect — union(A) op union(B) → ОДИН CSG, группы A и B — его дети.
-// Группы задаёт пользователь кнопками «Группа A» / «Группа B» (ui-store `csgGroups`):
+// Группы A/B приходят из режима «A → B → Enter» (`csg-group-mode.ts`, CSG-GROUP-FIX):
 //   - обе заданы             → A и B;
 //   - задана одна            → вторая — текущее выделение без неё;
 //   - ни одной, выбрано ≥ 2  → A — первый выбранный, B — остальные (бинарный случай:
-//                              ровно 2 → a op b, как раньше).
-// Мёртвые id (объект поглощён, удалён, undo) отбрасываются. Нечего считать → null
-// (кнопки неактивны), простые сценарии уведомлением не отклоняются.
+//                              ровно 2 → a op b, как раньше; так считает `csgBoolean` без групп).
+// Мёртвые id (объект поглощён, удалён, undo) отбрасываются. Нечего считать → null.
 // ============================================================
 
 import type { SceneObject } from '../csg/types'
 
-/** Группы A/B для subtract/intersect (ui-store). */
+/** Группы A/B для subtract/intersect (режим `csg-group-mode`). */
 export interface CsgGroups {
   a: string[]
   b: string[]
 }
-
-export const EMPTY_CSG_GROUPS: CsgGroups = { a: [], b: [] }
 
 /** Операнды одной CSG-операции: `ids[0..groupA)` — группа A, остальные — B. */
 export interface CsgOperands {
@@ -30,7 +27,8 @@ export interface CsgOperands {
   groupA: number
 }
 
-const uniqueAlive = (ids: readonly string[], objects: Record<string, SceneObject>): string[] => {
+/** Id без повторов и без исчезнувших объектов (порядок сохраняется). */
+export function uniqueAlive(ids: readonly string[], objects: Record<string, SceneObject>): string[] {
   const seen = new Set<string>()
   const out: string[] = []
   for (const id of ids) {
@@ -70,13 +68,4 @@ export function resolveCsgOperands(
   }
   if (a.length === 0 || b.length === 0) return null
   return { ids: [...a, ...b], groupA: a.length }
-}
-
-/** Назначить выделение группой `which` (снимает эти объекты с другой группы). */
-export function assignCsgGroup(groups: CsgGroups, which: 'a' | 'b', ids: readonly string[]): CsgGroups {
-  const set = new Set(ids)
-  const next = [...set]
-  return which === 'a'
-    ? { a: next, b: groups.b.filter((id) => !set.has(id)) }
-    : { a: groups.a.filter((id) => !set.has(id)), b: next }
 }

@@ -32,6 +32,7 @@ import {
 } from './icons'
 import { isTextObject, textsByObjectId, textOfNode, defaultTextName } from '../store/text-object'
 import { useDocumentStore } from '../store/document-store'
+import { useCsgGroupModeStore } from '../store/csg-group-mode'
 
 interface Props {
   objects: SceneObject[]
@@ -93,13 +94,15 @@ export default function ComponentTree({ objects, selectedIds, onSelect, onRename
   const expanded = useUiStore((s) => s.expandedTreeIds)
   const toggleExpanded = useUiStore((s) => s.toggleTreeExpanded)
   const selectedChild = useUiStore((s) => s.selectedChild)
-  const csgGroups = useUiStore((s) => s.csgGroups)
+  // CSG-GROUP-FIX: режим вычитания / пересечения — «A» у зафиксированной группы, «B» у выделения
+  const csgGroupMode = useCsgGroupModeStore((s) => s.csgGroupMode)
   const groupOfId = useMemo(() => {
     const m = new Map<string, 'a' | 'b'>()
-    for (const id of csgGroups.b) m.set(id, 'b')
-    for (const id of csgGroups.a) m.set(id, 'a')
+    if (!csgGroupMode) return m
+    for (const id of selectedIds) m.set(id, 'b')
+    for (const id of csgGroupMode.groupA) m.set(id, 'a')
     return m
-  }, [csgGroups])
+  }, [csgGroupMode, selectedIds])
   const setSelectedChild = useUiStore((s) => s.setSelectedChild)
   // UX-AUDIT-34: какие запечённые дети CSG — 3D-текст (по истории; объект-текст поглощён CSG)
   const operations = useDocumentStore((s) => s.operations)
@@ -296,7 +299,7 @@ export default function ComponentTree({ objects, selectedIds, onSelect, onRename
                 </span>
               )}
 
-              {/* N-ARY-CSG: объект назначен группой A/B для вычитания/пересечения */}
+              {/* CSG-GROUP-FIX: объект — в группе A / B режима вычитания / пересечения */}
               {group && (
                 <span className="ct-csg-group" data-testid="ct-csg-group" data-group={group} title={t(group === 'a' ? 'csg.groupA' : 'csg.groupB')}>
                   {group === 'a' ? 'A' : 'B'}

@@ -30,12 +30,13 @@
     "result": "CSG result",
     "operations": "CSG operations",
     "groupA": "Group A",
-    "groupB": "Group B",
-    "groupATip": "Assign the selected objects to group A (the one subtracted from / intersected)",
-    "groupBTip": "Assign the selected objects to group B (subtracted from A / intersected with A)",
-    "groupsClear": "Clear groups A and B",
-    "groupsHint": "Subtract and intersect: the first selected object against the rest. For groups use “Group A”, “Group B”.",
-    "groupsHintActive": "Subtract and intersect: group A against group B (the selection, if B is not set)."
+    "groupB": "Group B"
+  },
+  "csgMode": {
+    "hint": "{{op}}: select the second group (A: {{a}}, B: {{b}}). Enter — OK, Esc — cancel",
+    "ok": "OK",
+    "okTip": "Apply: group A and the selected objects (B) → one CSG (Enter)",
+    "cancelTip": "Leave without changes (Esc)"
   },
   "mirror": {
     "title": "Mirror",
@@ -393,8 +394,8 @@
     "mirrorXz": "Mirrors the object relative to the XZ plane",
     "mirrorXy": "Mirrors the object relative to the XY plane",
     "csgUnion": "Combines the selected objects into one (union)",
-    "csgSubtract": "Subtracts the rest (group B) from the first object (group A) (subtract)",
-    "csgIntersect": "Keeps the common part of the first object (group A) and the rest (group B) (intersect)",
+    "csgSubtract": "Subtract: select what to subtract from (A), press, then select what to subtract (B) and Enter — A − B as one CSG (subtract)",
+    "csgIntersect": "Intersect: select the first group (A), press, then select the second (B) and Enter — the common part of A and B as one CSG (intersect)",
     "themeToggle": "Switches between dark and light theme",
     "clearScene": "Removes all objects from the scene",
     "alignTool": "Align mode: pick a plane (a face of object A or X / Y / Z), then click face B — it moves into plane A. With “Multiple” checked you can align several objects in a row. Esc or right click exits."

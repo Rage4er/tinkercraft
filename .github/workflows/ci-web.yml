@@ -76,8 +76,8 @@ jobs:
               independent-copy import-mesh-csg nested-moved-edit align-plane-resolve
           - group: ux-audit-5, 3, 1
             specs: ux-audit-5 ux-audit-3 ux-audit
-          - group: align, ux-audit-2, 4, n-ary-csg
-            specs: align-obb align-ui-revit ux-audit-2 ux-audit-4 n-ary-csg
+          - group: align, ux-audit-2, 4, n-ary, group-fix
+            specs: align-obb align-ui-revit ux-audit-2 ux-audit-4 n-ary-csg csg-group-fix
     steps:
       - name: Checkout
         uses: actions/checkout@v4

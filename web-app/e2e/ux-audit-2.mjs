@@ -15,7 +15,7 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { openApp, panelButton, toolbarButton, spaceShapeClick, assertPerf, waitToastsSettled } from './helpers.mjs'
+import { openApp, panelButton, toolbarButton, spaceShapeClick, assertPerf, waitToastsSettled, csgAB, csgModeStart, csgModeConfirm } from './helpers.mjs'
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ux-audit-2-'))
 const ok = []
@@ -155,9 +155,9 @@ try {
     const fc = page.waitForEvent('filechooser'); await toolbarButton(page, 'Импорт').click(); (await fc).setFiles(big)
     await s.waitRows(1, 30000)
     const sphere = (await s.ids())[0]; const cube = await s.add('Куб')
-    await s.pick(sphere); await page.locator(`.ct-item[data-object-id="${cube}"]`).click({ modifiers: ['Shift'] })
-    await page.evaluate(() => document.activeElement?.blur())
-    let t = Date.now(); await page.keyboard.press('KeyX'); await s.waitRows(1, 30000)
+    // CSG-GROUP-FIX: X — режим A → B → Enter
+    await s.pick(sphere); await csgModeStart(page, 'subtract'); await s.pick(cube)
+    let t = Date.now(); await csgModeConfirm(page); await s.waitRows(1, 30000)
     const tCsg = Date.now() - t
     const lastStep = await page.locator('.tl-item').last().innerText()
     if (!lastStep.includes('Вычитание')) fail('UX-AUDIT-11: шаг вычитания в истории — ' + lastStep.replace(/\s+/g, ' '))
@@ -264,8 +264,8 @@ try {
       res.toolbar = await read('[role=toolbar]')
       // тост: пересечение непересекающихся (UX-AUDIT-4)
       const [p, q] = await s.ids()
-      await s.pick(p); await page.locator(`.ct-item[data-object-id="${q}"]`).click({ modifiers: ['Shift'] })
-      await panelButton(page, 'Пересечение').click(); await page.locator('.toast').first().waitFor({ timeout: 5000 })
+      await csgAB(page, 'intersect', () => s.pick(p), () => s.pick(q), { via: 'toolbar' })
+      await page.locator('.toast').first().waitFor({ timeout: 5000 })
       res.toast = await read('.toast'); res.toastText = await read('.toast-msg')
       // ✅ UX-AUDIT-19: тост не закрывает правую панель и тулбар — в правом верхнем углу вьюпорта
       if (!toastChecked) {

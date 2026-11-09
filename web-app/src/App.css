@@ -987,6 +987,29 @@ body {
   text-overflow: ellipsis;
 }
 
+/* CSG-GROUP-FIX: режим вычитания / пересечения — первым в строке (на узком окне обрезаются
+   пункты справа, а не он); длинная подсказка — с многоточием, кнопки «ОК» / «Отмена» видны */
+.status-item.status-csg-mode {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--accent-yellow);
+}
+
+.status-csg-hint {
+  max-width: 55vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.statusbar .btn.status-btn {
+  height: 18px;
+  min-height: 0;
+  padding: 0 8px;
+  font-size: 11px;
+  line-height: 16px;
+}
+
 /* UX-AUDIT-12: узкое окно — второстепенные пункты статус-бара (время CSG, версия) скрыты */
 @media (max-width: 900px) {
   .status-optional {
@@ -1247,7 +1270,8 @@ body {
   background: none;
 }
 
-/* N-ARY-CSG: метка «A»/«B» у объекта, назначенного группой */
+/* CSG-GROUP-FIX: метка «A»/«B» у объекта в режиме вычитания / пересечения
+   (A — зафиксированная группа, тёплая, как её подсветка во вьюпорте; B — выделение) */
 .ct-csg-group {
   font-size: 9px;
   font-weight: 700;
@@ -1257,6 +1281,10 @@ body {
   background: var(--accent);
   color: var(--bg-deep);
   flex-shrink: 0;
+}
+
+.ct-csg-group[data-group="a"] {
+  background: var(--accent-yellow);
 }
 
 /* ---- Ruler display ---- */

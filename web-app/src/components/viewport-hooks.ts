@@ -18,6 +18,7 @@ import { TransformControls } from "three/examples/jsm/controls/TransformControls
 import type { SceneObject, TransformNR } from "../csg/types";
 import { computeAABB } from "../store/helpers";
 import { buildObjectGeometry } from "./object-geometry";
+import { useCsgGroupModeStore } from "../store/csg-group-mode";
 import {
     findNearestSnap,
     createSnapIndicator,
@@ -80,6 +81,9 @@ const AXES_POS = new THREE.Vector3(-170, -170, -0.4);
 // Selection highlight
 const EMISSIVE_SELECTED = 0x444466;
 const EMISSIVE_INTENSITY = 0.5;
+// CSG-GROUP-FIX: группа A режима вычитания / пересечения — тёплая подсветка (B — как выделение)
+const EMISSIVE_GROUP_A = 0xcc6600;
+const EMISSIVE_GROUP_A_INTENSITY = 0.9;
 
 // Material defaults
 const MATERIAL_ROUGHNESS = 0.35;
@@ -520,15 +524,22 @@ export function useMeshSync(
     >,
     selectedIds: Set<string>,
 ): void {
-    // ---- Emissive highlight for selected objects ----
+    // ---- Emissive highlight for selected objects (и группы A режима CSG — CSG-GROUP-FIX) ----
+    const csgGroupA = useCsgGroupModeStore((s) => s.csgGroupMode?.groupA);
     useEffect(() => {
         const sel = selectedIds;
+        const groupA = new Set(csgGroupA ?? []);
         for (const [id, entry] of meshMapRef.current) {
             const mat = entry.mesh.material as THREE.MeshStandardMaterial;
+            if (groupA.has(id)) {
+                mat.emissive.setHex(EMISSIVE_GROUP_A);
+                mat.emissiveIntensity = EMISSIVE_GROUP_A_INTENSITY;
+                continue;
+            }
             mat.emissive.setHex(sel.has(id) ? EMISSIVE_SELECTED : 0x000000);
             mat.emissiveIntensity = sel.has(id) ? EMISSIVE_INTENSITY : 0;
         }
-    }, [selectedIds, meshMapRef]);
+    }, [selectedIds, csgGroupA, meshMapRef]);
 
     // ---- Sync objects → Three.js meshes ----
     useEffect(() => {
