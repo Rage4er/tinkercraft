@@ -30,7 +30,8 @@ import { resolveHotkey, NO_REPEAT, mirrorPlaneOf, csgOpOf, isTextEntry, tabToggl
 import { useSelectedChildGuard } from "./hooks/useSelectedChildGuard";
 import { useSelectedStepGuard } from "./hooks/useSelectedStepGuard";
 import { useTimelineEdit } from "./hooks/useTimelineEdit";
-import { resolveCsgOperands, aliveGroups } from "./store/csg-operands";
+import { useCsgGroupModeStore, csgButtonStates } from "./store/csg-group-mode";
+import { useCsgGroupMode } from "./hooks/useCsgGroupMode";
 import type {
   TransformNR,
   ShapeParams,
@@ -112,7 +113,6 @@ export default function App() {
       deleteSelected: s.deleteSelected,
       selectObjects: s.selectObjects,
       clearSelection: s.clearSelection,
-      csgBoolean: s.csgBoolean,
       undo: s.undo,
       redo: s.redo,
       jumpToHistory: s.jumpToHistory,
@@ -151,7 +151,6 @@ export default function App() {
     deleteSelected,
     selectObjects,
     clearSelection,
-    csgBoolean,
     undo,
     redo,
     jumpToHistory,
@@ -204,7 +203,7 @@ export default function App() {
   const kbState = {
     objects, selectedIds, busy, deleteSelected, undo, redo, selectObjects,
     saveProject, openProject, clearSelection, copySelected, pasteClipboard,
-    csgBoolean, mirrorSelected,
+    mirrorSelected,
     modalOpen: showTextModal || showPM || showClearConfirm,
   };
   const kbRef = useRef(kbState);
@@ -231,8 +230,8 @@ export default function App() {
       }
       const csgOp = csgOpOf(action);
       if (csgOp) {
-        // N-ARY-CSG: операнды (N, группы A/B) разбирает стор; нечего считать — ничего
-        if (!kb.busy) void kb.csgBoolean(csgOp, useUiStore.getState().csgGroups);
+        // CSG-GROUP-FIX: U — сразу; X / I — режим A → B → Enter (в режиме — подтвердить / сменить)
+        if (!kb.busy) void useCsgGroupModeStore.getState().pressCsgOperation(csgOp);
         return;
       }
       switch (action) {
@@ -325,16 +324,13 @@ export default function App() {
   const handleTimelineEdit = useTimelineEdit();
   const hasSelectedChild = useUiStore((s) => s.selectedChild !== null);
 
-  // N-ARY-CSG: группы A/B — без поглощённых/удалённых объектов (после CSG, undo, удаления)
-  const csgGroups = useUiStore((s) => s.csgGroups);
-  const setCsgGroups = useUiStore((s) => s.setCsgGroups);
-  useEffect(() => {
-    const alive = aliveGroups(csgGroups, objects);
-    if (alive.a.length !== csgGroups.a.length || alive.b.length !== csgGroups.b.length) setCsgGroups(alive);
-  }, [objects, csgGroups, setCsgGroups]);
+  // CSG-GROUP-FIX: «Объединение» — сразу; «Вычитание» / «Пересечение» — режим A → B → Enter
+  // (Enter / Esc, исчезнувшие объекты A, выход при «Выровнять» — useCsgGroupMode)
+  const csgGroupMode = useCsgGroupModeStore((s) => s.csgGroupMode);
+  useCsgGroupMode(showTextModal || showPM || showClearConfirm);
   const runCsg = useCallback(
-    (op: CsgBooleanOp) => csgBoolean(op, useUiStore.getState().csgGroups),
-    [csgBoolean],
+    (op: CsgBooleanOp) => void useCsgGroupModeStore.getState().pressCsgOperation(op),
+    [],
   );
 
   const objectList = useMemo(() => Object.values(objects), [objects]);
@@ -351,8 +347,13 @@ export default function App() {
   // CSG недоступен, если среди выбранных объектов есть non-manifold (import_mesh)
   // IMPORT-MESH-CSG: импорт (STL, 3D-текст) не блокируется по типу — замкнутость проверяет
   // воркер; незамкнутый меш → уведомление errors.csgNonManifold.
-  // N-ARY-CSG: union — N выбранных; subtract/intersect — группы A/B или «первый против остальных»
-  const canCsg = !busy && resolveCsgOperands(selectedIds, csgGroups, objects) !== null;
+  // N-ARY-CSG: union — N выбранных → один CSG; CSG-GROUP-FIX: subtract/intersect — от 1
+  // выбранного (режим A → B → Enter); доступность каждой кнопки — csgButtonStates
+  const csgOpStates = useMemo(
+    () => csgButtonStates(selectedIds, objects, csgGroupMode),
+    [selectedIds, objects, csgGroupMode],
+  );
+  const canCsg = !busy && (selectedIds.length > 0 || csgGroupMode !== null);
   const canMirror = selectedIds.length > 0 && !busy;
   // ALIGN-UI-REVIT: «Выровнять» — режим (плоскость → грань B), нужен хотя бы один объект
   const canAlign = objectList.length > 0 && !busy;
@@ -483,6 +484,7 @@ export default function App() {
         canAlign={canAlign}
         alignActive={alignActive}
         canCsg={canCsg}
+        csgOpStates={csgOpStates}
         theme={theme}
         onOpen={openProject}
         onSave={saveProject}
@@ -630,6 +632,7 @@ export default function App() {
             selectedIds={selectedIds}
             canResize={canResize}
             canCsg={canCsg}
+            csgOpStates={csgOpStates}
             objectList={objectList}
             operationsLength={operations.length}
             fileName={fileName}

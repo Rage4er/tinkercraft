@@ -48,8 +48,8 @@ export interface DocumentStore {
   clearSelection: () => void
   /**
    * N-ARY-CSG: union — N операндов → один CSG; subtract/intersect — union(A) op union(B).
-   * Операнды — `resolveCsgOperands(selectedIds, groups)`: группы A/B (ui-store) либо
-   * «первый выбранный против остальных».
+   * Операнды — `resolveCsgOperands(selectedIds, groups)`: группы A/B (режим A → B → Enter,
+   * `csg-group-mode.ts`, CSG-GROUP-FIX) либо «первый выбранный против остальных».
    */
   csgBoolean: (op: CsgBooleanOp, groups?: CsgGroups) => Promise<void>
   moveObject: (id: string, transform: TransformNR) => Promise<void>

@@ -11,7 +11,7 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { openApp, panelButton, toolbarButton, spaceShapeClick } from './helpers.mjs'
+import { openApp, panelButton, toolbarButton, spaceShapeClick, csgAB, csgModeStart, csgModeConfirm } from './helpers.mjs'
 
 const shotDir = process.argv[2]
 const VERSION = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version
@@ -180,8 +180,9 @@ try {
   const tImport = Date.now() - t
   const big = (await ids())[0]
   const c2 = await add('Куб')
-  await pick(big); await page.locator(`.ct-item[data-object-id="${c2}"]`).click({ modifiers: ['Shift'] })
-  t = Date.now(); await panelButton(page, 'Вычитание').click()
+  // CSG-GROUP-FIX: «Вычитание» — режим A → B → Enter
+  await pick(big); await csgModeStart(page, 'subtract', 'toolbar'); await pick(c2)
+  t = Date.now(); await csgModeConfirm(page)
   await page.waitForFunction(() => document.querySelectorAll('.ct-item[data-object-id]').length === 1, null, { timeout: 30000 })
   const tCsg = Date.now() - t
   if (tImport > 10000 || tCsg > 15000) fail(`100k: импорт ${tImport} мс, вычитание ${tCsg} мс`)
@@ -215,9 +216,8 @@ try {
   // ── ✅ UX-AUDIT-4: пересечение непересекающихся — уведомление, объекты и история не тронуты ──
   {
     const [p, q] = await ids()
-    await pick(p); await page.locator(`.ct-item[data-object-id="${q}"]`).click({ modifiers: ['Shift'] })
     const n = await steps()
-    await panelButton(page, 'Пересечение').click()
+    await csgAB(page, 'intersect', () => pick(p), () => pick(q), { via: 'toolbar' })
     await page.locator('.toast-msg', { hasText: 'Результат CSG пуст' }).waitFor({ timeout: 10000 })
       .catch(async () => fail('UX-AUDIT-4: нет уведомления о пустом результате: ' + (await toasts())))
     if ((await rows.count()) !== 2 || (await steps()) !== n) fail(`UX-AUDIT-4: объекты ${await rows.count()}, шагов ${await steps()} (было ${n})`)
@@ -251,13 +251,15 @@ try {
     const nObj = await rows.count()
     const waitObj = (k) => page.waitForFunction((m) => document.querySelectorAll('.ct-item[data-object-id]').length === m, k, { timeout: 10000 })
     // (число шагов не годится: после Ctrl+Z отменённый шаг остаётся в Timeline для redo)
+    // CSG-GROUP-FIX: U — сразу (пара); X / I — режим: A → клавиша → B → Enter
     for (const key of ['KeyU', 'KeyX']) {
-      await sel2(); await page.keyboard.press(key)
+      if (key === 'KeyU') { await sel2(); await page.keyboard.press(key) }
+      else await csgAB(page, 'subtract', () => pick(a5), () => pick(b5))
       await waitObj(nObj - 1).catch(async () => fail(`UX-AUDIT-5: ${key} не выполнил CSG (объектов ${await rows.count()}, было ${nObj})`))
       await page.keyboard.press('Control+z'); await waitObj(nObj)
     }
     // I — пересечение (куб и сфера не пересекаются → уведомление о пустом результате, UX-AUDIT-4)
-    await sel2(); await page.keyboard.press('KeyI')
+    await csgAB(page, 'intersect', () => pick(a5), () => pick(b5))
     await page.locator('.toast-msg', { hasText: 'Результат CSG пуст' }).waitFor({ timeout: 10000 })
       .catch(() => fail('UX-AUDIT-5: I не запустил пересечение'))
     await page.locator('.toast').first().click().catch(() => {})
@@ -304,8 +306,7 @@ try {
   }
   await setPos(txt, 'X', 0); await setPos(txt, 'Z', 8)
   // ── ✅ UX-AUDIT-3: куб − 3D-текст (гравировка) — CSG выполняется, без уведомлений ──
-  await pick(c3); await page.locator(`.ct-item[data-object-id="${txt}"]`).click({ modifiers: ['Shift'] })
-  await panelButton(page, 'Вычитание').click()
+  await csgAB(page, 'subtract', () => pick(c3), () => pick(txt), { via: 'toolbar' })
   await page.waitForFunction(() => document.querySelectorAll('.ct-item[data-object-id]').length === 1, null, { timeout: 15000 })
     .catch(async () => fail('UX-AUDIT-3: куб − текст не выполнен; уведомление: ' + (await toasts())))
   if (await toasts()) fail('UX-AUDIT-3: уведомления после куб − текст: ' + (await toasts()))

@@ -41,7 +41,7 @@ import { computeRSMatrix } from '../csg/worker-matrix'
 import { meshVolume, checkChildEditable, checkRootConsistency } from '../store/edit-child'
 import { rebuildFromHistory, rebuildBuildTree } from '../store/rebuild'
 import { serialize3dtc, parse3dtc } from '../io/3dtc-io'
-import { resolveCsgOperands, assignCsgGroup, aliveGroups, EMPTY_CSG_GROUPS, type CsgGroups } from '../store/csg-operands'
+import { resolveCsgOperands, aliveGroups, type CsgGroups } from '../store/csg-operands'
 import { clampGroupA } from '../csg/worker-handlers'
 import { CSG_SOFT_LIMIT } from '../constants'
 import i18n from '../i18n'
@@ -433,12 +433,13 @@ describe('N-ARY-CSG — старые бинарные совместимы', () 
 })
 
 describe('resolveCsgOperands / группы', () => {
+  const NO_GROUPS: CsgGroups = { a: [], b: [] }
   const objs = (ids: string[]) => Object.fromEntries(ids.map((id) => [id, { id } as SceneObject]))
   const all = objs(['a1', 'a2', 'b1', 'b2', 'c'])
 
   it('без групп: < 2 выбранных — null; иначе первый против остальных', () => {
-    expect(resolveCsgOperands(['a1'], EMPTY_CSG_GROUPS, all)).toBeNull()
-    expect(resolveCsgOperands(['a1', 'b1', 'b2'], EMPTY_CSG_GROUPS, all)).toEqual({ ids: ['a1', 'b1', 'b2'], groupA: 1 })
+    expect(resolveCsgOperands(['a1'], NO_GROUPS, all)).toBeNull()
+    expect(resolveCsgOperands(['a1', 'b1', 'b2'], NO_GROUPS, all)).toEqual({ ids: ['a1', 'b1', 'b2'], groupA: 1 })
   })
 
   it('обе группы → A, затем B; одна — вторая из выделения; мёртвые id отброшены', () => {
@@ -449,9 +450,7 @@ describe('resolveCsgOperands / группы', () => {
     expect(resolveCsgOperands(['a1'], { a: ['a1'], b: [] }, all)).toBeNull()      // B пуста
   })
 
-  it('assignCsgGroup снимает объекты с другой группы; aliveGroups — без мёртвых и пересечений', () => {
-    const g = assignCsgGroup({ a: ['a1', 'a2'], b: [] }, 'b', ['a2', 'b1'])
-    expect(g).toEqual({ a: ['a1'], b: ['a2', 'b1'] })
+  it('aliveGroups — без мёртвых и пересечений', () => {
     expect(aliveGroups({ a: ['a1', 'x'], b: ['a1', 'b1'] }, all)).toEqual({ a: ['a1'], b: ['b1'] })
   })
 

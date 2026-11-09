@@ -20,7 +20,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { createRequire } from 'node:module'
-import { openApp, panelButton, toolbarButton, findAlignFace, spaceShapeClick, assertPerf, waitToastsSettled } from './helpers.mjs'
+import { openApp, panelButton, toolbarButton, findAlignFace, spaceShapeClick, assertPerf, waitToastsSettled, csgAB } from './helpers.mjs'
 
 const JSZip = createRequire(import.meta.url)('jszip')
 const shotDir = process.argv[2]
@@ -81,10 +81,11 @@ async function session(size) {
     await waitSteps(n + 1)
   }
   const pair = async (a, b) => { await pick(a); await page.locator(`.ct-item[data-object-id="${b}"]`).click({ modifiers: ['Shift'] }); await blur() }
-  /** CSG клавишей (U / X / I) → id результата. */
+  /** CSG клавишей → id результата: U — пара сразу; X / I — режим A → B → Enter (CSG-GROUP-FIX). */
   const csg = async (a, b, key) => {
     const be = new Set(await ids())
-    await pair(a, b); await page.keyboard.press(key)
+    if (key === 'KeyU') { await pair(a, b); await page.keyboard.press(key) }
+    else await csgAB(page, key === 'KeyX' ? 'subtract' : 'intersect', () => pick(a), () => pick(b))
     await waitRows(be.size - 1)
     return (await ids()).find((i) => !be.has(i))
   }
@@ -292,7 +293,7 @@ try {
     await page.mouse.click(vp.left + (vp.right - vp.left) * 0.3, vp.top + (vp.bottom - vp.top) * 0.8)
     await page.mouse.click(vp.left + (vp.right - vp.left) * 0.6, vp.top + (vp.bottom - vp.top) * 0.85)
     await page.locator('.ruler-display').waitFor({ timeout: 5000 }); await page.waitForTimeout(300)
-    await s.pair(a, b); await panelButton(page, 'Пересечение').click()
+    await csgAB(page, 'intersect', () => s.pick(a), () => s.pick(b))
     await page.locator('.toast').first().waitFor({ timeout: 5000 }); await page.waitForTimeout(400); await waitToastsSettled(page)
     await s.shot('y-1280.png')
     const [r, t, tb, right, snap] = [await s.rect('.ruler-display'), await s.rect('.toast'), await s.rect('[role=toolbar]'), await s.rect('.panel-right'), await s.rect('.snap-selector')]

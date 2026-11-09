@@ -25,7 +25,7 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { openApp, panelButton, toolbarButton, findAlignFace, spaceShapeClick, assertPerf, waitToastsSettled } from './helpers.mjs'
+import { openApp, panelButton, toolbarButton, findAlignFace, spaceShapeClick, assertPerf, waitToastsSettled, csgAB } from './helpers.mjs'
 
 const shotDir = process.argv[2]
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ux-audit-3-'))
@@ -79,10 +79,11 @@ async function session(size) {
     await waitSteps(n + 1)
   }
   const pair = async (a, b) => { await pick(a); await page.locator(`.ct-item[data-object-id="${b}"]`).click({ modifiers: ['Shift'] }); await blur() }
-  /** CSG клавишей (U / X / I) → id результата. */
+  /** CSG клавишей → id результата: U — пара сразу; X / I — режим A → B → Enter (CSG-GROUP-FIX). */
   const csg = async (a, b, key) => {
     const be = new Set(await ids())
-    await pair(a, b); await page.keyboard.press(key)
+    if (key === 'KeyU') { await pair(a, b); await page.keyboard.press(key) }
+    else await csgAB(page, key === 'KeyX' ? 'subtract' : 'intersect', () => pick(a), () => pick(b))
     await waitRows(be.size - 1)
     return (await ids()).find((i) => !be.has(i))
   }
@@ -359,7 +360,7 @@ try {
     ok.push(`Q: 1366×768 — тулбар в одну строку (${m.tbH} px), с названием, все кнопки в окне, статус-бар 1 строка, палитра 3 столбца`)
 
     // R. тост: не поверх панели/тулбара; над модалкой; исчезает через ~5 с
-    await s.pair(a, b); await panelButton(page, 'Пересечение').click()
+    await csgAB(page, 'intersect', () => s.pick(a), () => s.pick(b))
     await page.locator('.toast').first().waitFor({ timeout: 5000 }); await page.waitForTimeout(400); await waitToastsSettled(page)
     const [toast, right, tb] = [await s.rect('.toast'), await s.rect('.panel-right'), await s.rect('[role=toolbar]')]
     if (overlap(toast, right) || overlap(toast, tb)) fail('R: тост перекрывает правую панель или тулбар')
@@ -453,7 +454,7 @@ try {
     await page.mouse.click(vp.left + (vp.right - vp.left) * 0.3, vp.top + (vp.bottom - vp.top) * 0.8)
     await page.mouse.click(vp.left + (vp.right - vp.left) * 0.7, vp.top + (vp.bottom - vp.top) * 0.85)
     await page.locator('.ruler-display').waitFor({ timeout: 5000 })
-    await s.pair(a, b); await panelButton(page, 'Пересечение').click()     // линейка включена — плашка видна
+    await csgAB(page, 'intersect', () => s.pick(a), () => s.pick(b))     // линейка включена — плашка видна
     await page.locator('.toast').first().waitFor({ timeout: 5000 }); await page.waitForTimeout(400); await waitToastsSettled(page)
     await s.shot('toast-768.png')
     const [t, snap, ruler, right, tb] = [await s.rect('.toast'), await s.rect('.snap-selector'), await s.rect('.ruler-display'), await s.rect('.panel-right'), await s.rect('[role=toolbar]')]

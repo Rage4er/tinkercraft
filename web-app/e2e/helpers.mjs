@@ -109,3 +109,36 @@ export async function spaceShapeClick(page, label) {
   lastShapeClick.set(label, Date.now())
 }
 
+
+/**
+ * CSG-GROUP-FIX: вычитание / пересечение — режим A → B → Enter. `via`: 'key' (X / I),
+ * 'toolbar' или 'panel' (кнопка; в панели секция CSG видна от 2 выбранных или в режиме).
+ * Ждёт пункт режима в статус-баре. Выделение перед вызовом — группа A.
+ */
+export async function csgModeStart(page, op, via = 'key') {
+  if (via === 'key') {
+    await page.evaluate(() => document.activeElement?.blur())
+    await page.keyboard.press(op === 'subtract' ? 'KeyX' : 'KeyI')
+  } else {
+    const name = op === 'subtract' ? 'Вычитание' : 'Пересечение'
+    await (via === 'panel' ? panelButton : toolbarButton)(page, name).click()
+  }
+  await page.locator('[data-testid=csg-mode]').waitFor({ timeout: 5000 })
+}
+/** Подтвердить режим: Enter (фокус снят с поля ввода) или кнопка «ОК» статус-бара. */
+export async function csgModeConfirm(page, how = 'enter') {
+  const ok = page.locator('[data-testid=csg-mode-ok]')
+  await page.waitForFunction(() => document.querySelector('[data-testid=csg-mode-ok]')?.disabled === false, null, { timeout: 5000 })
+  if (how === 'ok') await ok.click()
+  else {
+    await page.evaluate(() => document.activeElement?.blur())
+    await page.keyboard.press('Enter')
+  }
+}
+/** A op B режимом: `selectA()` → кнопка / клавиша → `selectB()` → Enter / «ОК». */
+export async function csgAB(page, op, selectA, selectB, { via = 'key', confirm = 'enter' } = {}) {
+  await selectA()
+  await csgModeStart(page, op, via)
+  await selectB()
+  await csgModeConfirm(page, confirm)
+}

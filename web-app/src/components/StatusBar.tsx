@@ -1,6 +1,8 @@
 import { useTranslation } from "react-i18next";
 import { APP_VERSION } from "../constants";
 import { useAlignModeStore, alignHintKey } from "../store/align-mode";
+import { useCsgGroupModeStore, groupBOf } from "../store/csg-group-mode";
+import { useDocumentStore } from "../store/document-store";
 
 export default function StatusBar({
   workerOk,
@@ -27,6 +29,14 @@ export default function StatusBar({
 }) {
   const { t, i18n } = useTranslation();
   const alignMode = useAlignModeStore((s) => s.alignMode);
+  // CSG-GROUP-FIX: режим вычитания / пересечения — подсказка, «ОК» (= Enter), «Отмена» (= Esc)
+  const csgMode = useCsgGroupModeStore((s) => s.csgGroupMode);
+  const confirmCsgGroup = useCsgGroupModeStore((s) => s.confirmCsgGroup);
+  const cancelCsgGroup = useCsgGroupModeStore((s) => s.cancelCsgGroup);
+  const selectedIds = useDocumentStore((s) => s.selectedIds);
+  const objects = useDocumentStore((s) => s.objects);
+  const busy = useDocumentStore((s) => s.busy);
+  const csgB = csgMode ? groupBOf(csgMode, selectedIds, objects).length : 0;
   const currentLang = i18n.language?.startsWith("ru") ? "ru" : "en";
   const toggleLanguage = () => {
     const next = currentLang === "en" ? "ru" : "en";
@@ -39,6 +49,36 @@ export default function StatusBar({
       role="status"
       aria-live="polite"
     >
+      {csgMode && (
+        <span className="status-item status-csg-mode" data-testid="csg-mode" data-operation={csgMode.operation}>
+          <span className="status-csg-hint" data-testid="csg-mode-hint">
+            {t("csgMode.hint", {
+              op: t(csgMode.operation === "subtract" ? "csg.subtract" : "csg.intersect"),
+              a: csgMode.groupA.length,
+              b: csgB,
+            })}
+          </span>
+          <button
+            type="button"
+            className="btn btn-compact status-btn primary"
+            data-testid="csg-mode-ok"
+            disabled={csgB === 0 || busy}
+            title={t("csgMode.okTip")}
+            onClick={() => void confirmCsgGroup()}
+          >
+            {t("csgMode.ok")}
+          </button>
+          <button
+            type="button"
+            className="btn btn-compact status-btn"
+            data-testid="csg-mode-cancel"
+            title={t("csgMode.cancelTip")}
+            onClick={() => cancelCsgGroup()}
+          >
+            {t("actions.cancel")}
+          </button>
+        </span>
+      )}
       <span className="status-item">
         {t("statusbar.csgEngine")}&nbsp;
         {workerOk ? (

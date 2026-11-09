@@ -2,6 +2,7 @@ import type { GizmoMode } from "./Viewport3D";
 import { useTranslation } from "react-i18next";
 import MirrorButtons from "./MirrorButtons";
 import CsgButtons from "./CsgButtons";
+import type { CsgOpButtonStates } from "../store/csg-group-mode";
 import IconButton from "./IconButton";
 import ToolbarRowSplit from "./ToolbarRowSplit";
 import { TOOLTIP_DATA, type TooltipData } from "../constants";
@@ -46,6 +47,7 @@ export default function Toolbar({
   canAlign,
   alignActive,
   canCsg,
+  csgOpStates,
   theme,
   onOpen,
   onSave,
@@ -85,6 +87,8 @@ export default function Toolbar({
   /** Режим выравнивания активен (ALIGN-UI-REVIT) */
   alignActive: boolean;
   canCsg: boolean;
+  /** CSG-GROUP-FIX: доступность / нажатость каждой операции (режим A → B → Enter) */
+  csgOpStates?: CsgOpButtonStates;
   theme: "dark" | "light";
   onOpen: () => void;
   onSave: () => void;
@@ -236,7 +240,7 @@ export default function Toolbar({
       <div className="toolbar-separator" />
 
       {/* Group 8: CSG */}
-      <CsgButtons disabled={!canCsg} onCsg={onCsg} maxRows={getRows("csg")} />
+      <CsgButtons disabled={!canCsg} onCsg={onCsg} opStates={csgOpStates} maxRows={getRows("csg")} />
       <div className="toolbar-separator" />
 
       {/* Group 9: Theme */}
