@@ -38,6 +38,18 @@
     "okTip": "Apply: group A and the selected objects (B) → one CSG (Enter)",
     "cancelTip": "Leave without changes (Esc)"
   },
+  "placement": {
+    "hint": "Place {{shape}}: hover an object face or the grid, X / Y / Z — axis plane. Click / Enter — place, Esc / right click — cancel",
+    "where": "{{plane}} · X {{x}} · Y {{y}} · Z {{z}}",
+    "whereDefault": "Enter — next to the others",
+    "whereAxisOnly": "plane {{plane}} — move the cursor over the scene",
+    "planeFace": "face of “{{name}}”",
+    "planeGrid": "grid (XY)",
+    "planeAxis": "plane {{plane}} ({{axis}})",
+    "ok": "Place",
+    "okTip": "Place the shape at the preview, without one — next to the others (Enter)",
+    "cancelTip": "Cancel — no shape is created (Esc, right click)"
+  },
   "mirror": {
     "title": "Mirror",
     "yz": "Mirror YZ",
@@ -140,7 +152,8 @@
     "history": "History",
     "filter": "Filter",
     "timelineEmpty": "Empty",
-    "addShape": "Add {{label}}"
+    "addShape": "Add {{label}}",
+    "placeShape": "Place {{label}}: then click an object face or the grid (Enter — next to the others)"
   },
   "componentTree": {
     "sceneEmpty": "Scene is empty",

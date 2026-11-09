@@ -13,6 +13,7 @@ import {
   useMeshSync,
   useRulerMode,
   useMirrorPreview,
+  usePlacementPreview,
   type GizmoMode,
   setGridColor,
 } from "./viewport-hooks";
@@ -20,6 +21,8 @@ import { devLogEvent, devLogPointer, devLogTransform } from "../utils/debug";
 import { fmtPoint, fmtPoint2 } from "../utils/debug-format";
 import { useAlignModeStore } from "../store/align-mode";
 import { pickFace, planarFaceTriangles } from "./align-picking";
+import { usePlacementModeStore } from "../store/placement-mode";
+import type { PlacementAim } from "../store/placement";
 import { fitDistance, FIT_DIR } from "./camera-fit";
 
 export type { GizmoMode } from "./viewport-hooks";
@@ -28,6 +31,8 @@ export type { GizmoMode } from "./viewport-hooks";
 const DRAG_THRESHOLD_PX = 4;
 /** ALIGN-UI-REVIT: не чаще одного raycast наведения за столько мс */
 const ALIGN_HOVER_THROTTLE_MS = 50;
+/** PLUG-AND-PLAY: превью размещения — не чаще раза за столько мс (последнее положение — догоняется) */
+const PLACEMENT_AIM_THROTTLE_MS = 50;
 
 /** Полупрозрачная подсветка (поверх меша, вне raycast) из мировых треугольников. */
 function makeAlignHighlight(positions: Float32Array, color: number, opacity: number): THREE.Mesh {
@@ -53,6 +58,13 @@ function axisPlanePositions(axis: "X" | "Y" | "Z"): Float32Array {
       : [[-s, -s, 0], [s, -s, 0], [s, s, 0], [-s, s, 0]];
   return new Float32Array([...q[0], ...q[1], ...q[2], ...q[0], ...q[2], ...q[3]]);
 }
+
+/**
+ * PLUG-AND-PLAY: идёт ли размещение. Обработчики читают стор, а не ref после рендера: клик по
+ * иконке и клик по сцене, пришедшие из очереди ввода подряд (медленный CPU), обрабатываются до
+ * перерисовки.
+ */
+const isPlacing = () => usePlacementModeStore.getState().placementMode !== null;
 
 function disposeHighlight(scene: THREE.Scene, mesh: THREE.Mesh): void {
   scene.remove(mesh);
@@ -196,8 +208,8 @@ export default function Viewport3D({
   const hovered = alignMode?.hoveredFace ?? null;
   const alignPlane = alignMode?.plane ?? null;
 
-  /** Грань под курсором (мировые нормаль и точка) или null. */
-  const pickAt = useCallback(
+  /** Луч из камеры через точку экрана (null — нет камеры / контейнера). */
+  const rayAt = useCallback(
     (clientX: number, clientY: number) => {
       const camera = activeCameraRef.current ?? cameraRef.current;
       const container = containerRef.current;
@@ -207,12 +219,68 @@ export default function Viewport3D({
       const y = -((clientY - rect.top) / rect.height) * 2 + 1;
       const raycaster = new THREE.Raycaster();
       raycaster.setFromCamera(new THREE.Vector2(x, y), camera);
+      return raycaster;
+    },
+    [activeCameraRef, cameraRef, containerRef],
+  );
+
+  /** Грань под курсором (мировые нормаль и точка) или null. */
+  const pickAt = useCallback(
+    (clientX: number, clientY: number) => {
+      const raycaster = rayAt(clientX, clientY);
+      if (!raycaster) return null;
       const meshes: THREE.Mesh[] = [];
       for (const entry of meshMapRef.current.values()) if (entry.mesh.visible) meshes.push(entry.mesh);
       return pickFace(raycaster, meshes);
     },
-    [activeCameraRef, cameraRef, containerRef, meshMapRef],
+    [rayAt, meshMapRef],
   );
+
+  // ---- PLUG-AND-PLAY: режим размещения ----
+  const placement = usePlacementModeStore((s) => s.placementMode);
+  const placementActive = placement !== null;
+  usePlacementPreview(sceneRef, objects.length);
+
+  /** Куда смотрит курсор: луч и грань объекта под ним (null — нет камеры). */
+  const aimAt = useCallback(
+    (clientX: number, clientY: number): PlacementAim | null => {
+      const raycaster = rayAt(clientX, clientY);
+      if (!raycaster) return null;
+      const meshes: THREE.Mesh[] = [];
+      for (const entry of meshMapRef.current.values()) if (entry.mesh.visible) meshes.push(entry.mesh);
+      const { origin, direction } = raycaster.ray;
+      return {
+        ray: { origin: { x: origin.x, y: origin.y, z: origin.z }, direction: { x: direction.x, y: direction.y, z: direction.z } },
+        face: pickFace(raycaster, meshes),
+      };
+    },
+    [rayAt, meshMapRef],
+  );
+  // превью: не чаще PLACEMENT_AIM_THROTTLE_MS, последнее положение курсора догоняется таймером
+  const placementAimAtRef = useRef(0);
+  const placementAimTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const placementAimPosRef = useRef<{ x: number; y: number } | null>(null);
+  const clearPlacementAimTimer = useCallback(() => {
+    if (placementAimTimerRef.current) clearTimeout(placementAimTimerRef.current);
+    placementAimTimerRef.current = null;
+  }, []);
+  const schedulePlacementAim = useCallback(
+    (clientX: number, clientY: number) => {
+      placementAimPosRef.current = { x: clientX, y: clientY };
+      const run = () => {
+        placementAimTimerRef.current = null;
+        const pos = placementAimPosRef.current;
+        if (!pos || !isPlacing()) return;
+        placementAimAtRef.current = performance.now();
+        usePlacementModeStore.getState().aim(aimAt(pos.x, pos.y));
+      };
+      const wait = PLACEMENT_AIM_THROTTLE_MS - (performance.now() - placementAimAtRef.current);
+      if (wait <= 0) { clearPlacementAimTimer(); run(); }
+      else if (!placementAimTimerRef.current) placementAimTimerRef.current = setTimeout(run, wait);
+    },
+    [aimAt, clearPlacementAimTimer],
+  );
+  useEffect(() => clearPlacementAimTimer, [clearPlacementAimTimer]);
 
   // подсветка грани под курсором (вся плоская грань — то, что встанет в плоскость)
   useEffect(() => {
@@ -253,7 +321,8 @@ export default function Viewport3D({
     };
     const tc = transformCtRef.current as unknown as TC | null;
     if (!tc) return;
-    if (gizmoMode === "none" || selectedIds.size === 0) {
+    // PLUG-AND-PLAY: на время размещения гизмо скрыт (клик — место фигуры, а не захват гизмо)
+    if (gizmoMode === "none" || selectedIds.size === 0 || placementActive) {
       tc.detach();
       return;
     }
@@ -264,7 +333,7 @@ export default function Viewport3D({
     }
     tc.setMode(gizmoMode);
     tc.attach(entry.pivot);
-  }, [gizmoMode, selectedIds, transformCtRef, meshMapRef]);
+  }, [gizmoMode, selectedIds, transformCtRef, meshMapRef, placementActive]);
 
   // ---- TransformControls mouseUp handler ----
   useEffect(() => {
@@ -413,6 +482,9 @@ export default function Viewport3D({
         return;
       }
 
+      // PLUG-AND-PLAY: превью под курсором (без нажатых кнопок — при перетаскивании вращается камера)
+      if (isPlacing() && e.buttons === 0) schedulePlacementAim(e.clientX, e.clientY);
+
       // ALIGN-UI-REVIT: подсветка грани при наведении (без нажатых кнопок, throttle)
       if (alignActiveRef.current && e.buttons === 0) {
         const now = performance.now();
@@ -428,8 +500,16 @@ export default function Viewport3D({
       const dy = e.clientY - pointerDownPos.current.y;
       if (Math.hypot(dx, dy) > DRAG_THRESHOLD_PX) isDraggingRef.current = true;
     },
-    [rulerMode, handleRulerPointerMove, cameraRef, containerRef, pickAt],
+    [rulerMode, handleRulerPointerMove, cameraRef, containerRef, pickAt, schedulePlacementAim],
   );
+
+  // PLUG-AND-PLAY: курсор ушёл из вьюпорта — превью скрыто (Enter — рядом с прошлыми)
+  const handlePointerLeave = useCallback(() => {
+    if (!isPlacing()) return;
+    clearPlacementAimTimer();
+    placementAimPosRef.current = null;
+    usePlacementModeStore.getState().aim(null);
+  }, [clearPlacementAimTimer]);
 
   const handlePointerUp = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
@@ -446,6 +526,25 @@ export default function Viewport3D({
       pointerDownPos.current = null;
 
       if (!start) return;
+
+      // PLUG-AND-PLAY: в режиме размещения клик — поставить фигуру (место — в точке клика),
+      // правый клик — отмена; перетаскивание — вращение/панорама камеры. Выделение не меняется.
+      if (isPlacing()) {
+        const wasDrag = isDraggingRef.current;
+        isDraggingRef.current = false;
+        if (wasDrag) return;
+        const store = usePlacementModeStore.getState();
+        if (e.button === 2) {
+          store.cancelPlacement();
+          return;
+        }
+        if (e.button !== 0) return;
+        clearPlacementAimTimer();
+        const aim = aimAt(e.clientX, e.clientY);
+        devLogEvent('placement', 'click', { face: aim?.face ? `${aim.face.objectId}#${aim.face.triangleIndex}` : 'none' });
+        if (aim) void store.confirmPlacement(aim);
+        return;
+      }
 
       // ALIGN-UI-REVIT: в режиме клик — выбор грани (A, затем B), правый клик — выход;
       // перетаскивание остаётся вращением/панорамой камеры. Выделение не меняется.
@@ -518,6 +617,8 @@ export default function Viewport3D({
       meshMapRef,
       performDragSelect,
       pickAt,
+      aimAt,
+      clearPlacementAimTimer,
     ],
   );
 
@@ -528,8 +629,14 @@ export default function Viewport3D({
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
-      onContextMenu={(e) => { if (alignActiveRef.current) e.preventDefault(); }}
-      style={alignActive ? { cursor: "crosshair" } : undefined}
+      onPointerLeave={handlePointerLeave}
+      onContextMenu={(e) => { if (alignActiveRef.current || isPlacing()) e.preventDefault(); }}
+      style={alignActive || placementActive ? { cursor: "crosshair" } : undefined}
+      data-placement={placement?.shapeType}
+      data-placement-plane={placement?.preview ? (placement.preview.plane.kind === "axis" ? placement.preview.plane.axis : placement.preview.plane.kind) : undefined}
+      data-placement-face={placement?.preview?.plane.kind === "face" ? placement.preview.plane.objectId : undefined}
+      data-placement-normal={placement?.preview ? [placement.preview.plane.normal.x, placement.preview.plane.normal.y, placement.preview.plane.normal.z].map((v) => (Math.round(v * 100) / 100 + 0).toFixed(2)).join(",") : undefined}
+      data-placement-pos={placement?.preview ? [placement.preview.transform.x, placement.preview.transform.y, placement.preview.transform.z].map((v) => (Math.round(v * 100) / 100 + 0).toString()).join(",") : undefined}
       data-align-mode={alignActive ? (alignPlane ? "face-b" : "plane") : undefined}
       data-align-hover={hovered ? `${hovered.objectId}:${hovered.triangleIndex}` : undefined}
       data-align-hover-normal={hovered?.normal ? [hovered.normal.x, hovered.normal.y, hovered.normal.z].map((v) => v.toFixed(2)).join(",") : undefined}

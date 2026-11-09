@@ -16,7 +16,7 @@
 // Необязательный аргумент — каталог для скриншотов: `node e2e/csg-group-fix.mjs /tmp/shots`.
 import os from 'node:os'
 import path from 'node:path'
-import { openApp, panelButton, toolbarButton, spaceShapeClick, csgModeStart, csgModeConfirm } from './helpers.mjs'
+import { openApp, panelButton, toolbarButton, csgModeStart, csgModeConfirm, placeShape } from './helpers.mjs'
 
 const shotDir = process.argv[2]
 const { browser, page, errors } = await openApp()
@@ -39,8 +39,7 @@ const shot = async (name) => { if (shotDir) await page.screenshot({ path: path.j
 
 async function add(label) {
   const before = new Set(await ids())
-  await spaceShapeClick(page, label)                       // UX-AUDIT-9: подряд та же фигура — не «двойной клик»
-  await page.getByText(label, { exact: true }).first().click()
+  await placeShape(page, label)
   await waitRows(before.size + 1)
   await page.waitForTimeout(250)                           // окно «двойного клика» — от обработки клика (CI)
   return (await ids()).find((id) => !before.has(id))

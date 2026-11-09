@@ -14,7 +14,7 @@
 - **manifold-3d** (WASM) — CSG операции в Web Worker
 - **Zustand 5** — стейт-менеджмент
 - **Vite 6** — сборка
-- **Vitest 4** — тесты (906 тестов, 73 файла; `it.fails` открытых багов нет — UX-прогон 7 нашёл 0 новых, цикл закрыт; UX-AUDIT-1…10 исправлены в `fix-all`, 11…20 — в `fix-all-2`, 21…31 — в `fix-all-3`, 32…35 — в `fix-all-4`, 32-followup и 36…40 — в `fix-all-5`, 41, 42 — в `fix-all-6`)
+- **Vitest 4** — тесты (918 тестов, 74 файла; `it.fails` открытых багов нет — UX-прогон 7 нашёл 0 новых, цикл закрыт; UX-AUDIT-1…10 исправлены в `fix-all`, 11…20 — в `fix-all-2`, 21…31 — в `fix-all-3`, 32…35 — в `fix-all-4`, 32-followup и 36…40 — в `fix-all-5`, 41, 42 — в `fix-all-6`)
 - **pnpm** — пакетный менеджер
 
 ## Команды
@@ -23,7 +23,7 @@
 cd web-app
 pnpm dev          # dev-сервер (порт 5000)
 pnpm build        # production-сборка
-pnpm test         # запуск тестов (906 тестов, 73 файла)
+pnpm test         # запуск тестов (918 тестов, 74 файла)
 pnpm typecheck    # tsc --noEmit
 pnpm e2e:smoke    # дымовой тест в браузере (Playwright; нужен запущенный pnpm dev; см. web-app/e2e/helpers.mjs). В CI все e2e — job `e2e` в ci-web.yml (CI-E2E)
 pnpm e2e:tree     # Фаза 9.1: раскрытие CSG в дереве, выбор ребёнка
@@ -46,7 +46,8 @@ pnpm e2e:align-obb  # ALIGN-REVIT: режимом «Выровнять» — п�
 pnpm e2e:align-plane-resolve  # ALIGN-PLANE-RESOLVE: режим «Выровнять» → шаг align («Выровнять по грани», ✎ нет) → правка «Переместить» якоря до выравнивания → снова заподлицо; undo/redo, .3dtc; призма с поворотом; плоскость по оси
 pnpm e2e:n-ary-csg  # N-ARY-CSG: 10 кубов → «Объединение» → один CSG, 10 детей плоско, правка 5-го ребёнка, undo/redo; A (5) → «Вычитание» → B (5) → Enter / «Пересечение» → «ОК» → один CSG с группами A и B; 31 куб → предупреждение «много объектов», CSG создан
 pnpm e2e:csg-group-fix  # CSG-GROUP-FIX: кнопок групп нет; A (5) → «Вычитание» → режим (статус-бар «A: 5, B: 0», метки «A») → B → Esc — без изменений; X → B → Enter / «Пересечение» → «ОК» / кнопка ещё раз → один CSG; «Объединение» — сразу
-pnpm e2e:double-click-timing  # DOUBLE-CLICK-TIMING: главный поток занят → клики через 300 мс (в очереди, обработаны подряд) — две фигуры, через 100 мс — одна; долгая задача после клика → 100 мс — одна; без нагрузки 100 / 300 мс; палитра на месте до 14 фигур (история прокручивает только свой список)
+pnpm e2e:double-click-timing  # клики по иконке палитры на медленном CPU (в очереди при занятом главном потоке): два клика — один режим размещения, 0 фигур, Enter — 1; иконка + клик по сетке в очереди — 1 фигура на сетке; палитра на месте до 14 фигур (история прокручивает только свой список)
+pnpm e2e:plug-and-play  # PLUG-AND-PLAY: «Куб» → режим (0 фигур) → превью на сетке → клик → куб на сетке (Z = 10); «Сфера» → верхняя грань куба → сфера стоит на кубе; X / Y / Z → YZ / XZ / XY (нормаль — к камере), цилиндр лёжа на YZ; Esc / правый клик — отмена; Enter над сценой — в превью
 ```
 
 ## Текущий статус
@@ -106,7 +107,10 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 | `src/store/notifications.ts` | Toast-уведомления (замена alert) |
 | `src/store/add-text.ts` | 3D-текст в сцену (`addTextObject`): меш `io/text-mesh.ts`, имя «Текст: …», ошибка → уведомление (UX-AUDIT-3/6/10) |
 | `src/store/text-object.ts` | 3D-текст как объект (UX-AUDIT-31): `textOfOp` (строка текста шага `import_mesh`: поле `text`, у старых — по id `txt_N` и имени), `isTextObject` — история «Добавить текст: …», «Тип: Текст», иконка текста; `textsByObjectId`/`textOfNode` — текст запечённых узлов дерева CSG по истории (import_mesh с текстом, зеркальные копии, узлы копий CSG — UX-AUDIT-34); `defaultTextName` — имя по умолчанию «Текст: …» → строка, `displayName` показывает его на языке интерфейса (UX-AUDIT-36) |
-| `src/store/add-shape-queue.ts` | Клик по фигуре палитры (UX-AUDIT-9): повтор той же фигуры <200 мс отбрасывается, позже — ждёт освобождения стора (`createAddShapeGate`, `addShapeWhenIdle`); интервал — по времени клика `event.timeStamp`, не обработки (`createShapeClickHandler(type, at)` — обработчик App, DOUBLE-CLICK-TIMING) |
+| `src/store/add-shape-queue.ts` | `addShapeWhenIdle(type, { at, timeoutMs })` — фигура, когда стор свободен (UX-AUDIT-9: поставленная во время долгого CSG ждёт очереди, не теряется); `at` — место из режима размещения. Фильтр двойного клика по иконке (DOUBLE-CLICK-TIMING) удалён — клик по иконке только включает размещение (PLUG-AND-PLAY) |
+| `src/store/placement.ts` | Геометрия размещения (PLUG-AND-PLAY, чистые функции): `resolvePlacement` — луч → плоскость (ось X / Y / Z → YZ / XZ / XY через начало координат → грань под курсором → сетка z = 0; нормаль оси и сетки — к камере) → точка с шагом привязки (`snapInPlane`: на сетке, оси и грани, перпендикулярной оси) → трансформ фигуры, СТОЯЩЕЙ на плоскости (`placementTransform`: локальная +Z — по нормали `rotationForNormal`, pivot = точка + нормаль × `meshBottom`) |
+| `src/store/placement-mode.ts` | **Режим размещения** (PLUG-AND-PLAY): `placementMode` (`shapeType`, `lock` — ось, `preview`, `mesh` — меш превью из воркера, кэш по типу), `startPlacement` (клик по иконке; та же — без изменений, выход из «Выровнять» / CSG A → B / линейки), `aim` (луч + грань под курсором → превью), `setPreview`, `setSnap` / `toggleAxis` (X / Y / Z), `confirmPlacement(at?)` (клик — в точке клика; без `at` — Enter: в превью, без превью — рядом с прошлыми; мимо плоскостей — режим остаётся), `cancelPlacement` |
+| `src/hooks/usePlacementMode.ts` | Esc / Enter / X·Y·Z режима размещения (capture, раньше App; X — не «Вычитание»; не в поле ввода и не под модалкой); вход в «Выровнять», режим CSG A → B или линейку — выход из размещения. Превью — `viewport-hooks` › `usePlacementPreview` (меш фигуры, прозрачность 0,5, вне raycast); клик / правый клик / уход курсора — `Viewport3D`; подсказка, плоскость, место, «Поставить» / «Отмена» — `StatusBar` |
 | `src/store/mirror-store.ts` | Store для зеркальных операций; зеркало CSG — независимая копия дерева (`copySubtree` с плоскостью) |
 | **CSG / Build Tree** | |
 | `src/csg/history-tree.ts` | **Build Tree** — параметрическое дерево (primitive/boolean/baked; boolean — N детей + `groupA`, `createBooleanNode(id, op, childIds, transform?, groupA?)`, N-ARY-CSG), `rebuildNode`, `mirrorNodeRecursive`, `cloneSubtree`; независимая копия CSG (`copySubtree`, `snapshotSubtree`, `instantiateSubtree`, id узлов `${idКопии}:${idИсточника}`); у boolean-узла `originTransform` (TRS₀ — система листьев; вложенный boolean воркер переносит на `Mat(localTransform)·Mat(originTransform)⁻¹`, NESTED-MOVED-EDIT) |
@@ -140,11 +144,11 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 | `src/csg/types.ts` | Типы операций, сцены, параметров, `TreeNode` |
 | `src/csg/BUILD_TREE_SPEC.md` | Спецификация Build Tree (1410 строк) |
 | **Components** | |
-| `src/components/Viewport3D.tsx` | Three.js вьюпорт, гизмо, raycaster, ruler, snap-to-geometry |
+| `src/components/Viewport3D.tsx` | Three.js вьюпорт, гизмо, raycaster, ruler, snap-to-geometry; режим размещения (PLUG-AND-PLAY): наведение → `aim` (throttle 50 мс + последнее положение), клик — `confirmPlacement`, правый клик — отмена, гизмо скрыт, курсор — прицел, `data-placement*` для e2e |
 | `src/components/camera-fit.ts` | «Вписать в экран» (F): `fitDistance` — расстояние камеры по рамке сцены с учётом угла обзора и соотношения сторон вьюпорта (узкий — сцена не обрезается; широкий — как раньше, 2,5 × размер), `FIT_DIR` — направление (UX-AUDIT-39) |
 | `src/components/snap-utils.ts` | Привязка (snap) к геометрии: vertex, edge, face, circle; кандидаты — треугольники рядом с точкой попадания (сетка треугольников геометрии в локальных координатах, кэш на геометрию — UX-AUDIT-35: 100k — ~6 мс на запрос); рёбра — и у геометрии без индекса (по позициям, UX-AUDIT-22) |
 | `src/components/Toolbar.tsx` | Тулбар (файл, undo, view, gizmo, CSG, тема); у каждой кнопки `aria-label` = подпись тултипа (`IconButton`), e2e ищут кнопки по нему (`toolbarButton`/`panelButton` в `e2e/helpers.mjs`), не по индексу |
-| `src/components/LeftPanel.tsx` | Палитра фигур + список объектов + история |
+| `src/components/LeftPanel.tsx` | Палитра фигур + список объектов + история; клик по фигуре — режим размещения (`onAddShape` = `startPlacement`), размещаемая фигура — нажатая иконка; «Текст» — окно ввода |
 | `src/components/PropertiesPanel.tsx` | Панель свойств (трансформ, resize, CSG; extrude в UI нет — EXTRUDE-3D-SCALE) |
 | `src/components/TextModal.tsx` | Модалка 3D текста |
 | `src/components/StatusBar.tsx` | Статус-бар |
@@ -213,7 +217,7 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 - Известный, но ещё не исправленный баг: `it.fails('ID ожидание: …')` + `it('ID реальность: …')` (а не `skip`): тест подтверждает баг на каждом прогоне и краснеет после фикса; в e2e — `knownBug(...)` (см. `e2e/ux-audit.mjs`). После фикса: `it.fails` → `it`, «реальность» удалить, `knownBug` → обычная проверка. Реестр — `DEVELOPMENT_PLAN.md` › «UX-AUDIT», «UX-AUDIT-2», «UX-AUDIT-3», «UX-AUDIT-4», «UX-AUDIT-5», «UX-AUDIT-6», «UX-AUDIT-7»
 - Строки интерфейса — только через i18n (`t('…')`, ru и en): `i18n/i18n-coverage.test.ts` (AST-скан) падает на кириллице в литералах/JSX вне `console`/`devLog` и на расхождении ключей ru/en
 - e2e в CI (CI-E2E): раннер без GPU (WebGL — Mesa llvmpipe на CPU), язык — `LANG=ru_RU`. Порог производительности (FPS, долгие задачи, время) — только через `assertPerf` (`e2e/helpers.mjs`), не `fail`: локально строго, в CI (`E2E_SOFT_PERF=1`) — предупреждение `[SOFT PERF]`. Рамку тоста мерить после `waitToastsSettled` (анимация появления), а не по паузе
-- e2e, добавляющие одну и ту же фигуру подряд, — через `spaceShapeClick` (`e2e/helpers.mjs`): повтор той же фигуры <200 мс — «двойной клик» (UX-AUDIT-9)
+- e2e добавляют фигуру палитры через `placeShape(page, label)` (`e2e/helpers.mjs`): клик по иконке включает режим размещения, Enter ставит фигуру рядом с прошлыми — позиции как до PLUG-AND-PLAY. Размещение на грани / сетке / плоскости оси — `e2e/plug-and-play.mjs` (`data-placement*` у `.viewport-canvas`)
 
 ### CSS
 - Тёмная/светлая темы через CSS-переменные в `App.css`
@@ -290,10 +294,11 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 
 - Импортированные меши (STL) не параметризуются (IMPORT-MESH-PARAMETRIC: не требуется); трансформации и CSG работают — CSG допускает замкнутый STL (проверка по manifold в воркере, IMPORT-MESH-CSG), незамкнутый → уведомление `errors.csgNonManifold`; «починка» незамкнутого меша не делается; старые extrude без `group.source` не редактируются как extrude (EXTRUDE-LEGACY: не мигрируем); `extrudeSelected` — движок правки 9.5.4, не UI-инструмент: это «растянуть по оси», а не extrude 2D→3D, кнопку не возвращать (EXTRUDE-3D-SCALE; настоящий extrude — Фаза 11)
 - Скругления (fillet) нет: прежний параметр куба удалён (remove-fillet) до инструмента на B-Rep; старые шаги `fillet` вырезаются при загрузке (`io/legacy-fillet.ts`) — новых не создавать
-- После v1.3.1 открыто: связанное зеркало (linked mirror) не делали — копия CSG всегда независимая; «починка» незамкнутого STL. CI — один workflow `ci-web.yml` (CI-DEDUP ✅): job `ci` (install + typecheck + test + build) и job `e2e` — все 22 e2e (CI-E2E ✅)
+- После v1.3.1 открыто: связанное зеркало (linked mirror) не делали — копия CSG всегда независимая; «починка» незамкнутого STL. CI — один workflow `ci-web.yml` (CI-DEDUP ✅): job `ci` (install + typecheck + test + build) и job `e2e` — все 23 e2e (CI-E2E ✅)
 - Выравнивание режимом «Выровнять» (ALIGN-UI-REVIT) пишется шагом `align` с плоскостью (ALIGN-PLANE-RESOLVE ✅; с поворотом — UX-AUDIT-32; грань гладкой поверхности — цилиндр, сфера — не поворачивает, только касание): правка прошлого шага пересчитывает его; ✎ у самого шага нет (как у обычного align). Плоскость A следует за системой объекта A (TRS), а не за гранью при правке формы A (правка ребёнка CSG A)
 - Дерево живой сессии, начатой до v1.3.2 (boolean-узлы без `originTransform`), для вложенного CSG, сдвинутого до объединения, остаётся под замком `nested_moved` (предохранитель); после перезагрузки/загрузки проекта дерево перестраивается из истории с TRS₀ — правка работает
 - `.doodle` (legacy) в UI не открывается: `parseDoodle` не вызывается
+- Размещение (PLUG-AND-PLAY): плоскости X / Y / Z — мировые, через начало координат (не через грань под курсором); на наклонной грани шаг привязки не действует (точка — точно в попадании); поворот вокруг нормали при размещении не задаётся (только «стоит на плоскости»); после размещения режим выключается (одна фигура на клик по иконке); «Текст» — по-прежнему окно ввода, без размещения
 - 3D-текст, созданный до `fix-all` (в истории — несшитый меш), в CSG не участвует — пересоздать (UX-AUDIT-3 не мигрирует старые шаги); «Отменить» после «Очистить сцену» работает только сразу после очистки (до нового действия)
 - 3D-текст: латиница — шрифт helvetiker, строки с кириллицей/диакритикой — запасной Droid Sans (`io/text-mesh.ts`); символов, которых нет ни в одном (иероглифы, emoji), — «?» с предупреждением
 - Узкое окно (≤1024): тулбар в 2–3 строки, подсказка вьюпорта скрыта; панели 320 + 200 px фиксированы (на 768 вьюпорт ~250 px)

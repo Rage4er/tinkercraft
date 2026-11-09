@@ -7,7 +7,7 @@
 // Запуск: `pnpm dev` в одном терминале, `pnpm e2e:import-mesh-csg` в другом.
 // Необязательный аргумент — путь для скриншота: `node e2e/import-mesh-csg.mjs /tmp/stl.png`.
 import { fileURLToPath } from 'node:url'
-import { openApp, toolbarButton, panelButton } from './helpers.mjs'
+import { openApp, toolbarButton, panelButton, placeShape } from './helpers.mjs'
 
 const fixture = (name) => fileURLToPath(new URL(`./fixtures/${name}`, import.meta.url))
 const RU = 'Меш не замкнут (non-manifold), CSG невозможен. Проверьте STL.'
@@ -40,7 +40,7 @@ async function importStl(name) {
 /** Куб-примитив (20³ по умолчанию), поставленный рядом с объектом `nextTo` (+12 по X — STL 10³ выступает из куба). */
 async function cubeNextTo(nextTo) {
   const before = new Set(await ids())
-  await page.getByText('Куб', { exact: true }).first().click()
+  await placeShape(page, 'Куб')
   await page.waitForFunction((n) => document.querySelectorAll('.ct-item[data-object-id]').length === n, before.size + 1, { timeout: 15000 })
   const cube = (await ids()).find((id) => !before.has(id))
   await row(nextTo).click()

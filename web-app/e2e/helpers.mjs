@@ -98,17 +98,18 @@ export async function findAlignFace(page, id, accept) {
 }
 
 /**
- * UX-AUDIT-9: повторный клик по той же фигуре палитры раньше 200 мс — «двойной клик», он
- * отбрасывается. Ждёт, чтобы с прошлого клика по `label` прошло ≥ 250 мс (для e2e, которые
- * добавляют одну и ту же фигуру подряд).
+ * PLUG-AND-PLAY: добавить фигуру палитры. Клик по иконке включает режим размещения, Enter ставит
+ * фигуру рядом с прошлыми — как раньше просто клик, позиции в e2e прежние. «Текст» — окно ввода
+ * (только клик). Размещение на грани / сетке / плоскости оси — e2e/plug-and-play.mjs.
  */
-const lastShapeClick = new Map()
-export async function spaceShapeClick(page, label) {
-  const wait = (lastShapeClick.get(label) ?? 0) + 250 - Date.now()
-  if (wait > 0) await page.waitForTimeout(wait)
-  lastShapeClick.set(label, Date.now())
+export async function placeShape(page, label) {
+  await page.getByText(label, { exact: true }).first().click()
+  if (label === 'Текст' || label === 'Text') return
+  const mode = page.locator('[data-testid=placement-mode]')
+  await mode.waitFor({ timeout: 10000 })
+  await page.keyboard.press('Enter')
+  await mode.waitFor({ state: 'detached', timeout: 10000 })
 }
-
 
 /**
  * CSG-GROUP-FIX: вычитание / пересечение — режим A → B → Enter. `via`: 'key' (X / I),

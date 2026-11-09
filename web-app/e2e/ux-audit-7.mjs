@@ -16,7 +16,7 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { openApp, toolbarButton, findAlignFace, spaceShapeClick } from './helpers.mjs'
+import { openApp, toolbarButton, findAlignFace, placeShape } from './helpers.mjs'
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ux-audit-7-'))
 const ok = []
@@ -36,8 +36,7 @@ async function session(size) {
   const labels = async () => (await page.locator('.tl-label').allInnerTexts()).map((x) => x.trim())
   const add = async (label) => {
     const b = new Set(await ids())
-    await spaceShapeClick(page, label)
-    await page.getByText(label, { exact: true }).first().click()
+    await placeShape(page, label)
     await waitRows(b.size + 1)
     return (await ids()).find((i) => !b.has(i))
   }

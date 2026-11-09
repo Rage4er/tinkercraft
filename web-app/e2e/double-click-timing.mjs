@@ -1,20 +1,22 @@
-// e2e/double-click-timing.mjs — DOUBLE-CLICK-TIMING в браузере: фильтр двойного клика по фигуре
-// палитры (повтор той же фигуры раньше 200 мс — отбрасывается, UX-AUDIT-9) меряет интервал по
-// времени КЛИКА (`event.timeStamp`), а не по времени обработки.
+// e2e/double-click-timing.mjs — клики по фигуре палитры на медленном CPU и неподвижная палитра.
+// DOUBLE-CLICK-TIMING (v1.3.6) мерил фильтр двойного клика по иконке по времени клика; с PLUG-AND-PLAY
+// клик по иконке только включает режим размещения, фигура появляется, когда её ставят (клик по сетке
+// / грани, Enter) — фильтр удалён. Здесь — что клики, в т. ч. пришедшие из очереди подряд, дают ровно
+// столько фигур, сколько размещений, и что палитра не уезжает из-под курсора (TIMELINE-SCROLL-FIX).
 // Медленный CPU — по-настоящему: главный поток занят долгой задачей, клики приходят в это время и
-// ждут в очереди ввода браузера (клики — сырым CDP `Input.dispatchMouseEvent`, без ожидания
-// обработки, как от мыши; `page.mouse.click` ждёт обработки и очередь не создаёт). Что очередь
-// была, проверяется по самим событиям: обработаны подряд, а `timeStamp` — через заданный интервал.
-//  A. поток занят 900 мс, клики через 300 мс → обработаны подряд → ДВЕ фигуры (было: одна).
-//  B. поток занят 900 мс, клики через 100 мс → обработаны подряд → ОДНА фигура (защита).
-//  C. долгая задача сразу после первого клика, второй через 100 мс ждёт её → обработан через
-//     > 200 мс → ОДНА фигура (было: две).
-//  D. без нагрузки (быстрый CPU): клики через 100 мс — одна, через 300 мс — две.
+// ждут в очереди ввода браузера (сырым CDP `Input.dispatchMouseEvent`, без ожидания обработки, как от
+// мыши; `page.mouse.click` ждёт обработки и очередь не создаёт). Что очередь была, проверяется по
+// самим событиям: обработаны подряд, а `timeStamp` — через заданный интервал.
+//  A. поток занят 900 мс, два клика по «Кубу» через 300 мс (обработаны подряд) → один режим, 0 фигур;
+//     Enter → ровно 1.
+//  B. поток занят 900 мс: клик по «Кубу», через 300 мс клик по сетке (оба в очереди) → 1 фигура, там,
+//     где был клик (стоит на сетке).
+//  C. без нагрузки: «Куб» → двойной клик по сетке → 1 фигура (второй клик — уже не размещение).
 //  E. палитра не уезжает: до 14 фигур (история переполняет свой список) левая панель не
-//     прокручивается, «Куб» на месте; текущий шаг виден — прокручен список истории.
-//     Клики по одной точке через 300 мс при 9+ фигурах → две (было: панель уезжала на строку
+//     прокручивается, «Куб» на месте; текущий шаг виден — прокручен список истории; клик по иконке
+//     в одной и той же точке + Enter, через 300 мс ещё раз → 2 фигуры (раньше панель уезжала на строку
 //     с каждой фигурой — второй клик мимо «Куба», флейк UX-AUDIT-9 в CI).
-// Перед каждой парой проверяется, что «Куб» там же, где в начале (окно 1400×850, как в ux-audit).
+// Перед каждой проверкой — «Куб» там же, где в начале (окно 1400×850, как в ux-audit).
 // Уведомлений и ошибок консоли нет. Логика — __tests__/double-click-timing.test.tsx (WASM).
 // Запуск: `pnpm dev` в одном терминале, `pnpm e2e:double-click-timing` в другом.
 import os from 'node:os'
@@ -25,100 +27,108 @@ const { browser, page, errors } = await openApp()
 let stage = 'старт'
 const fail = (msg) => { throw new Error(msg) }
 const cubeBtn = page.locator('.shape-btn', { hasText: 'Куб' }).first()
-const cubes = () => page.locator('.ct-item[data-object-id]').count()
+const rows = page.locator('.ct-item[data-object-id]')
+const cubes = () => rows.count()
+const mode = page.locator('[data-testid=placement-mode]')
 const toasts = async () => (await page.locator('.toast-msg').allTextContents()).join(' | ')
 const cdp = await page.context().newCDPSession(page)
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+const waitCubes = (k) => page.waitForFunction((n) => document.querySelectorAll('.ct-item[data-object-id]').length === n, k, { timeout: 15000 })
 
 try {
   await page.locator('button.tab-btn', { hasText: 'Дерево' }).click()
-  // клики по палитре (capture): время клика и время обработки
+  // клики (capture): по палитре или по вьюпорту — время клика и время обработки
   await page.evaluate(() => {
     window.__clicks = []
-    window.addEventListener('click', (e) => {
-      if (e.target.closest?.('.shape-btn')) window.__clicks.push({ ts: e.timeStamp, handled: performance.now() })
+    for (const type of ['click', 'pointerup']) window.addEventListener(type, (e) => {
+      const where = e.target.closest?.('.shape-btn') ? 'palette' : e.target.closest?.('.viewport-canvas') ? 'viewport' : null
+      if (where && (type === 'click') === (where === 'palette')) window.__clicks.push({ where, ts: e.timeStamp, handled: performance.now() })
     }, true)
   })
   const box = await cubeBtn.boundingBox()
   const [x, y] = [box.x + box.width / 2, box.y + box.height / 2]
+  const vp = await page.locator('.viewport-canvas').boundingBox()
+  const [gx, gy] = [vp.x + vp.width * 0.5, vp.y + vp.height * 0.62]   // сетка перед камерой
 
   /** Клик сырым CDP: ввод уходит в браузер сразу, даже если главный поток занят (не ждём обработки). */
-  const rawClick = () => Promise.all(['mousePressed', 'mouseReleased'].map((type) =>
-    cdp.send('Input.dispatchMouseEvent', { type, x, y, button: 'left', clickCount: 1 })))
+  const rawClick = (px, py) => Promise.all(['mousePressed', 'mouseReleased'].map((type) =>
+    cdp.send('Input.dispatchMouseEvent', { type, x: px, y: py, button: 'left', clickCount: 1 })))
   /** Долгая задача на главном потоке страницы (медленный CPU: кадр, сборка фигуры). */
   const longTask = (ms) => page.evaluate((d) => {
     setTimeout(() => { const t = performance.now(); while (performance.now() - t < d) { /* занят */ } }, 0)
   }, ms)
-  /** Пара кликов → ожидаемое число новых фигур; интервалы событий (время клика, обработки), мс. */
-  async function pair(label, expected, run) {
+  const clicks = () => page.evaluate(() => window.__clicks)
+  async function before(label) {
     stage = label
-    await page.waitForTimeout(400)                            // прошлая пара не мешает фильтру
+    await page.waitForTimeout(300)
     const b = await cubeBtn.boundingBox()
     if (Math.abs(b.y - box.y) > 1) fail(`палитра сдвинулась (${box.y} → ${b.y}): клики не по «Кубу»`)
     await page.evaluate(() => { window.__clicks = [] })
-    const n0 = await cubes()
-    await run()
-    await page.waitForFunction((k) => document.querySelectorAll('.ct-item[data-object-id]').length >= k, n0 + expected, { timeout: 15000 })
-      .catch(async () => fail(`${label}: добавлено ${(await cubes()) - n0}, ожидалось ${expected}`))
-    await page.waitForTimeout(1200)                           // лишняя фигура успела бы появиться
-    const added = (await cubes()) - n0
-    if (added !== expected) fail(`${label}: добавлено ${added}, ожидалось ${expected}`)
-    const c = await page.evaluate(() => window.__clicks)
-    if (c.length !== 2) fail(`${label}: событий click ${c.length}, ожидалось 2`)
-    const t = { clicked: Math.round(c[1].ts - c[0].ts), handled: Math.round(c[1].handled - c[0].handled) }
-    if (await toasts()) fail(`${label}: уведомления ${await toasts()}`)
-    return t
+    return cubes()
   }
-  const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
-
-  // ── A. занятый поток, клики через 300 мс → две ──
-  {
-    const t = await pair('A. занят, 300 мс', 2, async () => {
-      await longTask(900); await page.waitForTimeout(50)
-      const p1 = rawClick(); await sleep(300); const p2 = rawClick()
-      await Promise.all([p1, p2])
-    })
-    if (t.handled > 100 || t.clicked < 280) fail(`A: очереди не было (клик ${t.clicked} мс, обработка ${t.handled} мс)`)
-    console.log(`✅ A. поток занят: клики через ${t.clicked} мс обработаны через ${t.handled} мс → 2 фигуры`)
+  /** Очередь была: два события обработаны подряд, а время клика — через `gap` мс. */
+  function assertQueued(c, gap, what) {
+    if (c.length !== 2) fail(`${what}: событий ${c.length}, ожидалось 2 (${JSON.stringify(c)})`)
+    const clicked = Math.round(c[1].ts - c[0].ts), handled = Math.round(c[1].handled - c[0].handled)
+    if (handled > 100 || clicked < gap - 20) fail(`${what}: очереди не было (клик ${clicked} мс, обработка ${handled} мс)`)
+    return { clicked, handled }
   }
 
-  // ── B. занятый поток, клики через 100 мс → одна ──
+  // ── A. занятый поток, два клика по иконке через 300 мс → один режим, 0 фигур; Enter → 1 ──
   {
-    const t = await pair('B. занят, 100 мс', 1, async () => {
-      await longTask(900); await page.waitForTimeout(50)
-      const p1 = rawClick(); await sleep(100); const p2 = rawClick()
-      await Promise.all([p1, p2])
-    })
-    if (t.handled > 100 || t.clicked > 180) fail(`B: очереди не было (клик ${t.clicked} мс, обработка ${t.handled} мс)`)
-    console.log(`✅ B. поток занят: двойной клик через ${t.clicked} мс (обработка через ${t.handled} мс) → 1 фигура`)
+    const n0 = await before('A. два клика по иконке в очереди')
+    await longTask(900); await page.waitForTimeout(50)
+    const p1 = rawClick(x, y); await sleep(300); const p2 = rawClick(x, y)
+    await Promise.all([p1, p2])
+    await mode.waitFor({ timeout: 5000 })
+    await page.waitForTimeout(800)
+    if ((await cubes()) !== n0) fail(`A: клики по иконке добавили ${(await cubes()) - n0} фигур(ы)`)
+    const t = assertQueued(await clicks(), 300, 'A')
+    await page.keyboard.press('Enter')
+    await waitCubes(n0 + 1)
+    await page.waitForTimeout(800)
+    if ((await cubes()) !== n0 + 1) fail(`A: Enter добавил ${(await cubes()) - n0} фигур(ы)`)
+    console.log(`✅ A. поток занят: клики по иконке через ${t.clicked} мс обработаны через ${t.handled} мс → один режим, 0 фигур; Enter → 1`)
   }
 
-  // ── C. долгая задача после первого клика: второй (через 100 мс) обработан позже 200 мс → одна ──
+  // ── B. занятый поток: иконка, через 300 мс клик по сетке (оба в очереди) → 1 фигура в точке клика ──
   {
-    const t = await pair('C. задача после 1-го, 100 мс', 1, async () => {
-      const t0 = Date.now()
-      await rawClick()                                         // обработан сразу
-      await longTask(700)
-      await sleep(Math.max(0, 100 - (Date.now() - t0)))
-      await rawClick()                                         // ждёт конца задачи
-    })
-    if (t.handled < 250 || t.clicked > 180) fail(`C: второй клик не ждал (клик ${t.clicked} мс, обработка ${t.handled} мс)`)
-    console.log(`✅ C. долгая задача после клика: двойной клик через ${t.clicked} мс обработан через ${t.handled} мс → 1 фигура`)
+    const n0 = await before('B. иконка + сетка в очереди')
+    await page.mouse.move(gx, gy)                             // курсор над сценой: место превью известно заранее
+    await longTask(900); await page.waitForTimeout(50)
+    const p1 = rawClick(x, y); await sleep(300); const p2 = rawClick(gx, gy)
+    await Promise.all([p1, p2])
+    await waitCubes(n0 + 1).catch(async () => fail(`B: добавлено ${(await cubes()) - n0}, ожидалась 1`))
+    await page.waitForTimeout(800)
+    if ((await cubes()) !== n0 + 1) fail(`B: добавлено ${(await cubes()) - n0}, ожидалась 1`)
+    if (await mode.count()) fail('B: режим размещения не выключился')
+    const c = await clicks()
+    const clicked = Math.round(c[1].ts - c[0].ts), handled = Math.round(c[1].handled - c[0].handled)
+    if (c.length !== 2 || handled > 100 || clicked < 280) fail(`B: очереди не было (${JSON.stringify(c)})`)
+    // новая фигура — последняя строка; её Z = 10 (куб стоит на сетке), не в начале координат
+    await rows.last().click()
+    const z = await page.locator('.panel-right input').nth(3).inputValue()
+    if (Math.abs(Number(z) - 10) > 0.01) fail(`B: куб не на сетке — Z = ${z}`)
+    console.log(`✅ B. поток занят: иконка и клик по сетке через ${clicked} мс обработаны через ${handled} мс → 1 фигура на сетке (Z = ${z})`)
   }
 
-  // ── D. без нагрузки: 100 мс — одна, 300 мс — две ──
+  // ── C. без нагрузки: «Куб» → двойной клик по сетке → 1 фигура ──
   {
-    const t1 = await pair('D. без нагрузки, 100 мс', 1, async () => {
-      await page.mouse.click(x, y); await page.waitForTimeout(100); await page.mouse.click(x, y)
-    })
-    const t2 = await pair('D. без нагрузки, 300 мс', 2, async () => {
-      await page.mouse.click(x, y); await page.waitForTimeout(300); await page.mouse.click(x, y)
-    })
-    console.log(`✅ D. без нагрузки: через ${t1.clicked} мс → 1 фигура, через ${t2.clicked} мс → 2`)
+    const n0 = await before('C. двойной клик по сетке')
+    await cubeBtn.click()
+    await mode.waitFor({ timeout: 5000 })
+    await page.mouse.move(gx + 40, gy)
+    await page.mouse.dblclick(gx + 40, gy)
+    await waitCubes(n0 + 1)
+    await page.waitForTimeout(800)
+    if ((await cubes()) !== n0 + 1) fail(`C: двойной клик по сетке добавил ${(await cubes()) - n0} фигур(ы)`)
+    console.log('✅ C. без нагрузки: «Куб» → двойной клик по сетке → 1 фигура')
   }
 
   // ── E. палитра не уезжает, история прокручивается в своём списке ──
   {
     stage = 'E. палитра на месте'
+    await page.mouse.click(vp.x + 10, vp.y + vp.height - 10)  // снять выделение
     const layout = () => page.evaluate(() => {
       const list = document.querySelector('.tl-list')
       const cur = list.querySelector('.tl-item.current')
@@ -132,10 +142,11 @@ try {
     })
     while ((await cubes()) < 14) {
       const n = await cubes()
-      await page.waitForTimeout(250)                             // не двойной клик
-      await page.mouse.click(x, y)
-      await page.waitForFunction((k) => document.querySelectorAll('.ct-item[data-object-id]').length === k, n + 1, { timeout: 15000 })
-      await page.waitForTimeout(400)                             // плавная прокрутка истории
+      await page.mouse.click(x, y)                             // в одной и той же точке экрана
+      await mode.waitFor({ timeout: 5000 })
+      await page.keyboard.press('Enter')
+      await waitCubes(n + 1)
+      await page.waitForTimeout(400)                           // плавная прокрутка истории
       const b = await cubeBtn.boundingBox()
       const st = await layout()
       if (st.panel !== 0 || Math.abs(b.y - box.y) > 1) fail(`${n + 1} фигур: левая панель прокручена на ${st.panel} px, «Куб» ${box.y} → ${b.y}`)
@@ -149,13 +160,15 @@ try {
     }, null, { timeout: 5000 }).catch(async () => fail(`текущий шаг истории не виден: ${JSON.stringify(await layout())}`))
     const after = await layout()
     if (after.listTop <= 0) fail('список истории не прокрутился к текущему шагу')
-    const t = await pair('E. 14 фигур, 300 мс по одной точке', 2, async () => {
-      await page.mouse.click(x, y); await page.waitForTimeout(300); await page.mouse.click(x, y)
-    })
-    if ((await layout()).panel !== 0) fail('после пары левая панель прокрутилась')
-    console.log(`✅ E. 14+ фигур: левая панель не прокручивается, «Куб» на месте; история — в своём списке (прокрутка ${after.listTop} px); 300 мс (${t.clicked}) → 2 фигуры`)
+    const n0 = await before('E. 14 фигур, два размещения через 300 мс')
+    await page.mouse.click(x, y); await page.keyboard.press('Enter'); await page.waitForTimeout(300)
+    await page.mouse.click(x, y); await page.keyboard.press('Enter')
+    await waitCubes(n0 + 2).catch(async () => fail(`E: добавлено ${(await cubes()) - n0}, ожидалось 2`))
+    if ((await layout()).panel !== 0) fail('после размещений левая панель прокрутилась')
+    console.log(`✅ E. 14+ фигур: левая панель не прокручивается, «Куб» на месте; история — в своём списке (прокрутка ${after.listTop} px); два размещения через 300 мс → 2 фигуры`)
   }
 
+  if (await toasts()) fail('уведомления: ' + (await toasts()))
   if (errors.length) fail('ошибки консоли: ' + errors.join(' | '))
   console.log('DOUBLE-CLICK-TIMING e2e: OK')
 } catch (e) {

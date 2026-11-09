@@ -1,15 +1,15 @@
 // e2e/tree.mjs — Фаза 9.1: CSG раскрывается в дереве, ребёнок выбирается.
 // Запуск: `pnpm dev` в одном терминале, `pnpm e2e:tree` в другом.
 // Необязательный аргумент — путь для скриншота: `node e2e/tree.mjs /tmp/tree.png`.
-import { openApp, panelButton } from './helpers.mjs'
+import { openApp, panelButton, placeShape } from './helpers.mjs'
 
 const shot = process.argv[2]
 const { browser, page, errors } = await openApp()
 const fail = (msg) => { throw new Error(msg) }
 try {
-  await page.getByText('Куб', { exact: true }).first().click()
+  await placeShape(page, 'Куб')
   await page.waitForTimeout(800)
-  await page.getByText('Сфера', { exact: true }).first().click()
+  await placeShape(page, 'Сфера')
   await page.waitForTimeout(800)
 
   await page.locator('button.tab-btn', { hasText: 'Дерево' }).click()
@@ -69,7 +69,7 @@ try {
   await posX.fill('60')
   await posX.blur()
   await page.waitForTimeout(500)
-  await page.getByText('Цилиндр', { exact: true }).first().click()
+  await placeShape(page, 'Цилиндр')
   await page.waitForTimeout(800)
   const rows2 = page.locator('.ct-item[data-object-id]')
   if ((await rows2.count()) !== 2) fail('ожидалось 2 объекта перед вторым CSG, получено ' + (await rows2.count()))

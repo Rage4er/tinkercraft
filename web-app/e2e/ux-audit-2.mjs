@@ -15,7 +15,7 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { openApp, panelButton, toolbarButton, spaceShapeClick, assertPerf, waitToastsSettled, csgAB, csgModeStart, csgModeConfirm } from './helpers.mjs'
+import { openApp, panelButton, toolbarButton, assertPerf, waitToastsSettled, csgAB, csgModeStart, csgModeConfirm, placeShape } from './helpers.mjs'
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ux-audit-2-'))
 const ok = []
@@ -42,8 +42,7 @@ async function session(size) {
   const status = async () => (await page.locator('.statusbar').innerText()).replace(/\s+/g, ' ')
   const add = async (label) => {
     const b = new Set(await ids())
-    await spaceShapeClick(page, label)
-    await page.getByText(label, { exact: true }).first().click()
+    await placeShape(page, label)
     await waitRows(b.size + 1)
     return (await ids()).find((i) => !b.has(i))
   }
@@ -172,7 +171,7 @@ try {
     await s.confirmClear()
     const LABELS = ['Куб', 'Сфера', 'Цилиндр', 'Конус', 'Тор', 'Призма', 'Пирамида']
     t = Date.now()
-    for (let i = 0; i < 35; i++) { await page.getByText(LABELS[i % 7], { exact: true }).first().click(); await s.waitRows(i + 1) }
+    for (let i = 0; i < 35; i++) { await placeShape(page, LABELS[i % 7]); await s.waitRows(i + 1) }
     const all = await s.ids()
     for (let i = 0; i < all.length; i++) {
       if (i % 7 === 0) continue

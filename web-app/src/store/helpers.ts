@@ -269,13 +269,28 @@ export function solvePlaneAlignDelta(
 }
 
 /** Матрица поворота 3×3 (по строкам) на угол `angle` вокруг единичной оси `k` (Родригес). */
-function axisAngleMatrix(k: Vec3, angle: number): number[] {
+export function axisAngleMatrix(k: Vec3, angle: number): number[] {
   const c = Math.cos(angle), s = Math.sin(angle), v = 1 - c
   return [
     c + k.x * k.x * v, k.x * k.y * v - k.z * s, k.x * k.z * v + k.y * s,
     k.y * k.x * v + k.z * s, c + k.y * k.y * v, k.y * k.z * v - k.x * s,
     k.z * k.x * v - k.y * s, k.z * k.y * v + k.x * s, c + k.z * k.z * v,
   ]
+}
+
+/**
+ * Параметры фигуры по умолчанию (`addShape` без params и превью режима размещения).
+ * UX-AUDIT-14: у цилиндра — свои параметры (раньше падал в ветку куба: width/height/depth;
+ * геометрия та же — радиус 10 и 48 сегментов по умолчанию воркера, высота 20).
+ */
+export function defaultShapeParams(shapeType: ShapeType): ShapeParams {
+  return shapeType === 'sphere' ? { radius: 12, segments: 32 }
+    : shapeType === 'cylinder' ? { radius: 10, height: 20 }
+      : shapeType === 'cone' ? { radius: 10, height: 24, segments: 32 }
+        : shapeType === 'torus' ? { torusRadius: 15, tubeRadius: 4, segments: 32, tubeSegments: 16 }
+          : shapeType === 'prism' ? { radius: 12, height: 20, sides: 6 }
+            : shapeType === 'pyramid' ? { radius: 12, height: 20, sides: 4 }
+              : { width: 20, height: 20, depth: 20 }
 }
 
 /** Произведение матриц 3×3 (по строкам). */

@@ -71,6 +71,8 @@ Web Worker с manifold-3d (WASM). Воркер кэширует manifold-объ�
 
 **N-ARY-CSG:** CSG — N-арный. Union N объектов — один CSG с N детьми; subtract/intersect — union(A) op union(B) (группы A/B — `groupA` у операции `group` и boolean-узла). Группы в UI — режим «A → B → Enter» (CSG-GROUP-FIX, `store/csg-group-mode.ts`): «Вычитание» / «Пересечение» фиксируют выделение группой A, затем выделение — группа B, Enter / «ОК» — одна операция; «Объединение» — сразу. Boolean над N операндами считает одна функция воркера `combineOperands` — для живого CSG (`csgBooleanMulti`), перестроения дерева (`rebuildTreeNode`) и воспроизведения истории (`rebuildScene`), поэтому дерево и меш совпадают по построению. 2 операнда — прежний бинарный путь.
 
+**PLUG-AND-PLAY:** фигура палитры ставится режимом размещения (`store/placement-mode.ts`): клик по иконке → `startPlacement` (меш превью — воркер `buildShape` с параметрами по умолчанию, кэш по типу) → наведение во вьюпорте: луч камеры + грань под ним (`pickFace`) → `resolvePlacement` (`store/placement.ts`, чистая геометрия: ось X / Y / Z → грань → сетка, шаг привязки, трансформ «стоит на плоскости») → превью (`usePlacementPreview`) → клик / Enter → `addShapeWhenIdle(type, { at })` → `addShape(type, params, at)`: шаг `add_shape` с этим трансформом — история, undo / redo, `.3dtc` без изменений формата.
+
 **Правило:** Worker НЕ центрирует геометрию. Центрирование — ответственность store.
 
 ### 4. I/O Layer — `io/`
