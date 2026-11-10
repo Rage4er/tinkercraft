@@ -39,7 +39,7 @@ TinkerCraft — браузерный 3D CAD-редактор. Параметри
 | CSG | manifold-3d (WASM, выделенный Web Worker) |
 | Персистентность | IndexedDB + JSZip (.3dtc) |
 | Сборка | Vite 6 + pnpm |
-| Тестирование | Vitest 4 (951 тест, 77 файлов) + Playwright e2e (26, в CI) |
+| Тестирование | Vitest 4 (955 тестов, 78 файлов) + Playwright e2e (27, в CI) |
 | Язык | TypeScript 5.7 (strict) |
 
 ---
@@ -56,7 +56,7 @@ pnpm dev          # dev-сервер на http://localhost:5000
 
 ```bash
 pnpm build        # production-сборка в dist/
-pnpm test         # запуск тестов (951 тест, 77 файлов)
+pnpm test         # запуск тестов (955 тестов, 78 файлов)
 pnpm typecheck    # проверка типов TypeScript
 ```
 

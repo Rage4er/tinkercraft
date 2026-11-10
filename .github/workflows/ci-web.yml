@@ -73,7 +73,7 @@ jobs:
           - group: ux-audit-6 + базовые
             specs: >-
               ux-audit-6 smoke tree edit-child edit-step-move edit-step-mirror edit-step-extrude
-              independent-copy import-mesh-csg nested-moved-edit align-plane-resolve
+              independent-copy import-mesh-csg nested-moved-edit align-plane-resolve ux-polish
           - group: ux-audit-5, 3, 1, double-click, dimensions
             specs: ux-audit-5 ux-audit-3 ux-audit double-click-timing dimensions
           - group: align, ux-audit-2, 4, n-ary, group-fix, plug-and-play, ux-viewport

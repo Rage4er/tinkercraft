@@ -20,7 +20,7 @@ import { computeAABB, colorForIndex, defaultShapeParams } from "../store/helpers
 import { buildObjectGeometry } from "./object-geometry";
 import { VIEWPORT_MOUSE_BUTTONS } from "./viewport-nav";
 import { createAdaptiveGrid, updateAdaptiveGrid, setAdaptiveGridTheme, viewHeightAt, type GridState } from "./adaptive-grid";
-import { SelectionOutlinePass, selectionOutlineTargets, renderWithSelectionOutline, DRAW_OVER_OUTLINE } from "./selection-outline";
+import { SelectionOutlinePass, selectionOutlineTargets, renderWithSelectionOutline, DRAW_OVER_OUTLINE, GROUP_A_OUTLINE } from "./selection-outline";
 import { useCsgGroupModeStore } from "../store/csg-group-mode";
 import { usePlacementModeStore } from "../store/placement-mode";
 import { useDimensionsStore } from "../store/dimensions-store";
@@ -187,6 +187,12 @@ export function useThreeInit(
     useEffect(() => {
         outlineIdsRef.current = selectedIds;
     }, [selectedIds]);
+    // CSG-GROUP-UI: группа A режима «Вычитание» / «Пересечение» — тёплая кайма (B — выделение, синяя)
+    const csgGroupA = useCsgGroupModeStore((s) => s.csgGroupMode?.groupA);
+    const groupAIdsRef = useRef<ReadonlySet<string>>(new Set());
+    useEffect(() => {
+        groupAIdsRef.current = new Set(csgGroupA ?? []);
+    }, [csgGroupA]);
 
     // Stabilize onFpsUpdate via ref
     const fpsUpdateRef = useRef(onFpsUpdate);
@@ -302,7 +308,11 @@ export function useThreeInit(
 
         // SELECTION-OUTLINE: кайма выделенных (OutlinePass поверх канваса, буферы — в CSS px)
         const outline = new SelectionOutlinePass(w, h, scene, camera);
+        // CSG-GROUP-UI: кайма группы A (тёплая) — рисуется до каймы выделенных (B)
+        const outlineA = new SelectionOutlinePass(w, h, scene, camera, GROUP_A_OUTLINE);
+        const outlinePasses = [outlineA, outline];
         let outlineCount = -1;
+        let outlineACount = -1;
 
         const ro = new ResizeObserver(() => {
             const cw = container.clientWidth;
@@ -314,6 +324,7 @@ export function useThreeInit(
             camera.aspect = cw / ch;
             camera.updateProjectionMatrix();
             outline.setSize(Math.max(1, cw), Math.max(1, ch));
+            outlineA.setSize(Math.max(1, cw), Math.max(1, ch));
         });
         ro.observe(container);
 
@@ -371,10 +382,17 @@ export function useThreeInit(
             }
             // SELECTION-OUTLINE: есть выделенные — кайма вокруг них; нет — обычный кадр
             selectionOutlineTargets(outlineIdsRef.current, meshMapRef.current, outline.selectedObjects);
-            const outlined = renderWithSelectionOutline(renderer, scene, activeCam, outline) ? outline.selectedObjects.length : 0;
+            selectionOutlineTargets(groupAIdsRef.current, meshMapRef.current, outlineA.selectedObjects);
+            const drawn = renderWithSelectionOutline(renderer, scene, activeCam, outlinePasses);
+            const outlined = drawn ? outline.selectedObjects.length : 0;
             if (outlined !== outlineCount) {
                 outlineCount = outlined;
                 container.dataset.outlineCount = String(outlined);
+            }
+            const outlinedA = drawn ? outlineA.selectedObjects.length : 0;
+            if (outlinedA !== outlineACount) {
+                outlineACount = outlinedA;
+                container.dataset.outlineACount = String(outlinedA);
             }
             const now = performance.now();
             fpsRef.current.frames++;
@@ -398,6 +416,7 @@ export function useThreeInit(
             if (rafRef.current) cancelAnimationFrame(rafRef.current);
             ro.disconnect();
             outline.dispose();
+            outlineA.dispose();
             renderer.dispose();
             if (container.contains(renderer.domElement))
                 container.removeChild(renderer.domElement);

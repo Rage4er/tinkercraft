@@ -40,6 +40,15 @@ export const SELECTION_OUTLINE = {
   edgeGlow: 0,
 } as const
 
+/** Вид каймы: цвет видимой части силуэта и закрытой другим объектом. */
+export interface OutlineStyle { color: number; hiddenColor: number }
+
+/**
+ * CSG-GROUP-UI: кайма группы A режима «Вычитание» / «Пересечение» — тёплая (оранжевая), в пару к
+ * тёплой подсветке A; группа B — выделение, холодная синяя кайма (SELECTION_OUTLINE).
+ */
+export const GROUP_A_OUTLINE: OutlineStyle = { color: 0xff7a00, hiddenColor: 0x8f4600 }
+
 /** Флаг userData объектов верхнего уровня сцены, которые рисуются ПОВЕРХ каймы (гизмо, размеры). */
 export const DRAW_OVER_OUTLINE = 'drawOverOutline'
 
@@ -49,10 +58,10 @@ const CANVAS_TARGET = null as unknown as THREE.WebGLRenderTarget
 const isPerspective = (camera: THREE.Camera) => (camera as THREE.PerspectiveCamera).isPerspectiveCamera === true
 
 export class SelectionOutlinePass extends OutlinePass {
-  constructor(width: number, height: number, scene: THREE.Scene, camera: THREE.Camera) {
+  constructor(width: number, height: number, scene: THREE.Scene, camera: THREE.Camera, style: OutlineStyle = SELECTION_OUTLINE) {
     super(new THREE.Vector2(Math.max(1, width), Math.max(1, height)), scene, camera)
-    this.visibleEdgeColor.setHex(SELECTION_OUTLINE.color)
-    this.hiddenEdgeColor.setHex(SELECTION_OUTLINE.hiddenColor)
+    this.visibleEdgeColor.setHex(style.color)
+    this.hiddenEdgeColor.setHex(style.hiddenColor)
     this.edgeStrength = SELECTION_OUTLINE.edgeStrength
     this.edgeThickness = SELECTION_OUTLINE.edgeThickness
     this.edgeGlow = SELECTION_OUTLINE.edgeGlow
@@ -144,28 +153,33 @@ function visibleOverlays(scene: THREE.Scene, out: THREE.Object3D[]): THREE.Objec
 }
 
 const _overlays: THREE.Object3D[] = []
+const _active: SelectionOutlinePass[] = []
 
 /**
- * Кадр с каймой: сцена (без накладок) → кайма выделенных → накладки поверх.
- * Без выделенных (`pass.selectedObjects` пуст) — обычный renderer.render. Возвращает: кайма нарисована.
+ * Кадр с каймой: сцена (без накладок) → каймы (по порядку: группа A, затем выделенные) → накладки поверх.
+ * Нет ни одного прохода с объектами — обычный renderer.render. Возвращает: кайма нарисована.
  */
 export function renderWithSelectionOutline(
   renderer: THREE.WebGLRenderer,
   scene: THREE.Scene,
   camera: THREE.Camera,
-  pass: SelectionOutlinePass,
+  passes: SelectionOutlinePass | readonly SelectionOutlinePass[],
 ): boolean {
-  if (pass.selectedObjects.length === 0) {
+  _active.length = 0
+  for (const p of passes instanceof SelectionOutlinePass ? [passes] : passes) if (p.selectedObjects.length > 0) _active.push(p)
+  if (_active.length === 0) {
     renderer.render(scene, camera)
     return false
   }
   const overlays = visibleOverlays(scene, _overlays)
   for (const o of overlays) o.visible = false
   renderer.render(scene, camera)
-  pass.setCamera(camera)
   const shadowAuto = renderer.shadowMap.autoUpdate
   renderer.shadowMap.autoUpdate = false
-  pass.render(renderer, CANVAS_TARGET, CANVAS_TARGET, 0, false)
+  for (const pass of _active) {
+    pass.setCamera(camera)
+    pass.render(renderer, CANVAS_TARGET, CANVAS_TARGET, 0, false)
+  }
   renderer.shadowMap.autoUpdate = shadowAuto
   for (const o of overlays) o.visible = true
   if (overlays.length > 0) {
