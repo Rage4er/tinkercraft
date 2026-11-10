@@ -5,7 +5,9 @@
 // в режиме нажата кнопка его операции; во вьюпорте группа A — тёплая кайма (+ тёплая подсветка),
 // группа B (выделение) — холодная синяя. CLEANUP-TREE-SNAPSHOT: снимков дерева больше нет (писались на
 // каждом шаге, не читались) — undo / redo перестраивают дерево из операций: на каждом шаге назад и вперёд
-// объекты и дерево — как были (реальный WASM). Браузер — e2e/ux-polish.mjs.
+// объекты и дерево — как были (реальный WASM). SHADOW-BOUNDS-400: область теней и приёмник следуют за
+// видом (было ±200 мм у начала координат), размер — по отдалению; свет — то же направление.
+// Браузер — e2e/ux-polish.mjs.
 
 import { describe, it, expect, vi, beforeAll, afterEach } from 'vitest'
 
@@ -41,6 +43,9 @@ import type { CsgOpButtonStates } from '../store/csg-group-mode'
 import { useDocumentStore } from '../store/document-store'
 import { useNotifications } from '../store/notifications'
 import * as snapshots from '../store/snapshots'
+import {
+  SHADOW_MIN_HALF, SUN_DIR, applyShadowFrustum, sameShadowFrustum, shadowFrustumFor, shadowHalfFor,
+} from '../components/shadow-follow'
 import { clearTree, getNode } from '../csg/history-tree'
 
 beforeAll(() => {
@@ -242,4 +247,96 @@ describe('CLEANUP-TREE-SNAPSHOT — undo / redo без снимков дерев
   }, 60000)
 
   const warnings = () => useNotifications.getState().notifications.filter((n) => n.type === 'warning' || n.type === 'error').map((n) => n.message)
+})
+
+describe('SHADOW-BOUNDS-400 — тени там, где смотрит камера', () => {
+  const MAP = 4096
+  /** Солнце и приёмник, как во вьюпорте; область применена. */
+  function rig(target: { x: number; y: number; z: number }, dist: number) {
+    const sun = new THREE.DirectionalLight(0xffffff, 1.2)
+    sun.castShadow = true
+    sun.shadow.mapSize.set(MAP, MAP)
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), new THREE.ShadowMaterial())
+    const f = shadowFrustumFor(target, dist, MAP)
+    applyShadowFrustum(sun, ground, 400, f)
+    sun.updateMatrixWorld()
+    sun.shadow.updateMatrices(sun)
+    /** Точка в области теней (NDC камеры тени в −1…1). */
+    const inShadowArea = (x: number, y: number, z = 0) => {
+      const p = new THREE.Vector3(x, y, z).project(sun.shadow.camera)
+      return Math.abs(p.x) <= 1 && Math.abs(p.y) <= 1 && p.z >= -1 && p.z <= 1
+    }
+    return { sun, ground, f, inShadowArea }
+  }
+
+  it('объект за пределами 400 × 400: раньше вне области теней, теперь в ней (область — у центра вида)', () => {
+    // прежняя область: ±200 мм у начала координат, солнце (100, −80, 200)
+    const old = new THREE.DirectionalLight(); old.position.set(100, -80, 200)
+    Object.assign(old.shadow.camera, { left: -200, right: 200, top: 200, bottom: -200, near: 0.1, far: 1000 })
+    old.shadow.camera.updateProjectionMatrix(); old.updateMatrixWorld(); old.shadow.updateMatrices(old)
+    const oldIn = (x: number, y: number) => { const p = new THREE.Vector3(x, y, 0).project(old.shadow.camera); return Math.abs(p.x) <= 1 && Math.abs(p.y) <= 1 }
+    expect(oldIn(0, 0)).toBe(true)
+    for (const [x, y] of [[600, 0], [1500, -800], [-2500, 3000]]) {
+      expect(oldIn(x, y)).toBe(false)
+      const { f, ground, inShadowArea } = rig({ x, y, z: 0 }, 300)
+      expect(inShadowArea(x, y)).toBe(true)                            // объект у центра вида — в тени
+      expect(inShadowArea(x + 20, y - 20, 20)).toBe(true)              // и его верх
+      expect(inShadowArea(x + 150, y + 150)).toBe(true)                 // и окрестность
+      expect(Math.hypot(f.center.x - x, f.center.y - y, f.center.z)).toBeLessThan((2 * f.half) / MAP)   // центр — с точностью до текселя
+      expect(ground.position.x).toBe(f.center.x)                        // приёмник теней — там же
+      expect(ground.position.y).toBe(f.center.y)
+      expect(ground.scale.x).toBeCloseTo((2 * f.half) / 400, 9)
+    }
+  })
+
+  it('отдалили камеру — область теней больше (не меньше ±200 мм, ступенями ×1,25); видимая область покрыта', () => {
+    expect(shadowHalfFor(10)).toBe(SHADOW_MIN_HALF)
+    expect(shadowHalfFor(200)).toBe(SHADOW_MIN_HALF)
+    const ds = [10, 100, 277, 600, 1500, 5000]
+    const hs = ds.map(shadowHalfFor)
+    for (let i = 0; i < ds.length; i++) {
+      expect(hs[i]).toBeGreaterThanOrEqual(Math.max(SHADOW_MIN_HALF, ds[i]))
+      expect(hs[i]).toBeLessThan(Math.max(SHADOW_MIN_HALF, ds[i]) * 1.25 + 1e-6)
+      if (i) expect(hs[i]).toBeGreaterThanOrEqual(hs[i - 1])
+      const k = Math.log(hs[i] / SHADOW_MIN_HALF) / Math.log(1.25)
+      expect(Math.abs(k - Math.round(k))).toBeLessThan(1e-9)          // ступени
+    }
+    // камера на 1500 мм от цели: точки в ±1000 мм вокруг цели — в области теней
+    const { inShadowArea } = rig({ x: 300, y: 300, z: 0 }, 1500)
+    for (const [dx, dy] of [[1000, 0], [-1000, 0], [0, 1000], [0, -1000], [700, 700]]) expect(inShadowArea(300 + dx, 300 + dy)).toBe(true)
+  })
+
+  it('свет — то же направление; смещения в мировых единицах — как при ±200 мм (тени не отрываются и не рябят)', () => {
+    for (const d of [100, 1000, 5000]) {
+      const { sun, f } = rig({ x: 700, y: -300, z: 0 }, d)
+      const dir = sun.position.clone().sub(sun.target.position).normalize()
+      expect(dir.distanceTo(SUN_DIR)).toBeLessThan(1e-9)
+      expect(f.bias * (f.far - f.near)).toBeCloseTo(-0.002 * 1000, 9)  // depth bias × глубина — 2 мм, как было
+      expect(f.normalBias / ((2 * f.half) / MAP)).toBeCloseTo(0.05 / (400 / MAP), 9)   // normal bias на тексель — как было
+      expect(sun.shadow.camera.right).toBe(f.half)
+      expect(sun.shadow.camera.far).toBe(f.far)
+    }
+  })
+
+  it('сдвиг вида меньше текселя — область почти не меняется (тени не дрожат); дальше — центр по сетке текселей', () => {
+    const a = shadowFrustumFor({ x: 400, y: 100, z: 0 }, 300, MAP)
+    const texel = (2 * a.half) / MAP
+    // 11 положений вида в пределах полутекселя: центр меняется только на границах ячеек (≤ 1 раз по каждой оси)
+    const centers = new Set<string>()
+    for (let i = 0; i <= 10; i++) {
+      const f = shadowFrustumFor({ x: 400 + texel * 0.05 * i, y: 100, z: 0 }, 300, MAP)
+      centers.add(f.center.toArray().map((v) => v.toFixed(6)).join(','))
+    }
+    expect(centers.size).toBeLessThanOrEqual(4)
+    expect(sameShadowFrustum(a, shadowFrustumFor({ x: 400, y: 100, z: 0 }, 300, MAP))).toBe(true)
+    const c = shadowFrustumFor({ x: 470, y: 160, z: 0 }, 300, MAP)
+    expect(sameShadowFrustum(a, c)).toBe(false)
+    expect(sameShadowFrustum(null, a)).toBe(false)
+    // центры a и c отличаются на целое число текселей в плоскости света
+    const m = new THREE.Matrix4().lookAt(SUN_DIR, new THREE.Vector3(), new THREE.Vector3(0, 1, 0))
+    const ax = new THREE.Vector3().setFromMatrixColumn(m, 0), ay = new THREE.Vector3().setFromMatrixColumn(m, 1)
+    const d = c.center.clone().sub(a.center)
+    const az = new THREE.Vector3().setFromMatrixColumn(m, 2)
+    for (const axis of [ax, ay, az]) { const k = d.dot(axis) / texel; expect(Math.abs(k - Math.round(k))).toBeLessThan(1e-6) }
+  })
 })

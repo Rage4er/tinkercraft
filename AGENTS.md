@@ -14,7 +14,7 @@
 - **manifold-3d** (WASM) — CSG операции в Web Worker
 - **Zustand 5** — стейт-менеджмент
 - **Vite 6** — сборка
-- **Vitest 4** — тесты (957 тестов, 78 файлов; `it.fails` открытых багов нет — UX-прогон 7 нашёл 0 новых, цикл закрыт; UX-AUDIT-1…10 исправлены в `fix-all`, 11…20 — в `fix-all-2`, 21…31 — в `fix-all-3`, 32…35 — в `fix-all-4`, 32-followup и 36…40 — в `fix-all-5`, 41, 42 — в `fix-all-6`)
+- **Vitest 4** — тесты (961 тест, 78 файлов; `it.fails` открытых багов нет — UX-прогон 7 нашёл 0 новых, цикл закрыт; UX-AUDIT-1…10 исправлены в `fix-all`, 11…20 — в `fix-all-2`, 21…31 — в `fix-all-3`, 32…35 — в `fix-all-4`, 32-followup и 36…40 — в `fix-all-5`, 41, 42 — в `fix-all-6`)
 - **pnpm** — пакетный менеджер
 
 ## Команды
@@ -23,7 +23,7 @@
 cd web-app
 pnpm dev          # dev-сервер (порт 5000)
 pnpm build        # production-сборка
-pnpm test         # запуск тестов (957 тестов, 78 файлов)
+pnpm test         # запуск тестов (961 тест, 78 файлов)
 pnpm typecheck    # tsc --noEmit
 pnpm e2e:smoke    # дымовой тест в браузере (Playwright; нужен запущенный pnpm dev; см. web-app/e2e/helpers.mjs). В CI все e2e — job `e2e` в ci-web.yml (CI-E2E)
 pnpm e2e:tree     # Фаза 9.1: раскрытие CSG в дереве, выбор ребёнка
@@ -51,7 +51,7 @@ pnpm e2e:plug-and-play  # PLUG-AND-PLAY: «Куб» → режим (0 фигур
 pnpm e2e:dimensions  # DIMENSIONS: меню «Размер» (3 пункта, Esc), D — режим сразу; «Поставить размер» → точка куба 1 → точка куба 2 → число = |B − A|; клик по линии — выделен; сдвиг / масштаб куба 2 и Ctrl+Z / Ctrl+Y — число за объектом; «Показать / скрыть размеры»; «Настройки» к выбранному — Проекция, цвет, шрифт; Delete — размер удалён, кубы на месте
 pnpm e2e:ux-viewport  # UX-VIEWPORT: ЛКМ-протяжка вид не вращает, ПКМ вращает, СКМ сдвигает; F и двойной клик СКМ — вписать; сетка: шаги 1 → 5 → 10 → 50 → 100 (жирная ×10), не обрывается на отдалении и после сдвига; рамка: слева направо — синяя, только целиком внутри; справа налево — зелёная пунктирная, задетые; Shift — добавить
 pnpm e2e:selection-outline  # SELECTION-OUTLINE: ничего не выделено — каймы нет; клик по кубу — синяя кайма вокруг него (2–4 px); клик в пусто — нет; Shift+клик / рамка — кайма у всех; светлая тема, орто, гизмо; 100k + 24 объекта выделены — FPS ≥ 55
-pnpm e2e:ux-polish  # ux-polish: A — CSG-GROUP-UI (кнопки CSG в тулбаре; «Вычитание» → кайма A оранжевая, B синяя; Esc — каймы A нет); B — CLEANUP-TREE-SNAPSHOT (куб − сфера → X → undo / redo — объекты и дети CSG как были)
+pnpm e2e:ux-polish  # ux-polish: A — CSG-GROUP-UI (кнопки CSG в тулбаре; «Вычитание» → кайма A оранжевая, B синяя; Esc — каймы A нет); B — CLEANUP-TREE-SNAPSHOT (куб − сфера → X → undo / redo — объекты и дети CSG как были); C — SHADOW-BOUNDS-400 (куб на X = 0 / 600 / 1500 и отдалились — тень есть, центр области теней у куба)
 ```
 
 ## Текущий статус
@@ -158,6 +158,7 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 | `src/components/viewport-nav.ts` | Кнопки мыши OrbitControls (`VIEWPORT_MOUSE_BUTTONS`: LEFT — нет, MIDDLE — сдвиг, RIGHT — вращение), детектор двойного клика СКМ (`createMiddleDoubleClick`) |
 | `src/components/adaptive-grid.ts` | Сетка (GRID-ADAPTIVE): шейдерная плоскость — тонкая + жирная ×10 + оси, шаг 1 / 5 / 10 / 50 / 100 по масштабу (`gridStepFor`, клетка ≥ 16 px), без края (следует за целью камеры, гаснет к краю радиуса `gridRadiusFor`); обновляется в цикле отрисовки, `data-grid-step` / `-major` / `-radius` / `-center` у вьюпорта; темы — `setAdaptiveGridTheme` |
 | `src/components/selection-outline.ts` | Кайма выделенных (SELECTION-OUTLINE): `SelectionOutlinePass` — `OutlinePass` прямо на канвас (без EffectComposer: сцена — обычный `renderer.render`, затем проходы каймы, затем накладки с флагом `DRAW_OVER_OUTLINE` — гизмо, размеры); обычное смешивание (светлая тема), маска под тип камеры (`setCamera`), буферы в CSS px; `selectionOutlineTargets` (выделенные видимые меши, каждый кадр), `renderWithSelectionOutline` (несколько проходов: группа A режима CSG — тёплая `GROUP_A_OUTLINE`, затем выделенные — синяя; нет объектов — один `render`); `data-outline-count` / `data-outline-a-count` у вьюпорта (e2e) |
+| `src/components/shadow-follow.ts` | Тени у центра вида (SHADOW-BOUNDS-400): `shadowFrustumFor(target, distance, mapSize)` — область теней (полуразмер `shadowHalfFor` ≥ 200 мм и ≥ расстояния, ступени ×1,25; центр в узле текселей в осях света; солнце по `SUN_DIR`; bias / normalBias — под размер, в мировых единицах как при ±200), `applyShadowFrustum` (солнце, цель, камера тени, приёмник), `sameShadowFrustum`; в цикле отрисовки — `useThreeInit`, `data-shadow-half` / `-center` у вьюпорта |
 | `src/components/selection-rect.ts` | Рамка выделения (SELECTION-RECT): `rectModeOf` (вправо — окно, влево — секущая), `objectsInRect` / `meshInRect` по настоящей геометрии (окно — все вершины в рамке; секущая — вершина или треугольник пересекает рамку, `triangleOverlapsRect` — SAT) |
 | `src/components/camera-fit.ts` | «Вписать в экран» (F): `fitDistance` — расстояние камеры по рамке сцены с учётом угла обзора и соотношения сторон вьюпорта (узкий — сцена не обрезается; широкий — как раньше, 2,5 × размер), `FIT_DIR` — направление (UX-AUDIT-39) |
 | `src/components/snap-utils.ts` | Привязка (snap) к геометрии: vertex, edge, face, circle; кандидаты — треугольники рядом с точкой попадания (сетка треугольников геометрии в локальных координатах, кэш на геометрию — UX-AUDIT-35: 100k — ~6 мс на запрос); рёбра — и у геометрии без индекса (по позициям, UX-AUDIT-22) |

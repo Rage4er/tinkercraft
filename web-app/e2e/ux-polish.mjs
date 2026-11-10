@@ -4,6 +4,9 @@
 //     выбрал цилиндр и конус (B) — синяя (холодная) кайма вокруг них; Esc — каймы A нет.
 //  B. CLEANUP-TREE-SNAPSHOT: куб − сфера (режим) → CSG с 2 детьми в дереве → сдвиг X → undo ×2 — снова куб и
 //     сфера, redo ×2 — CSG с теми же детьми, X на месте; undo / redo без ошибок (снимков дерева нет).
+//  C. SHADOW-BOUNDS-400 (чистая сцена): куб у начала координат и на X = 600 / 1500 (раньше за краем области
+//     теней ±200 мм) → «Вписать» → тень есть (пиксели, темнее с кубом, чем со скрытым кубом), центр области
+//     теней (data-shadow-center) — у куба; отдалились — тень есть, область больше.
 // Ошибок консоли нет. Логика — src/__tests__/ux-polish.test.tsx.
 // Запуск: `pnpm dev` в одном терминале, `pnpm e2e:ux-polish` в другом.
 // Необязательный аргумент — каталог для скриншотов: `node e2e/ux-polish.mjs /tmp/shots`.
@@ -20,6 +23,7 @@ const rows = page.locator('.ct-item[data-object-id]')
 const ids = () => rows.evaluateAll((els) => els.map((e) => e.getAttribute('data-object-id')))
 const waitRows = (n, t = 30000) => page.waitForFunction((k) => document.querySelectorAll('.ct-item[data-object-id]').length === k, n, { timeout: t })
 const shot = async (name) => { if (shotDir) await page.screenshot({ path: path.join(shotDir, name) }) }
+const shotPage = async (p, name) => { if (shotDir) await p.screenshot({ path: path.join(shotDir, name) }) }
 const blur = () => page.evaluate(() => document.activeElement?.blur())
 const pick = async (id, add = false) => {
   await page.locator(`.ct-item[data-object-id="${id}"]`).click(add ? { modifiers: ['Shift'] } : undefined)
@@ -140,6 +144,76 @@ try {
   if (Math.abs(x - 40) > 0.01) fail('B: после redo X = ' + x)
   await shot('polish-b-undo-redo.png')
   ok.push(`B: куб − сфера → CSG (${kids0.length} ребёнка) → X 40 → undo ×2 — куб и сфера на месте, redo ×2 — CSG с теми же детьми, X 40`)
+
+  // ── C: SHADOW-BOUNDS-400 — тени за пределами 400 × 400 ──
+  stage = 'C. SHADOW-BOUNDS-400'
+  {
+    const s2 = await openApp()
+    const p2 = s2.page
+    try {
+      const vp2 = p2.locator('.viewport-canvas')
+      await p2.locator('button.tab-btn', { hasText: 'Дерево' }).click()
+      await placeShape(p2, 'Куб')
+      await p2.waitForFunction(() => document.querySelectorAll('.ct-item[data-object-id]').length === 1)
+      const cid = await p2.locator('.ct-item[data-object-id]').first().getAttribute('data-object-id')
+      const row = p2.locator(`.ct-item[data-object-id="${cid}"]`)
+      const setPos = async (x) => {
+        await row.click()
+        for (const [f, v] of [['X', x], ['Z', 10]]) { const el = p2.locator(`.panel-right #num-input-pos-${f}`); await el.fill(String(v)); await el.press('Enter'); await p2.waitForTimeout(250) }
+      }
+      /** Кадр, который больше не меняется (анимация «вписать» и демпфирование камеры закончились; на CPU — дольше). */
+      const frame = async () => {
+        const clip = await vp2.boundingBox()
+        const t0 = Date.now()
+        let prev = await p2.screenshot({ clip })
+        for (;;) {
+          await p2.waitForTimeout(300)
+          const cur = await p2.screenshot({ clip })
+          if (Buffer.compare(prev, cur) === 0) return cur
+          if (Date.now() - t0 > 20000) fail('C: вид не успокаивается')
+          prev = cur
+        }
+      }
+      /** Пикселей тени: кадр с кубом темнее кадра со скрытым кубом (все каналы ≥ 4). */
+      const shadowPx = async (wheel = 0) => {
+        await p2.evaluate(() => document.activeElement?.blur()); await p2.keyboard.press('KeyF')
+        await p2.waitForTimeout(1500)
+        const b = await vp2.boundingBox()
+        for (let i = 0; i < wheel; i++) { await p2.mouse.move(b.x + b.width / 2, b.y + b.height / 2); await p2.mouse.wheel(0, 300); await p2.waitForTimeout(40) }
+        await p2.keyboard.press('Escape'); await p2.waitForTimeout(300)
+        const on = await frame()
+        const ds = await vp2.evaluate((e) => ({ half: Number(e.dataset.shadowHalf), center: e.dataset.shadowCenter }))
+        await row.click(); await p2.locator('.panel-right button', { hasText: 'Да' }).click(); await p2.waitForTimeout(200)
+        await p2.keyboard.press('Escape'); await p2.waitForTimeout(400)
+        const off = await frame()
+        await row.click(); await p2.locator('.panel-right button', { hasText: 'Нет' }).click(); await p2.waitForTimeout(200)
+        const n = await p2.evaluate(async ([a, c]) => {
+          const load = async (b64) => { const img = new Image(); img.src = 'data:image/png;base64,' + b64; await img.decode(); const cv = document.createElement('canvas'); cv.width = img.width; cv.height = img.height; const x = cv.getContext('2d'); x.drawImage(img, 0, 0); return x.getImageData(0, 0, img.width, img.height).data }
+          const p = await load(a), q = await load(c)
+          let k = 0
+          for (let i = 0; i < p.length; i += 4) if (q[i] - p[i] >= 4 && q[i + 1] - p[i + 1] >= 4 && q[i + 2] - p[i + 2] >= 4) k++
+          return k
+        }, [on.toString('base64'), off.toString('base64')])
+        return { n, ...ds }
+      }
+      const res = []
+      for (const [x, wheel] of [[0, 0], [600, 0], [1500, 0], [1500, 8]]) {
+        await setPos(x)
+        const r = await shadowPx(wheel)
+        const cx = Number(r.center.split(',')[0])
+        if (r.n < 150) fail(`C: куб на X = ${x}${wheel ? ', отдалились' : ''} — тени нет (${r.n} px)`)
+        if (r.n > 20000) fail(`C: куб на X = ${x} — «тень» ${r.n} px: кадры с кубом и без отличаются целиком (вид сдвинулся)`)
+        if (Math.abs(cx - x) > 60) fail(`C: центр области теней ${r.center}, куб на X = ${x}`)
+        if (x >= 600 && !wheel && r.half < 200) fail(`C: область теней ±${r.half} мм`)
+        res.push(`X ${x}${wheel ? ' (отдалились)' : ''}: тень ${r.n} px, область ±${r.half} мм у ${r.center}`)
+        if (x === 1500) await shotPage(p2, wheel ? 'polish-c-shadow-far.png' : 'polish-c-shadow-1500.png')
+      }
+      if (s2.errors.length) fail('C: ошибки консоли: ' + s2.errors.join(' | '))
+      ok.push('C: ' + res.join('; '))
+    } finally {
+      await s2.browser.close()
+    }
+  }
 
   stage = 'итог'
   if (errors.length) fail('ошибки консоли: ' + errors.join(' | '))
