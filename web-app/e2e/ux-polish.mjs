@@ -7,6 +7,9 @@
 //  C. SHADOW-BOUNDS-400 (чистая сцена): куб у начала координат и на X = 600 / 1500 (раньше за краем области
 //     теней ±200 мм) → «Вписать» → тень есть (пиксели, темнее с кубом, чем со скрытым кубом), центр области
 //     теней (data-shadow-center) — у куба; отдалились — тень есть, область больше.
+//  D. DIMENSION-UNDO (чистая сцена): два куба → «Размер» (D) → точка куба 1 → точка куба 2 → размер в списке
+//     → выбрать его, Delete — удалён → Ctrl+Z — вернулся (то же число), «Повторить» активна → Ctrl+Y — удалён →
+//     кнопки «Отменить» / «Повторить» тулбара — то же; история документа не изменилась (2/2).
 // Ошибок консоли нет. Логика — src/__tests__/ux-polish.test.tsx.
 // Запуск: `pnpm dev` в одном терминале, `pnpm e2e:ux-polish` в другом.
 // Необязательный аргумент — каталог для скриншотов: `node e2e/ux-polish.mjs /tmp/shots`.
@@ -212,6 +215,78 @@ try {
       ok.push('C: ' + res.join('; '))
     } finally {
       await s2.browser.close()
+    }
+  }
+
+  // ── D: DIMENSION-UNDO — удалить размер → Ctrl+Z → вернулся, Ctrl+Y → удалён ──
+  stage = 'D. DIMENSION-UNDO'
+  {
+    const s3 = await openApp()
+    const p3 = s3.page
+    try {
+      const vp3 = p3.locator('.viewport-canvas')
+      const dimRows = p3.locator('[data-testid=dimension-row]')
+      await p3.locator('button.tab-btn', { hasText: 'Дерево' }).click()
+      await placeShape(p3, 'Куб'); await placeShape(p3, 'Куб')
+      await p3.waitForFunction(() => document.querySelectorAll('.ct-item[data-object-id]').length === 2)
+      const [c1, c2] = await p3.locator('.ct-item[data-object-id]').evaluateAll((els) => els.map((e) => e.getAttribute('data-object-id')))
+      await p3.evaluate(() => document.activeElement?.blur()); await p3.keyboard.press('KeyF'); await p3.waitForTimeout(1500)
+      const vb = await vp3.boundingBox()
+      await p3.mouse.move(vb.x + vb.width / 2, vb.y + vb.height / 2)
+      await p3.keyboard.press('KeyD')
+      await p3.locator('[data-testid=dimension-mode]').waitFor({ timeout: 5000 })
+      const probe = async (x, y) => {
+        await p3.mouse.move(x, y); await p3.waitForTimeout(90)
+        const h = await vp3.getAttribute('data-dimension-hover')
+        if (!h) return null
+        const [id] = h.split('|')
+        return { x, y, id }
+      }
+      let A = null, B = null
+      for (let j = 0; j < 14 && !(A && B); j++) for (let i = 0; i < 22 && !(A && B); i++) {
+        const h = await probe(vb.x + vb.width * (0.25 + i * 0.5 / 22), vb.y + vb.height * (0.25 + j * 0.5 / 14))
+        if (h?.id === c1 && !A) A = h
+        if (h?.id === c2 && !B) B = h
+      }
+      if (!A || !B) fail(`D: точки на кубах не найдены (A ${!!A}, B ${!!B})`)
+      await p3.mouse.move(A.x, A.y); await p3.waitForTimeout(120); await p3.mouse.click(A.x, A.y)
+      await p3.waitForFunction(() => document.querySelector('.viewport-canvas')?.getAttribute('data-dimension-mode') === 'b', null, { timeout: 5000 })
+      await p3.mouse.move(B.x, B.y); await p3.waitForTimeout(150); await p3.mouse.click(B.x, B.y)
+      await dimRows.first().waitFor({ timeout: 5000 })
+      await p3.keyboard.press('Escape')
+      await p3.locator('[data-testid=dimension-mode]').waitFor({ state: 'detached', timeout: 5000 })
+      const rowText = await dimRows.first().innerText()
+      const hist = async () => (await p3.locator('.statusbar').innerText()).match(/История: (\d+\/\d+)/)[1]
+      const h0 = await hist()
+      const undoBtn = toolbarButton(p3, 'Отменить'), redoBtn = toolbarButton(p3, 'Повторить')
+      const rowsAre = (n, what) => p3.waitForFunction((k) => document.querySelectorAll('[data-testid=dimension-row]').length === k, n, { timeout: 5000 })
+        .catch(async () => fail(`D: ${what} — размеров в списке ${await dimRows.count()}, ожидалось ${n}`))
+      // выбрать размер в списке → Delete
+      await dimRows.first().click()
+      await p3.evaluate(() => document.activeElement?.blur())
+      await p3.keyboard.press('Delete')
+      await rowsAre(0, 'Delete')
+      if ((await p3.locator('.ct-item[data-object-id]').count()) !== 2) fail('D: Delete удалил объекты')
+      if (!(await undoBtn.isEnabled())) fail('D: «Отменить» неактивна после удаления размера')
+      await p3.keyboard.press('Control+z')
+      await rowsAre(1, 'Ctrl+Z')
+      if ((await dimRows.first().innerText()) !== rowText) fail(`D: вернулся другой размер: ${await dimRows.first().innerText()} (был ${rowText})`)
+      if (!(await redoBtn.isEnabled())) fail('D: «Повторить» неактивна после Ctrl+Z удаления')
+      await shot('polish-d-undo.png')
+      await p3.keyboard.press('Control+y')
+      await rowsAre(0, 'Ctrl+Y')
+      await undoBtn.click()
+      await rowsAre(1, '«Отменить» в тулбаре')
+      await redoBtn.click()
+      await rowsAre(0, '«Повторить» в тулбаре')
+      await undoBtn.click()
+      await rowsAre(1, '«Отменить» ещё раз')
+      if ((await hist()) !== h0) fail(`D: история документа изменилась: ${h0} → ${await hist()}`)
+      if ((await p3.locator('.ct-item[data-object-id]').count()) !== 2) fail('D: объекты изменились')
+      if (s3.errors.length) fail('D: ошибки консоли: ' + s3.errors.join(' | '))
+      ok.push(`D: размер «${rowText.replace(/\s+/g, ' ')}» → Delete — удалён → Ctrl+Z — вернулся, «Повторить» активна → Ctrl+Y — удалён; кнопки тулбара — то же; история ${h0} не изменилась`)
+    } finally {
+      await s3.browser.close()
     }
   }
 

@@ -38,6 +38,7 @@ import { useSelectedStepGuard } from "./hooks/useSelectedStepGuard";
 import { useTimelineEdit } from "./hooks/useTimelineEdit";
 import { useCsgGroupModeStore, csgButtonStates } from "./store/csg-group-mode";
 import { useCsgGroupMode } from "./hooks/useCsgGroupMode";
+import { undoWithDimensions, redoWithDimensions, canUndoDimension, canRedoDimension } from "./store/dimension-undo";
 import type {
   TransformNR,
   ShapeParams,
@@ -120,8 +121,6 @@ export default function App() {
       deleteSelected: s.deleteSelected,
       selectObjects: s.selectObjects,
       clearSelection: s.clearSelection,
-      undo: s.undo,
-      redo: s.redo,
       jumpToHistory: s.jumpToHistory,
       clearScene: s.clearScene,
       openProject: s.openProject,
@@ -158,8 +157,6 @@ export default function App() {
     deleteSelected,
     selectObjects,
     clearSelection,
-    undo,
-    redo,
     jumpToHistory,
     clearScene,
     openProject,
@@ -208,7 +205,7 @@ export default function App() {
   // UX-AUDIT-5: клавиша → действие — `resolveHotkey` (hotkeys.ts, сверяется с подсказками
   // TOOLTIP_DATA тестом); здесь — только исполнение. Под модалкой сочетания не работают.
   const kbState = {
-    objects, selectedIds, busy, deleteSelected, undo, redo, selectObjects,
+    objects, selectedIds, busy, deleteSelected, selectObjects,
     saveProject, openProject, clearSelection, copySelected, pasteClipboard,
     mirrorSelected,
     modalOpen: showTextModal || showPM || showClearConfirm || showDimensionSettings,
@@ -243,8 +240,9 @@ export default function App() {
       }
       switch (action) {
         case "delete": void kb.deleteSelected(); break;
-        case "undo": void kb.undo(); break;
-        case "redo": void kb.redo(); break;
+        // DIMENSION-UNDO: Ctrl+Z / Ctrl+Y — и действия с размерами (в общем порядке с шагами документа)
+        case "undo": void undoWithDimensions(); break;
+        case "redo": void redoWithDimensions(); break;
         case "selectAll": kb.selectObjects(Object.keys(kb.objects), false); break;
         // FIX (HIGH-18-18): Ctrl+S сохраняет и при активном гизмо (S без Ctrl — гизмо масштаба)
         case "save": void kb.saveProject(); break;
@@ -353,8 +351,11 @@ export default function App() {
   );
   // UX-AUDIT-2: сразу после «Очистить сцену» отмена возвращает документ
   const undoClear = useDocumentStore(canUndoClear);
-  const canUndo = historyIndex > 0 || undoClear;
-  const canRedo = historyIndex < operations.length;
+  // DIMENSION-UNDO: отменить / вернуть можно и действие с размером (на текущей позиции документа)
+  const dimUndo = useDimensionsStore((s) => canUndoDimension(s.undoStack, historyIndex));
+  const dimRedo = useDimensionsStore((s) => canRedoDimension(s.redoStack, historyIndex));
+  const canUndo = historyIndex > 0 || undoClear || dimUndo;
+  const canRedo = historyIndex < operations.length || dimRedo;
   // CSG недоступен, если среди выбранных объектов есть non-manifold (import_mesh)
   // IMPORT-MESH-CSG: импорт (STL, 3D-текст) не блокируется по типу — замкнутость проверяет
   // воркер; незамкнутый меш → уведомление errors.csgNonManifold.
@@ -510,8 +511,8 @@ export default function App() {
         onExportStl={exportStl}
         onImportStl={importStl}
         onShowProjects={() => setShowPM(true)}
-        onUndo={undo}
-        onRedo={redo}
+        onUndo={() => void undoWithDimensions()}
+        onRedo={() => void redoWithDimensions()}
         onCopy={copySelected}
         onPaste={pasteClipboard}
         onDelete={deleteSelected}

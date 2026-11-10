@@ -7,6 +7,8 @@
 // каждом шаге, не читались) — undo / redo перестраивают дерево из операций: на каждом шаге назад и вперёд
 // объекты и дерево — как были (реальный WASM). SHADOW-BOUNDS-400: область теней и приёмник следуют за
 // видом (было ±200 мм у начала координат), размер — по отдалению; свет — то же направление.
+// DIMENSION-UNDO: удалил размер → Ctrl+Z → вернулся (тот же размер, на том же месте списка), Ctrl+Y →
+// снова удалён; действия с размерами и шаги документа отменяются в общем порядке.
 // Браузер — e2e/ux-polish.mjs.
 
 import { describe, it, expect, vi, beforeAll, afterEach } from 'vitest'
@@ -47,6 +49,9 @@ import {
   SHADOW_MIN_HALF, SUN_DIR, applyShadowFrustum, sameShadowFrustum, shadowFrustumFor, shadowHalfFor,
 } from '../components/shadow-follow'
 import { clearTree, getNode } from '../csg/history-tree'
+import { useDimensionsStore } from '../store/dimensions-store'
+import { useDimensionModeStore, createDimension, deleteDimension, restyleDimension } from '../store/dimension-mode'
+import { undoWithDimensions, redoWithDimensions, canUndoDimension, canRedoDimension } from '../store/dimension-undo'
 
 beforeAll(() => {
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -339,4 +344,107 @@ describe('SHADOW-BOUNDS-400 — тени там, где смотрит каме�
     const az = new THREE.Vector3().setFromMatrixColumn(m, 2)
     for (const axis of [ax, ay, az]) { const k = d.dot(axis) / texel; expect(Math.abs(k - Math.round(k))).toBeLessThan(1e-6) }
   })
+})
+
+describe('DIMENSION-UNDO — удалить размер → Ctrl+Z → вернулся, Ctrl+Y → удалён', () => {
+  const st = () => useDocumentStore.getState()
+  const ds = () => useDimensionsStore.getState()
+  function reset(): void {
+    useDocumentStore.setState({ objects: {}, operations: [], historyIndex: 0, selectedIds: [], busy: false, modified: false })
+    useNotifications.setState({ notifications: [] })
+    useDimensionsStore.setState({ dimensions: [], selectedDimensionId: null, undoStack: [], redoStack: [], showDimensions: true })
+    useDimensionModeStore.setState({ dimensionMode: null })
+    snapshots.clearSnapshots(); clearTree()
+  }
+  /** Два куба (X = 0 и 25) и размеры между их вершинами. */
+  async function twoCubes() {
+    reset()
+    await st().addShape('cube'); await st().addShape('cube')
+    const [a, b] = Object.keys(st().objects)
+    const dim = (za: number) => createDimension({ objectId: a, point: { x: 10, y: 10, z: za } }, { objectId: b, point: { x: 15, y: 10, z: za } })!
+    return { a, b, dim }
+  }
+  const ids = () => ds().dimensions.map((d) => d.id)
+  /** Ctrl+Z / Ctrl+Y и доступность кнопок «Отменить» / «Повторить» по размерам. */
+  const z = () => undoWithDimensions()
+  const y = () => redoWithDimensions()
+  const canZ = () => canUndoDimension(ds().undoStack, st().historyIndex)
+  const canY = () => canRedoDimension(ds().redoStack, st().historyIndex)
+
+  it('удалил → Ctrl+Z — тот же размер на том же месте списка; Ctrl+Y — снова удалён; документ не тронут', async () => {
+    const { dim } = await twoCubes()
+    const d1 = dim(10), d2 = dim(-10), d3 = dim(0)
+    expect(ids()).toEqual([d1.id, d2.id, d3.id])
+    useDocumentStore.setState({ modified: false })
+    deleteDimension(d2.id)
+    expect(ids()).toEqual([d1.id, d3.id])
+    expect(canZ()).toBe(true)
+    await z()
+    expect(ids()).toEqual([d1.id, d2.id, d3.id])                      // вернулся на своё место
+    expect(ds().dimensions[1]).toEqual(d2)                              // тот же размер (точки, стиль, отступ)
+    expect(st().historyIndex).toBe(2)                                   // шаг документа не отменён
+    expect(Object.keys(st().objects)).toHaveLength(2)
+    expect(st().modified).toBe(true)
+    expect(canY()).toBe(true)
+    await y()
+    expect(ids()).toEqual([d1.id, d3.id])                              // снова удалён
+    await z(); await z()                                                 // удаление, затем создание d3
+    expect(ids()).toEqual([d1.id, d2.id])
+    await y()
+    expect(ids()).toEqual([d1.id, d2.id, d3.id])
+  }, 30000)
+
+  it('общий порядок: размер → сдвиг куба → удаление размера; Ctrl+Z ×4 и Ctrl+Y ×4 — в обратном и прямом порядке', async () => {
+    const { b, dim } = await twoCubes()
+    const d = dim(10)                                                  // позиция документа 2
+    await st().moveObject(b, { ...st().objects[b].transform, x: 40 })   // 3
+    deleteDimension(d.id)                                               // на позиции 3
+    const state = () => `${st().historyIndex}:${ids().join(',')}:${st().objects[b]?.transform.x ?? '-'}`
+    const s3del = state()
+    await z(); expect(state()).toBe(`3:${d.id}:40`)                     // 1) вернулось удаление
+    await z(); expect(state()).toBe(`2:${d.id}:25`)                     // 2) отменён сдвиг
+    await z(); expect(state()).toBe('2::25')                            // 3) отменено создание размера
+    await z(); expect(state()).toBe('1::-')                             // 4) отменён второй куб
+    await y(); expect(state()).toBe('2::25')
+    await y(); expect(state()).toBe(`2:${d.id}:25`)
+    await y(); expect(state()).toBe(`3:${d.id}:40`)
+    await y(); expect(state()).toBe(s3del)
+    expect(canY()).toBe(false)
+    expect(st().historyIndex).toBe(st().operations.length)              // «Повторить» неактивна
+  }, 30000)
+
+  it('стиль: Ctrl+Z — прежний цвет и отступ, Ctrl+Y — новый', async () => {
+    const { dim } = await twoCubes()
+    const d = dim(10)
+    restyleDimension(d.id, { color: '#ff0000', offset: 12 })
+    expect(ds().dimensions[0].style.color).toBe('#ff0000')
+    await z()
+    expect(ds().dimensions[0].style.color).toBe(d.style.color)
+    expect(ds().dimensions[0].offset).toBe(d.offset)
+    await y()
+    expect(ds().dimensions[0].style.color).toBe('#ff0000')
+    expect(ds().dimensions[0].offset).toBe(12)
+    restyleDimension(d.id, { color: '#ff0000', offset: 12 })            // без изменений — записи нет
+    expect(ds().undoStack.map((e) => e.kind)).toEqual(['create', 'restyle'])
+  }, 30000)
+
+  it('новый шаг после Ctrl+Z — вернуть удалённый размер Ctrl+Y нельзя; открыт другой документ — стек пуст', async () => {
+    const { a, dim } = await twoCubes()
+    const d = dim(10)
+    deleteDimension(d.id)
+    await z()
+    expect(canY()).toBe(true)
+    await st().moveObject(a, { ...st().objects[a].transform, y: 30 })   // новый шаг документа
+    expect(canY()).toBe(false)
+    expect(ds().redoStack).toEqual([])
+    expect(ids()).toEqual([d.id])
+    await y()
+    expect(ids()).toEqual([d.id])                                       // Ctrl+Y ничего не сделал с размерами
+    // открытие файла / проекта — слой заменён, стек размеров пуст
+    deleteDimension(d.id)
+    expect(canZ()).toBe(true)
+    ds().setDimensions([])
+    expect(ds().undoStack).toEqual([])
+    expect(canZ()).toBe(false)
+  }, 30000)
 })
