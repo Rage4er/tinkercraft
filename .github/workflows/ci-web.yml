@@ -68,8 +68,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - group: ux-audit-7
-            specs: ux-audit-7
+          - group: ux-audit-7, selection-outline
+            specs: ux-audit-7 selection-outline
           - group: ux-audit-6 + базовые
             specs: >-
               ux-audit-6 smoke tree edit-child edit-step-move edit-step-mirror edit-step-extrude

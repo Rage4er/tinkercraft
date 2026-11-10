@@ -35,7 +35,8 @@
     "e2e:double-click-timing": "node e2e/double-click-timing.mjs",
     "e2e:plug-and-play": "node e2e/plug-and-play.mjs",
     "e2e:dimensions": "node e2e/dimensions.mjs",
-    "e2e:ux-viewport": "node e2e/ux-viewport.mjs"
+    "e2e:ux-viewport": "node e2e/ux-viewport.mjs",
+    "e2e:selection-outline": "node e2e/selection-outline.mjs"
   },
   "dependencies": {
     "i18next": "^26.3.6",

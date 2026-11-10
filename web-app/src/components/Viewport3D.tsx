@@ -154,7 +154,7 @@ export default function Viewport3D({
     fitTargetRef,
     cubeCamera,
     cubeCtrl,
-  } = useThreeInit(webglOk, cameraMode, onFpsUpdate);
+  } = useThreeInit(webglOk, cameraMode, onFpsUpdate, selectedIds);
 
   // ---- Refs for props ----
   const onTransformEndRef = useRef(onTransformEnd);
@@ -446,6 +446,9 @@ export default function Viewport3D({
       const box = new THREE.Box3();
       for (const entry of map.values()) {
         const m = entry.mesh;
+        // FIT-STALE-MATRIX: matrixWorld нового / сдвинутого объекта обновляется только при отрисовке —
+        // F в том же кадре, что и добавление фигуры, вписывал её прежнее место (новая — в начале координат)
+        m.updateWorldMatrix(true, false);
         // FIX (LOW-18-24): Use existing boundingBox if available instead of recomputing
         const mb = m.geometry.boundingBox ?? m.geometry.computeBoundingBox();
         if (m.geometry.boundingBox) box.union(m.geometry.boundingBox.clone().applyMatrix4(m.matrixWorld));

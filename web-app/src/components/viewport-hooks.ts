@@ -20,6 +20,7 @@ import { computeAABB, colorForIndex, defaultShapeParams } from "../store/helpers
 import { buildObjectGeometry } from "./object-geometry";
 import { VIEWPORT_MOUSE_BUTTONS } from "./viewport-nav";
 import { createAdaptiveGrid, updateAdaptiveGrid, setAdaptiveGridTheme, viewHeightAt, type GridState } from "./adaptive-grid";
+import { SelectionOutlinePass, selectionOutlineTargets, renderWithSelectionOutline, DRAW_OVER_OUTLINE } from "./selection-outline";
 import { useCsgGroupModeStore } from "../store/csg-group-mode";
 import { usePlacementModeStore } from "../store/placement-mode";
 import { useDimensionsStore } from "../store/dimensions-store";
@@ -151,6 +152,8 @@ export function useThreeInit(
     webglOk: boolean,
     cameraMode: 'perspective' | 'orthographic',
     onFpsUpdate: (fps: number) => void,
+    /** SELECTION-OUTLINE: выделенные объекты — кайма в цикле отрисовки */
+    selectedIds: ReadonlySet<string> = new Set(),
 ): ThreeInitResult {
     const [sceneReady, setSceneReady] = useState(false);
     const [cubeCamera, setCubeCamera] = useState<THREE.PerspectiveCamera | null>(null);
@@ -178,6 +181,12 @@ export function useThreeInit(
     useEffect(() => {
         cameraModeRef.current = cameraMode;
     }, [cameraMode]);
+
+    // SELECTION-OUTLINE: выделение читается в цикле отрисовки (меши — из meshMapRef каждый кадр)
+    const outlineIdsRef = useRef<ReadonlySet<string>>(selectedIds);
+    useEffect(() => {
+        outlineIdsRef.current = selectedIds;
+    }, [selectedIds]);
 
     // Stabilize onFpsUpdate via ref
     const fpsUpdateRef = useRef(onFpsUpdate);
@@ -285,8 +294,15 @@ export function useThreeInit(
             controls.enabled = !e.value;
         });
         // FIX: TransformControls must be added to scene via getHelper() to render the gizmo
-        scene.add((tc as unknown as { getHelper(): THREE.Object3D }).getHelper());
+        const gizmoHelper = (tc as unknown as { getHelper(): THREE.Object3D }).getHelper();
+        // SELECTION-OUTLINE: гизмо рисуется поверх каймы
+        gizmoHelper.userData[DRAW_OVER_OUTLINE] = true;
+        scene.add(gizmoHelper);
         transformCtRef.current = tc;
+
+        // SELECTION-OUTLINE: кайма выделенных (OutlinePass поверх канваса, буферы — в CSS px)
+        const outline = new SelectionOutlinePass(w, h, scene, camera);
+        let outlineCount = -1;
 
         const ro = new ResizeObserver(() => {
             const cw = container.clientWidth;
@@ -297,6 +313,7 @@ export function useThreeInit(
             renderer.setSize(cw, ch);
             camera.aspect = cw / ch;
             camera.updateProjectionMatrix();
+            outline.setSize(Math.max(1, cw), Math.max(1, ch));
         });
         ro.observe(container);
 
@@ -352,7 +369,13 @@ export function useThreeInit(
                 container.dataset.gridRadius = String(Math.round(gs.radius));
                 container.dataset.gridCenter = `${Math.round(gs.center.x)},${Math.round(gs.center.y)}`;
             }
-            renderer.render(scene, activeCam);
+            // SELECTION-OUTLINE: есть выделенные — кайма вокруг них; нет — обычный кадр
+            selectionOutlineTargets(outlineIdsRef.current, meshMapRef.current, outline.selectedObjects);
+            const outlined = renderWithSelectionOutline(renderer, scene, activeCam, outline) ? outline.selectedObjects.length : 0;
+            if (outlined !== outlineCount) {
+                outlineCount = outlined;
+                container.dataset.outlineCount = String(outlined);
+            }
             const now = performance.now();
             fpsRef.current.frames++;
             if (now - fpsRef.current.last >= FPS_INTERVAL_MS) {
@@ -374,6 +397,7 @@ export function useThreeInit(
             setSceneReady(false);
             if (rafRef.current) cancelAnimationFrame(rafRef.current);
             ro.disconnect();
+            outline.dispose();
             renderer.dispose();
             if (container.contains(renderer.domElement))
                 container.removeChild(renderer.domElement);
@@ -1170,6 +1194,7 @@ export function useDimensionsRender(
         if (!scene) return;
         const root = new THREE.Group();
         root.userData.dimensionsRoot = true;
+        root.userData[DRAW_OVER_OUTLINE] = true;   // SELECTION-OUTLINE: размеры — поверх каймы
         root.renderOrder = 996;
         if (show) {
             for (const d of dimensions) {
@@ -1209,6 +1234,7 @@ export function useDimensionModePreview(sceneRef: React.MutableRefObject<THREE.S
         if (!scene || !mode) return;
         const root = new THREE.Group();
         root.userData.dimensionPreview = true;
+        root.userData[DRAW_OVER_OUTLINE] = true;
         const marker = (p: { x: number; y: number; z: number }, color: number) => {
             const m = new THREE.Mesh(
                 new THREE.SphereGeometry(0.9, 12, 12),
