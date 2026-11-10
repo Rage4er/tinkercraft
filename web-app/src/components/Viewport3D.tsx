@@ -31,6 +31,7 @@ import { useDocumentStore } from "../store/document-store";
 import { isDimensionAlive } from "../store/dimensions";
 import { findNearestSnap } from "./snap-utils";
 import { pickDimension } from "./dimension-render";
+import { createMiddleDoubleClick } from "./viewport-nav";
 import { fitDistance, FIT_DIR } from "./camera-fit";
 
 export type { GizmoMode } from "./viewport-hooks";
@@ -519,12 +520,23 @@ export default function Viewport3D({
   // ---- Pointer handlers ----
   const pointerDownPos = useRef<{ x: number; y: number } | null>(null);
   const isDraggingRef = useRef(false);
+  // VIEWPORT-NAV: двойной клик СКМ — «Вписать в экран» (как F)
+  const middleDoubleClickRef = useRef(createMiddleDoubleClick());
 
   const handlePointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
+      // VIEWPORT-NAV: двойной клик СКМ — «Вписать в экран» (как F), в любом режиме
+      if (e.button === 1) {
+        e.preventDefault();                                   // без автопрокрутки браузера
+        if (middleDoubleClickRef.current(e.clientX, e.clientY, e.timeStamp)) {
+          devLogEvent('view', 'fit', { by: 'middle-double-click' });
+          fitViewRef?.current?.();
+        }
+      }
       // Ruler mode: handled by useRulerMode
       if (rulerMode) {
-        handleRulerPointerDown(e, cameraRef.current, containerRef.current);
+        // VIEWPORT-NAV: точка линейки — ЛКМ (ПКМ / СКМ — вращение и сдвиг вида)
+        if (e.button === 0) handleRulerPointerDown(e, cameraRef.current, containerRef.current);
         e.stopPropagation();
         return;
       }
@@ -533,7 +545,7 @@ export default function Viewport3D({
       pointerDownPos.current = { x: e.clientX, y: e.clientY };
       isDraggingRef.current = false;
     },
-    [rulerMode, handleRulerPointerDown, cameraRef, containerRef],
+    [rulerMode, handleRulerPointerDown, cameraRef, containerRef, fitViewRef],
   );
 
   const handlePointerMove = useCallback(
@@ -649,6 +661,12 @@ export default function Viewport3D({
         const pick = pickAt(e.clientX, e.clientY);
         devLogEvent('align', 'click', { pick: pick ? `${pick.objectId}#${pick.triangleIndex}` : 'none' });
         if (pick) void store.clickFace(pick);
+        return;
+      }
+
+      // VIEWPORT-NAV: выбор и рамка — только ЛКМ (ПКМ — вращение вида, СКМ — сдвиг)
+      if (e.button !== 0) {
+        isDraggingRef.current = false;
         return;
       }
 

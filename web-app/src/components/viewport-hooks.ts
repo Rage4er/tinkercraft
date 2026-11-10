@@ -18,6 +18,7 @@ import { TransformControls } from "three/examples/jsm/controls/TransformControls
 import type { SceneObject, TransformNR } from "../csg/types";
 import { computeAABB, colorForIndex, defaultShapeParams } from "../store/helpers";
 import { buildObjectGeometry } from "./object-geometry";
+import { VIEWPORT_MOUSE_BUTTONS } from "./viewport-nav";
 import { useCsgGroupModeStore } from "../store/csg-group-mode";
 import { usePlacementModeStore } from "../store/placement-mode";
 import { useDimensionsStore } from "../store/dimensions-store";
@@ -270,6 +271,11 @@ export function useThreeInit(
         controls.minDistance = CONTROLS_MIN_DIST;
         controls.maxDistance = CONTROLS_MAX_DIST;
         controls.maxPolarAngle = CONTROLS_MAX_POLAR;
+        // VIEWPORT-NAV: ЛКМ — выбор и рамка (камеру не вращает), ПКМ — вращение, СКМ — сдвиг, колесо — масштаб
+        controls.mouseButtons = { ...VIEWPORT_MOUSE_BUTTONS };
+        // VIEWPORT-NAV: колесо / вращение / сдвиг прерывают анимацию «Вписать в экран» — иначе
+        // после F (из далёкого вида анимация идёт секунды) ввод пользователя затирался анимацией
+        controls.addEventListener("start", () => { fitTargetRef.current = null; });
         controlsRef.current = controls;
         setCubeCamera(camera);
         setCubeCtrl(controls);
