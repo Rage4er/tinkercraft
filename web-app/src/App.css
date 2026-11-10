@@ -2009,3 +2009,23 @@ body {
   border-radius: 3px;
   padding: 0 4px;
 }
+
+/* ---- SELECTION-RECT: рамка выделения (как AutoCAD) ---- */
+.sel-rect {
+  position: absolute;
+  pointer-events: none;
+  z-index: 5;
+  box-sizing: border-box;
+}
+
+/* слева направо — окно: только целиком внутри (синяя, сплошная) */
+.sel-rect.window {
+  border: 1px solid #4c8dff;
+  background: rgba(76, 141, 255, 0.14);
+}
+
+/* справа налево — секущая: всё, что задевает (зелёная, пунктир) */
+.sel-rect.crossing {
+  border: 1px dashed #3fcf74;
+  background: rgba(63, 207, 116, 0.14);
+}

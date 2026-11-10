@@ -31,6 +31,8 @@ import { useDocumentStore } from "../store/document-store";
 import { isDimensionAlive } from "../store/dimensions";
 import { findNearestSnap } from "./snap-utils";
 import { pickDimension } from "./dimension-render";
+import { createMiddleDoubleClick } from "./viewport-nav";
+import { objectsInRect, rectModeOf, rectToNdc, type RectMode } from "./selection-rect";
 import { fitDistance, FIT_DIR } from "./camera-fit";
 
 export type { GizmoMode } from "./viewport-hooks";
@@ -84,12 +86,6 @@ function disposeHighlight(scene: THREE.Scene, mesh: THREE.Mesh): void {
   (mesh.material as THREE.Material).dispose();
 }
 
-interface DragRect {
-  startX: number;
-  startY: number;
-  endX: number;
-  endY: number;
-}
 
 interface Props {
   workerOk: boolean;
@@ -482,58 +478,83 @@ export default function Viewport3D({
     };
   }, [resetViewRef, fitTargetRef]);
 
-  // ---- Drag-select helpers ----
+  // ---- SELECTION-RECT: рамка выделения (как AutoCAD) ----
+  // ЛКМ-протяжка в обычном режиме: слева направо — окно (только целиком внутри, синяя сплошная),
+  // справа налево — секущая (всё, что задевает, зелёная пунктирная). Shift — добавить к выделению.
+  // Не рисуется при перетаскивании гизмо и в режимах (выравнивание, размещение, размер, линейка).
+  const selRectRef = useRef<HTMLDivElement | null>(null);
+  const boxGestureRef = useRef(false);
+  const drawSelRect = useCallback((x0: number, y0: number, x1: number, y1: number) => {
+    const el = selRectRef.current;
+    const container = containerRef.current;
+    if (!el || !container) return;
+    const r = container.getBoundingClientRect();
+    const mode: RectMode = rectModeOf(x0, x1);
+    el.hidden = false;
+    el.className = `sel-rect ${mode}`;
+    el.dataset.mode = mode;
+    el.style.left = `${Math.min(x0, x1) - r.left}px`;
+    el.style.top = `${Math.min(y0, y1) - r.top}px`;
+    el.style.width = `${Math.abs(x1 - x0)}px`;
+    el.style.height = `${Math.abs(y1 - y0)}px`;
+  }, [containerRef]);
+  const hideSelRect = useCallback(() => {
+    if (selRectRef.current) selRectRef.current.hidden = true;
+  }, []);
   const performDragSelect = useCallback(
-    (rect: DragRect) => {
-      const camera = cameraRef.current;
+    (x0: number, y0: number, x1: number, y1: number, add: boolean) => {
+      const camera = activeCameraRef.current ?? cameraRef.current;
       const container = containerRef.current;
       if (!camera || !container) return;
-
-      const cw = container.clientWidth,
-        ch = container.clientHeight;
-      const minX = (Math.min(rect.startX, rect.endX) / cw) * 2 - 1;
-      const maxX = (Math.max(rect.startX, rect.endX) / cw) * 2 - 1;
-      const minY = -((Math.max(rect.startY, rect.endY) / ch) * 2 - 1);
-      const maxY = -((Math.min(rect.startY, rect.endY) / ch) * 2 - 1);
-
-      const selected: string[] = [];
-      for (const [id, entry] of meshMapRef.current) {
-        const m = entry.mesh;
-        if (!m.visible) continue;
-        // FIX (MED-18-28): Use existing boundingSphere if available instead of recomputing
-        const sphere = m.geometry.boundingSphere ?? m.geometry.computeBoundingSphere();
-        if (!m.geometry.boundingSphere) continue;
-        const center = m.geometry.boundingSphere.center.clone().applyMatrix4(m.matrixWorld);
-        const ndc = center.project(camera);
-        if (ndc.x >= minX && ndc.x <= maxX && ndc.y >= minY && ndc.y <= maxY)
-          selected.push(id);
-      }
-      if (selected.length > 0) {
-        if (onMultiSelect) onMultiSelect(selected);
-        else onSelect(selected[0], false);
-      }
+      const r = container.getBoundingClientRect();
+      const mode = rectModeOf(x0, x1);
+      const rect = rectToNdc(x0 - r.left, y0 - r.top, x1 - r.left, y1 - r.top, r.width, r.height);
+      const found = objectsInRect(meshMapRef.current, camera, rect, mode);
+      devLogEvent('select', 'rect', { mode, found: found.length });
+      if (found.length === 0) return;
+      const ids = add ? [...new Set([...selectedIdsRef.current, ...found])] : found;
+      if (onMultiSelect) onMultiSelect(ids);
+      else onSelect(ids[0], false);
     },
-    [onSelect, onMultiSelect, cameraRef, containerRef, meshMapRef],
+    [onSelect, onMultiSelect, activeCameraRef, cameraRef, containerRef, meshMapRef],
   );
 
   // ---- Pointer handlers ----
   const pointerDownPos = useRef<{ x: number; y: number } | null>(null);
   const isDraggingRef = useRef(false);
+  // VIEWPORT-NAV: двойной клик СКМ — «Вписать в экран» (как F)
+  const middleDoubleClickRef = useRef(createMiddleDoubleClick());
 
   const handlePointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
+      // VIEWPORT-NAV: двойной клик СКМ — «Вписать в экран» (как F), в любом режиме
+      if (e.button === 1) {
+        e.preventDefault();                                   // без автопрокрутки браузера
+        if (middleDoubleClickRef.current(e.clientX, e.clientY, e.timeStamp)) {
+          devLogEvent('view', 'fit', { by: 'middle-double-click' });
+          fitViewRef?.current?.();
+        }
+      }
       // Ruler mode: handled by useRulerMode
       if (rulerMode) {
-        handleRulerPointerDown(e, cameraRef.current, containerRef.current);
+        // VIEWPORT-NAV: точка линейки — ЛКМ (ПКМ / СКМ — вращение и сдвиг вида)
+        if (e.button === 0) handleRulerPointerDown(e, cameraRef.current, containerRef.current);
         e.stopPropagation();
         return;
       }
+      // SELECTION-RECT: рамка — ЛКМ в обычном режиме, не по ручке гизмо
+      const tc = transformCtRef.current as unknown as { dragging?: boolean; axis?: string | null } | null;
+      boxGestureRef.current = e.button === 0 && !isPlacing() && !isDimensioning() && !alignActiveRef.current
+        && !(tc && (tc.dragging || tc.axis));
+      // отпускание за пределами вьюпорта тоже приходит сюда: OrbitControls захватывает указатель на
+      // канвасе (любой кнопкой), событие всплывает в контейнер. Свой захват НЕ брать — отнимет у
+      // OrbitControls pointerup, и он «залипнет» (следующая ПКМ-протяжка не вращает)
       devLogPointer('down', { screenX: e.clientX, screenY: e.clientY });
       devLogEvent('pointer', 'down', { screen: fmtPoint2({ x: e.clientX, y: e.clientY }) });
       pointerDownPos.current = { x: e.clientX, y: e.clientY };
       isDraggingRef.current = false;
     },
-    [rulerMode, handleRulerPointerDown, cameraRef, containerRef],
+    [rulerMode, handleRulerPointerDown, cameraRef, containerRef, fitViewRef],
   );
 
   const handlePointerMove = useCallback(
@@ -563,8 +584,13 @@ export default function Viewport3D({
       const dx = e.clientX - pointerDownPos.current.x;
       const dy = e.clientY - pointerDownPos.current.y;
       if (Math.hypot(dx, dy) > DRAG_THRESHOLD_PX) isDraggingRef.current = true;
+      if (isDraggingRef.current && boxGestureRef.current) {
+        const tc = transformCtRef.current as unknown as { dragging?: boolean } | null;
+        if (tc?.dragging) { boxGestureRef.current = false; hideSelRect(); }
+        else drawSelRect(pointerDownPos.current.x, pointerDownPos.current.y, e.clientX, e.clientY);
+      }
     },
-    [rulerMode, handleRulerPointerMove, cameraRef, containerRef, pickAt, schedulePlacementAim, scheduleDimHover],
+    [rulerMode, handleRulerPointerMove, cameraRef, containerRef, pickAt, schedulePlacementAim, scheduleDimHover, drawSelRect, hideSelRect, transformCtRef],
   );
 
   // PLUG-AND-PLAY: курсор ушёл из вьюпорта — превью скрыто (Enter — рядом с прошлыми)
@@ -593,6 +619,9 @@ export default function Viewport3D({
 
       const start = pointerDownPos.current;
       pointerDownPos.current = null;
+      const boxGesture = boxGestureRef.current;
+      boxGestureRef.current = false;
+      hideSelRect();
 
       if (!start) return;
 
@@ -652,6 +681,12 @@ export default function Viewport3D({
         return;
       }
 
+      // VIEWPORT-NAV: выбор и рамка — только ЛКМ (ПКМ — вращение вида, СКМ — сдвиг)
+      if (e.button !== 0) {
+        isDraggingRef.current = false;
+        return;
+      }
+
       // If it was a click (not drag) — select object via Raycaster
       if (!isDraggingRef.current) {
         const camera = activeCameraRef.current ?? cameraRef.current;
@@ -693,17 +728,12 @@ export default function Viewport3D({
         return;
       }
 
-      // If it was a drag (box selection)
+      // SELECTION-RECT: протяжка ЛКМ — рамка (окно / секущая по направлению)
       if (isDraggingRef.current) {
-        devLogEvent('select', 'drag', { start: fmtPoint2(start), end: fmtPoint2({ x: e.clientX, y: e.clientY }) });
-        const rect: DragRect = {
-          startX: start.x,
-          startY: start.y,
-          endX: e.clientX,
-          endY: e.clientY,
-        };
-        performDragSelect(rect);
         isDraggingRef.current = false;
+        if (!boxGesture) return;                              // гизмо, режимы
+        devLogEvent('select', 'drag', { start: fmtPoint2(start), end: fmtPoint2({ x: e.clientX, y: e.clientY }) });
+        performDragSelect(start.x, start.y, e.clientX, e.clientY, e.shiftKey);
       }
     },
     [
@@ -714,6 +744,7 @@ export default function Viewport3D({
       containerRef,
       meshMapRef,
       performDragSelect,
+      hideSelRect,
       pickAt,
       aimAt,
       clearPlacementAimTimer,
@@ -754,6 +785,7 @@ export default function Viewport3D({
           </span>
         </div>
       )}
+      <div ref={selRectRef} className="sel-rect" data-testid="selection-rect" hidden />
       <ViewCube mainCamera={cubeCamera} mainControls={cubeCtrl} />
     </div>
   );
