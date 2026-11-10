@@ -9,16 +9,47 @@
 
 ## [Unreleased]
 
-### Merge `main` v1.3.9 → `yandex-games` (ветка `yandex-games-v1.4.0`)
+---
 
-#### Changed
+## [1.4.0] — 2026-11-10
+
+Первый релиз Яндекс-версии с Фазой 9: `yandex-games` = `main` v1.3.9 один-в-один + SDK и экономика Яндекс.Игр (PR #52). Архив для консоли Яндекс.Игр — `dist-yandex` (`pnpm build:yandex`).
+
+### Added
+- **Фаза 9 и все фичи `main` v1.3.0–v1.3.9** (подробно — разделы [1.3.0]…[1.3.9] ниже): параметрическая история (дерево CSG, правка детей и прошлых шагов move / mirror / extrude с каскадом, независимые копии CSG, CSG для замкнутых STL); N-арный CSG и режим A → B → Enter; Plug & Play (размещение на грань / сетку / плоскость оси); размерные линии; навигация как в CAD, адаптивная сетка, рамка выделения; кайма выделения; каймы групп A / B, тени за видом, отмена размеров; 3D-текст — замкнутый меш, участвует в CSG (гравировка)
+- **Экономика и SDK Яндекс.Игр:** токены, бонус дня, реклама (rewarded, sticky-баннер), аренда 24 ч (3D-текст, расширенная палитра, без баннера), подписки, задания дня V2, кэшбэк V2, онбординг; SDK — `initPlatform`, облачное сохранение прогресса, `LoadingAPI.ready()`, Gameplay API; рефакторинг Y.1–Y.5 (`EconomyPanel`, `useYandexInit`, `EconomyOverlays`, `economy-integration`, `economy-types`)
+- **Старые сохранения игроков открываются:** `.doodle` конвертируется в `.3dtc` («Сохранить» — `.3dtc` с размерами); 3D-текст старых проектов (`text3d`) — как текст `main`
+- **Smoke SDK** — `pnpm e2e:yandex-sdk-smoke`: `initPlatform`, `loadFromCloud`, `LoadingAPI.ready`, Gameplay API (8 модалок), реклама, экспорт за токены / рекламу, задания — 7/7
+
+### Changed
+- **«Открыть» / «Сохранить» — `.3dtc`, как в `main`** (было `.doodle` без размеров)
+- **Скругление (fillet) удалено** (как в `main`); старые шаги вырезаются при загрузке
+- **Gameplay API на паузе при любой модалке** — и при новых из `main` («Настройки размеров», «Очистить сцену?»)
+- **Без SDK — вёрстка и поведение v1.3.9** (правая панель 200 px, поле цвета, переключатель языка); с SDK — правая панель 240 px под экономику
+
+### Fixed
+- Без SDK: 3D-текст не добавлялся, экспорт показывал «Кэшбэк учтён в стоимости», «Расширенный выбор» цвета не открывался
+- Выбранный язык сбрасывался после перезагрузки (теперь: SDK → выбор → язык браузера)
+- Тосты наезжали на правую панель 240 px; бейджи цены сдвигали «Экспорт» / «Импорт»; иконка линейки увеличивала плашку «Расстояние»
+- Зашитые русские строки (названия цветов палитры, экран загрузки) — в i18n
+
+### Особенности и ограничения
+- **SUB-EXPORT-CASHBACK — подписчик получает кэшбэк при экспорте** (при подписке экспорт идёт способом «за рекламу»). Лояльно к игроку — особенность экономики, оставлено намеренно (`ECONOMY.md` §3.3)
+- 3D-текст старых проектов (`text3d`) — несшитый меш: открывается и отображается, в CSG не участвует — пересоздать
+- Ограничения `main` v1.3.9 — те же: размеры — не шаги «Истории», к объекту в CSG скрываются (DIMENSION-CSG-TRANSFER), при перетаскивании число — по отпусканию (DIMENSION-LIVE-DRAG); размещение — PLACEMENT-AXIS-ORIGIN / -SNAP-SLOPED / -ROTATE / -TEXT
+
+### Подробно
+
+#### Merge `main` v1.3.9 → `yandex-games` (ветка `yandex-games-v1.4.0`)
+
+##### Changed
 - **В `yandex-games` — Фаза 9 и все фичи `main` до v1.3.9:** параметрическая история (дерево CSG, правка детей и прошлых шагов, независимые копии), N-арный CSG и режим A → B → Enter, Plug & Play, размерные линии, UX-VIEWPORT (навигация, адаптивная сетка, рамка), кайма выделения, ux-polish (каймы групп A/B, тени за видом, отмена размеров). Ядро (`rebuild.ts`, `worker-handlers.ts`, `mirror-store.ts`, `csg/types.ts`, `ComponentTree.tsx`, `Timeline.tsx`, `WebGLFallback.tsx`) — версия `main`; `document-store.ts` — `main` + все однострочные врезки экономики Y.3 на прежних местах (`earnActionToken`, `evaluateQuestsAfterMutation`, `completeImportQuest`, `commitQuests`, `settleExport`; `cacheSnapshotWithTree` в main — `cacheSnapshot`, врезки по-прежнему не в нём); `App.tsx` / `PropertiesPanel.tsx` / `LeftPanel.tsx` / `Toolbar.tsx` / `StatusBar.tsx` — `main` + тонкие вставки yandex (`useYandexInit`, `<EconomyOverlays />`, гейтинг 3D-текста и палитры, бейджи, переключатель языка — только вне `build:yandex`); i18n ru/en — трёхстороннее слияние по ключам
 - **3D-текст — как в `main`:** создаётся `addTextObject` → `addRawMesh` (шаг `import_mesh` с `text`, замкнутый меш — участвует в CSG, UX-AUDIT-3/31/36) вместо yandex-шага `text3d` (`addTextMesh` удалён). Гейтинг аренды/подписки, токен за действие и квесты — прежние. Квест «Гравировка» (`count_text3d`) и категория «текст» кэшбэка считают текст через `economyShapeKind` (`isTextObject`) (`store/economy-config.ts`, `store/economy-store.ts`)
 - **Скругление (fillet) удалено и в `yandex-games`** (remove-fillet из `main`): старые шаги `fillet` вырезаются при загрузке (`io/legacy-fillet.ts`)
 - **Палитра Wad's Optimum 16 и сплэш загрузки — через i18n** (`palette.colors.*`, `app.loading`): тест `i18n-coverage` из `main` (UX-AUDIT-7) нашёл зашитые русские строки (`constants.ts`, `ColorPalette.tsx`, `main.tsx`)
 - **Gameplay API — пауза и при новых модалках `main`:** «Настройки размеров» (`ui-store.showDimensionSettings`) — в `isAnyModalOpen`; подтверждение «Очистить сцену» (флаг `App`) — параметром `useYandexInit(localModalOpen)` (`hooks/useYandexInit.ts`)
 
-#### Fixed
+##### Fixed
 - **Вёрстка — как в v1.3.9, широкая правая панель — только с экономикой:** правая панель `yandex-games` 240 px (UB5-2, под панель экономики) теперь только при SDK — `useYandexInit` ставит `html[data-economy]`, CSS `:root[data-economy]`; без SDK — 200 px, как в `main` (на 240 px e2e `main` `ux-audit-5` не находил грань на экране). Тосты: в `main` прижаты левее панели 200 px (UX-AUDIT-19) и при 240 px перекрывали её — с экономикой отступ 252 px (`App.css`, `hooks/useYandexInit.ts`; тест `useYandexInit.test.tsx` +1)
 - **Кнопки «Экспорт» / «Импорт» с бейджами цены стояли на 0,2 px выше соседних** (обёртка с бейджами — блочная): обёртка `display: flex` — тулбар на 1366 снова ровно в одну строку (e2e `ux-audit-3` › Q) (`Toolbar.tsx`)
 - **Поле цвета без SDK — как в v1.3.9:** в clean-режиме (экономики нет) панель свойств сразу показывает поле цвета (переключатель — на палитру Wad's 16); с SDK — как раньше: палитра бесплатно, полный выбор — по аренде (`PropertiesPanel.tsx`)
@@ -27,17 +58,17 @@
 
 - **«Открыть» / «Сохранить» в тулбаре — `.3dtc`, как в `main`** (до v1.4.0 в `yandex-games` — `.doodle`: только история, без объектов и без слоя размеров; размеры при сохранении в файл терялись). `.doodle` больше не пишется: `openDoodle` / `saveDoodle` удалены (`store/document-store.ts`, `store/types.ts`, `App.tsx`)
 
-#### Added
+##### Added
 - **Smoke SDK Яндекс.Игр — `pnpm e2e:yandex-sdk-smoke`** (`e2e/yandex-sdk-smoke.mjs`, только yandex-games, не в CI): production-сборка `dist-yandex` с dev-адаптером SDK Яндекса (тот же `yandex-dev-adapter.js`, что у `sdk-dev-proxy --dev-mode`; вызовы SDK перехватываются обёрткой `window.YaGames`) — 7 пунктов: `initPlatform`, `loadFromCloud` (токены из облака после очистки localStorage приложения), `LoadingAPI.ready()` ×1, Gameplay API (пауза при каждой из 8 модалок, продолжение при закрытии), реклама (sticky-баннер, rewarded +50), `exportStl('tokens' | 'ad')` (списание 50 − кэшбэк / кэшбэк за рекламу), квесты (прогресс по сцене, выполнение, `commitQuests` при сохранении → облако)
 - **Старые `.doodle` игроков открываются и конвертируются в `.3dtc`** (`io/project-file.ts`; диалог — `open3dtcFilePicker`, `accept` + `.doodle`): «Открыть» принимает `.3dtc` и `.doodle` (и `.doodle`, переименованный в `.zip`); история `.doodle` проходит ту же миграцию, что `.3dtc` (`text3d`, fillet), объекты пересобираются, документ получает имя «имя.3dtc» и пометку «не сохранено», уведомление «… (.doodle) открыт — «Сохранить» запишет его в .3dtc» (`errors.doodleConverted`, ru/en); «Сохранить» пишет `.3dtc` с размерами. Тесты: `__tests__/doodle-to-3dtc.test.ts` (7, реальный WASM)
 - **`io/legacy-text3d.ts` — старые проекты игроков с 3D-текстом открываются:** шаг `text3d` (yandex до v1.4.0) при любой загрузке (`.3dtc`, старый `.doodle` — через конвертацию, автосохранение, проекты IndexedDB — `document-store.migrateLoaded`) переводится в `import_mesh` с текстом из имени; объект — 3D-текст на прежнем месте. `.3dtc` принимает тип `text3d` (раньше такой файл yandex-версии не открывался). Тесты: `__tests__/legacy-text3d-load.test.ts` (9, реальный WASM), `useYandexInit.test.tsx` (+4)
 
-### yandex-games — до merge main v1.3.9 (Y.1–Y.5, UB2–UB5, экономика)
+#### yandex-games — до merge main v1.3.9 (Y.1–Y.5, UB2–UB5, экономика)
 
-#### Added
+##### Added
 - **`docs/REFACTORING_YANDEX.md`** — сводка рефакторинга `yandex-games` Y.1–Y.5: карта «что откуда переехало», инварианты (порядок `settleExport`, bootstrap, список модалок), инструкция по следующим merge `main`, ограничения. Счётчики тестов в `README.md`, `AGENTS.md`, `CONTRIBUTING.md`, `web-app/NODEJS_SETUP.md` обновлены до 647 / 47 файлов
 
-#### Fixed
+##### Fixed
 - **Gameplay API не ставился на паузу при части модалок:** `stopGameplay()` вызывался только для текста, менеджера проектов и экспорта; модалки импорта, аренды 24ч и онбординг экономики геймплей не останавливали (требование модерации Яндекс.Игр). Теперь `useYandexInit` сам считает `isAnyModalOpen()` из `ui-store` по всем шести модалкам (единый список, `App.tsx` параметр больше не передаёт). Онбординг публикует свой флаг через новый `ui-store.onboardingOpen` (сбрасывается при закрытии и размонтировании). Тесты: +13 (`hooks/useYandexInit.test.tsx`) (`hooks/useYandexInit.ts`, `components/EconomyOnboarding.tsx`, `store/ui-store.ts`, `App.tsx`)
 - **Merge origin/main → yandex-games (f332e6e), smoke-тест сборки:** `pnpm build:yandex` падал на `tsc` — в `store/document-store.test.ts` mock-колбэк `workerBuildShape` типизировал `params` как `Record<string, number>`, что несовместимо с `ShapeParams` (нет index signature). Mock приведён к сигнатуре клиента (`ShapeParams` + cast в `originBoxMesh`); восстановлена сборка `dist-yandex` (sdk.js до module-скрипта) и чистая сборка `dist`. Прогон: 625/625 тестов, typecheck 0 ошибок (`store/document-store.test.ts`)
 - **UB5-1 (аренда продавалась поверх активной Pro-подписки, токены списывались за уже выданное):** `buyRental` валидировал только баланс, а `rentalsSection` в панели определял «уже активно» по `hasRental(r.key)` — без учёта подписки, которая по спеке уже включает текст/палитру/скрытие баннера. Гейт добавлен в store — в начале `buyRental` (`store/economy-store.ts`): `state.hasActiveSubscriptionRO()` → `{ ok: false, code: 'included_in_subscription' }`, до `await getServerTime()` и до `set()`, поэтому списания нет ни при каком пути вызова (RO-геттер, expiry по серверному времени, P0-2). В UI (`components/PropertiesPanel.tsx`) в `rentalsSection` добавлена ветка `hasActiveSub`: вместо колонок кнопок «токены/ревард» рендерится статус «Входит в Pro» (новый ключ `economy.status.includedInPro`, ru/en); строки не скрываются — пользователю видно, что входит в Pro. Правило зафиксировано в `ECONOMY.md` §3.2. Тесты: +4 store (`extendedPalette`, `text3d`+`disableBanner` с проверкой `bannerVisible`/`hideBannerAdv`, истёкшая подписка не блокирует, без подписки покупка проходит — регрессия UB4-1) и +2 UI (`PropertiesPanel.color.test.tsx`: «Included in Pro» + отсутствие кнопок с ценой 75/50; без подписки все 3 кнопки на месте) (`store/economy-store.ts`, `components/PropertiesPanel.tsx`, `i18n/locales/{ru,en}/translation.json`, `store/economy-store.test.ts`, `components/PropertiesPanel.color.test.tsx`, `docs/USER_FEEDBACK_UB5.md`)
@@ -45,7 +76,7 @@
 - **UB2-1 (квесты не прогрессировали при создании примитивов):** `addShape` был единственной мутацией сцены без `evaluateQuestsAfterMutation` (все остальные — addRawMesh/addTextMesh/importStl/fillet/CSG/move/resize/mirror — её вызывают) → прогресс квеста «Разнообразие» и прочих по-состоянию не обновлялся при добавлении фигур из палитры, а `commitQuests()` при save/export коммитит только уже `completed` квесты — награда терялась. Вызов добавлен. Формулировка квеста уточнена: «≥ {{n}} разных типов фигур» (считаются уникальные ТИПЫ, а не количество примитивов). Тесты: 1 примитив → прогресс 1/4; 4 разных типа → квест завершён; 4 одинаковых → прогресс 1/4 (`store/document-store.ts`, `i18n/locales/ru/translation.json`, `store/document-store.test.ts` — мок worker-client)
 - **UB2-3a (подпись переключателя палитры латиницей):** при открытом расширенном picker кнопка возврата к обычной палитре подписывалась брендом «Wad's Optimum 16» (`properties.palette`). Теперь «Обычная палитра» (`palette.regular`, ru) / «Standard Palette» (en) — ключ существовал с UB-1, но нигде не использовался. Мёртвый ключ `properties.palette` удалён из ru/en (`components/PropertiesPanel.tsx`, `i18n/locales/{ru,en}/translation.json`)
 
-#### Changed
+##### Changed
 - **Рефакторинг yandex-games Y.3 (поведение не менялось):** экономические врезки вынесены из `store/document-store.ts` в явный модуль `store/economy-integration.ts` (без подписок и реестра — вызовы остались на тех же местах и в том же порядке): `evaluateQuestsAfterMutation`, `earnActionToken`, `completeImportQuest`, `commitQuests` (тонкие обёртки) и `settleExport()` — вся экономическая часть экспорта STL (хэш модели → `calculateAndClaimCashback` → `setExportHash` → скачивание → тост → событийные квесты → `commitQuests`; порядок зафиксирован в комментарии и тестом) вместе с `stripHeavyFieldsForHash`. `exportStl` в ядре теперь только сериализует Blob (P2-6: при ошибке экономика не трогается) и передаёт скачивание колбэком. Удалена мёртвая переменная `csgOps`. Вызов НЕ вынесен в `cacheSnapshotWithTree` намеренно: его зовут и мутации без квестов (`moveObject`, `setColor`, `toggleVisible`, `renameObject`, `restoreAutosave`, `extrudeSelected`) — иначе оценка квестов и токены начислялись бы при каждом переименовании. `document-store.ts` больше не импортирует `economy-store`/`economy-config`. Дифф к `main`: +258 → +146/−18. Тесты: +5 (`store/document-store.test.ts`: порядок `settleExport`, отсутствие побочных эффектов при падении Blob, врезки `addTextMesh`/`addRawMesh`, мутации без квестов), итого 647 в 47 файлах (`store/economy-integration.ts`, `store/document-store.ts`)
 - **Рефакторинг yandex-games Y.4 (поведение не менялось):** литерал `'tokens' | 'ad'` вынесен в тип `ExportPaymentMethod` (`store/economy-types.ts`) и заменён в `store/types.ts`, `store/document-store.ts`, `components/ExportModal.tsx`, `components/EconomyOverlays.tsx`
 - **Рефакторинг yandex-games Y.1 / Y.2 / Y.5 (поведение не менялось):** yandex-код вынесен из общих файлов, чтобы merge `main` → `yandex-games` давал меньше конфликтов. **Y.1** — `EconomyPanel` + хелперы времени аренды/подписки перенесены из `PropertiesPanel.tsx` в `components/EconomyPanel.tsx`; блок мини-HUD/режима экономики → `EconomyModeSection`, эффект сброса режима при смене выделения → хук `useEconomyModeReset` (в `PropertiesPanel` остались по одной строке); `t: any` заменён на `TFunction`; форматирование блоков `canResize`/`canFillet`/`selectedIds.length === 2` возвращено к виду `main`. **Y.2** — bootstrap платформы и экономики, `LoadingAPI.ready()` и Gameplay API → `hooks/useYandexInit.ts` (порядок init → loadFromCloud → debug-grant сохранён, StrictMode-guard `economyInitialized` сохранён; удалён мёртвый `setEconomyPanelOpen` в `App.tsx`). **Y.5** — онбординг, `RentalModal`, `ExportModal`, `ImportModal` и их обработчики → `components/EconomyOverlays.tsx`; флаги `showExportModal`/`showImportModal` перенесены из локального state `App.tsx` в `ui-store.ts`. Дифф к `main`: `PropertiesPanel.tsx` +719/−165 → +89/−14, `App.tsx` +240 → +63/−14. Заметки: оверлеи монтируются после `TextModal` (порядок наложения равных `z-index` изменился — модалка аренды теперь поверх текстовой, текстовая закрывается перед открытием аренды). Тесты: +4 (`components/EconomyPanel.test.tsx`), итого 629 в 46 файлах. Y.3/Y.4 — отдельными записями ниже (`components/EconomyPanel.tsx`, `components/EconomyOverlays.tsx`, `hooks/useYandexInit.ts`, `components/PropertiesPanel.tsx`, `App.tsx`, `store/ui-store.ts`)
@@ -58,7 +89,7 @@
 - **UB2-4 (рёбра фигур):** вьюпорт рендерит линии рёбер по выраженным граням (`EdgesGeometry`, порог 30°) цветом «на пару тонов темнее» базового цвета объекта (`edgeColorFor` = ×0.7 в sRGB). Рёбра — ребёнок меша (наследуют visibility/трансформы), пересобираются при изменении геометрии (CSG/resize/fillet) и цвета, освобождаются при удалении объекта; `raycast` отключён (не мешают выделению/snap). Защита производительности: рёбра не строятся для геометрии > 100 000 треугольников (тяжёлые импорты). Тесты `edgeColorFor` (`components/viewport-hooks.ts`, `components/viewport-hooks.test.ts`)
 - **UB2-5 (расширенные тултипы панели экономики):** элементы экономики переведены с нативных `title` на двухуровневый `Tooltip` (label мгновенно, описание через 1.5с): баланс, ежедневный бонус, реклама за токены, заголовки квестов/аренды/подписки + все три показателя EconomyMiniHUD. Кнопки покупки аренды/подписок получили нативные `title`. Новые ключи `economy.tooltip.{tokensDesc,bonusTitle,bonusDesc,adTitle,adDesc,questsDesc,rentalsDesc,subsDesc}` ru/en; декоративный «(i)» без интерактива убран; мёртвые `tooltip.bonus`/`tooltip.ad` заменены на `bonusTitle/bonusDesc`/`adTitle/adDesc` (`components/PropertiesPanel.tsx`, `components/EconomyMiniHUD.tsx`, `i18n/locales/{ru,en}/translation.json`)
 
-#### Fixed
+##### Fixed
 - **UB-0a (экспорт STL — «разлёт» фигур):** `exportToStl` применял `obj.transform` (позицию) к вершинам, у которых позиция спавна УЖЕ запечена воркером в геометрию (`handleBuildShape` → `m.transform([T])`) — при экспорте нескольких фигур позиция применялась дважды, и объекты разлетались на 2× своих координат. Теперь трансформ применяется к bbox-центрированной геометрии — ровно как во вьюпорте (`centerGeometry` + transform на pivot): `R·S·(v − center) + pos`. CSG-результаты (уже центрированные) не затрагиваются. Тесты обновлены + регрессионный тест «spawn position baked into vertices is not double-applied» (`io/stl-export.ts`, `io/stl-export.test.ts`)
 - **UB-0b (импортированная геометрия терялась при сохранении/загрузке):** `handleRebuildScene` в воркере запоминал для `import_mesh`/`text3d` только transform — вершины не попадали в manifold-кэш, объект отсутствовал в results, и после загрузки проекта (IndexedDB) или `.doodle` импорт/3D-текст исчезал. Теперь baked-геометрия восстанавливается из `op.vertices/indices` (с защитой по размерам, non-manifold → null + фолбэк); `move` над baked-мешом сдвигает кэш на дельту (раньше — no-op или куб-заглушка 20³); фолбэк в `rebuildFromHistory` возвращает сырой меш из операции, если воркер его не вернул; `move`/`mirror` больше не ищут `shapeInfos` для import/text3d (`csg/worker-handlers.ts`, `store/rebuild.ts`)
 - **UB-0b (.doodle):** `text3d` добавлен в `VALID_OP_TYPES` (файл с 3D-текстом раньше вообще не открывался); TypedArray (`Float32Array`/`Uint32Array`) сериализуются в JSON обычными массивами (раньше `JSON.stringify` давал объект `{"0":…}` — ~2× размер и потеря `length` у `group.resultIndices`, из-за чего CSG-модели могли не восстанавливаться); лимит `model.json` поднят 5→64 МБ (импорты легко превышали 5 МБ: файл сохранялся, но не открывался), защита от ZIP-бомбы 50 МБ осталась; `restoreOperationMeshArrays` нормализует и `text3d` (`io/doodle-io.ts`)
@@ -68,7 +99,7 @@
 - **UB-4 (дубли кнопок скрытия баннера):** удалена дублирующая секция «Скрытие баннера» в EconomyPanel и компонент `EconomyBanner` над панелью инструментов. Единственное место — строка «Отключение баннера» в разделе «Аренда» правой панели: кнопки «токены 50» + «1 просмотр» (ревард), статус «Баннер скрыт · N ч» (`PropertiesPanel.tsx`, `App.tsx`, удалён `components/EconomyBanner.tsx`)
 - **UB-5 (бейджи):** контейнер бейджа уменьшен ×0.75 (шрифт 10→7.5px, minWidth 16→12px, minHeight 14→10.5px, padding/gap/shadow/radius ×0.75, `overflow: visible`), SVG-иконки остались 20px. Тест обновлён (`components/Badge.tsx`, `components/Badge.test.tsx`)
 
-#### Added
+##### Added
 
 - **Сборка для itch.io:** новый скрипт `pnpm build:itch` (`web-app/package.json`) — `tsc && vite build --base=./ --outDir dist-itch` + удаление `dist-itch/sdk.js` (копируется из `public/`, на itch не нужен и не должен попадать в архив). Отличие от `build` (GitHub Pages, `base: '/tinkercraft/'`) — относительный `base: './'`: itch раздаёт HTML-игры из iframe по адресу вида `html.itch.zone/html/NNNNN/`, абсолютные пути не работают. Платформа — clean-режим (VITE_PLATFORM≠yandex): Yandex-чанк tree-shaken (`import.meta.env.VITE_PLATFORM` — литерал `"clean"`), `isEconomyAvailable()===false` → токены/реклама/подписки/аренда отключены, всё бесплатно; `window.YaGames` отсутствует → SDK-init возвращает null. Архив: `tinkercraft-itch-v1.3.4.zip` (569 KB, 12 файлов, `index.html` в корне ZIP, `*.zip` в gitignore); проверка: все ассеты 200 через `python3 -m http.server`, WASM грузится через `new URL(..., import.meta.url)` (относительный путь). `.gitignore` — `dist-itch/`. Документация: `web-app/NODEJS_SETUP.md` (секция «Сборка для itch.io»)
 - **Реестр отзыва пользователя UB5 (2026-09-28):** `docs/USER_FEEDBACK_UB5.md` — 3 пункта ручного прогона на Яндекс Играх, задокументированы без правок в код (задокументирован 2026-09-28, исправлен 2026-09-29 — см. Fixed/Changed выше; реестр закрыт). UB5-1 (🔴 P1) — при активной Pro-подписке раздел «Аренда» продолжает продавать `text3d`/`extendedPalette`/`disableBanner` и списывает токены за уже выданное: `buyRental` валидирует только баланс (`economy-store.ts:1237-1273`), `rentalsSection` сверяет `isActive = hasRental(r.key)` без учёта подписки (`PropertiesPanel.tsx:296-373`), при этом доступ по подписке реально выдаётся в 4 местах (`PropertiesPanel.tsx:533-534`, `App.tsx:498-505/749-762`, `economy-store.ts:1231-1235`, `ExportModal.tsx:52-60`/`ImportModal.tsx:58-66`), а защищённый аналог уже существует в `RentalModal.tsx:63` (bypass по `hasActiveSub`) → предложен гейт `code: 'included_in_subscription'` + статус «Входит в Pro» + i18n + 4 теста. UB5-2 (🟡 P2) — запрос расширить правую панель ×1,2: единственная точка `.panel-right { width: 200px }` (`App.css:763-773`) → 240px, продолжение UB3-2 (иконки/кнопки не влезают). UB5-3 (🟢 P3) — у вкладки «Список» нет внутреннего скролла в отличие от «Дерево»: `.ct-list` имеет `max-height: 240px` + `overflow-y: auto` + тонкий скроллбар (`App.css:987-996`), `.object-list` — ничего из этого (`App.css:456-462`), из-за чего длинный список скроллит всю `.panel-left` (`App.css:338`)
@@ -83,7 +114,7 @@
 - **withTimeout (sdk.ts):** обёртка `Promise.race` с гарантированной очисткой таймера (`clearTimeout` при успехе/ошибке исходного промиса) — устраняет ЛОЖНЫЕ предупреждения о таймауте в логе, когда исходный промис уже выиграл гонку (`platform/sdk.ts`)
 - **Ревью экономики (2026-09-15):** полная проверка `economy-store.ts`/`economy-config.ts`/`economy-ui-config.ts` — 8 проблем (EC-R1…EC-R8), приоритеты и статусы в `CODE_REVIEW.md`. Ключевые: EC-R1 — `scanForCashback` не считает зеркала (тот же корень, что C3, не починен в кэшбэке); EC-R2 — гонка `claimDailyBonus` при двойном клике (+100 вместо +50) (`CODE_REVIEW.md`)
 
-#### Fixed
+##### Fixed
 - **EC-R3 (ревью экономики):** `buySubscription`/`buyRental` — атомарная повторная проверка баланса ВНУТРИ updater: между внешней проверкой `tokens < cost` и `set()` есть `await getServerTime()` — при падении баланса за время await списание могло увести токены в минус. Теперь updater отказывает (`not_enough`) без списания. Тесты ×2 (`economy-store.ts`, `economy-store.test.ts`)
 - **EC-R4 (ревью экономики):** `loadFromCloud` — `lastSavedData` пересчитывается ОТДЕЛЬНЫМ `set()` ПОСЛЕ применения облачных полей (раньше object literal вычислялся до merge → hash ДО-облачного состояния → первый `syncToCloud` за запуск всегда делал избыточный `setData`); hash в `syncToCloud` = hash фактически сохранённых данных. Тест ×1 (`economy-store.ts`, `economy-store.test.ts`)
 - **EC-R5 (ревью экономики):** `loadFromCloud` — keep-local стратегия вместо безусловного cloud-wins: пустое облако (никогда не сохранялось) и облако ≡ наша последняя успешная копия (canonical hash совпадает с `lastSavedData`) НЕ перезаписывают локальный прогресс — раньше несинхронизированные токены (последний syncToCloud упал) молча терялись при перезагрузке. Облако с другого устройства (новее) — по-прежнему cloud wins. Канонический хэш (sorted keys, `sortDeep`) делает локальный/облачный хэши сравнимыми; `lastSavedData` исключён из облачных данных (внутренний dedupe-флаг). ⚠️ Одноразовая миграция формата хэша — один избыточный `setData`, без потери данных. Тесты ×3 (`economy-store.ts`, `economy-store.test.ts`)
@@ -95,7 +126,7 @@
 - **SDK-таймауты (диагностика лога 130926):** устранены ложные предупреждения «YaGames.init() timeout (10s)» и «getPlayer() timeout (5s)» ПОСЛЕ успешного завершения. Причина: голый `Promise.race([promise, timeout])` не отменяет таймер — setTimeout продолжал тикать и после победы исходного промиса печатал warn (resolve(null) был no-op, но console.warn срабатывал). Исправление: `withTimeout()` в `sdk.ts` (clearTimeout при любом исходе) используется для `YaGames.init()`; `getPlayer()` в `yandex.ts` переведён с голого `Promise.race` на `withTimeout` + обработка ПОЗДНЕГО прихода player (если таймаут сработал раньше, резолв getPlayer() после таймаута всё равно заполняет `this.player` — облачные сохранения `syncToCloud` больше не молча пропускаются в guest-режиме). Таймауты — это защита платформы от зависших вызовов, поведение экономики/сохранений не менялось (`platform/sdk.ts`, `platform/yandex.ts`)
 - **Тесты withTimeout:** `sdk.test.ts` — таймер очищен при успехе (нет ложного onTimeout после победы промиса), resolve(null) при таймауте, проброс ошибки исходного промиса, поздний resolve после таймаута не меняет внешний результат (4 теста) (`platform/sdk.test.ts`)
 
-#### Fixed
+##### Fixed
 - **B1:** sticky-баннер-оффер (`EconomyBanner`) теперь виден ПО УМОЛЧАНИЮ (§6.3 ECONOMY.md) — `bannerVisible` инициализируется `true` в `economy-store.ts` (initial state + persist-merge); платформенный `showBannerAdv()` в `yandex.ts` управляется платформой отдельно и НЕ гасит наш UI-баннер. Новый RO-геттер `shouldShowBannerRO()` (bannerVisible && !подписка && !аренда disableBanner по серверному времени) — единый источник для EconomyBanner и bootstrap EC1 в App.tsx; после expiry аренды баннер снова показывается (`economy-store.ts`, `EconomyBanner.tsx`, `App.tsx`)
 - **B2:** кнопка «3D-текст» в LeftPanel больше НЕ disabled при отсутствии доступа — клик открывает правую панель с оффером аренды text3d (75 токенов, бейдж 💰75 виден). Переход «купить» через новый store-флаг `economyPanelOpen` (ui-store) — НЕ снимает выделение, панель свойств остаётся открытой (`LeftPanel.tsx`, `App.tsx`, `ui-store.ts`, `PropertiesPanel.tsx`)
 - **B3:** кнопка «Расширенный выбор» (палитра) без доступа открывает экономику (аренда extendedPalette 75 TC) ВНУТРИ правой панели — `setEconomyPanelOpen(true)` вместо `clearSelection()`. Механизм: store-флаг `economyPanelOpen` рендерит `EconomyPanel` поверх свойств выделенного объекта (с кнопкой «← К свойствам»), не закрывая панель; флаг сбрасывается только при смене выбранного объекта (`PropertiesPanel.tsx`, `ui-store.ts`, `App.tsx`, i18n `properties.backToProps` ru/en)
@@ -109,7 +140,7 @@
 - **Финальная проверка U1–U10 (2026-09-12):** `pnpm verify` — typecheck 0 ошибок, 336/336 тестов (23 файла), `build` и `build:yandex` успешны. Реестр отзыва закрыт в [`docs/USER_FEEDBACK_ECONOMY.md`](docs/USER_FEEDBACK_ECONOMY.md) (9/10 исправлено; U3 — вопрос спецификации)
 - **Полная проверка A/B/C (2026-09-14):** `pnpm verify` ПОСЛЕ всех правок регрессий платформы — typecheck 0 ошибок, **357/357 тестов (23 файла)**, `build` и `build:yandex` успешны. Реестр A1/A2/B1/B2/B3/C1/C2/C3 закрыт в [`docs/USER_FEEDBACK_ECONOMY.md`](docs/USER_FEEDBACK_ECONOMY.md); статусы — [`CODE_REVIEW.md`](CODE_REVIEW.md), [`DEVELOPMENT_PLAN.md`](DEVELOPMENT_PLAN.md); ECONOMY.md обновлён до v2.3 (4 вида рекламы, максимум дня 405 TC)
 
-#### Fixed
+##### Fixed
 - **U1/U9 (v2.1):** rewarded-реклама разделена по видам награды — у каждого вида (`tokens` / `import` / `banner`) собственный кулдаун 5 мин и собственный дневной лимит ≤3/день (`adRewards: Record<AdRewardKind, AdRewardState>` вместо единых `todayAdsWatched`/`lastAdTimestamp`). Миграция старых полей → вид `tokens` в `sanitizeEconomyData`. Геттеры `getAdCooldownRemaining(kind)`/`getAdRewardsLeftToday(kind)`/`canWatchAdKind(kind)` для UI. Persist v3 + облако (`collectSyncData`/`loadFromCloud`/`partialize`) (`economy-store.ts`)
 - **U1/U9 (v2.1):** UI переведён на per-reward счётчики — EconomyMiniHUD/PropertiesPanel/ExportModal (вид `tokens`), ImportModal (вид `import`); i18n RU/EN подсказка «≤3/день на каждую награду, пауза 5 минут»; `LIMITS.maxPerDay` 405→705, `realisticPerDay` 240→350 (`EconomyMiniHUD.tsx`, `PropertiesPanel.tsx`, `ExportModal.tsx`, `ImportModal.tsx`, `translation.json`, `economy-config.ts`)
 - **U1/U9 (v2.1):** ECONOMY.md обновлён до v2.1 (§2 — таблица рекламы per-reward, максимум дня 705; §5 — раздельные счётчики по видам; §6.6 — подписи; §9 — баланс) (`ECONOMY.md`)
@@ -125,7 +156,7 @@
 - **C3 (регрессия quest «зеркала»):** квест `count_mirrored` («Зазеркалье») больше не «молчит» при выполнении условия. Причина: `mirrorObject` в `mirror-store.ts` пишет `scale = Math.abs(...)` — зеркальные объекты имеют ПОЛОЖИТЕЛЬНЫЙ scale, поэтому прежняя проверка `scale < 0` никогда не срабатывала. Счётчик теперь строится по mirror-операциям истории (`op.type === 'mirror'` → `op.ids` = id созданных зеркальных копий), пересечение с текущей сценой (удаление зеркала/undo уменьшает счётчик) + legacy `scale < 0`. Порог «≥ target»: target 3 засчитывается при 3+ зеркалах, target 1 при 1+. Зеркальные копии считаются уникально (Set по id) — повторные/цепочки зеркал не задваиваются (`economy-store.ts`)
 - **Тесты C1/C2/C3:** `Badge.test.tsx` — компактный шрифт 10px/padding 1px 3px, TokenIcon 20×20, золотая заливка куба (без монеты); `IconBadge.test.tsx` — шрифт/padding компактные (10px, 2px 4px), `pointer-events:none`; `economy-store.test.ts` — `evaluateQuests count_mirrored`: зачёт при N=target(3), не-зачёт при N<target, legacy scale<0, падение счётчика при удалении зеркала, уникальность при цепочках зеркал (5 новых тестов) (`Badge.test.tsx`, `IconBadge.test.tsx`, `economy-store.test.ts`)
 
-#### Fixed
+##### Fixed
 - **U4:** Бейдж 3D-текста (75 токенов) на панели фигур больше не «молчит» — сравнение в LeftPanel переведено на реальный тип `type:'text'` из `ALL_SHAPES_DATA` (в сцене объект создаётся как `shapeType:'text3d'`; тип в константах не переименован, чтобы не сломать `addTextMesh`) (`LeftPanel.tsx`)
 - **U6:** Простая палитра Wad's Optimum 16 доступна ВСЕГДА (ядро редактора бесплатно, §3.4) — `ColorPalette` рендерится без аренды/подписки; расширенный native `<input type="color">` (кнопка «Расширенный выбор») показывается только при аренде `extendedPalette` или подписке. Lock-блок заменён на бейдж «75» на кнопке (`PropertiesPanel.tsx`)
 - **U7:** Иконки бейджей увеличены в 2 раза — Badge: `MoneyIcon`/`AdFilmIcon`/`ClockIcon`/`CrownIcon` 10→20px, шрифт 10→16px; IconBadge: иконка 16→20px, шрифт 9→13px, контейнеры увеличены (padding/minWidth/minHeight) (`Badge.tsx`, `IconBadge.tsx`)
@@ -188,10 +219,10 @@
 - **Y3.15 EconomyShop подключён в App.tsx** — компонент подключён в левую панель как точка продаж (§6.3 ECONOMY.md: 3 места скрытия баннера: баннер, панель, магазин) (`components/EconomyShop.tsx`, `App.tsx`)
 - **Y3.16 Бейджи на кнопках экономики (§6.4)** — добавлены бейджи 💰/📺 на все платные кнопки: PropertiesPanel (палитра, аренда, подписки, баннер off), EconomyBanner (баннер off), EconomyShop (аренда, подписки, баннер off). Бейдж = 💰 слева-внизу (цена) / 📺 справа-внизу (реклама) (`components/PropertiesPanel.tsx`, `components/EconomyBanner.tsx`, `components/EconomyShop.tsx`)
 
-#### Changed
+##### Changed
 - **Проверка соответствия ECONOMY.md v2.0** — аудит выявил 2 проблемы: evaluateQuests() не вызывалась, EconomyShop не был подключён. Обе исправлены. (`CODE_REVIEW.md`)
 
-#### Added
+##### Added
 - **Отзыв пользователя по экономике/UI (2026-09-11)** — создан реестр из 10 проблем (3 P0: повторное списание токенов на скрытом баннере, экспорт не выполняется после оплаты/рекламы, SDK инициализируется после доступности игры; 5 P1: единый 5-мин кулдаун и единый счётчик рекламы на все награды, таймер отката не тикает, дублирование панели экономики слева и справа, нет простой палитры в свойствах; 2 P2: нет бейджа у 3D-текста, мелкие иконки бейджей). Только документирование, код не менялся (`docs/USER_FEEDBACK_ECONOMY.md`)
 - **Ревью экономики закрыто (2026-09-11)** — все 22 проблемы ревью от 2026-09-10 (`docs/ECONOMY_CODE_REVIEW.md`) исправлены: 6 P0 (анти-фарм кэшбэка, серверное время expiry/лимитов, хвостовая синхронизация облака, lastSavedData в persist, клиентская валидация, clean-фолбэк SDK), 9 P1, 7 P2. Проверка: `pnpm typecheck` 0 ошибок, `pnpm test` 299/299. Статусы — `CODE_REVIEW.md`, `DEVELOPMENT_PLAN.md`
 - **Тесты экономики** — новый `economy-store.test.ts` (~35 тестов): анти-фарм кэшбэка, лимиты/кулдауны, syncToCloud, sanitizeEconomyData; дополнены `document-store.test.ts`, `economy-config.test.ts`. Итого 299 тестов в 17 файлах (`economy-store.test.ts`, `document-store.test.ts`, `economy-config.test.ts`)
@@ -199,7 +230,7 @@
 - **Код-ревью экономики (2026-09-10)** — проведено ревью ECONOMY.md против фактической реализации; полный отчёт в `docs/ECONOMY_CODE_REVIEW.md`: выявлено 22 проблемы (6 P0 / 9 P1 / 7 P2). Критичные P0: анти-фарм кэшбэка, expiry по локальному времени, потеря обновлений syncToCloud, lastSavedData вне partialize, client-side экономика, clean-фолбэк SDK. Статусы в `CODE_REVIEW.md`, технический долг в `DEVELOPMENT_PLAN.md`
 - **Локализация: убран хардкод строк в экономике** — `formatRentalRemaining`/`formatSubRemaining` принимают `t()`, `rentalsConfig` label/desc через `t()`, "Аренда 24ч"/"Активно"/"Pro активна · "/"🔒 75"/"STL" переведены через i18n (`components/PropertiesPanel.tsx`, `components/Toolbar.tsx`, `i18n/locales/*/translation.json`)
 
-#### Fixed
+##### Fixed
 - **Rewarded video: правильные callbacks SDK** — `onClose` без аргументов (`wasShown`), `resolve(true)` только после закрытия, `onClose` вызывает `startGameplay()` (`platform/yandex.ts`)
 - **Fullscreen ad: showFullscreenAdv вместо showInterstitialAd** — SDK использует `showFullscreenAdv()`, не `showInterstitialAd()` (`platform/yandex.ts`)
 - **Баннер показывается при инициализации** — явный вызов `showBannerAdv()` в App.tsx после `initPlatform()` (`App.tsx`)
@@ -209,7 +240,7 @@
 - **Расширенная палитра заблокирована** — кнопка "Расширенный выбор" проверяет аренду/подписку, открывает магазин при отсутствии доступа (`components/PropertiesPanel.tsx`)
 - **IconButton: поддержка priceBadge/adBadge/timerBadge/proBadge** — новые props для бейджей на кнопках (`components/IconButton.tsx`)
 
-#### Added
+##### Added
 - **favicon.svg** — иконка вкладки браузера в стиле проекта: 3D-куб с градиентами и буквами TC (`public/favicon.svg`)
 - **SVG-иконки для эмодзи** — добавлены MoneyIcon, PackageIcon, SpeakerIcon (`components/icons/index.tsx`)
 - **Стики-баннер SDK** — автопоказ при инициализации Yandex SDK через `ysdk.adv.showBannerAdv()`, управление через API (§SDK, §6.3) (`platform/yandex.ts`, `platform/types.ts`, `platform/clean.ts`)
@@ -220,18 +251,18 @@
 - **Debounce evaluateQuests** — подписка на изменения документа теперь debounced 400 мс — живой прогресс квестов без просадок FPS на слабых устройствах (§4) (`App.tsx`)
 - **ECONOMY.md §6.3** — обновлено: кнопка скрытия баннера в трёх местах (баннер, панель, магазин) (`ECONOMY.md`)
 
-#### Added
+##### Added
 - **Y2.0 Кэшбэк V2** — формула коэффициентов (§2.1 ECONOMY.md v2.0): `min(25, 1 + Масштаб + РазнообразиеФигур + КолИнструментов + РазнообразиеИнструментов)` (`store/economy-config.ts`, `store/economy-store.ts`)
 - **Y2.0 scanForCashback()** — общий сканер дерева документов для кэшбэка и квестов (`store/economy-config.ts`)
 - **Y2.0 IconBadge.tsx** — бейджи на кнопках инструментов: 💰 токены, 📺 реклама, ⏱ таймер, 👑 подписка (`components/IconBadge.tsx`)
 - **Y2.0 Кнопка скрытия баннера** — два места: на баннере + в панели EconomyShop (§6.3) (`components/EconomyShop.tsx`)
 - **Y2.0 i18n подписи** — tooltip для всех элементов экономики (§6.6): токены, бонус, реклама, квесты, баннер, подписка, кэшбэк (`i18n/locales/*/translation.json`)
 
-#### Changed
+##### Changed
 - **Y2.0 calculateAndClaimCashback()** — теперь принимает scanResult вместо objectCount/csgOps (`store/economy-store.ts`, `store/document-store.ts`)
 - **Y2.0 ECONOMY.md** — обновлён до v2.0 с полной UI-спецификацией, политикой хранения и IAP-расчётом (`ECONOMY.md`)
 
-#### Fixed
+##### Fixed
 - **Y3.1 Токены за действия** — `earnActionToken()` добавлен в `addShape`, `addRawMesh`, `addTextMesh`, `importStl` — теперь +1 начисляется при добавлении фигуры (лимит 30/день, кулдаун 5с) (`store/document-store.ts`)
 - **Y3.2 Кэшбэк за экспорт** — `calculateAndClaimCashback()` добавлен в `exportStl` с расчётом `objectCount` и `csgOps` — кэшбэк +5…+25 токенов теперь начисляется (`store/document-store.ts`)
 - **Y3.3 Хэш модели для кэшбэка** — `createExportHash()` вызывается при экспорте, кэшбэк начисляется только при изменении модели (`store/document-store.ts`, `store/economy-store.ts`)
@@ -246,10 +277,10 @@
 - **Y3.11 Таймер кулдауна рекламы** — уже был реализован в `EconomyHUD.tsx` (строки 8-22, 32-41, 92-96) ✅
 - **Yandex SDK модерация** — исправлены критические проблемы встраивания SDK (п. 1.1 требований): `base: './'` вместо `'/'` для относительных путей, CDN SDK вместо локального лоадера (`vite.config.ts`), `manifest.json` с относительными путём и `start_url` (`public/manifest.json`), убран дублирующий `<script src="/sdk.js">` из `index.html` (`index.html`), обработка ошибок в callbacks рекламы с обязательным `GameplayAPI.start()` при ошибке (`src/platform/yandex.ts`)
 
-#### Changed
+##### Changed
 - **Проверка актуальности проблем Y.2** — верифицировано состояние 4 проблем ревью: Y2.1, Y2.2, Y2.4 полностью исправлены; Y2.3 частично (не хватает триггера `export:stl`, квест `sceneSize` не прогрессирует — пропускается через `continue` в `completeQuest`) (`CODE_REVIEW.md`)
 
-#### Fixed
+##### Fixed
 - **Y2.3 Добавлен триггер export:stl** — обёртка `handleExportStl` в `App.tsx` вызывает `completeQuest('export:stl')` после экспорта (`App.tsx`)
 - **Y2.3 Исправлен прогресс sceneSize** — `completeQuest` в `economy-store.ts` принимает `sceneSize?: number`, прогресс квеста по количеству объектов в сцене (ранее пропускался через `continue`) (`economy-store.ts`, `App.tsx`)
 - **Y2.1 Удалён дублирующий game-store.ts** — удалён устаревший `game-store.ts` (V11: +5/10 токенов, вечные разблокировки), оставлен `economy-store.ts` (V12: +50 токенов, аренда 24ч, лимиты) (`store/`)
@@ -258,7 +289,6 @@
 - **Y2.4 Очистка lock-config.ts** — удалены замки на torus/cone, оставлены только `tool:text3d` и `tool:extendedPalette` (`store/`)
 - **Y2.5 Триггеры квестов** — добавлены все 14 триггеров: addShape (7 типов), csgBoolean (union/subtract/intersect), setColor, mirror/align, import:stl, sceneSize (`App.tsx`)
 - **Y2.6 LeftPanel.tsx** — убраны импорты useGameStore, getLockConfig, ToolBadge, UnlockModal; фигуры теперь бесплатны без замков (`components/`)
-
 
 ---
 

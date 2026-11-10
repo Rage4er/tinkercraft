@@ -55,7 +55,9 @@ export default function ExportModal({
     if (hasActiveSub && !subBypassDone.current) {
       subBypassDone.current = true
       onClose()
-      onExport('ad') // метод не важен — подписка даёт безлимит
+      // SUB-EXPORT-CASHBACK: подписка — безлимит; способ 'ad' → подписчик получает кэшбэк
+      // (особенность экономики, лояльно к игроку — решение 2026-11-10, ECONOMY.md §3.3)
+      onExport('ad')
     }
   }, [economyActive, hasActiveSub])
 
