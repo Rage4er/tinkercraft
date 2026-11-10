@@ -393,3 +393,46 @@ export function subtractTransform(
     },
   }
 }
+
+type TRS = {
+  x: number; y: number; z: number
+  rotX: number; rotY: number; rotZ: number
+  scaleX: number; scaleY: number; scaleZ: number
+}
+
+/** Трансформы равны (покомпонентно, с допуском) — поправка не нужна. */
+function sameTRS(a: TRS, b: TRS, eps = 1e-9): boolean {
+  return Math.abs(a.x - b.x) <= eps && Math.abs(a.y - b.y) <= eps && Math.abs(a.z - b.z) <= eps &&
+    Math.abs(a.rotX - b.rotX) <= eps && Math.abs(a.rotY - b.rotY) <= eps && Math.abs(a.rotZ - b.rotZ) <= eps &&
+    Math.abs(a.scaleX - b.scaleX) <= eps && Math.abs(a.scaleY - b.scaleY) <= eps && Math.abs(a.scaleZ - b.scaleZ) <= eps
+}
+
+/**
+ * NESTED-MOVED-EDIT: поправка вложенного CSG, сдвинутого/повёрнутого/отмасштабированного
+ * ДО объединения. Листья поддерева лежат в мировой системе СОЗДАНИЯ (TRS₀ = origin), а
+ * объект перед объединением стоял в TRS_cur (cur):
+ *
+ *   M = Mat(cur) · Mat(origin)⁻¹,   v' = M·v = (R_c S_c)(S_o⁻¹ R_oᵀ)(v − p_o) + p_c
+ *
+ * Полная аффинная матрица (не только сдвиг) — поворот и неравномерный масштаб тоже.
+ * Column-major 4×4 (как buildTransformMatrix). null — трансформы совпадают (identity).
+ */
+export function relativeTransformMatrix(cur: TRS, origin: TRS): number[] | null {
+  if (sameTRS(cur, origin)) return null
+  const [a00, a01, a02, a10, a11, a12, a20, a21, a22] = computeRSMatrix(cur, cur)
+  const [b00, b01, b02, b10, b11, b12, b20, b21, b22] = computeInverseRSMatrix(origin, origin)
+  // M3 = A·B (row-major)
+  const m00 = a00 * b00 + a01 * b10 + a02 * b20, m01 = a00 * b01 + a01 * b11 + a02 * b21, m02 = a00 * b02 + a01 * b12 + a02 * b22
+  const m10 = a10 * b00 + a11 * b10 + a12 * b20, m11 = a10 * b01 + a11 * b11 + a12 * b21, m12 = a10 * b02 + a11 * b12 + a12 * b22
+  const m20 = a20 * b00 + a21 * b10 + a22 * b20, m21 = a20 * b01 + a21 * b11 + a22 * b21, m22 = a20 * b02 + a21 * b12 + a22 * b22
+  // t = p_c − M3·p_o
+  const tx = cur.x - (m00 * origin.x + m01 * origin.y + m02 * origin.z)
+  const ty = cur.y - (m10 * origin.x + m11 * origin.y + m12 * origin.z)
+  const tz = cur.z - (m20 * origin.x + m21 * origin.y + m22 * origin.z)
+  return [
+    m00, m10, m20, 0,
+    m01, m11, m21, 0,
+    m02, m12, m22, 0,
+    tx, ty, tz, 1,
+  ]
+}

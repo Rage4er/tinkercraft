@@ -44,7 +44,7 @@ TinkerCraft — браузерный 3D CAD-редактор. Пользоват
 2. **App.tsx** вызывает action из `document-store.ts`
 3. **Store** добавляет операцию в `history[]`, вызывает `rebuildFromHistory()`
 4. **rebuildFromHistory()** отправляет операции в `worker-client.ts` (Promise RPC)
-5. **Worker** выполняет manifold-3d операции (build, union, subtract, fillet...)
+5. **Worker** выполняет manifold-3d операции (build, union, subtract, mirror...)
 6. **Worker** возвращает mesh (vertices + indices)
 7. **Store** центрирует CSG-результаты через `extractAndCenter()`
 8. **Viewport3D** обновляет Three.js меши
@@ -66,7 +66,7 @@ Zustand store. Содержит:
 - `objects: SceneObject[]` — текущая сцена
 - `history: Operation[]` — история операций (undo/redo)
 - `selectedIds: string[]` — выделенные объекты
-- Actions: `addShape`, `csgBoolean`, `applyFillet`, `moveObject`, `undo`, `redo` и др.
+- Actions: `addShape`, `csgBoolean`, `moveObject`, `undo`, `redo` и др.
 
 **Правило:** Store — единственный источник истины. Все мутации идут через actions.
 
@@ -76,7 +76,13 @@ Web Worker с manifold-3d (WASM). Воркер кэширует manifold-объ�
 
 **worker-client.ts** — типобезопасный RPC: отправляет сообщения, возвращает Promise.
 
-**worker.ts** — обрабатывает сообщения: `buildShape`, `csgOp`, `applyFillet`, `rebuildScene`.
+**worker.ts** — обрабатывает сообщения: `buildShape`, `csgOp`, `rebuildScene`.
+
+**N-ARY-CSG:** CSG — N-арный. Union N объектов — один CSG с N детьми; subtract/intersect — union(A) op union(B) (группы A/B — `groupA` у операции `group` и boolean-узла). Группы в UI — режим «A → B → Enter» (CSG-GROUP-FIX, `store/csg-group-mode.ts`): «Вычитание» / «Пересечение» фиксируют выделение группой A, затем выделение — группа B, Enter / «ОК» — одна операция; «Объединение» — сразу. Boolean над N операндами считает одна функция воркера `combineOperands` — для живого CSG (`csgBooleanMulti`), перестроения дерева (`rebuildTreeNode`) и воспроизведения истории (`rebuildScene`), поэтому дерево и меш совпадают по построению. 2 операнда — прежний бинарный путь.
+
+**PLUG-AND-PLAY:** фигура палитры ставится режимом размещения (`store/placement-mode.ts`): клик по иконке → `startPlacement` (меш превью — воркер `buildShape` с параметрами по умолчанию, кэш по типу) → наведение во вьюпорте: луч камеры + грань под ним (`pickFace`) → `resolvePlacement` (`store/placement.ts`, чистая геометрия: ось X / Y / Z → грань → сетка, шаг привязки, трансформ «стоит на плоскости») → превью (`usePlacementPreview`) → клик / Enter → `addShapeWhenIdle(type, { at })` → `addShape(type, params, at)`: шаг `add_shape` с этим трансформом — история, undo / redo, `.3dtc` без изменений формата.
+
+**DIMENSIONS:** размерные линии — отдельный слой аннотаций (`store/dimensions-store.ts`), не шаги истории: undo / redo его не трогает. Конец размера — объект (id) и точка в его локальных координатах (+ локальная рамка при создании), поэтому число — функция текущих объектов: `dimensionEnds(dim, objects)` = трансформ объекта × точка (смена геометрии — перенос точки в новую рамку). Отрисовка (`useDimensionsRender`) пересобирает слой при изменении объектов, размеров или выделения; режим «Размер» (`store/dimension-mode.ts`) берёт точку с привязкой `findNearestSnap` и переводит её в систему объекта (`anchorOf`). Сохранение — поле `dimensions` в `.3dtc`, автосохранении и проектах (только размеры, чьи объекты есть).
 
 **Правило:** Worker НЕ центрирует геометрию. Центрирование — ответственность store.
 
@@ -128,7 +134,7 @@ Render = data (см. `web-app/ARCHITECTURE_RENDER.md`).
 
 ### История операций (undo/redo)
 
-`history[]` — массив операций (AddShape, Move, CSG, Fillet, Mirror...).
+`history[]` — массив операций (AddShape, Move, CSG, Mirror...).
 Undo/redo = полный rebuild через `rebuildFromHistory()`. Нет кэша snapshots (PERF-1 — отложено).
 Фильтрация: некоторые операции (выделение) не попадают в историю.
 
@@ -159,7 +165,6 @@ interface SceneObject {
   indices: number[];              // triangle indices
   visible: boolean;
   color: string;
-  filletRadius?: number;
   isCSG?: boolean;                // результат булевой операции
 }
 ```
@@ -170,7 +175,7 @@ interface SceneObject {
 type Operation =
   | { type: 'addShape'; id: string; shapeType: ShapeType; params; transform; name }
   | { type: 'csg'; id: string; operands: string[]; op: 'union' | 'subtract' | 'intersect' }
-  | { type: 'fillet'; id: string; radius: number }
+  | { type: 'fillet'; id: string; radius: number }   // устарело: только чтение старых файлов (remove-fillet)
   | { type: 'move'; id: string; dx; dy; dz }
   | { type: 'mirror'; id: string; axis: 'x' | 'y' | 'z' }
   | ...

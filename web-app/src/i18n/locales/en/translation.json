@@ -9,6 +9,16 @@
     "pyramid": "Pyramid",
     "text": "Text"
   },
+  "shapesAcc": {
+    "cube": "Cube",
+    "sphere": "Sphere",
+    "cylinder": "Cylinder",
+    "cone": "Cone",
+    "torus": "Torus",
+    "prism": "Prism",
+    "pyramid": "Pyramid",
+    "text": "Text"
+  },
   "shapesCategory": {
     "basic": "Basic",
     "special": "Special"
@@ -19,7 +29,66 @@
     "intersect": "Intersect",
     "result": "CSG result",
     "operations": "CSG operations",
-    "nonManifold": "CSG operations are impossible on this object (non-manifold geometry)"
+    "groupA": "Group A",
+    "groupB": "Group B"
+  },
+  "csgMode": {
+    "hint": "{{op}}: select the second group (A: {{a}}, B: {{b}}). Enter — OK, Esc — cancel",
+    "ok": "OK",
+    "okTip": "Apply: group A and the selected objects (B) → one CSG (Enter)",
+    "cancelTip": "Leave without changes (Esc)"
+  },
+  "placement": {
+    "hint": "Place {{shape}}: hover an object face or the grid, X / Y / Z — axis plane. Click / Enter — place, Esc / right click — cancel",
+    "where": "{{plane}} · X {{x}} · Y {{y}} · Z {{z}}",
+    "whereDefault": "Enter — next to the others",
+    "whereAxisOnly": "plane {{plane}} — move the cursor over the scene",
+    "planeFace": "face of “{{name}}”",
+    "planeGrid": "grid (XY)",
+    "planeAxis": "plane {{plane}} ({{axis}})",
+    "ok": "Place",
+    "okTip": "Place the shape at the preview, without one — next to the others (Enter)",
+    "cancelTip": "Cancel — no shape is created (Esc, right click)"
+  },
+  "dimensions": {
+    "button": "Dimension",
+    "place": "Place dimension",
+    "settings": "Dimension settings",
+    "toggle": "Show / hide dimensions",
+    "label": "{{value}} mm",
+    "hintA": "Dimension: pick the first point — an object vertex, edge or face. Esc / right click — exit",
+    "hintB": "Dimension: pick the second point. Esc — exit",
+    "created": "Dimensions: {{count}}",
+    "done": "Done",
+    "doneTip": "Leave dimension mode (Esc)",
+    "kindStandard": "Standard",
+    "kindOffset": "Offset",
+    "kindProjection": "Projection",
+    "kindStandardTip": "Straight line between the points",
+    "kindOffsetTip": "Line moved outwards, extension lines from the points",
+    "kindProjectionTip": "Projection onto the XY plane: horizontal length",
+    "type": "Type",
+    "color": "Color",
+    "font": "Font",
+    "fontSans": "Sans-serif",
+    "fontMono": "Monospace",
+    "fontSerif": "Serif",
+    "size": "Text height",
+    "offset": "Offset",
+    "units": "Units",
+    "applyNew": "Apply to new",
+    "applySelected": "Apply to selected",
+    "applyNewTip": "New dimensions will look like this",
+    "applySelectedTip": "Style for the selected dimension",
+    "panelTitle": "Dimension",
+    "value": "Value",
+    "between": "Between",
+    "delete": "Delete dimension",
+    "style": "Style…",
+    "section": "Dimensions",
+    "empty": "No dimensions — “Dimension” button (D)",
+    "hidden": "Layer hidden",
+    "rowTitle": "{{a}} — {{b}}: {{value}} mm"
   },
   "mirror": {
     "title": "Mirror",
@@ -28,16 +97,7 @@
     "xy": "Mirror XY"
   },
   "align": {
-    "title": "Alignment",
-    "x_min": "X min",
-    "x_center": "X center",
-    "x_max": "X max",
-    "y_min": "Y min",
-    "y_center": "Y center",
-    "y_max": "Y max",
-    "z_min": "Z min",
-    "z_center": "Z center",
-    "z_max": "Z max"
+    "title": "Alignment"
   },
   "actions": {
     "undo": "Undo",
@@ -94,10 +154,6 @@
     "header": "Properties",
     "type": "Type",
     "color": "Color",
-    "advancedPicker": "Advanced picker",
-    "backToProps": "← Back to properties",
-    "lockedExtended": "Extended palette",
-    "buyFor": "Buy for {{n}}",
     "visible": "Visible",
     "yes": "Yes",
     "no": "No",
@@ -113,8 +169,6 @@
     "torusRadius": "Torus radius",
     "tubeRadius": "Tube radius",
     "sides": "Sides",
-    "fillet": "Fillet",
-    "filletTitle": "Fillet",
     "quickSave": "Quick save",
     "save": "Save",
     "projectManager": "Project Manager",
@@ -122,43 +176,13 @@
     "selectObject": "Select an object",
     "toViewProperties": "to view properties",
     "inScene": "In scene:",
-    "objects": "objects"
-  },
-  "palette": {
-    "regular": "Standard Palette"
-  },
-  "export": {
-    "title": "Export STL",
-    "description": "Choose how to export your model:",
-    "cashbackInfo": "Cashback up to {{cashback}} tokens → final price: {{netCost}}",
-    "cashbackIncluded": "Cashback included in the price",
-    "cashbackEarned": "Cashback +{{cashback}} 💎",
-    "payTokens": "Pay {{cost}} tokens",
-    "watchAd": "Watch ad ({{count}}/{{max}} watched)",
-    "cashbackBreakdown": {
-      "base": "Base: {{base}}",
-      "scale": "Scale: +{{scale}}",
-      "shapeDiv": "Shape types: +{{shapeDiv}}",
-      "toolCount": "Tools: +{{toolCount}}",
-      "toolDiv": "Tool categories: +{{toolDiv}}",
-      "total": "Total cashback: {{total}}"
-    },
-    "adNotAvailable": "Ad limit reached today",
-    "notEnoughTokens": "Not enough tokens",
-    "adNotRentable": "Not available with ads",
-    "bonusCooldown": "Until {{time}}",
-    "bonusClaimed": "Already claimed",
-    "adLimitReached": "Ad limit reached",
-    "adCooldown": "Ad available in {{time}}"
-  },
-  "import": {
-    "title": "Import STL",
-    "description": "Choose how to import your model:",
-    "payTokens": "Pay {{cost}} tokens",
-    "watchAd": "Watch ads ×{{adsNeeded}} {{series}}/{{adsNeeded}} (imports {{done}}/{{max}})",
-    "watchAd_one": "Watch {{adsNeeded}} ad {{series}}/{{adsNeeded}} (imports {{done}}/{{max}})",
-    "watchAd_other": "Watch {{adsNeeded}} ads {{series}}/{{adsNeeded}} (imports {{done}}/{{max}})",
-    "adFailed": "Couldn't show ads. Try paying with tokens."
+    "objects": "objects",
+    "not_editable_title": "Editing unavailable",
+    "not_editable_body": "Editing this child's parameters is unavailable. Reason: {{reason}}",
+    "advancedPicker": "Advanced picker",
+    "backToProps": "← Back to properties",
+    "lockedExtended": "Extended palette",
+    "buyFor": "Buy for {{n}}"
   },
   "leftPanel": {
     "shapes": "Shapes",
@@ -173,6 +197,7 @@
     "filter": "Filter",
     "timelineEmpty": "Empty",
     "addShape": "Add {{label}}",
+    "placeShape": "Place {{label}}: then click an object face or the grid (Enter — next to the others)",
     "text3d": "3D Text"
   },
   "componentTree": {
@@ -182,19 +207,23 @@
     "show": "Show",
     "delete": "Delete",
     "import": "Import",
-    "text3d": "3D Text"
+    "expand": "Expand",
+    "collapse": "Collapse",
+    "nestedCsg": "Nested CSG",
+    "mirroredShort": "mirrored"
   },
   "timeline": {
     "addShape": "Add {{shape}}",
+    "addText": "Add Text: {{text}}",
     "importMesh": "Import {{name}}",
-    "text3d": "3D Text: {{name}}",
     "move": "Move",
     "scale": "Scale",
     "rotate": "Rotate",
     "resizeDims": "Resize",
-    "fillet": "Fillet r={{radius}}",
     "mirror": "Mirror {{plane}}",
     "align": "Align {{axis}} → {{anchor}}",
+    "alignFace": "Align to face",
+    "alignAxisPlane": "Align to {{plane}} plane",
     "groupUnion": "Union",
     "groupSubtract": "Subtract",
     "groupIntersect": "Intersect",
@@ -202,23 +231,38 @@
     "visibility": "Visibility",
     "color": "Color",
     "rename": "Rename",
+    "paste": "Paste {{what}}",
+    "pastedImport": "import",
     "csgResult": "CSG result",
     "goToStep": "Go to step {{step}}",
-    "empty": "Empty"
+    "empty": "Empty",
+    "editChildParams": "Edit CSG child size",
+    "editStep": "Edit this step's parameters",
+    "editGone": "The object of this step no longer exists in the scene",
+    "editStepOp": "Edit step {{step}}: {{detail}}",
+    "edited": "edited (step {{step}})",
+    "editMoveStep": "Edit this step's offset (CSG below is recomputed)",
+    "editMirrorStep": "Edit this mirror's plane (CSG below is recomputed)",
+    "extrude": "Extrude {{axis}} by {{depth}}",
+    "editExtrudeStep": "Edit this extrusion's depth (CSG below is recomputed)"
   },
   "filters": {
     "add_shape": "Add",
+    "paste": "Paste",
     "import_mesh": "Import",
     "move": "Move",
+    "rotate": "Rotate",
+    "scale": "Scale",
     "resize_dims": "Resize",
-    "fillet": "Fillet",
     "mirror": "Mirror",
     "align": "Align",
     "group": "CSG",
     "delete": "Delete",
     "visibility": "Visibility",
     "color": "Color",
-    "rename": "Rename"
+    "rename": "Rename",
+    "edit_child_params": "CSG child edit",
+    "edit_step": "Step edit"
   },
   "snap": {
     "label": "Snap:",
@@ -248,12 +292,14 @@
     "name": "Tinker Craft",
     "stlHeader": "Tinker Craft STL Export",
     "stlDefaultName": "tinker-craft-export.stl",
-    "webLabel": "Tinker Craft Web"
+    "webLabel": "Tinker Craft Web",
+    "loading": "Loading…"
   },
   "viewport": {
-    "hint": "LMB — select · Shift — multi · Drag — box · RMB — orbit · F — Fit View · H — Home View · G/R/S — gizmo"
+    "hint": "LMB — select · box: → inside, ← crossing · RMB — orbit · MMB — pan · wheel — zoom · F / 2×MMB — fit · H — home · G/R/S — gizmo"
   },
   "projectManager": {
+    "untitled": "Untitled",
     "title": "Project Manager",
     "saveCurrentScene": "Save current scene",
     "projectName": "Project name",
@@ -270,6 +316,7 @@
     "deleteProjectConfirm": "Delete project \"{{name}}\"?"
   },
   "textModal": {
+    "objectName": "Text: {{text}}",
     "title": "3D Text",
     "placeholder": "Enter text…",
     "size": "Size",
@@ -281,7 +328,6 @@
     "noObjectsSelected": "No objects selected",
     "csgNeedTwoObjects": "Select exactly 2 objects for CSG",
     "csgImpossible": "CSG operation impossible (non-manifold geometry)",
-    "filletFailed": "Fillet operation failed",
     "stlImportFailed": "STL import failed",
     "stlExportFailed": "STL export failed",
     "openFailed": "Open error: {{error}}",
@@ -301,12 +347,81 @@
     "pasteFailed": "Paste failed",
     "deleteFailed": "Failed to delete objects",
     "csgFailed": "CSG operation failed",
+    "csgNonManifold": "Mesh is not closed (non-manifold), CSG is not possible. Check the STL.",
+    "csgEmpty": "The CSG result is empty (the objects do not overlap or everything was subtracted) — objects are unchanged",
     "alignFailed": "Alignment failed",
     "resizeFailed": "Resize failed",
     "resizeCsgFailed": "Failed to resize CSG object",
     "extrudeFailed": "Extrusion failed",
     "operationFailed": "Operation failed: {{name}}",
-    "saveFailed": "Failed to save project"
+    "saveFailed": "Failed to save project",
+    "stlTooSmallFile": "STL: the file is too small",
+    "projectNotFound": "Project not found (id {{id}})",
+    "historyAction": {
+      "undo": "undo",
+      "redo": "redo",
+      "jump": "history jump"
+    },
+    "file": {
+      "tooDeep": "Invalid model.json: nesting is too deep (>{{max}}) at \"{{path}}\"",
+      "unsafeKey": "Invalid model.json: unsafe key \"{{key}}\" at \"{{path}}\"",
+      "tooLarge": "Invalid .3dtc: size {{size}} bytes exceeds the limit of {{max}} bytes",
+      "noModel": "Invalid .3dtc: model.json not found",
+      "notString": "Invalid model.json: not a string",
+      "jsonTooLarge": "Invalid model.json: size {{size}} bytes exceeds the limit of {{max}} bytes",
+      "badVersion": "Unsupported format version \"{{version}}\". Expected \"{{expected}}\".",
+      "noOperations": "Invalid model.json: the operations array is missing",
+      "unknownOperation": "Invalid model.json: an operation of unknown type"
+    },
+    "textFailed": "Could not create the text: {{reason}}",
+    "textMissingGlyphs": "The font has no characters «{{chars}}» — shown as «?»",
+    "textNoGlyphs": "the font has none of the characters of this text",
+    "textBadSize": "size and depth must be greater than 0",
+    "editChild": {
+      "notFound": "CSG object or its component was not found",
+      "notEditable": "This component cannot be edited (baked or mirrored)",
+      "noOrigin": "This CSG has no creation data — editing is unavailable",
+      "treeMismatch": "The component tree no longer matches the current geometry (the object changed after the merge) — editing is unavailable",
+      "empty": "The edit emptied the result (empty geometry) — change rejected",
+      "failed": "Failed to recompute CSG"
+    },
+    "legacyFilletRemoved": "Fillet has been removed from the app: rounding in this project is not restored, cubes are shown sharp",
+    "doodleConverted": "Old file “{{name}}” (.doodle) opened — “Save” will write it as .3dtc",
+    "editStep": {
+      "notFound": "Step {{step}} not found or not editable",
+      "unsupported": "Editing steps of this type is not available yet",
+      "invalid": "Invalid value",
+      "tooMany": "Too many dependent steps further down the history — edit rejected",
+      "missingOperand": "Step {{step}}: CSG operand not found — edit rejected",
+      "legacy": "Step {{step}}: CSG from an old file without creation data — edit rejected",
+      "empty": "Step {{step}} became empty — edit rejected",
+      "childFailed": "Step {{step}}: the CSG component edit could not be replayed — edit rejected",
+      "failed": "Could not recompute the history (step {{step}})"
+    },
+    "csgTooMany": "Many objects in one CSG operation ({{count}}, more than {{limit}}) — it may be slow; consider splitting it into several operations"
+  },
+  "confirmClear": {
+    "title": "Clear the scene?",
+    "message": "All objects and the history will be removed. You can undo it right after clearing (Ctrl+Z).",
+    "confirm": "Clear"
+  },
+  "units": {
+    "mm": "mm"
+  },
+  "ruler": {
+    "distance": "Distance"
+  },
+  "viewportStatus": {
+    "loadingCsg": "Loading CSG (WASM)…",
+    "computing": "Computing…"
+  },
+  "webgl": {
+    "title": "WebGL is not available",
+    "message": "This environment does not support WebGL (headless or software rendering). Open the app in a browser with hardware acceleration for full 3D rendering.",
+    "hint": "The CSG engine and the rest of the UI work correctly."
+  },
+  "autosave": {
+    "restored": "Previous session restored"
   },
   "toolbar": {
     "label": "Toolbar",
@@ -340,20 +455,126 @@
     "mirrorYz": "Mirrors the object relative to the YZ plane",
     "mirrorXz": "Mirrors the object relative to the XZ plane",
     "mirrorXy": "Mirrors the object relative to the XY plane",
-    "alignXMin": "⬅ Align to the anchor's left face (X axis). All selected shapes (except the anchor) shift so their left face matches the anchor's left face. The anchor — the second selected shape — stays in place.",
-    "alignXCenter": "⟷ Align to the anchor's center (X axis). All selected shapes shift so their X center matches the anchor's X center. The anchor stays in place.",
-    "alignXMax": "➡ Align to the anchor's right face (X axis). All selected shapes shift so their right face matches the anchor's right face. The anchor stays in place.",
-    "alignYMin": "⬇ Align to the anchor's bottom face (Y axis). All selected shapes shift so their bottom face matches the anchor's bottom face. The anchor stays in place.",
-    "alignYCenter": "↕ Align to the anchor's center (Y axis). All selected shapes shift so their Y center matches the anchor's Y center. The anchor stays in place.",
-    "alignYMax": "⬆ Align to the anchor's top face (Y axis). All selected shapes shift so their top face matches the anchor's top face. The anchor stays in place.",
-    "alignZMin": "◧ Align to the anchor's near face (Z axis). All selected shapes shift so their near face matches the anchor's near face. The anchor stays in place.",
-    "alignZCenter": "⦿ Align to the anchor's center (Z axis). All selected shapes shift so their Z center matches the anchor's Z center. The anchor stays in place.",
-    "alignZMax": "◨ Align to the anchor's far face (Z axis). All selected shapes shift so their far face matches the anchor's far face. The anchor stays in place.",
-    "csgUnion": "Combines two objects into one (union)",
-    "csgSubtract": "Subtracts one object from another (subtract)",
-    "csgIntersect": "Keeps the common part of two objects (intersect)",
+    "csgUnion": "Combines the selected objects into one (union)",
+    "csgSubtract": "Subtract: select what to subtract from (A), press, then select what to subtract (B) and Enter — A − B as one CSG (subtract)",
+    "csgIntersect": "Intersect: select the first group (A), press, then select the second (B) and Enter — the common part of A and B as one CSG (intersect)",
     "themeToggle": "Switches between dark and light theme",
-    "clearScene": "Removes all objects from the scene"
+    "clearScene": "Removes all objects from the scene",
+    "alignTool": "Align mode: pick a plane (a face of object A or X / Y / Z), then click face B — it moves into plane A. With “Multiple” checked you can align several objects in a row. Esc or right click exits.",
+    "dimension": "Dimension lines: menu — “Place dimension” (D — directly), “Dimension settings”, “Show / hide dimensions”. A dimension follows its objects — moving, rotating and scaling update the number",
+    "dimensionSettings": "Type (standard, offset, projection), color, font and text height of dimensions",
+    "dimensionsToggle": "Show or hide all dimensions (layer)"
+  },
+  "childProps": {
+    "title": "CSG component",
+    "type": "Type",
+    "rootHint": "Part of: {{root}}",
+    "back": "To object",
+    "sides": "Sides",
+    "apply": "Parameters apply immediately",
+    "checking": "Checking whether editing is possible…",
+    "recomputing": "Recomputing CSG…"
+  },
+  "tree": {
+    "child_not_editable": "Edit unavailable",
+    "reason": {
+      "nested_moved": "The component tree does not reproduce the current geometry",
+      "mirror": "Mirrored child",
+      "baked": "Baked mesh",
+      "boolean": "Nested operation — edit its components",
+      "no_origin": "No CSG creation data (pasted copy)"
+    }
+  },
+  "stepPanel": {
+    "title": "Step {{step}}: {{name}}",
+    "move": "Move",
+    "target": "Object",
+    "original": "Originally",
+    "edited": "Edited by step {{step}}",
+    "back": "Back",
+    "offset": "Offset",
+    "rotation": "Rotation",
+    "scale": "Scale",
+    "hint": "The value is applied on Enter or when leaving the field; CSG further down the history is recomputed",
+    "recomputing": "Recomputing CSG…",
+    "mirror": "Mirror",
+    "plane": "Plane",
+    "hintMirror": "The plane is applied immediately; CSG further down the history is recomputed",
+    "extrude": "Extrude",
+    "depth": "Depth",
+    "axis": "Axis"
+  },
+  "alignMode": {
+    "button": "Align",
+    "title": "Align",
+    "hintPlane": "Pick the plane to align to: face A or X / Y / Z",
+    "hintFaceB": "Pick face B of the object to align",
+    "hintAligned": "Aligned. Pick another B or Esc to exit",
+    "axisPlanes": "Axis plane",
+    "axisHint": "X — YZ plane, Y — XZ, Z — XY (through the origin)",
+    "planeFace": "Plane: face of “{{name}}”",
+    "planeAxis": "Plane: {{plane}} (normal {{axis}})",
+    "planeNone": "No plane selected",
+    "resetPlane": "Pick another plane",
+    "multiple": "Multiple",
+    "multipleHint": "The mode stays after aligning: B2, B3… to the same plane",
+    "done": "Done (Esc)",
+    "sameObject": "This is the plane A object — pick a face of another object",
+    "locked": "The object is locked — cannot align"
+  },
+  "palette": {
+    "regular": "Standard Palette",
+    "colors": {
+      "amethyst": "Amethyst",
+      "blue": "Blue",
+      "caramel": "Caramel",
+      "damson": "Damson",
+      "ebony": "Ebony",
+      "forest": "Forest",
+      "green": "Green",
+      "honeydew": "Honeydew",
+      "iron": "Iron",
+      "jade": "Jade",
+      "khaki": "Khaki",
+      "lime": "Lime",
+      "magenta": "Magenta",
+      "navy": "Navy",
+      "orange": "Orange",
+      "pink": "Pink"
+    }
+  },
+  "export": {
+    "title": "Export STL",
+    "description": "Choose how to export your model:",
+    "cashbackInfo": "Cashback up to {{cashback}} tokens → final price: {{netCost}}",
+    "cashbackIncluded": "Cashback included in the price",
+    "cashbackEarned": "Cashback +{{cashback}} 💎",
+    "payTokens": "Pay {{cost}} tokens",
+    "watchAd": "Watch ad ({{count}}/{{max}} watched)",
+    "cashbackBreakdown": {
+      "base": "Base: {{base}}",
+      "scale": "Scale: +{{scale}}",
+      "shapeDiv": "Shape types: +{{shapeDiv}}",
+      "toolCount": "Tools: +{{toolCount}}",
+      "toolDiv": "Tool categories: +{{toolDiv}}",
+      "total": "Total cashback: {{total}}"
+    },
+    "adNotAvailable": "Ad limit reached today",
+    "notEnoughTokens": "Not enough tokens",
+    "adNotRentable": "Not available with ads",
+    "bonusCooldown": "Until {{time}}",
+    "bonusClaimed": "Already claimed",
+    "adLimitReached": "Ad limit reached",
+    "adCooldown": "Ad available in {{time}}"
+  },
+  "import": {
+    "title": "Import STL",
+    "description": "Choose how to import your model:",
+    "payTokens": "Pay {{cost}} tokens",
+    "watchAd": "Watch ads ×{{adsNeeded}} {{series}}/{{adsNeeded}} (imports {{done}}/{{max}})",
+    "watchAd_one": "Watch {{adsNeeded}} ad {{series}}/{{adsNeeded}} (imports {{done}}/{{max}})",
+    "watchAd_other": "Watch {{adsNeeded}} ads {{series}}/{{adsNeeded}} (imports {{done}}/{{max}})",
+    "adFailed": "Couldn't show ads. Try paying with tokens."
   },
   "gameUI": {
     "tokensTitle": "Token balance",
@@ -490,11 +711,6 @@
     "next": "Next",
     "skip": "Skip",
     "done": "Done!"
-  },
-  "webgl": {
-    "unavailable": "WebGL unavailable",
-    "msg": "This environment does not support WebGL (headless or software rendering). Open the app in a browser with hardware acceleration for full 3D visualization.",
-    "hint": "CSG engine and remaining UI work correctly."
   },
   "rentalModal": {
     "title": "24-hour rental",

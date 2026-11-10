@@ -16,6 +16,8 @@ vi.mock('../csg/worker-client', () => ({
 
 import { workerRebuildScene } from '../csg/worker-client'
 import { rebuildFromHistory } from './rebuild'
+import { migrateLegacyText3d } from '../io/legacy-text3d'
+import { isTextObject } from './text-object'
 import type { ImportMeshOperation, TinkerCraftOperation } from '../csg/types'
 
 const T = { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
@@ -105,30 +107,29 @@ describe('rebuildFromHistory — baked import_mesh (UB-0)', () => {
     expect(objects['imp_1']).toBeUndefined()
   })
 
-  // 3D-текст — тот же baked-механизм, что и импорт
-  // (FIX UB-0, yandex-games: фолбэк покрывает import_mesh и text3d).
-  // FIX (8.5.2.5): фолбэк центрирует вершины по COM, смещение уходит в pivot.
-  // Интеграция merge: центроид считается по centerMassAtOrigin (main, массовый
-  // центроид) — для параллелограмма из 2 равных треугольников cy = 3 (не 14/6
-  // из прежней yandex-семантики vertex-mean).
-  it('восстанавливает geometry 3D-текста так же, как импорт', async () => {
+  // 3D-текст старого yandex-проекта (шаг text3d до v1.4.0) — загрузка переводит его в
+  // import_mesh с текстом (io/legacy-text3d.ts), дальше — тот же baked-механизм, что и импорт
+  // (FIX UB-0). FIX (8.5.2.5): фолбэк центрирует вершины по COM, смещение уходит в pivot;
+  // для параллелограмма из 2 равных треугольников cy = 3.
+  it('восстанавливает geometry 3D-текста старого проекта (text3d → import_mesh) так же, как импорт', async () => {
     mockedRebuild.mockResolvedValue({ results: [], ms: 0 })
-    const textOp: TinkerCraftOperation = {
+    const legacyText = {
       type: 'text3d',
       id: 'txt_1',
-      name: 'Привет',
+      name: 'Текст: Привет',
       color: '#cba6f7',
       transform: { ...T, y: 10 },
       vertices: [0, 0, 0, 8, 0, 0, 0, 6, 0, 8, 6, 0],
       indices: [0, 1, 2, 1, 3, 2],
-    }
+    } as unknown as TinkerCraftOperation
 
-    const objects = await rebuildFromHistory([textOp])
+    const objects = await rebuildFromHistory(migrateLegacyText3d([legacyText]).operations)
 
     expect(objects['txt_1']).toBeDefined()
     expect(objects['txt_1'].vertices).toHaveLength(12)
     expect(objects['txt_1'].indices).toHaveLength(6)
-    expect(objects['txt_1'].shapeType).toBe('text3d')
+    expect(objects['txt_1'].shapeType).toBe('import_mesh')
+    expect(isTextObject(objects['txt_1'])).toBe(true)
     // Позиция = transform операции (10) + массовый центроид меша (cy = 3) —
     // world-позиция сохранена
     expect(objects['txt_1'].transform.y).toBeCloseTo(10 + 3, 5)

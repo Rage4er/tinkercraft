@@ -1,16 +1,14 @@
 name: CI (web-app)
 
+# Единственный CI-workflow (CI-DEDUP): раньше параллельно гонялся build.yml
+# («Test package») — те же install + typecheck + test. Фильтра путей нет: PR только
+# с документацией тоже получает зелёную проверку. push — только main (ветки задач
+# проверяются через pull_request, без двойного прогона push + PR).
 on:
   push:
-    branches: ['**']
-    paths:
-      - 'web-app/**'
-      - '.github/workflows/ci-web.yml'
+    branches: [main]
   pull_request:
     branches: ['**']
-    paths:
-      - 'web-app/**'
-      - '.github/workflows/ci-web.yml'
 
 defaults:
   run:
@@ -27,12 +25,13 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 9
+          # версия pnpm — из packageManager в web-app/package.json
+          package_json_file: web-app/package.json
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: 'pnpm'
           cache-dependency-path: web-app/pnpm-lock.yaml
 
@@ -51,3 +50,127 @@ jobs:
           # COOP/COEP заголовки требуют cross-origin isolation
           # vite build не зависит от них, но оставляем для консистентности
           CI: true
+
+  # CI-E2E: все e2e (`web-app/e2e/*.mjs` — скрипты Playwright, не @playwright/test) в headless
+  # Chromium с WebGL против `pnpm dev` (порт 5000, как локально). Параллельно с `ci`, 4 группы —
+  # по локальному времени (~15 мин подряд; ux-audit-5…7 — ~13 мин). Повтор: до 2 раз на скрипт,
+  # с предупреждением в сводке (нестабильность не прячется). Пороги производительности — мягко
+  # (E2E_SOFT_PERF, предупреждение в сводке). Логи e2e и dev-сервера — артефакт.
+  e2e:
+    name: e2e (${{ matrix.group }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      # пороги производительности e2e (FPS, долгие задачи, время CSG — e2e/helpers.mjs › assertPerf)
+      # на раннере без GPU не выполнимы: в CI — предупреждение `[SOFT PERF]`, локально — строго
+      E2E_SOFT_PERF: '1'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - group: ux-audit-7, selection-outline
+            specs: ux-audit-7 selection-outline
+          - group: ux-audit-6 + базовые
+            specs: >-
+              ux-audit-6 smoke tree edit-child edit-step-move edit-step-mirror edit-step-extrude
+              independent-copy import-mesh-csg nested-moved-edit align-plane-resolve ux-polish
+          - group: ux-audit-5, 3, 1, double-click, dimensions
+            specs: ux-audit-5 ux-audit-3 ux-audit double-click-timing dimensions
+          - group: align, ux-audit-2, 4, n-ary, group-fix, plug-and-play, ux-viewport
+            specs: align-obb align-ui-revit ux-audit-2 ux-audit-4 n-ary-csg csg-group-fix plug-and-play ux-viewport
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          package_json_file: web-app/package.json
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: 'pnpm'
+          cache-dependency-path: web-app/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright Chromium + Mesa (llvmpipe)
+        # GPU у раннера нет: без системного EGL флаг --use-angle=gl-egl откатывается на SwiftShader
+        # (Vulkan на CPU). Mesa EGL + llvmpipe (многопоточный программный OpenGL) — в 2–2,5 раза быстрее
+        # (ux-audit-4: 72 с против 179 с; локально с GPU — 39 с)
+        run: |
+          pnpm exec playwright install --with-deps chromium
+          sudo apt-get install -y --no-install-recommends libegl1 libegl-mesa0 libgl1-mesa-dri libgles2 libgbm1
+
+      - name: WebGL check
+        # те же флаги, что у openApp (e2e/helpers.mjs › GL_ARGS); без WebGL приложение
+        # показывает WebGLFallback и все e2e падают на ожидании canvas
+        env:
+          # e2e ищут подписи на русском: язык приложения — из navigator.language (i18next), а он
+          # у Chromium на Linux — из LANG / LANGUAGE (у раннера en-US → интерфейс на английском)
+          LANG: ru_RU.UTF-8
+          LANGUAGE: ru_RU
+          EGL_PLATFORM: surfaceless   # Mesa EGL без дисплея (headless)
+        run: |
+          node --input-type=module -e "
+          import { chromium } from 'playwright'
+          import { GL_ARGS } from './e2e/helpers.mjs'
+          const b = await chromium.launch({ args: GL_ARGS })
+          const p = await b.newPage()
+          const r = await p.evaluate(() => {
+            const gl = document.createElement('canvas').getContext('webgl')
+            if (!gl) return null
+            const e = gl.getExtension('WEBGL_debug_renderer_info')
+            return [navigator.language, e ? gl.getParameter(e.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER)]
+          })
+          await b.close()
+          console.log('GL_ARGS:', GL_ARGS.join(' '), '→', r ? 'язык ' + r[0] + ', WebGL: ' + r[1] : 'WebGL НЕТ')
+          if (!r) process.exit(1)
+          "
+
+      - name: Start dev server
+        run: |
+          mkdir -p "$RUNNER_TEMP/e2e-logs"
+          nohup pnpm dev > "$RUNNER_TEMP/e2e-logs/dev-server.log" 2>&1 &
+          for i in $(seq 1 90); do
+            if curl -sf -o /dev/null http://localhost:5000/tinkercraft/; then echo "dev-сервер готов за ${i} с"; exit 0; fi
+            sleep 1
+          done
+          echo "::error::dev-сервер не поднялся за 90 с"; cat "$RUNNER_TEMP/e2e-logs/dev-server.log"; exit 1
+
+      - name: e2e (${{ matrix.specs }})
+        env:
+          LANG: ru_RU.UTF-8   # язык интерфейса — ru (см. «WebGL check»)
+          LANGUAGE: ru_RU
+          EGL_PLATFORM: surfaceless
+        run: |
+          failed=()
+          for t in ${{ matrix.specs }}; do
+            passed=0
+            for attempt in 1 2 3; do
+              log="$RUNNER_TEMP/e2e-logs/$t-$attempt.log"
+              start=$(date +%s)
+              if timeout 1800 pnpm -s "e2e:$t" > "$log" 2>&1; then passed=1; else rc=$?; fi
+              echo "::group::e2e:$t — попытка $attempt — $([ $passed = 1 ] && echo OK || echo "FAIL (exit $rc)") — $(( $(date +%s) - start )) с"
+              cat "$log"
+              echo "::endgroup::"
+              grep -F '[SOFT PERF]' "$log" | while IFS= read -r line; do echo "::warning title=e2e:$t — порог производительности (E2E_SOFT_PERF)::${line#\[SOFT PERF\] }"; done || true
+              if [ $passed = 1 ]; then
+                [ $attempt -gt 1 ] && echo "::warning title=e2e:$t нестабилен::прошёл с попытки $attempt (логи — артефакт)"
+                break
+              fi
+            done
+            [ $passed = 1 ] || { failed+=("$t"); echo "::error title=e2e:$t::упал 3 раза подряд — $(tail -n 3 "$log" | tr '\n' ' ')"; }
+          done
+          if [ ${#failed[@]} -gt 0 ]; then echo "Упали: ${failed[*]}"; exit 1; fi
+
+      - name: Upload e2e logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-logs-${{ strategy.job-index }}
+          path: ${{ runner.temp }}/e2e-logs
+          retention-days: 14

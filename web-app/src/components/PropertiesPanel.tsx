@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import NumInput from "./NumInput";
-import AlignButtons from "./AlignButtons";
 import CsgButtons from "./CsgButtons";
 import ColorPalette from "./ColorPalette";
 import EconomyPanel, { EconomyModeSection, useEconomyModeReset } from "./EconomyPanel";
+import { useCsgGroupModeStore, type CsgOpButtonStates } from "../store/csg-group-mode";
 import type { ShapeParams, SceneObject } from "../csg/types";
-import { EyeIcon, EyeOffIcon, FilletIcon, FolderIcon, SaveIcon } from "./icons";
+import { EyeIcon, EyeOffIcon, FolderIcon, SaveIcon } from "./icons";
+import { isTextObject } from '../store/text-object'
 import { useEconomyStore } from "../store/economy-store";
 import { useUiStore } from "../store/ui-store";
 import { isEconomyAvailable } from "../platform";
@@ -17,23 +18,17 @@ export default function PropertiesPanel({
   busy,
   selectedIds,
   canResize,
-  canFillet,
   canCsg,
-  canAlign,
-  nonManifoldSelected,
-  filletRadius,
+  csgOpStates,
   objectList,
   operationsLength,
   fileName,
-  onSetFilletRadius,
   onMoveAxis,
   onRotAxis,
   onScaleAxis,
   onResizeDim,
   onResizeObject,
-  onApplyFillet,
   onCsg,
-  onAlign,
   onSetColor,
   onToggleVisible,
   onShowProjects,
@@ -46,32 +41,29 @@ export default function PropertiesPanel({
   busy: boolean;
   selectedIds: string[];
   canResize: boolean;
-  canFillet: boolean;
   canCsg: boolean;
-  canAlign: boolean;
-  nonManifoldSelected?: boolean;
-  filletRadius: number;
+  /** CSG-GROUP-FIX: доступность / нажатость каждой операции (режим A → B → Enter) */
+  csgOpStates?: CsgOpButtonStates;
   objectList: SceneObject[];
   operationsLength: number;
   fileName: string | null;
   currentProjectId: string | null;
   currentProjectName: string | null;
   modified: boolean;
-  onSetFilletRadius: (v: number) => void;
   onMoveAxis: (axis: "x" | "y" | "z", val: number) => void;
   onRotAxis: (axis: "rotX" | "rotY" | "rotZ", val: number) => void;
   onScaleAxis: (axis: "scaleX" | "scaleY" | "scaleZ", val: number) => void;
   onResizeDim: (dim: "width" | "height" | "depth", val: number) => void;
   onResizeObject: (id: string, params: ShapeParams) => void;
-  onApplyFillet: (id: string, radius: number) => void;
   onCsg: (op: "union" | "subtract" | "intersect") => void;
-  onAlign: (axis: "X" | "Y" | "Z", anchor: "min" | "center" | "max") => void;
   onSetColor: (id: string, color: string, skipHistory?: boolean) => void;
   onToggleVisible: (id: string) => void;
   onShowProjects: () => void;
   onSaveToProject: (name: string) => void;
 }) {
   const { t } = useTranslation();
+  // CSG-GROUP-FIX: в режиме A → B → Enter кнопки CSG видны и при одном выбранном (группа B)
+  const csgModeActive = useCsgGroupModeStore((s) => s.csgGroupMode !== null);
   // FIX: Draft color state — preview in real-time (no history), commit once
   // on blur or object switch.
   //
@@ -86,7 +78,9 @@ export default function PropertiesPanel({
   const baseColorRef = useRef<string | null>(null);
 
   // Toggle: показывать ли нативный color picker вместо палитры
-  const [showNativePicker, setShowNativePicker] = useState(false);
+  // P0-6 / v1.4.0: без SDK (clean-режим) экономики нет — поле цвета сразу, как в main v1.3.9;
+  // с SDK — сначала бесплатная палитра, полный выбор — по аренде extendedPalette
+  const [showNativePicker, setShowNativePicker] = useState(() => !isEconomyAvailable());
 
   // FIX (UB-1): клик по «Расширенный выбор» БЕЗ аренды открывает МОДАЛКУ аренды
   // (раньше — молча переключал правую панель в режим экономики, и пользователь
@@ -104,7 +98,8 @@ export default function PropertiesPanel({
   // ✅ Проверка доступа к расширенной палитре — через RO-хелпер
   const hasExtendedPaletteRental = useEconomyStore(s => s.hasRentalRO('extendedPalette'))
   const hasActiveSub = useEconomyStore(s => s.hasActiveSubscriptionRO())
-  const canUseExtendedPicker = hasExtendedPaletteRental || hasActiveSub
+  // P0-6: без SDK (clean-режим) экономики нет — расширенный выбор без аренды (как bypass в RentalModal)
+  const canUseExtendedPicker = !isEconomyAvailable() || hasExtendedPaletteRental || hasActiveSub
   const commitDraftColor = () => {
     const targetId = draftTargetIdRef.current;
     const base = baseColorRef.current;
@@ -218,9 +213,9 @@ export default function PropertiesPanel({
         <span className="props-label">{t("properties.type")}</span>
         <span className="props-value">
           {firstSelected.shapeType === 'csg' ? t("csg.result") :
+            isTextObject(firstSelected) ? t("shapes.text") :             /* UX-AUDIT-31 */
             firstSelected.shapeType === 'import_mesh' ? t("actions.import") :
-              firstSelected.shapeType === 'text3d' ? t("leftPanel.text3d") :
-                t(`shapes.${firstSelected.shapeType}`)}
+              t(`shapes.${firstSelected.shapeType}`)}
         </span>
       </div>
 
@@ -298,18 +293,21 @@ export default function PropertiesPanel({
 
       <div className="props-section-title">{t("properties.position")}</div>
       <NumInput
+        id="num-input-pos-X"
         label="X"
         value={firstSelected.transform.x}
         disabled={busy}
         onChange={(v) => onMoveAxis("x", v)}
       />
       <NumInput
+        id="num-input-pos-Y"
         label="Y"
         value={firstSelected.transform.y}
         disabled={busy}
         onChange={(v) => onMoveAxis("y", v)}
       />
       <NumInput
+        id="num-input-pos-Z"
         label="Z"
         value={firstSelected.transform.z}
         disabled={busy}
@@ -318,6 +316,7 @@ export default function PropertiesPanel({
 
       <div className="props-section-title">{t("properties.rotation")}</div>
       <NumInput
+        id="num-input-rot-X"
         label="rotX"
         unit="°"
         value={firstSelected.transform.rotX}
@@ -325,6 +324,7 @@ export default function PropertiesPanel({
         onChange={(v) => onRotAxis("rotX", v)}
       />
       <NumInput
+        id="num-input-rot-Y"
         label="rotY"
         unit="°"
         value={firstSelected.transform.rotY}
@@ -332,6 +332,7 @@ export default function PropertiesPanel({
         onChange={(v) => onRotAxis("rotY", v)}
       />
       <NumInput
+        id="num-input-rot-Z"
         label="rotZ"
         unit="°"
         value={firstSelected.transform.rotZ}
@@ -341,6 +342,7 @@ export default function PropertiesPanel({
 
       <div className="props-section-title">{t("properties.scale")}</div>
       <NumInput
+        id="num-input-scale-X"
         label="X"
         unit="×"
         min={0.01}
@@ -350,6 +352,7 @@ export default function PropertiesPanel({
         onChange={(v) => onScaleAxis("scaleX", v)}
       />
       <NumInput
+        id="num-input-scale-Y"
         label="Y"
         unit="×"
         min={0.01}
@@ -359,6 +362,7 @@ export default function PropertiesPanel({
         onChange={(v) => onScaleAxis("scaleY", v)}
       />
       <NumInput
+        id="num-input-scale-Z"
         label="Z"
         unit="×"
         min={0.01}
@@ -511,6 +515,7 @@ export default function PropertiesPanel({
                 <NumInput
                   label={t("properties.sides")}
                   unit=""
+                  integer
                   min={3}
                   value={firstSelected.params.sides ?? (firstSelected.shapeType === "prism" ? 6 : 4)}
                   disabled={busy}
@@ -523,36 +528,18 @@ export default function PropertiesPanel({
         </div>
       )}
 
-      {/* Fillet — только для кубов (не для CSG результатов) */}
-      {canFillet && firstSelected.shapeType === 'cube' && (
-        <div className="csg-group">
-          <div className="csg-group-title">{t("properties.filletTitle")}</div>
-          <NumInput
-            label={t("properties.radius")}
-            unit="мм"
-            min={0}
-            value={filletRadius}
-            onChange={onSetFilletRadius}
-          />
-          <button
-            className="btn primary"
-            disabled={!canFillet}
-            onClick={() => onApplyFillet(firstSelected.id, filletRadius)}
-          >
-            <FilletIcon size={32} /> {t("actions.apply")}
-          </button>
-        </div>
-      )}
-
       {/* Extrude — скрыто в свойствах, доступно на панели инструментов */}
       {/* Mirror — скрыто в свойствах, доступно на панели инструментов */}
 
-      {/* CSG + Align */}
-      {selectedIds.length === 2 && (
-        <>
-          <CsgButtons disabled={!canCsg} onCsg={onCsg} variant="full" nonManifoldSelected={nonManifoldSelected} />
-          <AlignButtons disabled={!canAlign} onAlign={onAlign} variant="full" />
-        </>
+      {/* CSG (выравнивание — режим «Выровнять» в тулбаре, ALIGN-UI-REVIT) */}
+      {/* N-ARY-CSG: 2+ выбранных; CSG-GROUP-FIX: и в режиме A → B → Enter (кнопка операции нажата) */}
+      {(selectedIds.length >= 2 || csgModeActive) && (
+        <CsgButtons
+          disabled={!canCsg}
+          onCsg={onCsg}
+          opStates={csgOpStates}
+          variant="full"
+        />
       )}
     </>
   );

@@ -206,6 +206,17 @@ export const RulerIcon = (p: any) => (
   </Icon>
 )
 
+/* ===== DIMENSIONS · Размеры ===== */
+/** Размер: размерная линия со стрелками между выносными линиями, число над ней. */
+export const DimensionIcon = (p: any) => (
+  <Icon {...p}>
+    <path {...line} d="M10 16v34M54 16v34" />
+    <path {...line} d="M10 40h44" />
+    <path {...face(0.9)} strokeWidth={2} d="M10 40l8-5v10ZM54 40l-8-5v10Z" />
+    <path {...face(0.25)} d="M22 14h20v14H22Z" />
+  </Icon>
+)
+
 /* ===== Группа 7 · Зеркало ===== */
 export const MirrorYZIcon = (p: any) => (
   <Icon {...p}>
@@ -234,6 +245,15 @@ export const MirrorXYIcon = (p: any) => (
 /* ===== Группа 8 · Выравнивание ===== */
 /* ===== Группа 8 · Выравнивание (Z-up: X/Y горизонтальные, Z вертикальная) ===== */
 // X — горизонтальная ось экрана: вертикальная планка
+// ALIGN-UI-REVIT: одна кнопка «Выровнять» — два столбика разной высоты от одной плоскости
+export const AlignToolIcon = (p: any) => (
+  <Icon {...p}>
+    <path {...line} d="M8 52h48" />
+    <Shape d="M16 52V18h12v34Z" />
+    <Shape d="M36 52V32h12v20Z" />
+  </Icon>
+)
+
 export const AlignXMinIcon = (p: any) => (
   <Icon {...p}>
     <path {...line} d="M14 10v44" />
@@ -376,13 +396,6 @@ export const EyeOffIcon = (p: any) => (
     <path d="M6 32s10-14 26-14 26 14 26 14-10 14-26 14S6 32 6 32Z" {...face(0.22)} />
     <circle cx="32" cy="32" r="8" {...face(0.4)} />
     <path {...line} d="M10 10l44 44" />
-  </Icon>
-)
-
-export const FilletIcon = (p: any) => (
-  <Icon {...p}>
-    <rect {...line} x="10" y="10" width="44" height="44" rx="6" />
-    <path d="M10 26a16 16 0 0 1 16-16v16Z" {...face(0.22)} />
   </Icon>
 )
 

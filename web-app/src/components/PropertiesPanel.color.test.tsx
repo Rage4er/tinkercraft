@@ -128,25 +128,19 @@ function renderPanel(obj: SceneObject) {
                 busy={false}
                 selectedIds={[obj.id]}
                 canResize
-                canFillet
                 canCsg
-                canAlign
-                filletRadius={0}
                 objectList={[obj]}
                 operationsLength={0}
                 fileName={null}
                 currentProjectId={null}
                 currentProjectName={null}
                 modified={false}
-                onSetFilletRadius={() => { }}
                 onMoveAxis={() => { }}
                 onRotAxis={() => { }}
                 onScaleAxis={() => { }}
                 onResizeDim={() => { }}
                 onResizeObject={() => { }}
-                onApplyFillet={() => { }}
                 onCsg={() => { }}
-                onAlign={() => { }}
                 onSetColor={() => { }}
                 onToggleVisible={() => { }}
                 onShowProjects={() => { }}

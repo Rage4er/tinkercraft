@@ -76,6 +76,21 @@
 - При конфликте в ядре: брать версию `main`, затем заново добавить однострочные вызовы по таблице из `economy-integration.ts` (вызов сразу после `cacheSnapshotWithTree` + `invalidateMirrorCache`).
 - После merge: `pnpm verify`; сверить набор вызовов `grep -n "evaluateQuestsAfterMutation\|earnActionToken\|completeImportQuest\|commitQuests\|settleExport" web-app/src/store/document-store.ts`.
 
+### 4.1 Опыт merge `main` v1.3.9 → `yandex-games` (2026-11-10, ветка `yandex-games-v1.4.0`)
+
+61 конфликт в 24 файлах (от общего предка `ed90532`: в `main` 164 коммита, в `yandex-games` 127). Что сработало и что учесть в следующий раз:
+
+- **`document-store.ts`** — взят целиком из `main`, врезки добавлены заново скриптом по списку выше: 26 вызовов (было 29 — минус `addTextMesh` ×2 и `applyFillet`, которых в `main` нет). В `main` `cacheSnapshotWithTree` → `cacheSnapshot` (CLEANUP-TREE-SNAPSHOT) — инвариант 4 тот же: врезки не внутри него. Новые мутации `main` (`alignToPlane`, `editChildParams`, `editStepParams`, `clearScene`) врезок не получили — счётчики квестов они не меняют.
+- **Файлы ядра, где yandex правил только `text3d`** (`rebuild.ts`, `worker-handlers.ts`, `mirror-store.ts`, `csg/types.ts`, `ComponentTree.tsx`, `Timeline.tsx`) — версия `main` целиком (`git checkout origin/main -- <файл>`).
+- **3D-текст:** в `main` — `import_mesh` + `text` (замкнутый, CSG); yandex-шаг `text3d` больше не создаётся. Старые проекты — `io/legacy-text3d.ts` в `migrateLoaded` (рядом с `legacy-fillet`); экономика видит текст через `economyShapeKind` (`economy-config.ts`). Ключ аренды `text3d` — просто имя ключа экономики.
+- **i18n** — трёхстороннее слияние JSON по ключам (база / yandex / main; спорный ключ — `main`), а не текстовое: конфликтные куски JSON ломают структуру.
+- **CHANGELOG** — собран из `main` + yandex-разделы (`[Unreleased]` yandex — подразделом, `[Yandex MVP]` — на прежнем месте).
+- **Новые модалки `main`** — сразу в `isAnyModalOpen` (инвариант 5): «Настройки размеров» (`ui-store`), «Очистить сцену?» (флаг `App` → `useYandexInit(localModalOpen)`).
+- **Тест `i18n-coverage` из `main`** (UX-AUDIT-7) ловит зашитую кириллицу и в yandex-коде (палитра, сплэш `main.tsx`).
+- **Тесты `main`, рендерящие `LeftPanel`,** не знают yandex-пропса `openEconomy` — он опциональный (без него гейтинг — в `onShowTextModal` у `App`).
+- **«Открыть» / «Сохранить»** — `.3dtc`, как в `main` (до v1.4.0 yandex писал `.doodle`); старые `.doodle` — `io/project-file.ts::parseProjectFile` в `openProject` (разбор, `fromDoodle` → пересборка / имя / «не сохранено» / уведомление); диалог — `open3dtcFilePicker` из main, в `3dtc-io.ts` к `accept` добавлен `.doodle` (одна строка — тесты main подменяют именно этот диалог). `openDoodle` / `saveDoodle` удалены.
+- **e2e `main`** идут в clean-режиме (`pnpm dev`): экономика выключена, оплата — bypass (P0-6). Переключатель языка в статус-баре e2e нужен — в сборке `build:yandex` его нет (язык — SDK), в clean — есть.
+
 ## 5. Единственное изменение поведения
 
 **Gameplay API:** `stopGameplay()` вызывался только для текста, менеджера проектов и экспорта. Модалки импорта, аренды 24ч и онбординг геймплей не останавливали (требование модерации Яндекс.Игр). Теперь пауза при любой из шести модалок; онбординг публикует `ui-store.onboardingOpen`. Тесты: `hooks/useYandexInit.test.tsx` (13).

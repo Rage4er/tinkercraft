@@ -10,9 +10,9 @@ TinkerCraft Web — фронтенд-приложение на React + TypeScrip
 
 | Компонент | Версия | Статус |
 |-----------|--------|--------|
-| **Node.js** | v24.19.0 (Windows, winget) / v24.11.0 (Linux-сервер) | ✅ Установлен |
-| **pnpm** | 11.13.1 | ✅ Установлен |
-| **npm** | 11.17.0 (Windows) / 11.6.1 (Linux) | ✅ Установлен (fallback) |
+| **Node.js** | v24.22.2 | ✅ Установлен |
+| **pnpm** | 12.10.1 | ✅ Установлен (зафиксирован в `package.json` → `packageManager`; CI берёт версию оттуда) |
+| **npm** | 11.6.1 | ✅ Установлен (fallback) |
 | **TypeScript** | 5.9.3 | ✅ Установлен |
 
 ### Windows-специфика
@@ -83,7 +83,19 @@ cd /home/small-room/GitHub/tinkercraft/web-app
 pnpm test         # vitest run
 ```
 
-**Результат:** 647/647 тестов прошли (47 файлов).
+**Результат:** 1182/1182 теста прошли (94 файла; ветка `yandex-games` после merge `main` v1.3.9).
+
+### 2.1. E2E в браузере (Playwright)
+
+```bash
+pnpm exec playwright install chromium   # один раз (~120 МБ в ~/.cache/ms-playwright)
+pnpm dev                                # терминал 1 (порт 5000)
+pnpm e2e:smoke                          # терминал 2: «e2e smoke OK»
+```
+
+⚠️ В headless-Chromium на Linux WebGL работает только с флагами
+`--use-angle=gl-egl --use-gl=angle --ignore-gpu-blocklist` (уже заданы в
+`e2e/helpers.mjs`); без них приложение показывает `WebGLFallback`.
 
 ### 3. Dev-сервер
 
@@ -111,7 +123,7 @@ pnpm dev          # порт 5000
 ### Node.js версии
 
 - **Минимум:** ≥ 18.0 (LTS)
-- **Фактическая:** v24.11.0 (текущая на сервере)
+- **Фактическая:** v24.22.2 (текущая на сервере; в CI — Node 24)
 - **Рекомендация:** использовать `nvm` или `fnm` для переключения
 
 ---

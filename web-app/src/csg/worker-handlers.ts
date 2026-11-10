@@ -4,13 +4,12 @@
 // isolated functions for better readability and testability.
 // ============================================================
 
-import { buildSRTMatrixAroundCenter, buildTransformMatrix } from './worker-matrix'
+import { buildSRTMatrixAroundCenter, buildTransformMatrix, relativeTransformMatrix } from './worker-matrix'
 // Фаза 8, Этап 6.5: единая формула центрирования (объёмный центроид) —
 // та же функция, что использует frontend (store/helpers реэкспортирует её).
 import { centerMassAtOrigin } from './geometry-utils'
-import { FILLET_EPSILON, FILLET_MIN_RADIUS } from '../constants.ts'
 import type { RebuildTransform } from './rebuildOps'
-import { applyMoveDelta, applyMirrorToTransform, applyAlignToTransform } from './rebuildOps'
+import { applyMoveDelta, applyMirrorToTransform, applyAlignToTransform, expandForReplay } from './rebuildOps'
 import type { MirrorOperation } from './types'
 import { devLog, devLogCsg } from '../utils/debug'
 
@@ -31,6 +30,8 @@ export interface ManifoldObject {
   refine(recursions: number): ManifoldObject
   warp(fn: (v: number[]) => void): ManifoldObject
   translate(x: number, y?: number, z?: number): ManifoldObject
+  /** Отражение относительно плоскости через origin с нормалью `normal` (winding сохраняется корректным). */
+  mirror(normal: [number, number, number]): ManifoldObject
   /** Frees the WASM memory — must be called when the object is no longer needed. */
   delete(): void
 }
@@ -57,6 +58,8 @@ export interface ManifoldConstructor {
     center: boolean,
   ): ManifoldObject
   revolve(crossSection: CrossSection, segments: number): ManifoldObject
+  /** N-ARY-CSG: пакетное объединение (одна операция manifold, а не цепочка add). */
+  union(manifolds: readonly ManifoldObject[]): ManifoldObject
 }
 
 export interface CrossSectionConstructor {
@@ -98,8 +101,67 @@ export async function initWasm(): Promise<void> {
   self.postMessage({ type: 'ready' })
 }
 
+/**
+ * N-ARY-CSG: число операндов группы A в [1, n−1] (нет / вне диапазона — 1: первый против
+ * остальных, как старый бинарный `[a, b]`).
+ */
+export function clampGroupA(groupA: number | undefined, n: number): number {
+  if (groupA === undefined || !Number.isFinite(groupA) || n < 2) return 1
+  return Math.min(Math.max(1, Math.floor(groupA)), n - 1)
+}
+
+/**
+ * N-ARY-CSG: булева операция над N операндами в мировых координатах — ОДНО ядро для живого
+ * CSG (`csgBooleanMulti`), перестроения дерева (`rebuildTreeNode`) и воспроизведения истории
+ * (`rebuildScene`): дерево и меш совпадают по построению (замки 9.9 не ложные).
+ *   union            — объединение всех операндов (пакетный `Manifold.union`);
+ *   subtract/intersect — union(A) op union(B), A = `parts[0..groupA)`, B — остальные.
+ * Ровно 2 операнда с группой A = 1 — прежний бинарный путь (`a.add/subtract/intersect(b)`),
+ * старые документы не меняются ни на треугольник. Операнды НЕ освобождает (это делает
+ * вызывающий), промежуточные объединения групп — освобождает.
+ */
+export function combineOperands(
+  parts: readonly ManifoldObject[],
+  op: string,
+  groupA?: number,
+): ManifoldObject {
+  if (parts.length < 2) throw new Error(`CSG needs at least 2 operands, got ${parts.length}`)
+  const k = clampGroupA(groupA, parts.length)
+  if (parts.length === 2 && k === 1) {
+    const [a, b] = parts
+    if (op === 'subtract') return a.subtract(b)
+    if (op === 'intersect') return a.intersect(b)
+    return a.add(b)
+  }
+  const { Manifold } = getWasm()
+  if (op !== 'subtract' && op !== 'intersect') return Manifold.union(parts)
+  const groupOf = (g: readonly ManifoldObject[]) => (g.length === 1 ? g[0] : Manifold.union(g))
+  const a = groupOf(parts.slice(0, k))
+  const b = groupOf(parts.slice(k))
+  try {
+    return op === 'subtract' ? a.subtract(b) : a.intersect(b)
+  } finally {
+    if (k > 1) a.delete()
+    if (parts.length - k > 1) b.delete()
+  }
+}
+
 /** Кэш manifold-объектов по id (null = non-manifold import, CSG not supported) */
 export const cache = new Map<string, ManifoldObject | null>()
+
+/**
+ * IMPORT-MESH-CSG: маркер ошибки CSG над незамкнутым (non-manifold) мешем. Воркер
+ * бросает `Error('NON_MANIFOLD: <id>')`, стор по маркеру показывает
+ * `errors.csgNonManifold` (а не общее «CSG не удалась»).
+ */
+export const NON_MANIFOLD_ERROR = 'NON_MANIFOLD'
+
+/** Операнд CSG закэширован как non-manifold (меш не замкнут) → ошибка с маркером. */
+function assertManifoldOperands(...ids: string[]): void {
+  for (const id of ids) {
+    if (cache.has(id) && cache.get(id) === null) throw new Error(`${NON_MANIFOLD_ERROR}: ${id}`)
+  }
+}
 
 // --- Cache disposal helpers (CRIT-R8-1: prevent WASM memory leaks) ---
 
@@ -145,7 +207,6 @@ export function disposeAllCached(): void {
 export interface ShapeInfo {
   shapeType: string
   params: Record<string, number>
-  filletRadius: number
 }
 
 /** Re-export RebuildTransform for worker.ts */
@@ -295,52 +356,6 @@ export function buildPrimitive(shapeType: string, params: Record<string, number>
   return m
 }
 
-/** Build a rounded box via warp + refine (only for cube). */
-export function buildRoundedBox(w: number, h: number, d: number, r: number): ManifoldObject {
-  const wasm = getWasm()
-  const { Manifold } = wasm
-  const maxR = Math.min(w, h, d) / 2 - FILLET_EPSILON
-  const cr = Math.max(FILLET_MIN_RADIUS, Math.min(r, maxR))
-  const hw = w / 2 - cr
-  const hh = h / 2 - cr
-  const hd = d / 2 - cr
-
-  const cube = Manifold.cube([w, h, d], true)
-  const refined = cube.refine(6)
-  cube.delete()
-
-  const warped = refined.warp((v: number[]) => {
-    const x = v[0], y = v[1], z = v[2]
-    const ex = Math.max(0, Math.abs(x) - hw)
-    const ey = Math.max(0, Math.abs(y) - hh)
-    const ez = Math.max(0, Math.abs(z) - hd)
-    const len = Math.sqrt(ex * ex + ey * ey + ez * ez)
-    if (len < 1e-9) return
-    const s = cr / len
-    v[0] = Math.sign(x) * hw + ex * s * Math.sign(x || 1)
-    v[1] = Math.sign(y) * hh + ey * s * Math.sign(y || 1)
-    v[2] = Math.sign(z) * hd + ez * s * Math.sign(z || 1)
-  })
-  refined.delete()
-  return warped
-}
-
-/** Build primitive with optional fillet (only works for cube). */
-export function buildPrimitiveWithFillet(
-  shapeType: string,
-  params: Record<string, number>,
-  r: number,
-): ManifoldObject {
-  if (r > 0 && shapeType === 'cube') {
-    return buildRoundedBox(
-      params.width ?? 20,
-      params.height ?? 20,
-      params.depth ?? 20,
-      r,
-    )
-  }
-  return buildPrimitive(shapeType, params)
-}
 
 // --- Transform helpers ---
 
@@ -466,16 +481,6 @@ export interface BuildShapeMessage {
   transform: { x: number; y: number; z: number; rotX: number; rotY: number; rotZ: number; scaleX?: number; scaleY?: number; scaleZ?: number }
 }
 
-export interface ApplyFilletMessage {
-  reqId: string
-  type: 'applyFillet'
-  objId: string
-  shapeType: string
-  params: Record<string, number>
-  radius: number
-  transform: { x: number; y: number; z: number; rotX: number; rotY: number; rotZ: number; scaleX?: number; scaleY?: number; scaleZ?: number }
-}
-
 export interface BuildImportedMeshMessage {
   reqId: string
   type: 'buildImportedMesh'
@@ -566,35 +571,6 @@ export async function handleBuildShape(msg: BuildShapeMessage): Promise<void> {
   )
 }
 
-/** Handle applyFillet message. */
-export async function handleApplyFillet(msg: ApplyFilletMessage): Promise<void> {
-  const t0 = performance.now()
-  const shapeType = msg.shapeType
-  const safeP = sanitizeParams(msg.params)
-  const radius = clamp(msg.radius, 0, 1e4)
-
-  // DRY: use buildPrimitiveWithFillet instead of duplicated switch (WARN-R8-3)
-  // ⚠️ НЕ применяем transform к вершинам — vertices остаются в origin (COM).
-  let m = buildPrimitiveWithFillet(shapeType, safeP, radius)
-
-  setCached(msg.objId, m)
-
-  const mesh = extractMesh(m)
-  safePostMessage(
-    {
-      reqId: msg.reqId,
-      type: 'mesh',
-      objId: msg.objId,
-      vertices: mesh.vertices,
-      indices: mesh.indices,
-      normals: mesh.normals,
-      tris: mesh.tris,
-      ms: performance.now() - t0,
-    },
-    buildTransferList(mesh),
-  )
-}
-
 /** Handle buildImportedMesh message. */
 export async function handleBuildImportedMesh(msg: BuildImportedMeshMessage): Promise<void> {
   const wasm = getWasm()
@@ -647,6 +623,13 @@ export async function handleBuildImportedMesh(msg: BuildImportedMeshMessage): Pr
 
 // --- BuildTree: rebuild a node from its tree definition ---
 
+/** Нормали плоскостей зеркала (YZ отражает X и т.д.) */
+const MIRROR_NORMALS: Record<'XY' | 'XZ' | 'YZ', [number, number, number]> = {
+  YZ: [1, 0, 0],
+  XZ: [0, 1, 0],
+  XY: [0, 0, 1],
+}
+
 export interface RebuildTreeNodeMessage {
   reqId: string
   type: 'rebuildTreeNode'
@@ -657,13 +640,24 @@ export interface RebuildTreeNodeMessage {
     shapeType?: string
     params?: Record<string, number>
     localTransform?: { x: number; y: number; z: number; rotX: number; rotY: number; rotZ: number; scaleX: number; scaleY: number; scaleZ: number }
+    /** NESTED-MOVED-EDIT: TRS₀ boolean-узла — система, в которой лежат его листья */
+    originTransform?: { x: number; y: number; z: number; rotX: number; rotY: number; rotZ: number; scaleX: number; scaleY: number; scaleZ: number }
     vertices?: number[]
     indices?: number[]
     normals?: number[]
     operation?: 'union' | 'subtract' | 'intersect'
     children?: string[]
+    /** N-ARY-CSG: число детей группы A (subtract/intersect); нет — 1 */
+    groupA?: number
+    /** Фаза 9.8: плоскости зеркала примитива (применяются в origin до TRS) */
+    mirrored?: Array<'XY' | 'XZ' | 'YZ'>
   }>
   nodeIdPath: string[]
+  /**
+   * Фаза 9.3: true — корневой boolean НЕ центрируется по COM, ответ в мировых
+   * координатах (система создания CSG). Нужен правке параметров детей.
+   */
+  worldSpace?: boolean
 }
 
 /** RebuildTreeNodeMessage node data type */
@@ -700,7 +694,14 @@ export async function handleRebuildTreeNode(msg: RebuildTreeNodeMessage): Promis
       // Build primitive
       const shapeType = nd.shapeType || 'cube'
       const params = nd.params || {}
-      m = buildPrimitive(shapeType, params as Record<string, number>)
+      let prim: ManifoldObject = buildPrimitive(shapeType, params as Record<string, number>)
+      // Фаза 9.8: зеркальный примитив — отражение в origin ДО TRS (как SceneObject.mirrored)
+      for (const plane of nd.mirrored ?? []) {
+        const reflected: ManifoldObject = prim.mirror(MIRROR_NORMALS[plane])
+        prim.delete()
+        prim = reflected
+      }
+      m = prim
       // Apply transform
       const t = nd.localTransform || { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
       const matrix = buildTransformMatrix(
@@ -744,18 +745,18 @@ export async function handleRebuildTreeNode(msg: RebuildTreeNodeMessage): Promis
       }
 
     } else if (nd.type === 'boolean' && nd.children && nd.operation) {
-      const childA = rebuildNode(nd.children[0], rootId)
-      const childB = rebuildNode(nd.children[1], rootId)
-      if (childA && childB) {
-        if (nd.operation === 'subtract') {
-          m = childA.subtract(childB)
-        } else if (nd.operation === 'intersect') {
-          m = childA.intersect(childB)
-        } else {
-          m = childA.add(childB)
+      // N-ARY-CSG: N детей (старые бинарные — 2) — общее ядро combineOperands
+      const parts: ManifoldObject[] = []
+      for (const childId of nd.children) {
+        const child = rebuildNode(childId, rootId)
+        if (child) parts.push(child)
+      }
+      if (parts.length === nd.children.length && parts.length >= 2) {
+        try {
+          m = combineOperands(parts, nd.operation, nd.groupA)
+        } finally {
+          for (const p of parts) p.delete()
         }
-        childA.delete()
-        childB.delete()
 
         // Children have their transforms applied (world coordinates), so the boolean result
         // is also in world coordinates.
@@ -777,7 +778,7 @@ export async function handleRebuildTreeNode(msg: RebuildTreeNodeMessage): Promis
         // translation. Inner boolean results are in correct world coordinates relative
         // to each other and to sibling primitives (sphere). Root centering preserves
         // these relative positions while removing the absolute offset.
-        if (id === rootId) {
+        if (id === rootId && !msg.worldSpace) {
           // Stage 6.5: Center root boolean by CENTER OF MASS (centerMassAtOrigin,
           // объёмный центроид) — единая формула со frontend (store/helpers) и
           // rebuildNode. Раньше был vertex centroid (среднее по вершинам) — для
@@ -798,11 +799,23 @@ export async function handleRebuildTreeNode(msg: RebuildTreeNodeMessage): Promis
           const centered = m.transform(centerMatrix)
           m.delete()
           m = centered
-        } else {
-          // Inner boolean: pass-through. Return the boolean result as-is in world
-          // coordinates. The ROOT boolean will center the final result.
-          // See comment above for details.
+        } else if (id !== rootId && nd.originTransform && nd.localTransform) {
+          // NESTED-MOVED-EDIT: листья вложенного CSG лежат в системе его создания
+          // (originTransform = TRS₀), а перед объединением объект стоял в localTransform
+          // (TRS_cur — сдвиг/поворот/масштаб до объединения). Результат переносим
+          // M = Mat(TRS_cur)·Mat(TRS₀)⁻¹; не сдвинутый CSG — identity (без изменений).
+          const corr = relativeTransformMatrix(nd.localTransform, nd.originTransform)
+          if (corr) {
+            const moved = m.transform(corr)
+            m.delete()
+            m = moved
+          }
         }
+        // Inner boolean без originTransform (старое дерево): результат как есть в мировых
+        // координатах системы создания — корень центрирует итог (см. комментарий выше).
+      } else {
+        // ребёнок не перестроился — узел пустой (как прежде `childA && childB`)
+        for (const p of parts) p.delete()
       }
     }
 
@@ -853,7 +866,7 @@ export async function handleRebuildScene(msg: RebuildSceneMessage): Promise<void
 
   try {
     const wasm = getWasm()
-    const shapeInfos: Map<string, { shapeType: string; params: Record<string, number>; filletRadius: number }> = new Map()
+    const shapeInfos: Map<string, { shapeType: string; params: Record<string, number> }> = new Map()
     const currentTransforms: Map<string, RebuildTransform> = new Map()
     // FIX (8.5.2.5): CSG-результаты group-операций исключаются из центрирования
     // в results-петле — rebuild.ts использует сохранённые pivot-центрированные
@@ -861,7 +874,8 @@ export async function handleRebuildScene(msg: RebuildSceneMessage): Promise<void
     // объектов (примитивы, import_mesh) results-петля снимает запечённую
     // трансляцию и центрирует вершины по COM.
     const booleanResultIds = new Set<string>()
-    const ops = msg.operations as Record<string, unknown>[]
+    // ALIGN-PLANE-RESOLVE: выравнивание по плоскости воспроизводится как move каждой цели
+    const ops = (msg.operations as Record<string, unknown>[]).flatMap(expandForReplay) as Record<string, unknown>[]
 
     for (const op of ops) {
       if (op.type === 'add_shape') {
@@ -879,9 +893,9 @@ export async function handleRebuildScene(msg: RebuildSceneMessage): Promise<void
         const par = op.params as Record<string, number>
         const m = applyTransform(buildPrimitive(st, sanitizeParams(par)), t)
         setCached(op.id as string, m)
-        shapeInfos.set(op.id as string, { shapeType: st, params: par, filletRadius: 0 })
+        shapeInfos.set(op.id as string, { shapeType: st, params: par })
         currentTransforms.set(op.id as string, { ...t })
-      } else if (op.type === 'import_mesh' || op.type === 'text3d') {
+      } else if (op.type === 'import_mesh') {
         const raw = op.transform as { x: number; y: number; z: number; rotX: number; rotY: number; rotZ: number; scaleX?: number; scaleY?: number; scaleZ?: number } | undefined
         const t: RebuildTransform = raw
           ? { x: raw.x, y: raw.y, z: raw.z, rotX: raw.rotX, rotY: raw.rotY, rotZ: raw.rotZ, scaleX: raw.scaleX ?? 1, scaleY: raw.scaleY ?? 1, scaleZ: raw.scaleZ ?? 1 }
@@ -893,7 +907,7 @@ export async function handleRebuildScene(msg: RebuildSceneMessage): Promise<void
         // загрузки проекта/.3dtc импортированная геометрия ИСЧЕЗАЛА.
         // Конвенция как у примитивов: в cache запекается ТОЛЬКО translation
         // (rotation/scale применяются на рендере через pivot и в CSG через
-        // applySRAroundCenter). shapeInfos НЕ заполняем: ветки move/mirror/fillet
+        // applySRAroundCenter). shapeInfos НЕ заполняем: ветки move/mirror/align
         // должны обрабатывать baked-геометрию через cache-transform, а не через
         // buildPrimitive (иначе rebuild строил бы куб-заглушку 20×20×20).
         const verts = op.vertices as Float32Array | number[] | undefined
@@ -912,22 +926,15 @@ export async function handleRebuildScene(msg: RebuildSceneMessage): Promise<void
             setCached(op.id as string, m.transform(tm))
           } catch (me) {
             // Non-manifold — cache null; fallback в rebuild.ts вернёт сырой меш
-            console.warn(`[rebuild] Baked mesh (import/text3d) non-manifold for ${op.id}:`, me)
+            console.warn(`[rebuild] Baked mesh (import) non-manifold for ${op.id}:`, me)
             setCached(op.id as string, null)
           }
         } else if (vertCount > 0 || idxCount > 0) {
           console.warn(`[rebuild] Baked mesh skipped for ${op.id}: verts=${vertCount}, idxs=${idxCount}`)
         }
       } else if (op.type === 'fillet') {
-        const id = op.id as string
-        const info = shapeInfos.get(id)
-        const t = currentTransforms.get(id)
-        if (info && t && info.shapeType !== 'import_mesh' && info.shapeType !== 'text3d') {
-          const r = op.radius as number
-          info.filletRadius = r
-          const m = applyTransform(buildPrimitiveWithFillet(info.shapeType, info.params, r), t)
-          setCached(id, m)
-        }
+        // Скругление удалено из приложения (remove-fillet): операция старых файлов
+        // не воспроизводится — куб остаётся острым. В норме загрузка уже вырезала её.
       } else if (op.type === 'move') {
         const d = op.delta as { x: number; y: number; z: number }
         const rd = (op as { rotDelta?: { x: number; y: number; z: number } }).rotDelta
@@ -945,7 +952,7 @@ export async function handleRebuildScene(msg: RebuildSceneMessage): Promise<void
               // - At CSG time via applySRAroundCenter in the group handler
               // Previously buildTransformMatrix baked full RS+T into vertices,
               // causing doubling when viewport also applied RS via pivot.
-              const fresh = buildPrimitiveWithFillet(info.shapeType, info.params, info.filletRadius)
+              const fresh = buildPrimitive(info.shapeType, info.params)
               const tm = applyTransform(fresh, { x: nt.x, y: nt.y, z: nt.z })
               setCached(id, tm)
             } else {
@@ -979,9 +986,14 @@ export async function handleRebuildScene(msg: RebuildSceneMessage): Promise<void
             if (origT && origShape) {
               // Primitive — rebuild at mirrored position
               const nt = applyMirrorToTransform(origT, op.plane as 'XY' | 'XZ' | 'YZ')
-              const m = applyTransform(buildPrimitiveWithFillet(origShape.shapeType, origShape.params, origShape.filletRadius), nt)
+              const m = applyTransform(buildPrimitive(origShape.shapeType, origShape.params), nt)
               setCached(newId, m)
               currentTransforms.set(newId, nt)
+              // FIX (MIRROR-CHAIN-REPLAY, 9.5.3): копия — тоже примитив (незеркальная форма
+              // из params; список mirrored[] применяет rebuildFromHistory). Без этого зеркало
+              // КОПИИ уходило в ветку CSG/импорта: отражение кэша в мире + список mirrored[]
+              // на main thread → последняя плоскость применялась дважды (YZ∘YZ = тождество).
+              shapeInfos.set(newId, { shapeType: origShape.shapeType, params: { ...origShape.params } })
             } else {
               // FIX (MIRROR-CSG-REBUILD): CSG result or imported mesh —
               // mirror the cached manifold geometry around origin.
@@ -1017,7 +1029,7 @@ export async function handleRebuildScene(msg: RebuildSceneMessage): Promise<void
             const nt = applyAlignToTransform(t, axis, delta)
             currentTransforms.set(id, nt)
             if (info) {
-              const m = applyTransform(buildPrimitiveWithFillet(info.shapeType, info.params, info.filletRadius), nt)
+              const m = applyTransform(buildPrimitive(info.shapeType, info.params), nt)
               setCached(id, m)
             } else {
               const dx = axis === 'x' ? delta : 0
@@ -1043,7 +1055,7 @@ export async function handleRebuildScene(msg: RebuildSceneMessage): Promise<void
         const t = currentTransforms.get(id)
         if (info && t) {
           info.params = { ...info.params, ...np }
-          const m = applyTransform(buildPrimitiveWithFillet(info.shapeType, info.params, info.filletRadius), t)
+          const m = applyTransform(buildPrimitive(info.shapeType, info.params), t)
           setCached(id, m)
         }
       } else if (op.type === 'group') {
@@ -1096,32 +1108,27 @@ export async function handleRebuildScene(msg: RebuildSceneMessage): Promise<void
                 m = m.transform(tm)
               }
             }
-            disposeCached(ids[0])
-            disposeCached(ids[1])
+            // N-ARY-CSG: операнды поглощены результатом — все N (старые бинарные — 2)
+            for (const id of ids) disposeCached(id)
             setCached(resultId, m)
           } catch (me) {
             // Non-manifold — cache as null
             console.warn('[Worker] Non-manifold CSG result:', me)
-            disposeCached(ids[0])
-            disposeCached(ids[1])
+            for (const id of ids) disposeCached(id)
             setCached(resultId, null)
           }
         } else if (ids.length >= 2) {
-          // Fallback: rebuild CSG from operands (legacy path for pre-fix operations)
-          let a = cache.get(ids[0])
-          let b = cache.get(ids[1])
-          if (a && b) {
-            const tA = currentTransforms.get(ids[0])
-            const tB = currentTransforms.get(ids[1])
-            if (tA && hasSR(tA)) a = applySRAroundCenter(a, tA)
-            if (tB && hasSR(tB)) b = applySRAroundCenter(b, tB)
-            let result: ManifoldObject
-            const treeOp = op.treeOperation ?? 'union'
-            if (treeOp === 'intersect') result = a.intersect(b)
-            else if (treeOp === 'subtract') result = a.subtract(b)
-            else result = a.add(b)
-            disposeCached(ids[0])
-            disposeCached(ids[1])
+          // Fallback: rebuild CSG from operands (legacy path for pre-fix operations).
+          // N-ARY-CSG: N операндов — общее ядро combineOperands (2 — прежний бинарный путь)
+          const src = ids.map((id) => cache.get(id))
+          if (src.every((m): m is ManifoldObject => !!m)) {
+            const parts = src.map((m, i) => {
+              const t = currentTransforms.get(ids[i])
+              return t && hasSR(t) ? applySRAroundCenter(m, t) : m
+            })
+            const treeOp = (op.treeOperation as string | undefined) ?? 'union'
+            const result = combineOperands(parts, treeOp, op.groupA as number | undefined)
+            for (const id of ids) disposeCached(id)
             setCached(resultId as string, result)
           }
         }
@@ -1198,6 +1205,7 @@ export async function handleRebuildScene(msg: RebuildSceneMessage): Promise<void
 /** Handle csgBoolean message. */
 export async function handleCsgBoolean(msg: CsgBooleanMessage): Promise<void> {
   const t0 = performance.now()
+  assertManifoldOperands(msg.idA, msg.idB)
   const aOrig = cache.get(msg.idA)
   const bOrig = cache.get(msg.idB)
   if (!aOrig || !bOrig) throw new Error(`Objects not found: ${msg.idA}, ${msg.idB}`)
@@ -1413,6 +1421,7 @@ export async function handleCsgBooleanSync(msg: CsgBooleanSyncMessage): Promise<
   }
 
   // Perform boolean: apply transform ONE TIME to each origin-centered operand
+  assertManifoldOperands(msg.idA, msg.idB)
   const aOrig = cache.get(msg.idA)
   const bOrig = cache.get(msg.idB)
   if (!aOrig || !bOrig) throw new Error(`Objects not found: ${msg.idA}, ${msg.idB}`)
@@ -1459,6 +1468,81 @@ export async function handleCsgBooleanSync(msg: CsgBooleanSyncMessage): Promise<
 
   const mesh = extractMesh(result)
   result.delete()
+
+  safePostMessage(
+    {
+      reqId: msg.reqId,
+      type: 'mesh',
+      objId: msg.resultId,
+      vertices: mesh.vertices,
+      indices: mesh.indices,
+      normals: mesh.normals,
+      tris: mesh.tris,
+      ms: performance.now() - t0,
+    },
+    buildTransferList(mesh),
+  )
+}
+
+// --- N-ARY-CSG: sync + boolean над N операндами (union N, subtract/intersect A vs B) ---
+
+export interface CsgBooleanMultiMessage {
+  reqId: string
+  type: 'csgBooleanMulti'
+  /** Операнды по порядку: группа A (`[0..groupA)`), затем группа B; `shape` — примитив */
+  operands: Array<{
+    id: string
+    transform: RebuildTransform
+    shape?: { shapeType: string; params: Record<string, number> }
+  }>
+  op: string
+  /** Число операндов группы A (subtract/intersect); нет — 1 */
+  groupA?: number
+  resultId: string
+}
+
+/**
+ * N-ARY-CSG: как `csgBooleanSync`, но для N операндов. Примитивы строятся в origin из
+ * params, CSG/импорт/зеркальные — из кэша (`syncMesh` перед вызовом); TRS каждого
+ * применяется ОДИН раз; boolean — общее ядро `combineOperands`. Кэш результата —
+ * COM-центрированная копия, ответ — мировой меш (pivot считает фронтенд).
+ */
+export async function handleCsgBooleanMulti(msg: CsgBooleanMultiMessage): Promise<void> {
+  const t0 = performance.now()
+  for (const o of msg.operands) {
+    if (o.shape) setCached(o.id, buildPrimitive(o.shape.shapeType, sanitizeParams(o.shape.params)))
+  }
+  assertManifoldOperands(...msg.operands.map((o) => o.id))
+  const parts: ManifoldObject[] = []
+  let result: ManifoldObject
+  try {
+    for (const o of msg.operands) {
+      const src = cache.get(o.id)
+      if (!src) throw new Error(`Objects not found: ${o.id}`)
+      const t = o.transform
+      parts.push(src.transform(buildTransformMatrix(
+        { x: t.x, y: t.y, z: t.z },
+        { rotX: t.rotX, rotY: t.rotY, rotZ: t.rotZ },
+        { scaleX: t.scaleX, scaleY: t.scaleY, scaleZ: t.scaleZ },
+      )))
+    }
+    result = combineOperands(parts, msg.op, msg.groupA)
+  } finally {
+    for (const p of parts) p.delete()
+  }
+  for (const o of msg.operands) disposeCached(o.id)
+
+  const resultMeshData = result.getMesh()
+  const { cx, cy, cz } = centerMassAtOrigin(
+    new Float32Array(resultMeshData.vertProperties),
+    new Uint32Array(resultMeshData.triVerts),
+  )
+  const centered = result.transform([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -cx, -cy, -cz, 1])
+  setCached(msg.resultId, centered)
+
+  const mesh = extractMesh(result)
+  result.delete()
+  devLogCsg('multi', { id: msg.resultId, op: msg.op, operands: msg.operands.length, groupA: msg.groupA, tris: mesh.tris, ms: performance.now() - t0 })
 
   safePostMessage(
     {

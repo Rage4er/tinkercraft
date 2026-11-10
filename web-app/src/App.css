@@ -73,8 +73,9 @@ body {
 /* ---- Toolbar ---- */
 .toolbar {
   display: flex;
-  flex-wrap: nowrap;
-  /* группы НЕ переносятся — всегда одна строка */
+  flex-wrap: wrap;
+  /* UX-AUDIT-12: группы раскладывает useToolbarLayout (строки внутри групп); если и так не
+     влезает — группы переносятся на следующую строку, а не уезжают за край окна */
   align-items: stretch;
   /* все группы и разделители одной высоты */
   gap: 0;
@@ -326,11 +327,12 @@ body {
   display: flex;
   flex: 1;
   overflow: hidden;
+  position: relative;   /* UX-AUDIT-19: опора для .toast-container */
 }
 
 /* ---- Left panel ---- */
 .panel-left {
-  width: 170px;
+  width: 320px;
   background: var(--bg-panel);
   border-right: 1px solid var(--border);
   display: flex;
@@ -407,7 +409,7 @@ body {
 /* ---- Shape grid ---- */
 .shape-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, 1fr);
   gap: 3px;
   padding: 3px 5px;
 }
@@ -440,6 +442,13 @@ body {
 .shape-btn:disabled {
   opacity: 0.38;
   cursor: not-allowed;
+}
+
+/* PLUG-AND-PLAY: фигура, которая сейчас размещается */
+.shape-btn.active {
+  background: var(--bg-selected);
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
 }
 
 .shape-icon {
@@ -640,6 +649,25 @@ body {
   padding-left: 8px;
 }
 
+.tl-edited {
+  color: var(--accent, #89b4fa);
+  font-size: 0.85em;
+}
+
+.tl-edit {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0 4px;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.tl-edit:hover:not(:disabled) {
+  color: var(--accent, var(--text));
+}
+
 .tl-idx {
   font-size: 9px;
   color: var(--text-muted);
@@ -651,6 +679,13 @@ body {
   flex: 1;
   position: relative;
   overflow: hidden;
+}
+
+/* UX-AUDIT-12: подсказка и «Привязка» подстраиваются под ширину вьюпорта, а не окна
+   (контейнер — внешний .viewport App; у канваса Viewport3D тот же класс) */
+.main > .viewport {
+  container-type: inline-size;
+  container-name: viewport;
 }
 
 .viewport-loading {
@@ -766,11 +801,42 @@ body {
   background: rgba(244, 244, 248, 0.9);
 }
 
+/* UX-AUDIT-12: узкий вьюпорт — подсказка не помещается (её смысл есть в подсказках кнопок),
+   «Привязка» — наверх влево без подписи, чтобы не обрезалась и не наезжала на ViewCube */
+@container viewport (max-width: 600px) {
+  .viewport-hint {
+    display: none;
+  }
+}
+
+@container viewport (max-width: 420px) {
+  .viewport .ruler-display {
+    top: 40px;          /* UX-AUDIT-24: под «Привязкой» (она здесь — в левом верхнем углу); селектор
+                           сильнее — правило .ruler-display ниже по файлу */
+  }
+
+  .snap-selector {
+    top: 8px;
+    left: 8px;
+    right: auto;
+    bottom: auto;
+  }
+
+  .snap-label {
+    display: none;
+  }
+}
+
 /* ---- Right panel ---- */
-/* UB5-2: по отзыву пользователя панель слишком узкая (иконки и кнопки
- * экономики не влезают — см. также UB3-2), расширение ×1,2: 200px → 240px. */
-.panel-right {
+/* UB5-2 (yandex-games): по отзыву пользователя с экономикой панель слишком узкая (иконки и кнопки
+ * экономики не влезают — см. также UB3-2), расширение ×1,2: 200px → 240px — только при экономике
+ * (SDK, `html[data-economy]` ставит useYandexInit); без SDK — 200px, как в main. */
+:root[data-economy] .panel-right {
   width: 240px;
+}
+
+.panel-right {
+  width: 200px;
   background: var(--bg-panel);
   border-left: 1px solid var(--border);
   display: flex;
@@ -858,7 +924,7 @@ body {
 }
 
 .props-input {
-  width: 65px;
+  width: 70px;  /* UX-AUDIT-16: запас под «−12345.6» */
   background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -880,9 +946,33 @@ body {
   cursor: not-allowed;
 }
 
-.props-input::-webkit-inner-spin-button,
+/* UX-AUDIT-16: стрелки-счётчики занимали ~15 px внутри поля 65 px и закрывали последние цифры
+   («−1234.5» → «−1234.»). В покое — скрыты (значение целиком), при наведении/фокусе — видны;
+   ↑/↓ с клавиатуры работают всегда.
+   UX-AUDIT-23: прятать — только «не при наведении и не в фокусе». Раньше стрелки снимались всегда
+   (`appearance: none`), а при наведении возвращались `appearance: inner-spin-button` — Chromium
+   их не возвращал, и стрелок не было вовсе. Теперь при наведении/фокусе — обычные стрелки. */
+.props-input:not(:hover):not(:focus) {
+  -moz-appearance: textfield;
+}
+
+.props-input:not(:hover):not(:focus)::-webkit-inner-spin-button,
 .props-input::-webkit-outer-spin-button {
-  opacity: 0.4;
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* Стрелки — в тон теме (иначе в тёмной — светлая системная плашка) */
+.props-input {
+  color-scheme: dark;
+}
+
+[data-theme="light"] .props-input {
+  color-scheme: light;
+}
+
+.props-input::-webkit-inner-spin-button {
+  opacity: 0.6;
 }
 
 /* ---- CSG group ---- */
@@ -915,6 +1005,67 @@ body {
   color: var(--text-muted);
   flex-shrink: 0;
   overflow: hidden;
+}
+
+.status-item {
+  /* UX-AUDIT-12: пункт не переносится на 2 строки */
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.status-item.status-shrink {
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* CSG-GROUP-FIX: режим вычитания / пересечения — первым в строке (на узком окне обрезаются
+   пункты справа, а не он); длинная подсказка — с многоточием, кнопки «ОК» / «Отмена» видны */
+.status-item.status-csg-mode {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--accent-yellow);
+}
+
+/* PLUG-AND-PLAY: режим размещения — как режим CSG, свой цвет; место — моноширинно */
+.status-item.status-placement {
+  color: var(--accent);
+}
+
+.status-placement-where {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  opacity: 0.9;
+}
+
+.status-csg-hint {
+  max-width: 55vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.statusbar .btn.status-btn {
+  height: 18px;
+  min-height: 0;
+  padding: 0 8px;
+  font-size: 11px;
+  line-height: 16px;
+}
+
+/* UX-AUDIT-12: узкое окно — второстепенные пункты статус-бара (время CSG, версия) скрыты */
+@media (max-width: 900px) {
+  .status-optional {
+    display: none;
+  }
+}
+
+/* UX-AUDIT-12: узкое окно — у логотипа только значок */
+@media (max-width: 1200px) {
+  .toolbar-logo-text {
+    display: none;
+  }
 }
 
 .status-item strong {
@@ -1091,12 +1242,104 @@ body {
   color: var(--accent-red);
 }
 
+/* Фаза 9.1: иконки строк дерева компактнее (панель 168px — при 32px имя схлопывалось) */
+.ct-item .ct-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.ct-item .ct-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.ct-item .ct-icon,
+.ct-item .ct-btn {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.ct-name {
+  min-width: 24px;
+}
+
+/* Фаза 9.1: раскрытие CSG и строки детей */
+.ct-chevron {
+  width: 12px;
+  padding: 0;
+  font-size: 10px;
+  flex-shrink: 0;
+}
+
+.ct-chevron-spacer {
+  display: inline-block;
+  width: 12px;
+  flex-shrink: 0;
+}
+
+.ct-child {
+  border-left: 1px solid var(--border);
+  margin-left: 6px;
+}
+
+.ct-child.ct-readonly .ct-name {
+  font-style: italic;
+  opacity: 0.8;
+}
+
+.ct-child.ct-lock {
+  flex-shrink: 0;
+  font-size: 11px;
+  opacity: 0.8;
+  padding-right: 4px;
+}
+
+.ct-child-selected {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+/* N-ARY-CSG: заголовки групп A/B у детей вычитания/пересечения (не выбираются) */
+.ct-group-header {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-muted);
+  margin-left: 6px;
+  cursor: default;
+}
+
+.ct-group-header:hover {
+  background: none;
+}
+
+/* CSG-GROUP-FIX: метка «A»/«B» у объекта в режиме вычитания / пересечения
+   (A — зафиксированная группа, тёплая, как её подсветка во вьюпорте; B — выделение) */
+.ct-csg-group {
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 2px 4px;
+  border-radius: 3px;
+  background: var(--accent);
+  color: var(--bg-deep);
+  flex-shrink: 0;
+}
+
+.ct-csg-group[data-group="a"] {
+  background: var(--accent-yellow);
+}
+
 /* ---- Ruler display ---- */
+/* UX-AUDIT-24: было `fixed; top: 54px` по центру окна — при тулбаре в 2–3 строки (≤ 1280) плашка
+   лежала на его кнопках. Теперь — в левом верхнем углу вьюпорта (ниже тулбара любой высоты; справа
+   вверху — уведомления, по центру — «Вычисление…»); на узком вьюпорте — под «Привязкой». */
 .ruler-display {
-  position: fixed;
-  top: 54px;
-  left: 50%;
-  transform: translateX(-50%);
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  white-space: nowrap;
   background: rgba(19, 19, 31, 0.92);
   border: 1px solid rgba(250, 204, 21, 0.6);
   border-radius: 8px;
@@ -1105,7 +1348,7 @@ body {
   color: #facc15;
   z-index: 1000;
   pointer-events: none;
-  animation: fadeIn 0.2s ease;
+  animation: rulerIn 0.2s ease;    /* fadeIn центрирует (translateX −50%) — плашка больше не по центру */
 }
 
 /* FIX (LOW-18-37): Light theme adaptation for ruler display */
@@ -1113,6 +1356,18 @@ body {
   background: rgba(255, 255, 255, 0.92);
   border: 1px solid rgba(202, 138, 4, 0.6);
   color: #a16207;
+}
+
+@keyframes rulerIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes fadeIn {
@@ -1277,15 +1532,34 @@ body {
 
 /* ---- Toast notifications (SEC-2) ---- */
 .toast-container {
-  position: fixed;
-  top: 48px;
-  right: 12px;
+  /* UX-AUDIT-19: был fixed в правом верхнем углу окна — поверх тулбара и верха правой панели
+     (заголовок, подсказка режима выравнивания). Теперь — правый верхний угол вьюпорта:
+     левее правой панели (200 px), не шире вьюпорта (окно − 320 − 200). Над модалками
+     (z-index 999) — по-прежнему: .main не создаёт контекст наложения. */
+  position: absolute;
+  top: 8px;
+  right: 212px;
+  max-width: min(360px, calc(100% - 544px));
   z-index: 3000;
   display: flex;
   flex-direction: column;
   gap: 6px;
   pointer-events: auto;
-  max-width: 360px;
+}
+
+/* yandex-games: с экономикой правая панель 240 px (UB5-2) — отступ 240 + 12, ширина — окно − 320 − 240 − 24 */
+:root[data-economy] .toast-container {
+  right: 252px;
+  max-width: min(360px, calc(100% - 584px));
+}
+
+/* UX-AUDIT-30: узкий вьюпорт (окно ≤ 940 px = вьюпорт ≤ 420 px) — вверху вьюпорта «Привязка»
+   (8–33 px) и плашка линейки (40–67 px, UX-AUDIT-24): тост ниже них, а не поверх «Привязки».
+   Контейнерный запрос сюда не достаёт (тосты — в .main, не во вьюпорте) — запрос по окну. */
+@media (max-width: 940px) {
+  .toast-container {
+    top: 72px;
+  }
 }
 
 .toast {
@@ -1637,6 +1911,17 @@ body {
   margin-top: 14px;
 }
 
+/* ---- Confirm modal (UX-AUDIT-2) ---- */
+.confirm-modal-box {
+  max-width: 380px;
+}
+
+.confirm-modal-message {
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-primary);
+}
+
 /* ---- ViewCube navigation ---- */
 .viewcube-container {
   position: absolute;
@@ -1736,4 +2021,124 @@ body {
   height: 100%;
   border-radius: 2px;
   transition: width 0.3s ease;
+}
+
+/* ---- DIMENSIONS: размеры ---- */
+.dim-settings-box {
+  min-width: 340px;
+  max-width: 420px;
+}
+
+.dim-settings-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.dim-settings-label {
+  flex-shrink: 0;
+}
+
+.dim-settings-select {
+  width: auto;
+  min-width: 150px;
+}
+
+.dim-kind-group {
+  display: inline-flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.dim-list-value {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+  font-size: 11px;
+}
+
+.dim-panel-actions {
+  gap: 6px;
+  justify-content: flex-start;
+}
+
+/* DIMENSIONS: меню кнопки «Размер» (в портале — у тулбара overflow: hidden) */
+.tb-menu-wrap {
+  display: inline-flex;
+}
+
+.tb-menu {
+  position: fixed;
+  z-index: 1000;
+  min-width: 220px;
+  padding: 4px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.tb-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 8px;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tb-menu-item:hover,
+.tb-menu-item:focus-visible {
+  background: var(--bg-hover);
+  outline: none;
+}
+
+.tb-menu-check {
+  width: 14px;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.tb-menu-label {
+  flex: 1;
+}
+
+.tb-menu-kbd {
+  font-size: 10px;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0 4px;
+}
+
+/* ---- SELECTION-RECT: рамка выделения (как AutoCAD) ---- */
+.sel-rect {
+  position: absolute;
+  pointer-events: none;
+  z-index: 5;
+  box-sizing: border-box;
+}
+
+/* слева направо — окно: только целиком внутри (синяя, сплошная) */
+.sel-rect.window {
+  border: 1px solid #4c8dff;
+  background: rgba(76, 141, 255, 0.14);
+}
+
+/* справа налево — секущая: всё, что задевает (зелёная, пунктир) */
+.sel-rect.crossing {
+  border: 1px dashed #3fcf74;
+  background: rgba(63, 207, 116, 0.14);
 }

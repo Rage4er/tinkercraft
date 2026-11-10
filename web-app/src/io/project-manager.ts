@@ -3,7 +3,9 @@
 // Analog of ProjectManager.java from the original TinkerCraft
 // ============================================================
 
+import type { Dimension } from '../store/dimensions'
 import type { TinkerCraftOperation } from '../csg/types'
+import i18n from '../i18n'
 
 const DB_NAME = 'tinkercraft-projects'
 const DB_VERSION = 1
@@ -19,6 +21,8 @@ export interface ProjectMeta {
 
 export interface ProjectRecord extends ProjectMeta {
   operations: TinkerCraftOperation[]
+  /** DIMENSIONS: слой размеров (не шаги истории). Старые проекты — без поля */
+  dimensions?: Dimension[]
 }
 
 function openDb(): Promise<IDBDatabase> {
@@ -98,15 +102,16 @@ export async function saveProject(
   operations: TinkerCraftOperation[],
   objectCount: number,
   thumbnail?: string,
+  dimensions?: Dimension[],
 ): Promise<ProjectMeta> {
   // FIX (LOW-18-48): Check for duplicate project name
   const db = await getDb()
   const existing = await dbGetAll<ProjectRecord>(db)
   if (existing.some(p => p.name === name)) {
-    throw new Error(`Проект с именем "${name}" уже существует`)
+    throw new Error(i18n.t('errors.projectNameExists', { name }))
   }
   const id = `proj_${crypto.randomUUID()}`
-  const record: ProjectRecord = { id, name, savedAt: Date.now(), operations, thumbnail, objectCount }
+  const record: ProjectRecord = { id, name, savedAt: Date.now(), operations, thumbnail, objectCount, ...(dimensions ? { dimensions } : {}) }
   await dbPut(db, record)
   return { id, name, savedAt: record.savedAt, thumbnail, objectCount }
 }
@@ -117,14 +122,15 @@ export async function updateProject(
   operations: TinkerCraftOperation[],
   objectCount: number,
   thumbnail?: string,
+  dimensions?: Dimension[],
 ): Promise<void> {
   const db = await getDb()
   // FIX (MED-18-51): Check if project exists before updating — don't silently create new
   const existing = await dbGet<ProjectRecord>(db, id)
   if (!existing) {
-    throw new Error(`Проект с id "${id}" не найден — используйте saveProject для создания`)
+    throw new Error(i18n.t('errors.projectNotFound', { id }))
   }
-  const record: ProjectRecord = { id, name, savedAt: Date.now(), operations, thumbnail, objectCount }
+  const record: ProjectRecord = { id, name, savedAt: Date.now(), operations, thumbnail, objectCount, ...(dimensions ? { dimensions } : {}) }
   await dbPut(db, record)
 }
 

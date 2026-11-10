@@ -15,10 +15,10 @@
 import {
   initWasm,
   handleBuildShape,
-  handleApplyFillet,
   handleBuildImportedMesh,
   handleCsgBoolean,
   handleCsgBooleanSync,
+  handleCsgBooleanMulti,
   handleMirrorObject,
   handleRebuildScene,
   handleSyncObjects,
@@ -55,10 +55,10 @@ function installTransport(): void {
 async function dispatch(msg: BridgeMsg): Promise<void> {
   switch (msg.type) {
     case 'buildShape': await handleBuildShape(msg as never); break
-    case 'applyFillet': await handleApplyFillet(msg as never); break
     case 'buildImportedMesh': await handleBuildImportedMesh(msg as never); break
     case 'csgBoolean': await handleCsgBoolean(msg as never); break
     case 'csgBooleanSync': await handleCsgBooleanSync(msg as never); break
+    case 'csgBooleanMulti': await handleCsgBooleanMulti(msg as never); break
     case 'mirrorObject': await handleMirrorObject(msg as never); break
     case 'rebuildScene': await handleRebuildScene(msg as never); break
     case 'syncObjects': await handleSyncObjects(msg as never); break
@@ -117,12 +117,6 @@ export async function workerBuildShape(
   return toMeshResult(await call('buildShape', { objId, shapeType, params, transform }))
 }
 
-export async function workerApplyFillet(
-  objId: string, shapeType: ShapeType, params: ShapeParams, radius: number, transform: TransformNR,
-): Promise<MeshResult> {
-  return toMeshResult(await call('applyFillet', { objId, shapeType, params, radius, transform }))
-}
-
 export async function workerBuildImportedMesh(
   objId: string, vertices: Float32Array | number[], indices: Uint32Array | number[],
 ): Promise<MeshResult> {
@@ -160,6 +154,13 @@ export async function workerCsgBooleanWithSync(
   return toMeshResult(await call('csgBooleanSync', { idA, idB, op, resultId, transformA, transformB, shapeA, shapeB }))
 }
 
+export async function workerCsgBooleanMulti(
+  operands: Array<{ id: string; transform: TransformNR; shape?: { shapeType: ShapeType; params: ShapeParams } }>,
+  op: 'union' | 'subtract' | 'intersect', resultId: string, groupA?: number,
+): Promise<MeshResult> {
+  return toMeshResult(await call('csgBooleanMulti', { operands, op, resultId, groupA }))
+}
+
 export async function workerMirrorObject(
   objId: string, plane: 'XY' | 'XZ' | 'YZ', shapeType?: string, params?: Record<string, number>,
   transform?: TransformNR, mirrorCenter?: { x: number; y: number; z: number },
@@ -193,9 +194,12 @@ export async function workerRebuildNode(
     normals?: number[]
     operation?: 'union' | 'subtract' | 'intersect'
     children?: string[]
+    groupA?: number
+    mirrored?: Array<'XY' | 'XZ' | 'YZ'>
   }>,
+  options?: { worldSpace?: boolean },
 ): Promise<MeshResult> {
-  return toMeshResult(await call('rebuildTreeNode', { nodeId, nodeCount: nodes.length, nodes }))
+  return toMeshResult(await call('rebuildTreeNode', { nodeId, nodeCount: nodes.length, nodes, worldSpace: options?.worldSpace === true }))
 }
 
 export function isWorkerReady(): boolean { return true }

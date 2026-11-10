@@ -30,12 +30,14 @@ export interface GroupLayout {
  * @param groups — массив конфигураций групп
  * @param toolbarWidth — полная ширина toolbar
  * @param btnWidth — реальная ширина кнопки (из DOM)
+ * @param reservedWidth — ширина, не занятая кнопками: логотип, отступы групп (из DOM)
  * @returns layout с количеством строк для каждой группы
  */
 export function calculateToolbarLayout(
   groups: ToolbarGroup[],
   toolbarWidth: number,
   btnWidth: number,
+  reservedWidth = 0,
 ): GroupLayout[] {
   if (groups.length === 0) {
     return []
@@ -50,7 +52,7 @@ export function calculateToolbarLayout(
   }))
 
   // Единый расчёт: сужение + расширение
-  layout = calculateLayout(layout, toolbarWidth, btnWidth)
+  layout = calculateLayout(layout, toolbarWidth, btnWidth, reservedWidth)
 
   return layout
 }
@@ -63,8 +65,11 @@ function calculateLayout(
   layout: GroupLayout[],
   toolbarWidth: number,
   btnWidth: number,
+  reservedWidth: number,
 ): GroupLayout[] {
-  const totalSeparators = (layout.length - 1) * SEPARATOR_WIDTH
+  // UX-AUDIT-12: + место, не занятое кнопками (логотип, внутренние отступы групп) — без него
+  // на 1024/768 расчёт считал, что всё влезает, и кнопки уезжали за край окна
+  const totalSeparators = (layout.length - 1) * SEPARATOR_WIDTH + reservedWidth
 
   // Считаем общую ширину всех групп (SUM по всем группам)
   const totalButtonsWidth = layout.reduce((sum, g) => {

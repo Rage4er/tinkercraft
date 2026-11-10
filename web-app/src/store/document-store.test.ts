@@ -72,7 +72,6 @@ const wc = vi.hoisted(() => {
     workerCsgBoolean: vi.fn(),
     workerCsgBooleanWithSync: vi.fn(),
     workerBuildImportedMesh: vi.fn(),
-    workerApplyFillet: vi.fn(),
     workerMirrorObject: vi.fn(),
     workerRebuildScene: vi.fn(async () => ({ results: [], ms: 0 })),
     workerDeleteObjects: vi.fn(async () => { }),
@@ -735,8 +734,8 @@ describe('economy-integration: врезки мутаций (Y.3)', () => {
     useEconomyStore.setState({ earnActionToken: earn as never, evaluateQuests: evaluate as never })
   })
 
-  it('addTextMesh: токен за действие + оценка квестов', async () => {
-    await useDocumentStore.getState().addTextMesh('t', [0, 0, 0, 1, 0, 0, 0, 1, 0], [0, 1, 2])
+  it('3D-текст (addRawMesh с text, v1.4.0 — как в main): токен за действие + оценка квестов', async () => {
+    await useDocumentStore.getState().addRawMesh('Текст: t', [0, 0, 0, 1, 0, 0, 0, 1, 0], [0, 1, 2], 't')
     expect(earn).toHaveBeenCalledTimes(1)
     expect(evaluate).toHaveBeenCalledTimes(1)
   })
@@ -748,7 +747,7 @@ describe('economy-integration: врезки мутаций (Y.3)', () => {
   })
 
   it('moveObject/renameObject/setColor НЕ оценивают квесты и не дают токен', async () => {
-    await useDocumentStore.getState().addTextMesh('t', [0, 0, 0, 1, 0, 0, 0, 1, 0], [0, 1, 2])
+    await useDocumentStore.getState().addRawMesh('Текст: t', [0, 0, 0, 1, 0, 0, 0, 1, 0], [0, 1, 2], 't')
     const id = Object.keys(useDocumentStore.getState().objects)[0]
     earn.mockClear(); evaluate.mockClear()
     useDocumentStore.getState().renameObject(id, 'new')

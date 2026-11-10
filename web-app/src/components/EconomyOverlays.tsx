@@ -27,7 +27,7 @@ export default function EconomyOverlays() {
   // U8: method передаётся в exportStl() — от него зависит модель кэшбэка:
   // при 'tokens' кэшбэк уже учтён в цене модалки (нет повторного начисления),
   // при 'ad' — начисляется после экспорта (P1-1).
-  const handleExportExecute = useCallback((method: ExportPaymentMethod) => {
+  const handleExportExecute = useCallback((method?: ExportPaymentMethod) => {
     exportStl(method)
   }, [exportStl])
 

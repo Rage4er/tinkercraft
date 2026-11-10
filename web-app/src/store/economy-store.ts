@@ -22,6 +22,7 @@ import {
   calculateCashbackV2,
   scanForCashback,
   countSceneObjects, // P1-2: единый подсчёт объектов для экспорта/кэшбэка/квестов
+  economyShapeKind, // v1.4.0: 3D-текст (import_mesh + text) — тип text3d для квестов
   isDayPassed,
   isCooldownPassed,
   isLimitReached,
@@ -1439,11 +1440,13 @@ export const useEconomyStore = create<EconomyState>()(
 
         let coloredCount = 0
         for (const obj of Object.values(objects)) {
-          shapeTypes.add(obj.shapeType)
+          // v1.4.0: 3D-текст — import_mesh с текстом (main) → для квестов тип text3d
+          const kind = economyShapeKind(obj.id, obj)
+          shapeTypes.add(kind)
           if (obj.color && obj.color !== '#808080') coloredCount++
           if (obj.shapeType === 'csg') csgCount++
           // Y3.7: исправлено 'text' → 'text3d'
-          if (obj.shapeType === 'text3d') text3dCount++
+          if (kind === 'text3d') text3dCount++
           // C3/Y3.6: зеркало — объект создан mirror-операцией ИЛИ legacy scale < 0
           if (
             mirrorCreatedIds.has(obj.id) ||

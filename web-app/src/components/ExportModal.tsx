@@ -18,7 +18,8 @@ export default function ExportModal({
   objects: Record<string, { shapeType: string; transform?: { scaleX: number; scaleY: number; scaleZ: number }; color?: string }>
   operations: Array<{ type: string; ids?: string[] }>
   onClose: () => void
-  onExport: (method: ExportPaymentMethod) => void
+  /** method — чем оплачен; без него — экспорт без оплаты (clean-режим: экономики нет) */
+  onExport: (method?: ExportPaymentMethod) => void
 }) {
   const { t } = useTranslation()
   const tokens = useEconomyStore((s) => s.tokens)
@@ -47,7 +48,8 @@ export default function ExportModal({
       // P0-6: без SDK не показываем модалку оплаты — сразу экспортируем
       subBypassDone.current = true
       onClose()
-      onExport('tokens')
+      // без метода: оплаты не было — settleExport не пишет «кэшбэк учтён в стоимости»
+      onExport()
       return
     }
     if (hasActiveSub && !subBypassDone.current) {

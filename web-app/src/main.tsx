@@ -17,6 +17,7 @@ import { createRoot } from 'react-dom/client'
 import './App.css'
 import App from './App'
 import { initSdk } from './platform/sdk'
+import i18n from 'i18next'
 import { initI18n, applySdkLanguage } from './i18n/init'
 
 /** Показать простой сплэш (инлайн-стили, без зависимости от CSS/React) */
@@ -43,10 +44,16 @@ function showSplash(): void {
   label.textContent = 'TinkerCraft'
   label.style.cssText = 'font-size:15px;letter-spacing:0.06em;opacity:.85'
   const hint = document.createElement('div')
-  hint.textContent = 'Загрузка…'
+  // подпись — после initI18n (setSplashHint): строки интерфейса только через i18n (UX-AUDIT-7)
+  hint.setAttribute('data-bootstrap-hint', '')
   hint.style.cssText = 'font-size:12px;opacity:.55'
   splash.append(spinner, label, hint)
   root.appendChild(splash)
+}
+
+/** Подпись сплэша на языке интерфейса (когда i18n готов) */
+function setSplashHint(): void {
+  document.querySelectorAll('[data-bootstrap-hint]').forEach((el) => { el.textContent = i18n.t('app.loading') })
 }
 
 /** Убрать сплэш после рендера React */
@@ -61,6 +68,7 @@ async function bootstrap(): Promise<void> {
     // 1. i18n сразу — язык браузера (SDK ещё не готов, fallback по приоритету).
     //    Позже, после initSdk(), применяем язык из SDK через applySdkLanguage().
     await initI18n()
+    setSplashHint()
   } catch (e) {
     console.warn('[Bootstrap] i18n init failed:', e)
   }
@@ -72,6 +80,7 @@ async function bootstrap(): Promise<void> {
   try {
     await initSdk()
     applySdkLanguage()
+    setSplashHint()
   } catch (e) {
     console.warn('[Bootstrap] SDK init failed — running in clean mode:', e)
   }
