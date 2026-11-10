@@ -20,7 +20,8 @@ import { computeAABB, colorForIndex, defaultShapeParams } from "../store/helpers
 import { buildObjectGeometry } from "./object-geometry";
 import { VIEWPORT_MOUSE_BUTTONS } from "./viewport-nav";
 import { createAdaptiveGrid, updateAdaptiveGrid, setAdaptiveGridTheme, viewHeightAt, type GridState } from "./adaptive-grid";
-import { SelectionOutlinePass, selectionOutlineTargets, renderWithSelectionOutline, DRAW_OVER_OUTLINE } from "./selection-outline";
+import { shadowFrustumFor, applyShadowFrustum, sameShadowFrustum, type ShadowFrustum } from "./shadow-follow";
+import { SelectionOutlinePass, selectionOutlineTargets, renderWithSelectionOutline, DRAW_OVER_OUTLINE, GROUP_A_OUTLINE } from "./selection-outline";
 import { useCsgGroupModeStore } from "../store/csg-group-mode";
 import { usePlacementModeStore } from "../store/placement-mode";
 import { useDimensionsStore } from "../store/dimensions-store";
@@ -62,16 +63,10 @@ const TRANSFORM_SIZE = 0.8;
 // Lighting
 const AMBIENT_INTENSITY = 0.45;
 const SUN_INTENSITY = 1.2;
-const SUN_POS = new THREE.Vector3(100, -80, 200);
 const SUN_SHADOW_SIZE = 4096;
-const SUN_SHADOW_RANGE = 200;
-const SUN_SHADOW_NEAR = 0.1;
-const SUN_SHADOW_FAR = 1000;
-// FIX: shadow acne — PCFSoftShadowMap без bias даёт полосатые треугольники на гранях.
-// Вертикальные грани (угол падения света ≈ 90°) требуют БОЛЬШЕГО сдвига, чем
-// горизонтальные — для них -0.0005 было недостаточно.
-const SUN_SHADOW_BIAS = -0.002;
-const SUN_SHADOW_NORMAL_BIAS = 0.05;
+// SHADOW-BOUNDS-400: направление солнца, область теней (следует за видом) и смещения (bias: FIX shadow
+// acne — PCFSoftShadowMap без bias даёт полосатые треугольники на гранях; вертикальным граням нужен
+// больший сдвиг) — shadow-follow.ts
 const FILL_INTENSITY = 0.4;
 const FILL_POS = new THREE.Vector3(-100, 80, 50);
 const FILL_COLOR = 0x8888ff;
@@ -79,7 +74,8 @@ const FILL_COLOR = 0x8888ff;
 // Scene
 const BG_COLOR_DARK = 0x1e1e2e;
 const BG_COLOR_LIGHT = 0xf0f0f5;
-/** Приёмник теней (прозрачная плоскость под объектами), мм — как прежняя сетка; сетка — adaptive-grid.ts */
+/** Приёмник теней (прозрачная плоскость под объектами): геометрия GRID_SIZE × GRID_SIZE, масштаб — по области
+ *  теней, следует за видом (SHADOW-BOUNDS-400, shadow-follow.ts); сетка — adaptive-grid.ts */
 const GRID_SIZE = 400;
 const GROUND_Z = -0.5;
 const GROUND_OPACITY = 0.25;
@@ -187,6 +183,12 @@ export function useThreeInit(
     useEffect(() => {
         outlineIdsRef.current = selectedIds;
     }, [selectedIds]);
+    // CSG-GROUP-UI: группа A режима «Вычитание» / «Пересечение» — тёплая кайма (B — выделение, синяя)
+    const csgGroupA = useCsgGroupModeStore((s) => s.csgGroupMode?.groupA);
+    const groupAIdsRef = useRef<ReadonlySet<string>>(new Set());
+    useEffect(() => {
+        groupAIdsRef.current = new Set(csgGroupA ?? []);
+    }, [csgGroupA]);
 
     // Stabilize onFpsUpdate via ref
     const fpsUpdateRef = useRef(onFpsUpdate);
@@ -236,17 +238,12 @@ export function useThreeInit(
         scene.add(new THREE.AmbientLight(0xffffff, AMBIENT_INTENSITY));
 
         const sun = new THREE.DirectionalLight(0xffffff, SUN_INTENSITY);
-        sun.position.copy(SUN_POS);
         sun.castShadow = true;
         sun.shadow.mapSize.width = sun.shadow.mapSize.height = SUN_SHADOW_SIZE;
-        sun.shadow.camera.left = sun.shadow.camera.bottom = -SUN_SHADOW_RANGE;
-        sun.shadow.camera.right = sun.shadow.camera.top = SUN_SHADOW_RANGE;
-        sun.shadow.camera.near = SUN_SHADOW_NEAR;
-        sun.shadow.camera.far = SUN_SHADOW_FAR;
-        // FIX: bias убирает полосатые артефакты самозатенения на плоских гранях
-        sun.shadow.bias = SUN_SHADOW_BIAS;
-        sun.shadow.normalBias = SUN_SHADOW_NORMAL_BIAS;
         scene.add(sun);
+        // SHADOW-BOUNDS-400: цель солнца в сцене — область теней следует за видом (позиция, цель, камера
+        // тени, bias — applyShadowFrustum в цикле отрисовки)
+        scene.add(sun.target);
 
         const fill = new THREE.DirectionalLight(FILL_COLOR, FILL_INTENSITY);
         fill.position.copy(FILL_POS);
@@ -266,6 +263,20 @@ export function useThreeInit(
         ground.position.z = GROUND_Z;
         ground.receiveShadow = true;
         scene.add(ground);
+        let shadowState: ShadowFrustum | null = null;
+        let shadowKey = "";
+        const updateShadows = (target: THREE.Vector3, viewDist: number) => {
+            const key = `${target.x},${target.y},${target.z},${viewDist}`;
+            if (key === shadowKey) return;
+            shadowKey = key;
+            const sf = shadowFrustumFor(target, viewDist, SUN_SHADOW_SIZE);
+            if (sameShadowFrustum(shadowState, sf)) return;
+            shadowState = sf;
+            applyShadowFrustum(sun, ground, GRID_SIZE, sf);
+            container.dataset.shadowHalf = String(Math.round(sf.half));
+            container.dataset.shadowCenter = `${Math.round(sf.center.x)},${Math.round(sf.center.y)}`;
+        };
+        updateShadows(DEFAULT_CAM_TARGET, DEFAULT_CAM_POS.distanceTo(DEFAULT_CAM_TARGET));
 
         // Axes helper
         const axes = new THREE.AxesHelper(AXES_SIZE);
@@ -302,7 +313,11 @@ export function useThreeInit(
 
         // SELECTION-OUTLINE: кайма выделенных (OutlinePass поверх канваса, буферы — в CSS px)
         const outline = new SelectionOutlinePass(w, h, scene, camera);
+        // CSG-GROUP-UI: кайма группы A (тёплая) — рисуется до каймы выделенных (B)
+        const outlineA = new SelectionOutlinePass(w, h, scene, camera, GROUP_A_OUTLINE);
+        const outlinePasses = [outlineA, outline];
         let outlineCount = -1;
+        let outlineACount = -1;
 
         const ro = new ResizeObserver(() => {
             const cw = container.clientWidth;
@@ -314,6 +329,7 @@ export function useThreeInit(
             camera.aspect = cw / ch;
             camera.updateProjectionMatrix();
             outline.setSize(Math.max(1, cw), Math.max(1, ch));
+            outlineA.setSize(Math.max(1, cw), Math.max(1, ch));
         });
         ro.observe(container);
 
@@ -361,6 +377,8 @@ export function useThreeInit(
                 viewHeightMm: viewHeightAt(CAMERA_FOV, viewDist),
                 viewportHeightPx: container.clientHeight || renderer.domElement.clientHeight,
             });
+            // SHADOW-BOUNDS-400: тени — у центра вида, область по отдалению камеры
+            updateShadows(controls.target, viewDist);
             if (!gridState || gs.step !== gridState.step || Math.abs(gs.radius - gridState.radius) > 1
                 || Math.abs(gs.center.x - gridState.center.x) > 0.5 || Math.abs(gs.center.y - gridState.center.y) > 0.5) {
                 gridState = gs;
@@ -371,10 +389,17 @@ export function useThreeInit(
             }
             // SELECTION-OUTLINE: есть выделенные — кайма вокруг них; нет — обычный кадр
             selectionOutlineTargets(outlineIdsRef.current, meshMapRef.current, outline.selectedObjects);
-            const outlined = renderWithSelectionOutline(renderer, scene, activeCam, outline) ? outline.selectedObjects.length : 0;
+            selectionOutlineTargets(groupAIdsRef.current, meshMapRef.current, outlineA.selectedObjects);
+            const drawn = renderWithSelectionOutline(renderer, scene, activeCam, outlinePasses);
+            const outlined = drawn ? outline.selectedObjects.length : 0;
             if (outlined !== outlineCount) {
                 outlineCount = outlined;
                 container.dataset.outlineCount = String(outlined);
+            }
+            const outlinedA = drawn ? outlineA.selectedObjects.length : 0;
+            if (outlinedA !== outlineACount) {
+                outlineACount = outlinedA;
+                container.dataset.outlineACount = String(outlinedA);
             }
             const now = performance.now();
             fpsRef.current.frames++;
@@ -398,6 +423,7 @@ export function useThreeInit(
             if (rafRef.current) cancelAnimationFrame(rafRef.current);
             ro.disconnect();
             outline.dispose();
+            outlineA.dispose();
             renderer.dispose();
             if (container.contains(renderer.domElement))
                 container.removeChild(renderer.domElement);

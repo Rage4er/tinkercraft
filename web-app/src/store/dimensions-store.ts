@@ -2,7 +2,9 @@
 // dimensions-store.ts — слой размеров (DIMENSIONS)
 // ============================================================
 // Размеры — АННОТАЦИИ, а не шаги: живут отдельно от `document-store` (не в `operations` /
-// `historyIndex`), undo / redo их не трогает. Объекты, к которым привязан размер, undo может
+// `historyIndex`). Свой стек отмены (DIMENSION-UNDO): создание, удаление, стиль размера — записи
+// `undoStack` / `redoStack` с позицией истории документа; Ctrl+Z / Ctrl+Y чередуют их с шагами
+// документа — `dimension-undo.ts`. Объекты, к которым привязан размер, undo может
 // убрать и вернуть — размер в это время просто не виден (`isDimensionAlive`), id объектов при
 // перестроении из истории сохраняются. В .3dtc, автосохранении и проектах — отдельным полем
 // `dimensions`. Стор чистый (не знает про сцену); действия с объектами — `dimension-mode.ts`.
@@ -14,8 +16,26 @@ import {
   type Dimension, type DimensionStyle, type LocalBox,
 } from './dimensions'
 
+/**
+ * DIMENSION-UNDO: запись стека отмены размеров. `at` — позиция истории документа (`historyIndex`), на
+ * которой сделано действие; `index` — место размера в списке; `before` / `after` — размер до и после
+ * (создание: before = null; удаление: after = null; стиль: оба).
+ */
+export interface DimensionHistoryEntry {
+  kind: 'create' | 'delete' | 'restyle'
+  at: number
+  index: number
+  before: Dimension | null
+  after: Dimension | null
+}
+
 interface DimensionsStore {
   dimensions: Dimension[]
+  /** DIMENSION-UNDO: отменяемые действия с размерами (последнее — в конце). */
+  undoStack: DimensionHistoryEntry[]
+  /** DIMENSION-UNDO: отменённые (последнее отменённое — в конце). */
+  redoStack: DimensionHistoryEntry[]
+  setDimensionHistory: (undoStack: DimensionHistoryEntry[], redoStack: DimensionHistoryEntry[]) => void
   /** Слой «Размеры» виден (кнопка тулбара «Показать / скрыть размеры»). */
   showDimensions: boolean
   /** Выделенный размер (клик по нему во вьюпорте / в списке) — Delete удаляет его. */
@@ -29,12 +49,15 @@ interface DimensionsStore {
   /** Перепривязать концы (точки в системах своих объектов). */
   updateDimensionPoints: (id: string, a: { point: Vec3; box: LocalBox }, b: { point: Vec3; box: LocalBox }) => void
   selectDimension: (id: string | null) => void
-  /** Заменить слой целиком (открытие файла / проекта, восстановление сессии). */
+  /** Заменить слой целиком (открытие файла / проекта, восстановление сессии); стек отмены размеров — пуст. */
   setDimensions: (dims: Dimension[]) => void
 }
 
 export const useDimensionsStore = create<DimensionsStore>((set, get) => ({
   dimensions: [],
+  undoStack: [],
+  redoStack: [],
+  setDimensionHistory: (undoStack, redoStack) => set({ undoStack, redoStack }),
   showDimensions: true,
   selectedDimensionId: null,
 
@@ -71,5 +94,5 @@ export const useDimensionsStore = create<DimensionsStore>((set, get) => ({
 
   selectDimension: (id) => set({ selectedDimensionId: id }),
 
-  setDimensions: (dims) => set({ dimensions: dims, selectedDimensionId: null }),
+  setDimensions: (dims) => set({ dimensions: dims, selectedDimensionId: null, undoStack: [], redoStack: [] }),
 }))

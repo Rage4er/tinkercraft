@@ -21,6 +21,7 @@ import { useCsgGroupModeStore } from './csg-group-mode'
 import { usePlacementModeStore } from './placement-mode'
 import { useDimensionsStore } from './dimensions-store'
 import { anchorOf, newDimensionId, type Dimension, type DimensionStyle } from './dimensions'
+import { recordDimensionChange } from './dimension-undo'
 
 /** Точка, выбранная в режиме: объект и мировая точка на нём (с привязкой). */
 export interface DimensionPick { objectId: string; point: Vec3 }
@@ -65,21 +66,33 @@ export function createDimension(a: DimensionPick, b: DimensionPick): Dimension |
     offset, style: { ...style },
   }
   useDimensionsStore.getState().addDimension(dim)
+  recordDimensionChange('create', null, dim, useDimensionsStore.getState().dimensions.length - 1)
   markModified()
   return dim
 }
 
 /** Удалить размер (корзина в списке / панели, Delete при выделенном размере). */
 export function deleteDimension(id: string): void {
-  if (!useDimensionsStore.getState().dimensions.some((d) => d.id === id)) return
+  const list = useDimensionsStore.getState().dimensions
+  const index = list.findIndex((d) => d.id === id)
+  if (index < 0) return
+  const before = list[index]
   useDimensionsStore.getState().removeDimension(id)
+  recordDimensionChange('delete', before, null, index)   // DIMENSION-UNDO: Ctrl+Z вернёт его
   markModified()
 }
 
 /** Стиль / отступ размера (панель размера, «Применить к выбранному»). */
 export function restyleDimension(id: string, patch: Partial<DimensionStyle> & { offset?: number }): void {
-  if (!useDimensionsStore.getState().dimensions.some((d) => d.id === id)) return
+  const list = useDimensionsStore.getState().dimensions
+  const index = list.findIndex((d) => d.id === id)
+  if (index < 0) return
+  const before = list[index]
   useDimensionsStore.getState().setDimensionStyle(id, patch)
+  const after = useDimensionsStore.getState().dimensions.find((d) => d.id === id) ?? null
+  if (after && JSON.stringify({ s: after.style, o: after.offset }) !== JSON.stringify({ s: before.style, o: before.offset })) {
+    recordDimensionChange('restyle', before, after, index)
+  }
   markModified()
 }
 

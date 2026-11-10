@@ -10,11 +10,11 @@
 // The cache is a plain module-level Map — NOT part of Zustand state — so
 // updating it never triggers React re-renders.
 //
-// BuildTree integration: we also cache the tree nodes alongside objects
-// so that undo/redo restores both the scene objects AND the build tree.
+// Дерево (Build Tree) в снимках НЕ хранится (CLEANUP-TREE-SNAPSHOT): undo / redo всегда
+// перестраивают его из операций (`rebuildBuildTree`, CYCLE-CSG-RELOAD), а прежние снимки дерева
+// писались на каждом шаге и нигде не читались.
 
 import type { SceneObject } from '../csg/types'
-import type { TreeNode } from '../csg/types'
 
 /**
  * Maximum number of snapshots to keep in cache.
@@ -24,30 +24,6 @@ import type { TreeNode } from '../csg/types'
 const MAX_CACHE_SIZE = 50
 
 const cache = new Map<number, Record<string, SceneObject>>()
-
-/** Tree node data stored alongside snapshot for tree restoration */
-interface SnapshotTree {
-  nodes: Array<{
-    id: string
-    type: TreeNode['type']
-    shapeType?: string
-    params?: Record<string, number>
-    localTransform?: { x: number; y: number; z: number; rotX: number; rotY: number; rotZ: number; scaleX: number; scaleY: number; scaleZ: number }
-    /** NESTED-MOVED-EDIT: TRS₀ boolean-узла */
-    originTransform?: { x: number; y: number; z: number; rotX: number; rotY: number; rotZ: number; scaleX: number; scaleY: number; scaleZ: number }
-    // FIX (MED-18-9): Use ArrayLike<number> to accept both TypedArray and number[]
-    vertices?: ArrayLike<number>
-    indices?: ArrayLike<number>
-    normals?: ArrayLike<number>
-    operation?: 'union' | 'subtract' | 'intersect'
-    children?: string[]
-    groupA?: number
-    parentId?: string
-  }>
-}
-
-/** Tree data stored per snapshot index */
-const treeCache = new Map<number, SnapshotTree>()
 
 /**
  * Enforce cache eviction: if cache exceeds MAX_CACHE_SIZE, remove oldest entries.
@@ -66,39 +42,9 @@ function enforceCacheLimit(map: Map<number, unknown>): void {
 }
 
 /**
- * Serialize tree nodes to plain objects for snapshot storage.
- * Excludes cached fields (cachedMesh, cachedBBox, cacheHash).
- */
-function serializeTree(nodes: TreeNode[]): SnapshotTree {
-  const nodeArray: SnapshotTree['nodes'] = []
-  for (const node of nodes) {
-    // FIX (MED-18-9): Keep TypedArrays as-is instead of converting to Array.
-    // structuredClone (used by Map operations) handles TypedArrays natively,
-    // and restoring via new Float32Array(arraylike) works for both types.
-    nodeArray.push({
-      id: node.id,
-      type: node.type,
-      shapeType: node.shapeType,
-      params: node.params as Record<string, number> | undefined,
-      localTransform: node.localTransform,
-      originTransform: node.originTransform,
-      vertices: node.vertices ? (node.vertices as Float32Array) : undefined,
-      indices: node.indices ? (node.indices as Uint32Array) : undefined,
-      normals: node.normals ? (node.normals as Float32Array) : undefined,
-      operation: node.operation,
-      children: node.children,
-      groupA: node.groupA,
-      parentId: node.parentId,
-    })
-  }
-  return { nodes: nodeArray }
-}
-
-/**
  * Cache the objects dictionary at the given history index.
  * Automatically invalidates any snapshots for indices > `index`
  * (history was truncated by a new operation after undo).
- * Also caches the current build tree state.
  */
 export function cacheSnapshot(
   index: number,
@@ -109,20 +55,6 @@ export function cacheSnapshot(
     if (key > index) cache.delete(key)
   }
   enforceCacheLimit(cache)
-}
-
-/**
- * Cache the build tree state at the given history index.
- */
-export function cacheTreeSnapshot(
-  index: number,
-  nodes: TreeNode[],
-): void {
-  treeCache.set(index, serializeTree(nodes))
-  for (const key of treeCache.keys()) {
-    if (key > index) treeCache.delete(key)
-  }
-  enforceCacheLimit(treeCache)
 }
 
 /**
@@ -137,18 +69,7 @@ export function getCachedSnapshot(
   return cache.get(index)
 }
 
-/**
- * Returns the cached tree snapshot for the given index, or `undefined`.
- */
-export function getCachedTreeSnapshot(
-  index: number,
-): SnapshotTree | undefined {
-  // FIX (LOW-18-10): Return without delete/re-insert — unnecessary overhead.
-  return treeCache.get(index)
-}
-
 /** Clear all cached snapshots (used on clearScene, openProject, loadFromProject). */
 export function clearSnapshots(): void {
   cache.clear()
-  treeCache.clear()
 }
