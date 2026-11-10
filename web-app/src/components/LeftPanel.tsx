@@ -3,6 +3,10 @@ import { useTranslation } from "react-i18next";
 import Section from "./Section";
 import Timeline from "./Timeline";
 import ComponentTree, { displayName } from "./ComponentTree";
+import DimensionList from "./DimensionList";
+import { useDimensionsStore } from "../store/dimensions-store";
+import { useDocumentStore } from "../store/document-store";
+import { isDimensionAlive } from "../store/dimensions";
 import { OP_FILTER_LABELS } from "../constants";
 import { ALL_SHAPES } from "../constants.tsx";
 import type { TinkerCraftOperation, SceneObject } from "../csg/types";
@@ -55,6 +59,10 @@ export default function LeftPanel({
 }) {
   const { t } = useTranslation();
   const placing = usePlacementModeStore((st) => st.placementMode?.shapeType ?? null);
+  // DIMENSIONS: в счётчике — видимые размеры (объекты на месте), как в списке
+  const dimensions = useDimensionsStore((st) => st.dimensions);
+  const docObjects = useDocumentStore((st) => st.objects);
+  const dimensionCount = dimensions.filter((d) => isDimensionAlive(d, docObjects)).length;
 
   // FIX (LOW-18-31): Remove useMemo — ALL_SHAPES has only 8 elements, memo overhead > benefit
   const filteredShapes = shapeSearch.trim()
@@ -201,6 +209,11 @@ export default function LeftPanel({
           filters={tlFilters}
           onEdit={onTimelineEdit}
         />
+      </Section>
+
+      {/* DIMENSIONS: размеры — список, выделение, корзина */}
+      <Section title={t("dimensions.section")} badge={dimensionCount}>
+        <DimensionList />
       </Section>
     </div>
   );

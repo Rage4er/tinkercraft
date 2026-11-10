@@ -143,6 +143,9 @@ export const TOOLTIP_DATA: Record<string, TooltipData> = {
   // --- Ruler ---
   ruler: { labelKey: 'tools.ruler', shortcut: 'L', descriptionKey: 'tooltips.ruler' },
 
+  // --- DIMENSIONS ---
+  dimension: { labelKey: 'dimensions.button', shortcut: 'D', descriptionKey: 'tooltips.dimension' },
+
   // --- Mirror ---
   mirror_yz: { labelKey: 'mirror.yz', shortcut: 'M', descriptionKey: 'tooltips.mirrorYz' },
   mirror_xz: { labelKey: 'mirror.xz', shortcut: 'N', descriptionKey: 'tooltips.mirrorXz' },

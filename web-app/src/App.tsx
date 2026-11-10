@@ -15,6 +15,11 @@ import PropertiesPanel from "./components/PropertiesPanel";
 import ChildPropertiesPanel from "./components/ChildPropertiesPanel";
 import StepPanel from "./components/StepPanel";
 import AlignPanel from "./components/AlignPanel";
+import DimensionPanel from "./components/DimensionPanel";
+import DimensionSettingsModal from "./components/DimensionSettingsModal";
+import { useDimensionModeStore } from "./store/dimension-mode";
+import { useDimensionsStore } from "./store/dimensions-store";
+import { useDimensionMode } from "./hooks/useDimensionMode";
 import { useAlignModeStore } from "./store/align-mode";
 import { useAlignModeKeys } from "./hooks/useAlignModeKeys";
 import { useDocumentStore, canUndoClear } from "./store/document-store";
@@ -62,6 +67,7 @@ export default function App() {
     showTextModal, setShowTextModal,
     previewObject, setPreviewObject,
     mirrorPreviewPlane, setMirrorPreviewPlane,
+    showDimensionSettings, setShowDimensionSettings,
   } = useUiStore(
     useShallow(s => ({
       fps: s.fps, setFps: s.setFps,
@@ -81,6 +87,7 @@ export default function App() {
       showTextModal: s.showTextModal, setShowTextModal: s.setShowTextModal,
       previewObject: s.previewObject, setPreviewObject: s.setPreviewObject,
       mirrorPreviewPlane: s.mirrorPreviewPlane, setMirrorPreviewPlane: s.setMirrorPreviewPlane,
+      showDimensionSettings: s.showDimensionSettings, setShowDimensionSettings: s.setShowDimensionSettings,
     })),
   );
 
@@ -204,7 +211,7 @@ export default function App() {
     objects, selectedIds, busy, deleteSelected, undo, redo, selectObjects,
     saveProject, openProject, clearSelection, copySelected, pasteClipboard,
     mirrorSelected,
-    modalOpen: showTextModal || showPM || showClearConfirm,
+    modalOpen: showTextModal || showPM || showClearConfirm || showDimensionSettings,
   };
   const kbRef = useRef(kbState);
   kbRef.current = kbState;
@@ -254,6 +261,10 @@ export default function App() {
           setRulerActive((r) => !r);
           setRulerDist(null);
           break;
+        // DIMENSIONS: D — режим «Размер» (вход / выход)
+        case "dimension":
+          useDimensionModeStore.getState().toggleDimensionMode();
+          break;
         case "escape":
           setGizmoMode("none");
           kb.clearSelection();
@@ -300,7 +311,12 @@ export default function App() {
   // PLUG-AND-PLAY: клик по фигуре палитры — режим размещения (превью → клик по грани / сетке,
   // X / Y / Z — плоскость оси, Enter — поставить, Esc / правый клик — отмена)
   const handleAddShape = usePlacementModeStore((s) => s.startPlacement);
-  usePlacementMode(showTextModal || showPM || showClearConfirm);
+  usePlacementMode(showTextModal || showPM || showClearConfirm || showDimensionSettings);
+  // DIMENSIONS: режим «Размер» (Esc), Delete по выделенному размеру, согласованность режимов
+  useDimensionMode(showTextModal || showPM || showClearConfirm || showDimensionSettings);
+  const dimensionActive = useDimensionModeStore((s) => s.dimensionMode !== null);
+  const dimensionsVisible = useDimensionsStore((s) => s.showDimensions);
+  const hasSelectedDimension = useDimensionsStore((s) => s.selectedDimensionId !== null);
 
   // Фаза 9.1: сброс выбора ребёнка CSG, если узел/выделение исчезли
   useSelectedChildGuard();
@@ -463,6 +479,9 @@ export default function App() {
         />
       )}
 
+      {/* DIMENSIONS: «Настройки размеров» */}
+      {showDimensionSettings && <DimensionSettingsModal onClose={() => setShowDimensionSettings(false)} />}
+
       {/* ── TOOLBAR ── */}
       <Toolbar
         objectCount={objectList.length}
@@ -475,6 +494,11 @@ export default function App() {
         cameraMode={cameraMode}
         gizmoMode={gizmoMode}
         rulerActive={rulerActive}
+        dimensionActive={dimensionActive}
+        dimensionsVisible={dimensionsVisible}
+        onDimensionMode={() => useDimensionModeStore.getState().toggleDimensionMode()}
+        onDimensionSettings={() => setShowDimensionSettings(true)}
+        onToggleDimensions={() => useDimensionsStore.getState().toggleShowDimensions()}
         canMirror={canMirror}
         canAlign={canAlign}
         alignActive={alignActive}
@@ -621,7 +645,7 @@ export default function App() {
         <div className="panel-right">
           <div className="props-header">{t("properties.header")}</div>
 
-          {alignActive ? <AlignPanel /> : hasSelectedStep ? <StepPanel /> : hasSelectedChild ? <ChildPropertiesPanel /> : <PropertiesPanel
+          {alignActive ? <AlignPanel /> : hasSelectedDimension ? <DimensionPanel /> : hasSelectedStep ? <StepPanel /> : hasSelectedChild ? <ChildPropertiesPanel /> : <PropertiesPanel
             firstSelected={firstSelected}
             busy={busy}
             selectedIds={selectedIds}

@@ -44,6 +44,8 @@ export interface SnapResult {
   snapDistance: number;
   /** Расстояние от курсора до точки (в мировых единицах, 0 если raycast не попал). */
   cursorDistance: number;
+  /** DIMENSIONS: объект, на котором точка (меш под лучом). */
+  objectId?: string;
 }
 
 /**
@@ -478,6 +480,7 @@ export function findNearestSnap(
       type: best.type,
       snapDistance: best.threshold,
       cursorDistance,
+      objectId: hitMesh.userData.objectId as string | undefined,
     };
   }
 
@@ -487,6 +490,7 @@ export function findNearestSnap(
     type: null,
     snapDistance: Infinity,
     cursorDistance,
+    objectId: hitMesh.userData.objectId as string | undefined,
   };
 }
 

@@ -33,7 +33,8 @@
     "e2e:n-ary-csg": "node e2e/n-ary-csg.mjs",
     "e2e:csg-group-fix": "node e2e/csg-group-fix.mjs",
     "e2e:double-click-timing": "node e2e/double-click-timing.mjs",
-    "e2e:plug-and-play": "node e2e/plug-and-play.mjs"
+    "e2e:plug-and-play": "node e2e/plug-and-play.mjs",
+    "e2e:dimensions": "node e2e/dimensions.mjs"
   },
   "dependencies": {
     "i18next": "^26.3.6",

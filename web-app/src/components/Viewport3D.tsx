@@ -14,6 +14,8 @@ import {
   useRulerMode,
   useMirrorPreview,
   usePlacementPreview,
+  useDimensionsRender,
+  useDimensionModePreview,
   type GizmoMode,
   setGridColor,
 } from "./viewport-hooks";
@@ -23,6 +25,12 @@ import { useAlignModeStore } from "../store/align-mode";
 import { pickFace, planarFaceTriangles } from "./align-picking";
 import { usePlacementModeStore } from "../store/placement-mode";
 import type { PlacementAim } from "../store/placement";
+import { useDimensionModeStore, type DimensionHover } from "../store/dimension-mode";
+import { useDimensionsStore } from "../store/dimensions-store";
+import { useDocumentStore } from "../store/document-store";
+import { isDimensionAlive } from "../store/dimensions";
+import { findNearestSnap } from "./snap-utils";
+import { pickDimension } from "./dimension-render";
 import { fitDistance, FIT_DIR } from "./camera-fit";
 
 export type { GizmoMode } from "./viewport-hooks";
@@ -65,6 +73,10 @@ function axisPlanePositions(axis: "X" | "Y" | "Z"): Float32Array {
  * перерисовки.
  */
 const isPlacing = () => usePlacementModeStore.getState().placementMode !== null;
+/** DIMENSIONS: идёт ли режим «Размер» (из стора — как `isPlacing`). */
+const isDimensioning = () => useDimensionModeStore.getState().dimensionMode !== null;
+/** DIMENSIONS: наведение в режиме «Размер» — не чаще раза за столько мс (последнее — догоняется). */
+const DIMENSION_HOVER_THROTTLE_MS = 50;
 
 function disposeHighlight(scene: THREE.Scene, mesh: THREE.Mesh): void {
   scene.remove(mesh);
@@ -282,6 +294,56 @@ export default function Viewport3D({
   );
   useEffect(() => clearPlacementAimTimer, [clearPlacementAimTimer]);
 
+  // ---- DIMENSIONS: слой размеров и режим «Размер» ----
+  const dimRootRef = useDimensionsRender(sceneRef, sceneReady);
+  useDimensionModePreview(sceneRef);
+  const dimMode = useDimensionModeStore((s) => s.dimensionMode);
+  const dimensionActive = dimMode !== null;
+  const dimensionsList = useDimensionsStore((s) => s.dimensions);
+  const showDimensions = useDimensionsStore((s) => s.showDimensions);
+  const docObjects = useDocumentStore((s) => s.objects);
+  const visibleDimensions = showDimensions ? dimensionsList.filter((d) => isDimensionAlive(d, docObjects)).length : 0;
+
+  /** Точка объекта под курсором с привязкой (вершина > ребро > центр окружности > грань) или null. */
+  const snapAt = useCallback(
+    (clientX: number, clientY: number): DimensionHover | null => {
+      const raycaster = rayAt(clientX, clientY);
+      const camera = activeCameraRef.current ?? cameraRef.current;
+      const container = containerRef.current;
+      if (!raycaster || !camera || !container) return null;
+      const rect = container.getBoundingClientRect();
+      const ndc = new THREE.Vector2(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
+      const snap = findNearestSnap(raycaster, meshMapRef, camera, ndc, shapeTypeMapRef.current);
+      if (!snap?.objectId) return null;
+      return { objectId: snap.objectId, point: { x: snap.point.x, y: snap.point.y, z: snap.point.z }, snap: snap.type };
+    },
+    [rayAt, activeCameraRef, cameraRef, containerRef, meshMapRef, shapeTypeMapRef],
+  );
+  const dimHoverAtRef = useRef(0);
+  const dimHoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dimHoverPosRef = useRef<{ x: number; y: number } | null>(null);
+  const clearDimHoverTimer = useCallback(() => {
+    if (dimHoverTimerRef.current) clearTimeout(dimHoverTimerRef.current);
+    dimHoverTimerRef.current = null;
+  }, []);
+  const scheduleDimHover = useCallback(
+    (clientX: number, clientY: number) => {
+      dimHoverPosRef.current = { x: clientX, y: clientY };
+      const run = () => {
+        dimHoverTimerRef.current = null;
+        const pos = dimHoverPosRef.current;
+        if (!pos || !isDimensioning()) return;
+        dimHoverAtRef.current = performance.now();
+        useDimensionModeStore.getState().setHover(snapAt(pos.x, pos.y));
+      };
+      const wait = DIMENSION_HOVER_THROTTLE_MS - (performance.now() - dimHoverAtRef.current);
+      if (wait <= 0) { clearDimHoverTimer(); run(); }
+      else if (!dimHoverTimerRef.current) dimHoverTimerRef.current = setTimeout(run, wait);
+    },
+    [snapAt, clearDimHoverTimer],
+  );
+  useEffect(() => clearDimHoverTimer, [clearDimHoverTimer]);
+
   // подсветка грани под курсором (вся плоская грань — то, что встанет в плоскость)
   useEffect(() => {
     const scene = sceneRef.current;
@@ -322,7 +384,7 @@ export default function Viewport3D({
     const tc = transformCtRef.current as unknown as TC | null;
     if (!tc) return;
     // PLUG-AND-PLAY: на время размещения гизмо скрыт (клик — место фигуры, а не захват гизмо)
-    if (gizmoMode === "none" || selectedIds.size === 0 || placementActive) {
+    if (gizmoMode === "none" || selectedIds.size === 0 || placementActive || dimensionActive) {
       tc.detach();
       return;
     }
@@ -333,7 +395,7 @@ export default function Viewport3D({
     }
     tc.setMode(gizmoMode);
     tc.attach(entry.pivot);
-  }, [gizmoMode, selectedIds, transformCtRef, meshMapRef, placementActive]);
+  }, [gizmoMode, selectedIds, transformCtRef, meshMapRef, placementActive, dimensionActive]);
 
   // ---- TransformControls mouseUp handler ----
   useEffect(() => {
@@ -484,6 +546,8 @@ export default function Viewport3D({
 
       // PLUG-AND-PLAY: превью под курсором (без нажатых кнопок — при перетаскивании вращается камера)
       if (isPlacing() && e.buttons === 0) schedulePlacementAim(e.clientX, e.clientY);
+      // DIMENSIONS: точка с привязкой под курсором (маркер, превью A → курсор)
+      if (isDimensioning() && e.buttons === 0) scheduleDimHover(e.clientX, e.clientY);
 
       // ALIGN-UI-REVIT: подсветка грани при наведении (без нажатых кнопок, throttle)
       if (alignActiveRef.current && e.buttons === 0) {
@@ -500,16 +564,21 @@ export default function Viewport3D({
       const dy = e.clientY - pointerDownPos.current.y;
       if (Math.hypot(dx, dy) > DRAG_THRESHOLD_PX) isDraggingRef.current = true;
     },
-    [rulerMode, handleRulerPointerMove, cameraRef, containerRef, pickAt, schedulePlacementAim],
+    [rulerMode, handleRulerPointerMove, cameraRef, containerRef, pickAt, schedulePlacementAim, scheduleDimHover],
   );
 
   // PLUG-AND-PLAY: курсор ушёл из вьюпорта — превью скрыто (Enter — рядом с прошлыми)
   const handlePointerLeave = useCallback(() => {
+    if (isDimensioning()) {
+      clearDimHoverTimer();
+      dimHoverPosRef.current = null;
+      useDimensionModeStore.getState().setHover(null);
+    }
     if (!isPlacing()) return;
     clearPlacementAimTimer();
     placementAimPosRef.current = null;
     usePlacementModeStore.getState().aim(null);
-  }, [clearPlacementAimTimer]);
+  }, [clearPlacementAimTimer, clearDimHoverTimer]);
 
   const handlePointerUp = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
@@ -546,6 +615,25 @@ export default function Viewport3D({
         return;
       }
 
+      // DIMENSIONS: в режиме «Размер» клик — точка (A, затем B → размер), правый клик — выход;
+      // перетаскивание — камера. Выделение не меняется.
+      if (isDimensioning()) {
+        const wasDrag = isDraggingRef.current;
+        isDraggingRef.current = false;
+        if (wasDrag) return;
+        const mode = useDimensionModeStore.getState();
+        if (e.button === 2) {
+          mode.exitDimensionMode();
+          return;
+        }
+        if (e.button !== 0) return;
+        clearDimHoverTimer();
+        const pick = snapAt(e.clientX, e.clientY);
+        devLogEvent('dimension', 'click', { pick: pick ? `${pick.objectId}:${pick.snap}` : 'none' });
+        if (pick) mode.clickPoint({ objectId: pick.objectId, point: pick.point });
+        return;
+      }
+
       // ALIGN-UI-REVIT: в режиме клик — выбор грани (A, затем B), правый клик — выход;
       // перетаскивание остаётся вращением/панорамой камеры. Выделение не меняется.
       if (alignActiveRef.current) {
@@ -576,6 +664,16 @@ export default function Viewport3D({
           devLogEvent('raycast', 'start', { ndc: fmtPoint2({ x, y }) });
           const raycaster = new THREE.Raycaster();
           raycaster.setFromCamera(new THREE.Vector2(x, y), camera);
+          // DIMENSIONS: размер рисуется поверх объектов — клик по нему выделяет размер
+          const dims = useDimensionsStore.getState();
+          const dimId = dimRootRef.current ? pickDimension(raycaster, dimRootRef.current) : null;
+          if (dimId) {
+            devLogEvent('select', 'dimension', { id: dimId });
+            dims.selectDimension(dimId);
+            onSelect(null, false);
+            return;
+          }
+          if (dims.selectedDimensionId) dims.selectDimension(null);
           const meshes: THREE.Mesh[] = [];
           for (const entry of meshMapRef.current.values()) {
             if (entry.mesh.visible) meshes.push(entry.mesh);
@@ -619,6 +717,9 @@ export default function Viewport3D({
       pickAt,
       aimAt,
       clearPlacementAimTimer,
+      snapAt,
+      clearDimHoverTimer,
+      dimRootRef,
     ],
   );
 
@@ -630,8 +731,12 @@ export default function Viewport3D({
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerLeave={handlePointerLeave}
-      onContextMenu={(e) => { if (alignActiveRef.current || isPlacing()) e.preventDefault(); }}
-      style={alignActive || placementActive ? { cursor: "crosshair" } : undefined}
+      onContextMenu={(e) => { if (alignActiveRef.current || isPlacing() || isDimensioning()) e.preventDefault(); }}
+      style={alignActive || placementActive || dimMode ? { cursor: "crosshair" } : undefined}
+      data-dimension-mode={dimMode ? (dimMode.first ? "b" : "a") : undefined}
+      data-dimension-hover={dimMode?.hover ? `${dimMode.hover.objectId}|${dimMode.hover.snap ?? ""}|${[dimMode.hover.point.x, dimMode.hover.point.y, dimMode.hover.point.z].map((v) => v.toFixed(4)).join(",")}` : undefined}
+      data-dimensions-visible={showDimensions ? "1" : "0"}
+      data-dimension-count={visibleDimensions}
       data-placement={placement?.shapeType}
       data-placement-plane={placement?.preview ? (placement.preview.plane.kind === "axis" ? placement.preview.plane.axis : placement.preview.plane.kind) : undefined}
       data-placement-face={placement?.preview?.plane.kind === "face" ? placement.preview.plane.objectId : undefined}

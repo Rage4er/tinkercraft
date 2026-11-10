@@ -204,6 +204,17 @@ export const RulerIcon = (p: any) => (
   </Icon>
 )
 
+/* ===== DIMENSIONS · Размеры ===== */
+/** Размер: размерная линия со стрелками между выносными линиями, число над ней. */
+export const DimensionIcon = (p: any) => (
+  <Icon {...p}>
+    <path {...line} d="M10 16v34M54 16v34" />
+    <path {...line} d="M10 40h44" />
+    <path {...face(0.9)} strokeWidth={2} d="M10 40l8-5v10ZM54 40l-8-5v10Z" />
+    <path {...face(0.25)} d="M22 14h20v14H22Z" />
+  </Icon>
+)
+
 /* ===== Группа 7 · Зеркало ===== */
 export const MirrorYZIcon = (p: any) => (
   <Icon {...p}>

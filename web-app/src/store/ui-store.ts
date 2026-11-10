@@ -8,6 +8,7 @@ import { create } from 'zustand/react'
 import type { GizmoMode } from '../components/Viewport3D'
 import type { SceneObject } from '../csg/types'
 import { DEFAULT_FILTERS } from '../constants'
+import { DEFAULT_DIMENSION_DEFAULTS, clampDimensionOffset, clampDimensionSize, type DimensionDefaults } from './dimensions'
 
 export interface UiStore {
   // Performance
@@ -43,6 +44,12 @@ export interface UiStore {
   setRulerActive: (v: boolean | ((prev: boolean) => boolean)) => void
   rulerDist: number | null
   setRulerDist: (v: number | null) => void
+
+  // DIMENSIONS: стиль и отступ новых размеров (окно «Настройки размеров»)
+  dimensionDefaults: DimensionDefaults
+  setDimensionDefaults: (v: DimensionDefaults) => void
+  showDimensionSettings: boolean
+  setShowDimensionSettings: (v: boolean) => void
 
   // Modals
   showPM: boolean
@@ -119,6 +126,13 @@ export const useUiStore = create<UiStore>((set) => ({
     set((s) => ({ rulerActive: typeof v === 'function' ? v(s.rulerActive) : v })),
   rulerDist: null,
   setRulerDist: (v) => set({ rulerDist: v }),
+
+  dimensionDefaults: DEFAULT_DIMENSION_DEFAULTS,
+  setDimensionDefaults: (v) => set({
+    dimensionDefaults: { offset: clampDimensionOffset(v.offset), style: { ...v.style, size: clampDimensionSize(v.style.size), units: 'mm' } },
+  }),
+  showDimensionSettings: false,
+  setShowDimensionSettings: (v) => set({ showDimensionSettings: v }),
 
   showPM: false,
   setShowPM: (v) => set({ showPM: v }),

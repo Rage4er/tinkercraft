@@ -15,6 +15,7 @@ export type HotkeyAction =
   | 'gizmoTranslate' | 'gizmoRotate' | 'gizmoScale' | 'escape'
   | 'ruler' | 'mirrorYZ' | 'mirrorXZ' | 'mirrorXY'
   | 'union' | 'subtract' | 'intersect'
+  | 'dimension'
 
 export interface KeyLike {
   code: string
@@ -34,6 +35,7 @@ const PLAIN_KEYS: Record<string, HotkeyAction> = {
   KeyF: 'fitView', KeyH: 'homeView',
   KeyG: 'gizmoTranslate', KeyR: 'gizmoRotate', KeyS: 'gizmoScale',
   KeyL: 'ruler',
+  KeyD: 'dimension',
   KeyM: 'mirrorYZ', KeyN: 'mirrorXZ', KeyB: 'mirrorXY',
   KeyU: 'union', KeyX: 'subtract', KeyI: 'intersect',
   Tab: 'toggleCamera',
@@ -43,7 +45,7 @@ const PLAIN_KEYS: Record<string, HotkeyAction> = {
 export const NO_REPEAT: ReadonlySet<HotkeyAction> = new Set<HotkeyAction>([
   'toggleCamera', 'gizmoTranslate', 'gizmoRotate', 'gizmoScale', 'ruler',
   'mirrorYZ', 'mirrorXZ', 'mirrorXY', 'union', 'subtract', 'intersect',
-  'save', 'open', 'copy', 'paste', 'fitView', 'homeView',
+  'save', 'open', 'copy', 'paste', 'fitView', 'homeView', 'dimension',
 ])
 
 export function resolveHotkey(e: KeyLike): HotkeyAction | null {

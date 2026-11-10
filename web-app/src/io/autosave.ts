@@ -3,6 +3,7 @@
 // ============================================================
 
 import type { TinkerCraftOperation } from '../csg/types'
+import type { Dimension } from '../store/dimensions'
 
 const DB_NAME = 'tinkercraft-v1'
 /** IndexedDB schema version. Bump when store structure changes to trigger migration. */
@@ -16,6 +17,8 @@ interface AutosaveEntry {
   fileName: string | null
   /** UX-AUDIT-1: были ли несохранённые изменения (в файл/проект). Старые записи — без поля */
   modified?: boolean
+  /** DIMENSIONS: слой размеров (не шаги истории). Старые записи — без поля */
+  dimensions?: Dimension[]
   savedAt: number
 }
 
@@ -42,6 +45,7 @@ export async function autosaveSession(
   historyIndex: number,
   fileName: string | null,
   modified?: boolean,
+  dimensions?: Dimension[],
 ): Promise<void> {
   try {
     const db = await openDB()
@@ -49,6 +53,7 @@ export async function autosaveSession(
       const tx = db.transaction(STORE_NAME, 'readwrite')
       const entry: AutosaveEntry = { operations, historyIndex, fileName, savedAt: Date.now() }
       if (modified !== undefined) entry.modified = modified
+      if (dimensions !== undefined) entry.dimensions = dimensions
       const req = tx.objectStore(STORE_NAME).put(entry, KEY)
       req.onsuccess = () => resolve()
       req.onerror = () => reject(req.error)

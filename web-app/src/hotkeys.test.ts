@@ -19,6 +19,7 @@ const EXPECTED: Record<string, HotkeyAction> = {
   gizmo_translate: 'gizmoTranslate', gizmo_rotate: 'gizmoRotate', gizmo_scale: 'gizmoScale', gizmo_exit: 'escape',
   ruler: 'ruler', mirror_yz: 'mirrorYZ', mirror_xz: 'mirrorXZ', mirror_xy: 'mirrorXY',
   csg_union: 'union', csg_subtract: 'subtract', csg_intersect: 'intersect',
+  dimension: 'dimension',
 }
 
 describe('resolveHotkey — UX-AUDIT-5', () => {

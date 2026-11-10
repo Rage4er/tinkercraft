@@ -5,6 +5,7 @@ import CsgButtons from "./CsgButtons";
 import type { CsgOpButtonStates } from "../store/csg-group-mode";
 import IconButton from "./IconButton";
 import ToolbarRowSplit from "./ToolbarRowSplit";
+import DimensionMenuButton from "./DimensionMenuButton";
 import { TOOLTIP_DATA, type TooltipData } from "../constants";
 import {
   OpenIcon,
@@ -43,6 +44,8 @@ export default function Toolbar({
   cameraMode,
   gizmoMode,
   rulerActive,
+  dimensionActive,
+  dimensionsVisible,
   canMirror,
   canAlign,
   alignActive,
@@ -64,6 +67,9 @@ export default function Toolbar({
   onToggleCamera,
   onGizmo,
   onToggleRuler,
+  onDimensionMode,
+  onDimensionSettings,
+  onToggleDimensions,
   onMirror,
   onPreviewMirror,
   onPreviewMirrorEnd,
@@ -82,6 +88,10 @@ export default function Toolbar({
   cameraMode: "perspective" | "orthographic";
   gizmoMode: "translate" | "rotate" | "scale" | "none";
   rulerActive: boolean;
+  /** DIMENSIONS: режим «Размер» активен */
+  dimensionActive: boolean;
+  /** DIMENSIONS: слой размеров виден */
+  dimensionsVisible: boolean;
   canMirror: boolean;
   canAlign: boolean;
   /** Режим выравнивания активен (ALIGN-UI-REVIT) */
@@ -105,6 +115,10 @@ export default function Toolbar({
   onToggleCamera: () => void;
   onGizmo: (mode: "translate" | "rotate" | "scale" | "none") => void;
   onToggleRuler: () => void;
+  /** DIMENSIONS: меню кнопки «Размер» — «Поставить размер» (режим), «Настройки размера», «Показать / скрыть размеры» */
+  onDimensionMode: () => void;
+  onDimensionSettings: () => void;
+  onToggleDimensions: () => void;
   onMirror: (plane: "XY" | "XZ" | "YZ") => void;
   onPreviewMirror: (plane: "XY" | "XZ" | "YZ") => void;
   onPreviewMirrorEnd: () => void;
@@ -122,7 +136,7 @@ export default function Toolbar({
     { id: "edit2", buttonCount: 3 },
     { id: "view", buttonCount: 3 },
     { id: "gizmo", buttonCount: 4 },
-    { id: "ruler", buttonCount: 1 },
+    { id: "ruler", buttonCount: 2 },
     { id: "mirror", buttonCount: 3 },
     { id: "align", buttonCount: 1 },
     { id: "csg", buttonCount: 3 },
@@ -203,11 +217,19 @@ export default function Toolbar({
       />
       <div className="toolbar-separator" />
 
-      {/* Group 5: Ruler */}
+      {/* Group 5: Ruler + Размер (DIMENSIONS: одна кнопка с меню — на 1366 тулбар в одну строку) */}
       <ToolbarRowSplit
         rows={getRows("ruler")}
         buttons={[
           <IconButton key="ruler" icon={<RulerIcon size={32} />} label={t("tools.ruler")} onClick={onToggleRuler} tooltip={TOOLTIP_DATA.ruler} buttonVariant={rulerActive ? "active" : "default"} />,
+          <DimensionMenuButton
+            key="dimension"
+            dimensionActive={dimensionActive}
+            dimensionsVisible={dimensionsVisible}
+            onDimensionMode={onDimensionMode}
+            onDimensionSettings={onDimensionSettings}
+            onToggleDimensions={onToggleDimensions}
+          />,
         ]}
       />
       <div className="toolbar-separator" />

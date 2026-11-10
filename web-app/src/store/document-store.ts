@@ -29,6 +29,8 @@ import { saveProject as pmSave, updateProject as pmUpdate, loadProject as pmLoad
 import { exportToStl, downloadStlBlob, StlTooLargeError } from '../io/stl-export'
 import { openStlFilePicker, parseStlFile } from '../io/stl-import'
 import { autosaveSession, restoreSession, clearAutosave } from '../io/autosave'
+import { useDimensionsStore } from './dimensions-store'
+import { sanitizeDimensions, type Dimension } from './dimensions'
 import { migrateLegacyFillet, type LegacyFilletMigration } from '../io/legacy-fillet'
 import i18n from '../i18n'
 
@@ -235,6 +237,18 @@ function cacheSnapshotWithTree(index: number, objects: Record<string, SceneObjec
 }
 
 // ---- Store ----
+
+/**
+ * DIMENSIONS: размеры для записи (файл, проект, автосохранение) — те, чьи объекты есть в документе.
+ * Слой размеров — отдельно от истории: не шаги, undo его не трогает.
+ */
+function dimensionsToSave(objects: Record<string, SceneObject>): Dimension[] {
+  return useDimensionsStore.getState().dimensions.filter((d) => objects[d.objectIdA] && objects[d.objectIdB])
+}
+/** DIMENSIONS: слой из загруженного документа — только размеры, чьи объекты есть (иначе — пусто). */
+function loadDimensions(raw: unknown, objects: Record<string, SceneObject>): void {
+  useDimensionsStore.getState().setDimensions(sanitizeDimensions(raw).filter((d) => objects[d.objectIdA] && objects[d.objectIdB]))
+}
 
 export const useDocumentStore = create<DocumentStore>((set, get) => ({
   operations: [],
@@ -958,6 +972,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const ops = mig.operations
       const loadedObjects = mig.changed ? await rebuildFromHistory(ops) : newObjects
       rebuildBuildTree(ops, loadedObjects)
+      loadDimensions(doc.dimensions, loadedObjects)
       set({ operations: ops, historyIndex: ops.length, objects: loadedObjects, selectedIds: [], fileName: picked.file.name, modified: false, busy: false, lastCsgMs: performance.now() - t0, currentProjectId: null, currentProjectName: null, clearedDocument: null })
       cacheSnapshotWithTree(ops.length, loadedObjects)
       invalidateMirrorCache()
@@ -973,6 +988,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       operations: opsToSave,
       operationsTrimmed: historyIndex < operations.length,
       fileName: fileName ?? undefined,
+      dimensions: dimensionsToSave(objects),
     })
     downloadBlob(blob, (fileName ?? 'untitled') + (fileName?.endsWith('.3dtc') ? '' : '.3dtc'))
     set({ modified: false })
@@ -1298,8 +1314,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   // ── Autosave ──
   triggerAutosave: async () => {
     if (get().busy) return
-    const { operations, historyIndex, fileName, modified } = get()
-    await autosaveSession(operations.slice(0, historyIndex), historyIndex, fileName, modified)
+    const { operations, historyIndex, fileName, modified, objects } = get()
+    await autosaveSession(operations.slice(0, historyIndex), historyIndex, fileName, modified, dimensionsToSave(objects))
   },
 
   // ── Restore autosave ──
@@ -1321,6 +1337,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const newObjects = await rebuildFromHistory(ops)
       rebuildBuildTree(ops, newObjects)
       // несохранённость — из записи (старые записи без поля: работа не в файле → «не сохранено»)
+      loadDimensions(entry.dimensions, newObjects)
       set({ operations: ops, historyIndex: idx, objects: newObjects, selectedIds: [], fileName: entry.fileName, modified: entry.modified ?? true, busy: false, lastCsgMs: performance.now() - t0, clearedDocument: null })
       cacheSnapshotWithTree(idx, newObjects)
       return true
@@ -1343,9 +1360,9 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         return
       }
       if (currentProjectId) {
-        await pmUpdate(currentProjectId, effectiveName, ops, count)
+        await pmUpdate(currentProjectId, effectiveName, ops, count, undefined, dimensionsToSave(get().objects))
       } else {
-        const meta = await pmSave(effectiveName, ops, count)
+        const meta = await pmSave(effectiveName, ops, count, undefined, dimensionsToSave(get().objects))
         set({ currentProjectId: meta.id })
       }
       set({ modified: false, currentProjectName: effectiveName })
@@ -1367,6 +1384,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const ops = migrateLoaded(record.operations).operations
       const newObjects = await rebuildFromHistory(ops)
       rebuildBuildTree(ops, newObjects)
+      loadDimensions(record.dimensions, newObjects)
       set({ operations: ops, historyIndex: ops.length, objects: newObjects, selectedIds: [], fileName: null, modified: false, busy: false, lastCsgMs: performance.now() - t0, currentProjectId: id, currentProjectName: record.name, clearedDocument: null })
       cacheSnapshotWithTree(ops.length, newObjects)
     } catch (e) { set({ busy: false }); console.error('loadFromProject:', e); notify(i18n.t('errors.loadProjectFailed'), 'error') }

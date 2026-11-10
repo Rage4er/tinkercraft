@@ -1909,3 +1909,103 @@ body {
   background: rgba(19, 19, 31, 0.5);
   pointer-events: none;
 }
+
+/* ---- DIMENSIONS: размеры ---- */
+.dim-settings-box {
+  min-width: 340px;
+  max-width: 420px;
+}
+
+.dim-settings-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.dim-settings-label {
+  flex-shrink: 0;
+}
+
+.dim-settings-select {
+  width: auto;
+  min-width: 150px;
+}
+
+.dim-kind-group {
+  display: inline-flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.dim-list-value {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+  font-size: 11px;
+}
+
+.dim-panel-actions {
+  gap: 6px;
+  justify-content: flex-start;
+}
+
+/* DIMENSIONS: меню кнопки «Размер» (в портале — у тулбара overflow: hidden) */
+.tb-menu-wrap {
+  display: inline-flex;
+}
+
+.tb-menu {
+  position: fixed;
+  z-index: 1000;
+  min-width: 220px;
+  padding: 4px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.tb-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 8px;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tb-menu-item:hover,
+.tb-menu-item:focus-visible {
+  background: var(--bg-hover);
+  outline: none;
+}
+
+.tb-menu-check {
+  width: 14px;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.tb-menu-label {
+  flex: 1;
+}
+
+.tb-menu-kbd {
+  font-size: 10px;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0 4px;
+}
