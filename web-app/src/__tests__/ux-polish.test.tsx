@@ -3,9 +3,31 @@
 // ============================================================
 // CSG-GROUP-UI: кнопки CSG (объединение / вычитание / пересечение) — в тулбаре (с CSG-GROUP-FIX),
 // в режиме нажата кнопка его операции; во вьюпорте группа A — тёплая кайма (+ тёплая подсветка),
-// группа B (выделение) — холодная синяя. Браузер — e2e/ux-polish.mjs.
+// группа B (выделение) — холодная синяя. CLEANUP-TREE-SNAPSHOT: снимков дерева больше нет (писались на
+// каждом шаге, не читались) — undo / redo перестраивают дерево из операций: на каждом шаге назад и вперёд
+// объекты и дерево — как были (реальный WASM). Браузер — e2e/ux-polish.mjs.
 
 import { describe, it, expect, vi, beforeAll, afterEach } from 'vitest'
+
+vi.mock('../csg/worker-client', async () => {
+  const bridge = await import('./worker-bridge')
+  return {
+    workerBuildShape: bridge.workerBuildShape,
+    workerBuildImportedMesh: bridge.workerBuildImportedMesh,
+    workerSyncObjects: bridge.workerSyncObjects,
+    workerSyncMesh: bridge.workerSyncMesh,
+    workerCsgBoolean: bridge.workerCsgBoolean,
+    workerCsgBooleanWithSync: bridge.workerCsgBooleanWithSync,
+    workerMirrorObject: bridge.workerMirrorObject,
+    workerRebuildScene: bridge.workerRebuildScene,
+    workerDeleteObjects: bridge.workerDeleteObjects,
+    workerClearAll: bridge.workerClearAll,
+    workerRebuildNode: bridge.workerRebuildNode,
+    isWorkerReady: bridge.isWorkerReady,
+    disposeWorker: bridge.disposeWorker,
+  }
+})
+
 import React from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { act } from 'react-dom/test-utils'
@@ -16,6 +38,10 @@ import {
   GROUP_A_OUTLINE, SELECTION_OUTLINE, DRAW_OVER_OUTLINE, SelectionOutlinePass, renderWithSelectionOutline, selectionOutlineTargets,
 } from '../components/selection-outline'
 import type { CsgOpButtonStates } from '../store/csg-group-mode'
+import { useDocumentStore } from '../store/document-store'
+import { useNotifications } from '../store/notifications'
+import * as snapshots from '../store/snapshots'
+import { clearTree, getNode } from '../csg/history-tree'
 
 beforeAll(() => {
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -149,4 +175,71 @@ describe('CSG-GROUP-UI — подсветка групп A / B во вьюпор
     expect(renderWithSelectionOutline(gl, scene, camera, [passA, passB])).toBe(false)
     expect(log).toEqual(['scene'])
   })
+})
+
+describe('CLEANUP-TREE-SNAPSHOT — undo / redo без снимков дерева', () => {
+  const st = () => useDocumentStore.getState()
+  function reset(): void {
+    useDocumentStore.setState({ objects: {}, operations: [], historyIndex: 0, selectedIds: [], busy: false })
+    useNotifications.setState({ notifications: [] })
+    snapshots.clearSnapshots(); clearTree()
+  }
+  const r = (v: number) => Math.round(v * 1000) / 1000
+  /** Состояние сцены и дерева: объекты (тип, трансформ, число вершин) + узлы дерева (тип, params, дети). */
+  function signature(): string {
+    const objs = Object.values(st().objects).sort((a, b) => a.id.localeCompare(b.id)).map((o) => {
+      const t = o.transform
+      return [o.id, o.shapeType, r(t.x), r(t.y), r(t.z), r(t.rotZ), r(t.scaleX), o.vertices.length, o.indices.length].join(':')
+    })
+    const roots = Object.values(st().objects).filter((o) => o.shapeType === 'csg').map((o) => {
+      const node = getNode(o.id)
+      const kids = (node?.children ?? []).map((k) => { const n = getNode(k); return `${k}=${n?.type}${JSON.stringify(n?.params ?? {})}` })
+      return `${o.id}<${node?.operation}|${kids.join(',')}>`
+    })
+    return [...objs, ...roots].join(' ; ')
+  }
+
+  it('снимков дерева нет: модуль снимков — только объекты (запись, чтение, очистка)', () => {
+    expect(Object.keys(snapshots).sort()).toEqual(['cacheSnapshot', 'clearSnapshots', 'getCachedSnapshot'])
+  })
+
+  it('куб − сфера, правка ребёнка, сдвиг, цилиндр: каждый шаг назад и вперёд — объекты и дерево как были', async () => {
+    reset()
+    const sig: string[] = [signature()]
+    await st().addShape('cube'); sig.push(signature())
+    await st().addShape('sphere'); sig.push(signature())
+    const [cube, sphere] = Object.keys(st().objects)
+    await st().csgBoolean('subtract', { a: [cube], b: [sphere] }); sig.push(signature())
+    const root = Object.keys(st().objects)[0]
+    const kids = getNode(root)!.children!
+    await st().editChildParams(root, kids[1], { radius: 15, segments: 32 }); sig.push(signature())
+    await st().moveObject(root, { ...st().objects[root].transform, x: 30, rotZ: 45 }); sig.push(signature())
+    await st().addShape('cylinder'); sig.push(signature())
+    expect(st().historyIndex).toBe(sig.length - 1)
+    expect(getNode(getNode(root)!.children![1])!.params).toMatchObject({ radius: 15 })
+    expect(warnings()).toEqual([])
+
+    for (let i = sig.length - 2; i >= 0; i--) {                       // undo по шагу
+      await st().undo()
+      expect(st().historyIndex).toBe(i)
+      expect(signature()).toBe(sig[i])
+    }
+    for (let i = 1; i < sig.length; i++) {                             // redo по шагу
+      await st().redo()
+      expect(st().historyIndex).toBe(i)
+      expect(signature()).toBe(sig[i])
+    }
+    // без кэша объектов (перестроение через WASM — путь, где раньше тоже писался снимок дерева)
+    snapshots.clearSnapshots()
+    for (let i = sig.length - 2; i >= sig.length - 4; i--) {
+      await st().undo()
+      expect(signature()).toBe(sig[i])
+    }
+    expect(getNode(getNode(root)!.children![1])!.params).toMatchObject({ radius: 12 })   // правка ребёнка откатилась
+    await st().redo()
+    expect(signature()).toBe(sig[sig.length - 3])
+    expect(warnings()).toEqual([])
+  }, 60000)
+
+  const warnings = () => useNotifications.getState().notifications.filter((n) => n.type === 'warning' || n.type === 'error').map((n) => n.message)
 })

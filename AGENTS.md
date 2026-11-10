@@ -14,7 +14,7 @@
 - **manifold-3d** (WASM) — CSG операции в Web Worker
 - **Zustand 5** — стейт-менеджмент
 - **Vite 6** — сборка
-- **Vitest 4** — тесты (955 тестов, 78 файлов; `it.fails` открытых багов нет — UX-прогон 7 нашёл 0 новых, цикл закрыт; UX-AUDIT-1…10 исправлены в `fix-all`, 11…20 — в `fix-all-2`, 21…31 — в `fix-all-3`, 32…35 — в `fix-all-4`, 32-followup и 36…40 — в `fix-all-5`, 41, 42 — в `fix-all-6`)
+- **Vitest 4** — тесты (957 тестов, 78 файлов; `it.fails` открытых багов нет — UX-прогон 7 нашёл 0 новых, цикл закрыт; UX-AUDIT-1…10 исправлены в `fix-all`, 11…20 — в `fix-all-2`, 21…31 — в `fix-all-3`, 32…35 — в `fix-all-4`, 32-followup и 36…40 — в `fix-all-5`, 41, 42 — в `fix-all-6`)
 - **pnpm** — пакетный менеджер
 
 ## Команды
@@ -23,7 +23,7 @@
 cd web-app
 pnpm dev          # dev-сервер (порт 5000)
 pnpm build        # production-сборка
-pnpm test         # запуск тестов (955 тестов, 78 файлов)
+pnpm test         # запуск тестов (957 тестов, 78 файлов)
 pnpm typecheck    # tsc --noEmit
 pnpm e2e:smoke    # дымовой тест в браузере (Playwright; нужен запущенный pnpm dev; см. web-app/e2e/helpers.mjs). В CI все e2e — job `e2e` в ci-web.yml (CI-E2E)
 pnpm e2e:tree     # Фаза 9.1: раскрытие CSG в дереве, выбор ребёнка
@@ -51,7 +51,7 @@ pnpm e2e:plug-and-play  # PLUG-AND-PLAY: «Куб» → режим (0 фигур
 pnpm e2e:dimensions  # DIMENSIONS: меню «Размер» (3 пункта, Esc), D — режим сразу; «Поставить размер» → точка куба 1 → точка куба 2 → число = |B − A|; клик по линии — выделен; сдвиг / масштаб куба 2 и Ctrl+Z / Ctrl+Y — число за объектом; «Показать / скрыть размеры»; «Настройки» к выбранному — Проекция, цвет, шрифт; Delete — размер удалён, кубы на месте
 pnpm e2e:ux-viewport  # UX-VIEWPORT: ЛКМ-протяжка вид не вращает, ПКМ вращает, СКМ сдвигает; F и двойной клик СКМ — вписать; сетка: шаги 1 → 5 → 10 → 50 → 100 (жирная ×10), не обрывается на отдалении и после сдвига; рамка: слева направо — синяя, только целиком внутри; справа налево — зелёная пунктирная, задетые; Shift — добавить
 pnpm e2e:selection-outline  # SELECTION-OUTLINE: ничего не выделено — каймы нет; клик по кубу — синяя кайма вокруг него (2–4 px); клик в пусто — нет; Shift+клик / рамка — кайма у всех; светлая тема, орто, гизмо; 100k + 24 объекта выделены — FPS ≥ 55
-pnpm e2e:ux-polish  # ux-polish: A — CSG-GROUP-UI (кнопки CSG в тулбаре; «Вычитание» → кайма A оранжевая, B синяя; Esc — каймы A нет)
+pnpm e2e:ux-polish  # ux-polish: A — CSG-GROUP-UI (кнопки CSG в тулбаре; «Вычитание» → кайма A оранжевая, B синяя; Esc — каймы A нет); B — CLEANUP-TREE-SNAPSHOT (куб − сфера → X → undo / redo — объекты и дети CSG как были)
 ```
 
 ## Текущий статус
@@ -107,7 +107,7 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 | `src/store/helpers.ts` | Утилиты store (extractAndCenter, extractAndCenterGetAABB, computeAABB, makeObject, nextId, colorForIndex; `computeWorldAABB` — мировая рамка по реальной геометрии с полным TRS (вершины; без вершин — OBB `obbCorners`/`obbWorldAABB` из `localParamsBox`, ALIGN-REVIT), `worldVerticesAABB`, `solveAlignDeltas` — решатель выравнивания, общий для `alignSelected` и re-solve 9.5.2; `solvePlaneAlignDelta`/`worldProjectionRange`/`axisPlane` — выравнивание грани по плоскости (ALIGN-UI-REVIT); `solvePlaneAlignTransform` — то же с поворотом непараллельной плоской грани на месте (вокруг центра тела `alignRotationCenter`: у примитивов — опорная точка, UX-AUDIT-32-followup; у CSG — центр рамки, UX-AUDIT-41), `isSmoothSurfaceAt` — грань гладкой поверхности (порог = затенению), `eulerXYZFromMatrix` (UX-AUDIT-32), `continuousEuler` — углы в записи, ближайшей к прежним (дельта шага в ±180°; выравнивание и гизмо, UX-AUDIT-42); `faceToLocal`/`faceToWorld` — грань в системе объекта и обратно, `solvePlaneAlignMove` — решение шага выравнивания по плоскости (живое `alignToPlane` и каскад, ALIGN-PLANE-RESOLVE); `extrudeSlab` — плита extrude по мировой рамке базы, 9.5.4) |
 | `src/store/types.ts` | DocumentStore interface |
 | `src/store/rebuild.ts` | rebuildFromHistory — восстановление объектов из истории операций |
-| `src/store/snapshots.ts` | Snapshot cache для мгновенного undo/redo (PERF-1) |
+| `src/store/snapshots.ts` | Snapshot cache для мгновенного undo/redo (PERF-1) — только объекты; дерево не снимается (CLEANUP-TREE-SNAPSHOT: undo/redo перестраивают его из операций) |
 | `src/store/notifications.ts` | Toast-уведомления (замена alert) |
 | `src/store/add-text.ts` | 3D-текст в сцену (`addTextObject`): меш `io/text-mesh.ts`, имя «Текст: …», ошибка → уведомление (UX-AUDIT-3/6/10) |
 | `src/store/text-object.ts` | 3D-текст как объект (UX-AUDIT-31): `textOfOp` (строка текста шага `import_mesh`: поле `text`, у старых — по id `txt_N` и имени), `isTextObject` — история «Добавить текст: …», «Тип: Текст», иконка текста; `textsByObjectId`/`textOfNode` — текст запечённых узлов дерева CSG по истории (import_mesh с текстом, зеркальные копии, узлы копий CSG — UX-AUDIT-34); `defaultTextName` — имя по умолчанию «Текст: …» → строка, `displayName` показывает его на языке интерфейса (UX-AUDIT-36) |

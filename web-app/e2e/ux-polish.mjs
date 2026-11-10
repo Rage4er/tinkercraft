@@ -2,11 +2,13 @@
 //  A. CSG-GROUP-UI: кнопки «Объединение» / «Вычитание» / «Пересечение» — в тулбаре; выбрал куб и сферу →
 //     «Вычитание» в тулбаре → режим (кнопка нажата), A — оранжевая (тёплая) кайма вокруг куба и сферы,
 //     выбрал цилиндр и конус (B) — синяя (холодная) кайма вокруг них; Esc — каймы A нет.
+//  B. CLEANUP-TREE-SNAPSHOT: куб − сфера (режим) → CSG с 2 детьми в дереве → сдвиг X → undo ×2 — снова куб и
+//     сфера, redo ×2 — CSG с теми же детьми, X на месте; undo / redo без ошибок (снимков дерева нет).
 // Ошибок консоли нет. Логика — src/__tests__/ux-polish.test.tsx.
 // Запуск: `pnpm dev` в одном терминале, `pnpm e2e:ux-polish` в другом.
 // Необязательный аргумент — каталог для скриншотов: `node e2e/ux-polish.mjs /tmp/shots`.
 import path from 'node:path'
-import { openApp, placeShape, toolbarButton } from './helpers.mjs'
+import { openApp, placeShape, toolbarButton, csgModeStart, csgModeConfirm } from './helpers.mjs'
 
 const shotDir = process.argv[2]
 const { browser, page, errors } = await openApp()
@@ -102,6 +104,42 @@ try {
   await page.keyboard.press('Escape')
   await waitData('outlineACount', '0', 'A: Esc — режим закрыт')
   ok.push(`A: кнопки CSG в тулбаре (3); «Вычитание» → режим, кнопка нажата; кайма A — оранжевая (${oA.join(' / ')} px), B — синяя (${bB.join(' / ')} px); Esc — каймы A нет`)
+
+  // ── B: CLEANUP-TREE-SNAPSHOT — undo / redo без снимков дерева ──
+  stage = 'B. CLEANUP-TREE-SNAPSHOT'
+  await page.locator('.statusbar').waitFor()
+  const histText = async () => (await page.locator('.statusbar').innerText()).match(/История: (\d+)\/(\d+)/)
+  const waitHist = (k) => page.waitForFunction((k) => new RegExp(`История: ${k}/`).test(document.querySelector('.statusbar')?.textContent ?? ''), k, { timeout: 30000 })
+  // сцена A: куб, сфера, цилиндр, конус — вычитаем сферу из куба
+  const h0 = Number((await histText())[1])
+  await pick(cube); await csgModeStart(page, 'subtract'); await pick(sphere); await csgModeConfirm(page)
+  await waitRows(3); await waitHist(h0 + 1)
+  const root = (await ids()).find((i) => ![cyl, cone].includes(i))
+  const expand = async () => {
+    const ch = page.locator(`.ct-item[data-object-id="${root}"] .ct-chevron`)
+    if ((await page.locator('.ct-child').count()) === 0) await ch.click()
+    await page.waitForFunction(() => document.querySelectorAll('.ct-child').length === 2, null, { timeout: 10000 })
+      .catch(async () => fail(`B: детей CSG в дереве ${await page.locator('.ct-child').count()}, ожидалось 2`))
+    return page.locator('.ct-child').allInnerTexts()
+  }
+  const kids0 = await expand()
+  await pick(root)
+  const fx = page.locator('.panel-right #num-input-pos-X'); await fx.fill('40'); await fx.press('Enter'); await waitHist(h0 + 2)
+  await page.waitForTimeout(200)
+  const undoB = toolbarButton(page, 'Отменить'), redoB = toolbarButton(page, 'Повторить')
+  await undoB.click(); await waitHist(h0 + 1)
+  await undoB.click(); await waitHist(h0)
+  await waitRows(4)
+  if (JSON.stringify((await ids()).sort()) !== JSON.stringify([cube, sphere, cyl, cone].sort())) fail('B: undo — не куб, сфера, цилиндр, конус: ' + (await ids()).join(', '))
+  await redoB.click(); await waitHist(h0 + 1); await waitRows(3)
+  await redoB.click(); await waitHist(h0 + 2)
+  const kids1 = await expand()
+  if (JSON.stringify(kids1) !== JSON.stringify(kids0)) fail(`B: дети CSG после redo ${JSON.stringify(kids1)}, было ${JSON.stringify(kids0)}`)
+  await pick(root)
+  const x = Number((await page.locator('.panel-right #num-input-pos-X').inputValue()).replace(',', '.'))
+  if (Math.abs(x - 40) > 0.01) fail('B: после redo X = ' + x)
+  await shot('polish-b-undo-redo.png')
+  ok.push(`B: куб − сфера → CSG (${kids0.length} ребёнка) → X 40 → undo ×2 — куб и сфера на месте, redo ×2 — CSG с теми же детьми, X 40`)
 
   stage = 'итог'
   if (errors.length) fail('ошибки консоли: ' + errors.join(' | '))

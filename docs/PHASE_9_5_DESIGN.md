@@ -147,7 +147,7 @@
 ### 3.4 Кэш снимков
 
 - Снимки индексов `< len(ops)` остаются верными: префикс не меняется (главный выигрыш B′).
-- Новый индекс (после `edit_step`) кэшируется как обычно (`cacheSnapshotWithTree`).
+- Новый индекс (после `edit_step`) кэшируется как обычно (`cacheSnapshot`; до CLEANUP-TREE-SNAPSHOT — `cacheSnapshotWithTree`, со снимком дерева).
 - Дерево: `rebuildBuildTree(effective…)` строит его из эффективной истории (тот же путь, что после 9.6/9.8).
 
 ## 4. Undo / redo
