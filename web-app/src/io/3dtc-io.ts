@@ -17,6 +17,7 @@
 import JSZip from 'jszip'
 import i18n from '../i18n'
 import type { SceneObject, TinkerCraftOperation } from '../csg/types'
+import { sanitizeDimensions, type Dimension } from '../store/dimensions'
 
 export interface ThreeDtcDocument {
   objects: Record<string, SceneObject>
@@ -24,6 +25,8 @@ export interface ThreeDtcDocument {
   operationsTrimmed: boolean
   fileName?: string
   thumbnail?: string   // base64 PNG data-URL
+  /** DIMENSIONS: слой размеров — отдельно от `operations` (не шаги истории). Старые файлы — без поля. */
+  dimensions?: Dimension[]
 }
 
 const FORMAT_VERSION = '3dtc-v1'
@@ -258,7 +261,8 @@ function restoreSceneObjects(objects: Record<string, unknown>): Record<string, S
 /**
  * Сериализовать документ в Blob (.3dtc ZIP-архив).
  *
- * model.json: { version: "3dtc-v1", fileName, operationsTrimmed, objects, operations }
+ * model.json: { version: "3dtc-v1", fileName, operationsTrimmed, objects, operations, dimensions }
+ * (`dimensions` — слой размеров, DIMENSIONS; формат тот же — поле необязательное)
  * thumbnail.png: PNG или 1×1 прозрачный placeholder.
  */
 export async function serialize3dtc(doc: ThreeDtcDocument): Promise<Blob> {
@@ -270,6 +274,7 @@ export async function serialize3dtc(doc: ThreeDtcDocument): Promise<Blob> {
     operationsTrimmed: doc.operationsTrimmed,
     objects: encodeTypedArrays(doc.objects),
     operations: encodeTypedArrays(doc.operations),
+    dimensions: doc.dimensions ?? [],
   }
 
   zip.file('model.json', JSON.stringify(model, null, 2))
@@ -352,6 +357,7 @@ export async function parse3dtc(source: Blob | ArrayBuffer): Promise<ThreeDtcDoc
     operationsTrimmed: Boolean(sanitized.operationsTrimmed),
     fileName: typeof sanitized.fileName === 'string' ? sanitized.fileName : undefined,
     thumbnail,
+    dimensions: sanitizeDimensions(sanitized.dimensions),
   }
 }
 

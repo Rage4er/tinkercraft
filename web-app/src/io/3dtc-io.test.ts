@@ -299,6 +299,41 @@ describe('3dtc-io round-trip', () => {
     expect(p.copyTree.nodes[0]).toMatchObject({ children: ['a', 'b', 'c'], groupA: 2, operation: 'intersect' })
   })
 
+  it('DIMENSIONS: размеры — отдельный слой `dimensions` (не в operations), переживают round-trip; битые записи отбрасываются', async () => {
+    const box = { min: { x: -10, y: -10, z: -10 }, max: { x: 10, y: 10, z: 10 } }
+    const dim = {
+      id: 'dim_1', type: 'linear' as const,
+      objectIdA: 'obj_1', pointA: { x: 10, y: 10, z: 10 }, boxA: box,
+      objectIdB: 'obj_2', pointB: { x: -12, y: 0, z: 0 }, boxB: box,
+      offset: 15, style: { kind: 'offset' as const, color: '#ff8800', font: 'serif' as const, size: 7, units: 'mm' as const },
+    }
+    const ops = [{ type: 'add_shape', id: 'obj_1', shapeType: 'cube', params: {}, color: '#fff', transform: T }] as unknown as TinkerCraftOperation[]
+    const blob = await serialize3dtc({ objects: {}, operations: ops, operationsTrimmed: false, dimensions: [dim] })
+    const zip = await JSZip.loadAsync(await blob.arrayBuffer())
+    const model = JSON.parse(await zip.file('model.json')!.async('string'))
+    expect(model.version).toBe('3dtc-v1')                         // формат тот же — поле необязательное
+    expect(model.operations).toHaveLength(1)                      // размер — не шаг истории
+    expect(model.dimensions).toHaveLength(1)
+    const parsed = await parse3dtc(blob)
+    expect(parsed.dimensions).toEqual([dim])
+    expect(parsed.operations).toHaveLength(1)
+
+    // старый файл без поля — пустой слой; битые записи и недопустимые значения — отброшены / по умолчанию
+    model.dimensions = [
+      dim,
+      { id: 'bad' },
+      { ...dim, id: 'dim_2', offset: 1e9, style: { kind: 'zigzag', color: 'red', font: 'comic', size: -3 } },
+    ]
+    const z2 = new JSZip(); z2.file('model.json', JSON.stringify(model))
+    const p2 = await parse3dtc(await z2.generateAsync({ type: 'arraybuffer' }))
+    expect(p2.dimensions!.map((d) => d.id)).toEqual(['dim_1', 'dim_2'])
+    expect(p2.dimensions![1].offset).toBe(500)
+    expect(p2.dimensions![1].style).toEqual({ kind: 'standard', color: '#f9e2af', font: 'sans-serif', size: 1, units: 'mm' })
+    delete model.dimensions
+    const z3 = new JSZip(); z3.file('model.json', JSON.stringify(model))
+    expect((await parse3dtc(await z3.generateAsync({ type: 'arraybuffer' }))).dimensions).toEqual([])
+  })
+
   it('rejects unsupported version', async () => {
     // Создаём ZIP с version "1.0.0" (старый .doodle)
     const zip = new JSZip()

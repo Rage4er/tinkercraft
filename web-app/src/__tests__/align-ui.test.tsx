@@ -118,7 +118,8 @@ function renderToolbar(): HTMLButtonElement[] {
   const h = mount(
     <Toolbar
       objectCount={2} selectedCount={2} canUndo canRedo hasCopied busy={false} workerOk
-      cameraMode="perspective" gizmoMode="none" rulerActive={false}
+      cameraMode="perspective" gizmoMode="none" rulerActive={false} dimensionActive={false} dimensionsVisible
+      onDimensionMode={noop} onDimensionSettings={noop} onToggleDimensions={noop}
       canMirror canAlign alignActive={false} canCsg theme="dark"
       onOpen={noop} onSave={noop} onExportStl={noop} onImportStl={noop} onShowProjects={noop}
       onUndo={noop} onRedo={noop} onCopy={noop} onPaste={noop} onDelete={noop}

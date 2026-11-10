@@ -5,6 +5,7 @@ import { useCsgGroupModeStore, groupBOf } from "../store/csg-group-mode";
 import { useDocumentStore } from "../store/document-store";
 import { usePlacementModeStore, type PlacementModeState } from "../store/placement-mode";
 import { AXIS_PLANE_NAME } from "../store/placement";
+import { useDimensionModeStore } from "../store/dimension-mode";
 import { displayName } from "./ComponentTree";
 import type { SceneObject } from "../csg/types";
 
@@ -62,6 +63,9 @@ export default function StatusBar({
   const placement = usePlacementModeStore((s) => s.placementMode);
   const confirmPlacement = usePlacementModeStore((s) => s.confirmPlacement);
   const cancelPlacement = usePlacementModeStore((s) => s.cancelPlacement);
+  // DIMENSIONS: режим «Размер» — подсказка (A / B), сколько создано, «Готово» (= Esc)
+  const dimMode = useDimensionModeStore((s) => s.dimensionMode);
+  const exitDimensionMode = useDimensionModeStore((s) => s.exitDimensionMode);
   const currentLang = i18n.language?.startsWith("ru") ? "ru" : "en";
   const toggleLanguage = () => {
     const next = currentLang === "en" ? "ru" : "en";
@@ -74,6 +78,25 @@ export default function StatusBar({
       role="status"
       aria-live="polite"
     >
+      {dimMode && (
+        <span className="status-item status-csg-mode status-placement" data-testid="dimension-mode" data-step={dimMode.first ? "b" : "a"}>
+          <span className="status-csg-hint" data-testid="dimension-hint">
+            {t(dimMode.first ? "dimensions.hintB" : "dimensions.hintA")}
+          </span>
+          {dimMode.created > 0 && (
+            <span className="status-placement-where" data-testid="dimension-created">{t("dimensions.created", { count: dimMode.created })}</span>
+          )}
+          <button
+            type="button"
+            className="btn btn-compact status-btn"
+            data-testid="dimension-done"
+            title={t("dimensions.doneTip")}
+            onClick={() => exitDimensionMode()}
+          >
+            {t("dimensions.done")}
+          </button>
+        </span>
+      )}
       {placement && (
         <span
           className="status-item status-csg-mode status-placement"

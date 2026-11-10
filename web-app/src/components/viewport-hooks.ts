@@ -20,6 +20,13 @@ import { computeAABB, colorForIndex, defaultShapeParams } from "../store/helpers
 import { buildObjectGeometry } from "./object-geometry";
 import { useCsgGroupModeStore } from "../store/csg-group-mode";
 import { usePlacementModeStore } from "../store/placement-mode";
+import { useDimensionsStore } from "../store/dimensions-store";
+import { useDimensionModeStore } from "../store/dimension-mode";
+import { useUiStore } from "../store/ui-store";
+import { useDocumentStore } from "../store/document-store";
+import { dimensionEnds, dimensionGeometry, formatDimensionValue } from "../store/dimensions";
+import { buildDimensionObject, disposeDimensionObject } from "./dimension-render";
+import { useTranslation } from "react-i18next";
 import {
     findNearestSnap,
     createSnapIndicator,
@@ -1122,4 +1129,106 @@ export function usePlacementPreview(
         applyTransformToPivot(pivot, transform);
         pivot.visible = true;
     }, [transform, shapeType, meshData, nextIndex]);
+}
+
+// ============================================================
+// DIMENSIONS: слой размерных линий
+// ============================================================
+
+/**
+ * Размеры в сцене: группа на каждый видимый размер (оба объекта есть и видимы) — линии,
+ * стрелки, число (billboard). Пересобирается при изменении размеров, слоя, выделения, объектов
+ * (сдвиг / поворот / масштаб / геометрия — число пересчитано: ассоциативность) и языка.
+ * Слой скрыт («Показать / скрыть размеры») — групп нет. Возвращает корень для raycast.
+ */
+export function useDimensionsRender(
+    sceneRef: React.MutableRefObject<THREE.Scene | null>,
+    sceneReady: boolean,
+): React.MutableRefObject<THREE.Group | null> {
+    const { t, i18n } = useTranslation();
+    const dimensions = useDimensionsStore((s) => s.dimensions);
+    const show = useDimensionsStore((s) => s.showDimensions);
+    const selectedId = useDimensionsStore((s) => s.selectedDimensionId);
+    const objects = useDocumentStore((s) => s.objects);
+    const rootRef = useRef<THREE.Group | null>(null);
+
+    useEffect(() => {
+        const scene = sceneRef.current;
+        if (!scene) return;
+        const root = new THREE.Group();
+        root.userData.dimensionsRoot = true;
+        root.renderOrder = 996;
+        if (show) {
+            for (const d of dimensions) {
+                const ends = dimensionEnds(d, objects);
+                if (!ends) continue;
+                const geom = dimensionGeometry(ends, d.style.kind, d.offset, d.style.size * 0.9);
+                const text = t("dimensions.label", { value: formatDimensionValue(geom.value) });
+                root.add(buildDimensionObject(d.id, geom, d.style, text, d.id === selectedId));
+            }
+        }
+        scene.add(root);
+        rootRef.current = root;
+        return () => {
+            scene.remove(root);
+            disposeDimensionObject(root);
+            if (rootRef.current === root) rootRef.current = null;
+        };
+    }, [sceneRef, sceneReady, dimensions, show, selectedId, objects, t, i18n.language]);
+
+    return rootRef;
+}
+
+/**
+ * Режим «Размер»: маркер привязки под курсором (цвет — вид привязки, как у линейки), маркер
+ * точки A и превью размера A → курсор со стилем новых размеров и числом — до второго клика.
+ */
+export function useDimensionModePreview(sceneRef: React.MutableRefObject<THREE.Scene | null>): void {
+    const { t } = useTranslation();
+    const mode = useDimensionModeStore((s) => s.dimensionMode);
+    const defaults = useUiStore((s) => s.dimensionDefaults);
+    const objects = useDocumentStore((s) => s.objects);
+    const first = mode?.first ?? null;
+    const hover = mode?.hover ?? null;
+
+    useEffect(() => {
+        const scene = sceneRef.current;
+        if (!scene || !mode) return;
+        const root = new THREE.Group();
+        root.userData.dimensionPreview = true;
+        const marker = (p: { x: number; y: number; z: number }, color: number) => {
+            const m = new THREE.Mesh(
+                new THREE.SphereGeometry(0.9, 12, 12),
+                new THREE.MeshBasicMaterial({ color, depthTest: false, transparent: true, opacity: 0.95 }),
+            );
+            m.position.set(p.x, p.y, p.z);
+            m.renderOrder = 998;
+            m.raycast = () => { };
+            root.add(m);
+        };
+        if (hover) {
+            const c = hover.snap === "vertex" ? 0xff4444 : hover.snap === "edge" ? 0x44ff44 : hover.snap === "circle" ? 0x4488ff : hover.snap === "face" ? 0xffff44 : 0xffffff;
+            marker(hover.point, c);
+        }
+        if (first) marker(first.point, 0x89b4fa);
+        if (first && hover) {
+            const A = objects[first.objectId], B = objects[hover.objectId];
+            const ends = {
+                a: first.point, b: hover.point,
+                centerA: A ? { x: A.transform.x, y: A.transform.y, z: A.transform.z } : first.point,
+                centerB: B ? { x: B.transform.x, y: B.transform.y, z: B.transform.z } : hover.point,
+            };
+            const geom = dimensionGeometry(ends, defaults.style.kind, defaults.offset, defaults.style.size * 0.9);
+            if (geom.value > 1e-6) {
+                const g = buildDimensionObject("__dimension_preview__", geom, defaults.style, t("dimensions.label", { value: formatDimensionValue(geom.value) }), false);
+                g.traverse((o) => { o.raycast = () => { }; });
+                root.add(g);
+            }
+        }
+        scene.add(root);
+        return () => {
+            scene.remove(root);
+            disposeDimensionObject(root);
+        };
+    }, [sceneRef, mode, first, hover, defaults, objects, t]);
 }

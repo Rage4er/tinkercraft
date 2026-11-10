@@ -41,8 +41,12 @@ export function useToolbarLayout(groups: ToolbarGroup[]): UseToolbarLayoutResult
     if (!toolbarRef.current) return 34
     const btn = toolbarRef.current.querySelector(".toolbar-group .btn") as HTMLElement
     if (!btn) return 34
-    // Реальная ширина + gap (2px)
-    return btn.getBoundingClientRect().width + 4
+    // Реальная ширина + реальный зазор между кнопками в строке группы (`.toolbar-group-row`, gap 2px).
+    // DIMENSIONS: раньше — «+ 4» (комментарий обещал 2 px): +2 px × 30 кнопок — тулбар переносился
+    // на 1366, хотя место было
+    const row = btn.closest(".toolbar-group-row")
+    const gap = row ? parseFloat(getComputedStyle(row).columnGap) : NaN
+    return btn.getBoundingClientRect().width + (Number.isFinite(gap) ? gap : 4)
   }, [])
 
   // UX-AUDIT-12: ширина, не занятая кнопками, — логотип (с отступом) и внутренние отступы

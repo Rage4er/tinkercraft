@@ -10,6 +10,7 @@
 
 import { useEffect, useRef } from 'react'
 import { useDocumentStore } from '../store/document-store'
+import { useDimensionsStore } from '../store/dimensions-store'
 import { notify } from '../store/notifications'
 import { AUTOSAVE_DELAY_MS } from '../constants'
 import i18n from '../i18n'
@@ -18,6 +19,8 @@ export function useAutosave(workerOk: boolean): void {
   const operations = useDocumentStore((s) => s.operations)
   const historyIndex = useDocumentStore((s) => s.historyIndex)
   const triggerAutosave = useDocumentStore((s) => s.triggerAutosave)
+  // DIMENSIONS: слой размеров — тоже в автосохранении (меняется без шагов истории)
+  const dimensions = useDimensionsStore((s) => s.dimensions)
   const restoreAutosave = useDocumentStore((s) => s.restoreAutosave)
 
   // восстановление — один раз за запуск (StrictMode монтирует эффекты дважды)
@@ -30,12 +33,12 @@ export function useAutosave(workerOk: boolean): void {
       .catch((e) => console.warn('[AutoSave] restore error:', e))
   }, [workerOk, restoreAutosave])
 
-  // запись: через AUTOSAVE_DELAY_MS после последнего изменения истории
+  // запись: через AUTOSAVE_DELAY_MS после последнего изменения истории или размеров
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => {
     if (operations.length === 0) return
     if (timer.current) clearTimeout(timer.current)
     timer.current = setTimeout(() => { void triggerAutosave() }, AUTOSAVE_DELAY_MS)
     return () => { if (timer.current) clearTimeout(timer.current) }
-  }, [operations, historyIndex, triggerAutosave])
+  }, [operations, historyIndex, dimensions, triggerAutosave])
 }

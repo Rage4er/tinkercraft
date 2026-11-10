@@ -32,6 +32,11 @@ export interface IconButtonProps {
   className?: string
   /** ARIA-label для доступности (по умолчанию — подпись тултипа, затем title / label) */
   ariaLabel?: string
+  /** DIMENSIONS: кнопка открывает меню (`aria-haspopup="menu"`, `aria-expanded`) */
+  ariaHasPopup?: 'menu'
+  ariaExpanded?: boolean
+  /** Не показывать тултип (у кнопки открыто меню) */
+  tooltipSuppressed?: boolean
   /** Обработчики мыши (для preview mirror) */
   onMouseEnter?: () => void
   onMouseLeave?: () => void
@@ -48,6 +53,9 @@ export default function IconButton({
   tooltip,
   className = '',
   ariaLabel,
+  ariaHasPopup,
+  ariaExpanded,
+  tooltipSuppressed = false,
   onMouseEnter,
   onMouseLeave,
 }: IconButtonProps): React.ReactElement {
@@ -65,6 +73,8 @@ export default function IconButton({
       disabled={disabled}
       title={title ?? ariaLabel}
       aria-label={accessibleName}
+      aria-haspopup={ariaHasPopup}
+      aria-expanded={ariaHasPopup ? !!ariaExpanded : undefined}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
@@ -76,7 +86,7 @@ export default function IconButton({
   // Если есть расширенный тултип — оборачиваем в Tooltip
   if (tooltip) {
     return (
-      <Tooltip tooltip={tooltip}>{content}</Tooltip>
+      <Tooltip tooltip={tooltip} suppressed={tooltipSuppressed}>{content}</Tooltip>
     )
   }
 
