@@ -3,7 +3,8 @@
 // ============================================================
 // VIEWPORT-NAV: F и двойной клик СКМ — «Вписать в экран»; кнопки мыши — ЛКМ выбор / рамка,
 // ПКМ вращение, СКМ сдвиг. GRID-ADAPTIVE: две сетки (тонкая + жирная ×10), шаг 1 / 5 / 10 / 50 / 100
-// по масштабу, без края (следует за центром вида, радиус растёт с отдалением).
+// по масштабу, без края (следует за центром вида, радиус растёт с отдалением). SELECTION-RECT: рамка
+// слева направо — окно (только целиком внутри), справа налево — секущая (всё, что задевает).
 // Браузер (камера, сетка на экране, рамка мышью) — e2e/ux-viewport.mjs.
 
 import { describe, it, expect } from 'vitest'
@@ -13,6 +14,7 @@ import { createMiddleDoubleClick, VIEWPORT_MOUSE_BUTTONS, MIDDLE_DOUBLE_CLICK_MS
 import {
   GRID_MAJOR_FACTOR, GRID_STEPS, createAdaptiveGrid, gridStepFor, pixelsPerMm, updateAdaptiveGrid, viewHeightAt, setAdaptiveGridTheme, GRID_COLORS,
 } from '../components/adaptive-grid'
+import { meshInRect, objectsInRect, rectModeOf, rectToNdc, triangleOverlapsRect } from '../components/selection-rect'
 
 describe('VIEWPORT-NAV — «Вписать в экран»: F и двойной клик средней кнопкой', () => {
   it('F — по-прежнему «Вписать в экран»', () => {
@@ -87,5 +89,58 @@ describe('GRID-ADAPTIVE — две сетки, шаг 1 / 5 / 10 / 50 / 100 по
         }
       }
     }
+  })
+})
+
+describe('SELECTION-RECT — рамка: слева направо — внутри, справа налево — задевает', () => {
+  // камера сверху на плоскость XY: 1 мм ≈ 1 px в кадре 400 × 400
+  const camera = new THREE.OrthographicCamera(-200, 200, 200, -200, 0.1, 1000)
+  camera.position.set(0, 0, 500); camera.lookAt(0, 0, 0); camera.updateMatrixWorld(true)
+  const box = (x: number, y: number, size: number, indexed = true) => {
+    const g = new THREE.BoxGeometry(size, size, size)
+    const mesh = new THREE.Mesh(indexed ? g : g.toNonIndexed(), new THREE.MeshBasicMaterial())
+    mesh.position.set(x, y, 0); mesh.updateMatrixWorld(true)
+    return mesh
+  }
+  /** Рамка в px кадра 400 × 400 (0,0 — левый верх) от (x0, y0) до (x1, y1). */
+  const select = (entries: Array<[string, THREE.Mesh]>, x0: number, y0: number, x1: number, y1: number) =>
+    objectsInRect(entries.map(([id, mesh]) => [id, { mesh }] as [string, { mesh: THREE.Mesh }]), camera, rectToNdc(x0, y0, x1, y1, 400, 400), rectModeOf(x0, x1))
+
+  it('направление: вправо — окно, влево — секущая', () => {
+    expect(rectModeOf(10, 200)).toBe('window')
+    expect(rectModeOf(200, 10)).toBe('crossing')
+  })
+
+  it('слева направо — только объекты целиком внутри; справа налево — и задетые', () => {
+    const a = box(-100, 0, 40)                                     // экран x 80…120
+    const b = box(20, 0, 40, false)                                // x 200…240 (без индекса)
+    const scene: Array<[string, THREE.Mesh]> = [['a', a], ['b', b]]
+    expect(select(scene, 60, 150, 220, 250)).toEqual(['a'])          // b задет, но не внутри
+    expect(select(scene, 220, 250, 60, 150)).toEqual(['a', 'b'])     // справа налево — оба
+    expect(select(scene, 60, 150, 260, 250)).toEqual(['a', 'b'])     // оба целиком
+    expect(select(scene, 130, 150, 190, 250)).toEqual([])            // между ними — никого
+    expect(select(scene, 190, 250, 130, 150)).toEqual([])
+  })
+
+  it('секущая: рамка внутри большой грани (ни одной вершины в рамке) — объект задет', () => {
+    const big = box(0, 0, 300)
+    expect(select([['big', big]], 190, 190, 210, 210)).toEqual([])    // окно — не целиком
+    expect(select([['big', big]], 210, 210, 190, 190)).toEqual(['big'])
+    expect(meshInRect(big, camera, rectToNdc(0, 0, 10, 10, 400, 400), 'crossing')).toBe(false)   // мимо
+  })
+
+  it('скрытый объект и объект за камерой не выбираются', () => {
+    const hidden = box(0, 0, 40); hidden.visible = false
+    const behind = box(0, 0, 40); behind.position.z = 900; behind.updateMatrixWorld(true)
+    expect(select([['h', hidden], ['z', behind]], 0, 0, 400, 400)).toEqual([])
+    expect(select([['h', hidden], ['z', behind]], 400, 400, 0, 0)).toEqual([])
+  })
+
+  it('треугольник и прямоугольник: пересечение по разделяющей оси', () => {
+    const r = { minX: 0, minY: 0, maxX: 1, maxY: 1 }
+    expect(triangleOverlapsRect(-1, -1, 3, -1, -1, 3, r)).toBe(true)      // рамка внутри треугольника
+    expect(triangleOverlapsRect(2, 2, 3, 2, 2, 3, r)).toBe(false)         // в стороне
+    expect(triangleOverlapsRect(1.2, 0, 2, 2, 2.2, -1, r)).toBe(false)    // рядом, рамки не касается
+    expect(triangleOverlapsRect(0.5, -1, 0.6, 2, 0.7, -1, r)).toBe(true)  // узкий насквозь
   })
 })
