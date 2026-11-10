@@ -9,6 +9,9 @@
 
 ## [Unreleased]
 
+### Changed
+- **DEVELOPMENT_PLAN — план развития после v1.3.9 / v1.4.0:** Фаза 11 «B-Rep и тяжёлая математика» (FILLET-CHAMFER-BREP — скругление / фаска выбранного ребра на OCCT WASM, EDIT-VERTICES — работа с вершинами, SVG-EXTRUDE — SVG-контуры в 3D, THREAD-GENERATOR — метрическая и дюймовая резьба, STEP / IGES), Фаза 12 «Инструменты моделирования» (ARRAY-TOOL — линейный и круговой массивы, LOCK-OBJECT — блокировка фигуры, новые примитивы), Фаза 13 «UX, форматы и настройки» (APP-SETTINGS, THEME-ENGINE, SFX, FORMATS-OBJ-3MF-GLTF); прочие идеи — «Бэклог идей»; Фаза 10 — `yandex-games` v1.4.0 (`DEVELOPMENT_PLAN.md`, `README.md`, `AGENTS.md`)
+
 ---
 
 ## [1.3.9] — 2026-11-10
