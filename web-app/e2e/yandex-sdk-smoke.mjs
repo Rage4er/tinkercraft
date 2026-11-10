@@ -248,7 +248,9 @@ try {
     }
     await page.keyboard.press('Escape')
     const q1 = await quests()
-    const completed = q1.filter((x) => x.completed)
+    // награда при сохранении — за выполненные и ещё не начисленные (экспорт тоже вызывает commitQuests)
+    const paidBefore = await eco(page, 's.todayQuestsCompleted')
+    const completed = q1.filter((x) => x.completed && !paidBefore.includes(x.difficulty))
     const t0 = await eco(page, 's.tokens')
     await tb(page, L.pm).click()
     await page.locator('.modal-box input.modal-input').fill('smoke')
