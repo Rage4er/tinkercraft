@@ -19,6 +19,7 @@ import type { SceneObject, TransformNR } from "../csg/types";
 import { computeAABB, colorForIndex, defaultShapeParams } from "../store/helpers";
 import { buildObjectGeometry } from "./object-geometry";
 import { VIEWPORT_MOUSE_BUTTONS } from "./viewport-nav";
+import { createAdaptiveGrid, updateAdaptiveGrid, setAdaptiveGridTheme, viewHeightAt, type GridState } from "./adaptive-grid";
 import { useCsgGroupModeStore } from "../store/csg-group-mode";
 import { usePlacementModeStore } from "../store/placement-mode";
 import { useDimensionsStore } from "../store/dimensions-store";
@@ -52,7 +53,8 @@ const ORTHO_HALF_FOV_DEG = 22.5;
 // Controls
 const CONTROLS_DAMPING = 0.08;
 const CONTROLS_MIN_DIST = 10;
-const CONTROLS_MAX_DIST = 2000;
+// GRID-ADAPTIVE: сетка бесконечная — отдаление до 5 м (шаг сетки 100 мм)
+const CONTROLS_MAX_DIST = 5000;
 const CONTROLS_MAX_POLAR = Math.PI - 0.01;
 const TRANSFORM_SIZE = 0.8;
 
@@ -76,12 +78,8 @@ const FILL_COLOR = 0x8888ff;
 // Scene
 const BG_COLOR_DARK = 0x1e1e2e;
 const BG_COLOR_LIGHT = 0xf0f0f5;
+/** Приёмник теней (прозрачная плоскость под объектами), мм — как прежняя сетка; сетка — adaptive-grid.ts */
 const GRID_SIZE = 400;
-const GRID_DIVISIONS = 40;
-const GRID_COLOR_MAJOR_DARK = 0x3a3a5c;
-const GRID_COLOR_MINOR_DARK = 0x2a2a4a;
-const GRID_COLOR_MAJOR_LIGHT = 0x999999;
-const GRID_COLOR_MINOR_LIGHT = 0xcccccc;
 const GROUND_Z = -0.5;
 const GROUND_OPACITY = 0.25;
 const AXES_SIZE = 20;
@@ -142,7 +140,7 @@ export interface ThreeInitResult {
     fitTargetRef: React.MutableRefObject<FitTarget | null>;
     cubeCamera: THREE.PerspectiveCamera | null;
     cubeCtrl: OrbitControls | null;
-    gridRef: React.MutableRefObject<THREE.GridHelper | null>;
+    gridRef: React.MutableRefObject<THREE.Mesh | null>;
 }
 
 // ============================================================
@@ -162,7 +160,7 @@ export function useThreeInit(
     const initRanRef = useRef(false);
     const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
     const sceneRef = useRef<THREE.Scene | null>(null);
-    const gridRef = useRef<THREE.GridHelper | null>(null);
+    const gridRef = useRef<THREE.Mesh | null>(null);
     const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
     const orthoCameraRef = useRef<THREE.OrthographicCamera | null>(null);
     const cameraModeRef = useRef<'perspective' | 'orthographic'>(cameraMode);
@@ -245,12 +243,12 @@ export function useThreeInit(
         fill.position.copy(FILL_POS);
         scene.add(fill);
 
-        // Grid in XY plane (Z=0)
-        const grid = new THREE.GridHelper(GRID_SIZE, GRID_DIVISIONS, GRID_COLOR_MAJOR_DARK, GRID_COLOR_MINOR_DARK);
-        grid.rotation.x = Math.PI / 2;
-        grid.position.z = GROUND_Z;
+        // GRID-ADAPTIVE: сетка в плоскости XY — тонкая + жирная (×10), шаг 1 / 5 / 10 / 50 / 100 по масштабу,
+        // без края (шейдер по мировым координатам, следует за центром вида, гаснет к краю радиуса)
+        const grid = createAdaptiveGrid('dark', GROUND_Z);
         scene.add(grid);
         gridRef.current = grid;
+        let gridState: GridState | null = null;
 
         // Shadow receiver
         const groundGeo = new THREE.PlaneGeometry(GRID_SIZE, GRID_SIZE);
@@ -338,6 +336,22 @@ export function useThreeInit(
                 activeCam = orthoC;
             }
             activeCameraRef.current = activeCam;
+            // GRID-ADAPTIVE: шаг и радиус сетки — под текущий вид (масштаб у цели камеры)
+            const viewDist = camera.position.distanceTo(controls.target);
+            const gs = updateAdaptiveGrid(grid, {
+                target: controls.target,
+                distance: viewDist,
+                viewHeightMm: viewHeightAt(CAMERA_FOV, viewDist),
+                viewportHeightPx: container.clientHeight || renderer.domElement.clientHeight,
+            });
+            if (!gridState || gs.step !== gridState.step || Math.abs(gs.radius - gridState.radius) > 1
+                || Math.abs(gs.center.x - gridState.center.x) > 0.5 || Math.abs(gs.center.y - gridState.center.y) > 0.5) {
+                gridState = gs;
+                container.dataset.gridStep = String(gs.step);
+                container.dataset.gridMajor = String(gs.major);
+                container.dataset.gridRadius = String(Math.round(gs.radius));
+                container.dataset.gridCenter = `${Math.round(gs.center.x)},${Math.round(gs.center.y)}`;
+            }
             renderer.render(scene, activeCam);
             const now = performance.now();
             fpsRef.current.frames++;
@@ -392,16 +406,9 @@ export function useThreeInit(
     };
 }
 
-// ---- Тема: смена цвета грида ----
-export function setGridColor(grid: THREE.GridHelper | null, theme: 'dark' | 'light') {
-    if (!grid) return;
-    const major = theme === 'dark' ? GRID_COLOR_MAJOR_DARK : GRID_COLOR_MAJOR_LIGHT;
-    const minor = theme === 'dark' ? GRID_COLOR_MINOR_DARK : GRID_COLOR_MINOR_LIGHT;
-    grid.material = new THREE.LineBasicMaterial({
-        color: minor,
-        transparent: true,
-        opacity: 0.5,
-    });
+// ---- Тема: смена цвета сетки (GRID-ADAPTIVE) ----
+export function setGridColor(grid: THREE.Mesh | null, theme: 'dark' | 'light') {
+    setAdaptiveGridTheme(grid, theme);
 }
 
 // ============================================================
