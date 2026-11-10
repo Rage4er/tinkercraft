@@ -41,20 +41,42 @@ export function useToolbarLayout(groups: ToolbarGroup[]): UseToolbarLayoutResult
     if (!toolbarRef.current) return 34
     const btn = toolbarRef.current.querySelector(".toolbar-group .btn") as HTMLElement
     if (!btn) return 34
-    // Реальная ширина + gap (2px)
-    return btn.getBoundingClientRect().width + 4
+    // Реальная ширина + реальный зазор между кнопками в строке группы (`.toolbar-group-row`, gap 2px).
+    // DIMENSIONS: раньше — «+ 4» (комментарий обещал 2 px): +2 px × 30 кнопок — тулбар переносился
+    // на 1366, хотя место было
+    const row = btn.closest(".toolbar-group-row")
+    const gap = row ? parseFloat(getComputedStyle(row).columnGap) : NaN
+    return btn.getBoundingClientRect().width + (Number.isFinite(gap) ? gap : 4)
+  }, [])
+
+  // UX-AUDIT-12: ширина, не занятая кнопками, — логотип (с отступом) и внутренние отступы
+  // групп; меряется из DOM (текст логотипа на узком окне скрыт CSS)
+  const measureReserved = useCallback((): number => {
+    const tb = toolbarRef.current
+    if (!tb) return 0
+    let w = 0
+    const logo = tb.querySelector(".toolbar-logo") as HTMLElement | null
+    if (logo) {
+      const cs = getComputedStyle(logo)
+      w += logo.getBoundingClientRect().width + (parseFloat(cs.marginLeft) || 0) + (parseFloat(cs.marginRight) || 0)
+    }
+    tb.querySelectorAll(".toolbar-group").forEach((g) => {
+      const cs = getComputedStyle(g)
+      w += (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0)
+    })
+    return w
   }, [])
 
   // ✅ Стабильная функция расчёта layout (не зависит от groups в deps!)
   // Использует groupsRef.current для доступа к актуальным данным
-  const calculateAndSetLayout = useCallback((width: number, btnWidth: number) => {
+  const calculateAndSetLayout = useCallback((width: number, btnWidth: number, reserved: number) => {
     const currentGroups = groupsRef.current
     if (currentGroups.length === 0) {
       setRowsMap({})
       return
     }
 
-    const result = calculateToolbarLayout(currentGroups, width, btnWidth)
+    const result = calculateToolbarLayout(currentGroups, width, btnWidth, reserved)
 
     // Преобразуем GroupLayout[] → Record<string, number>
     const newRowsMap: Record<string, number> = {}
@@ -71,7 +93,7 @@ export function useToolbarLayout(groups: ToolbarGroup[]): UseToolbarLayoutResult
     // Инициализация: измеряем ширину и считаем layout
     const initialWidth = toolbarRef.current.getBoundingClientRect().width
     const btnWidth = measureButtonWidth()
-    calculateAndSetLayout(initialWidth, btnWidth)
+    calculateAndSetLayout(initialWidth, btnWidth, measureReserved())
 
     // DEBUG: логирование layout
     if (import.meta.env.DEV) {
@@ -98,7 +120,7 @@ export function useToolbarLayout(groups: ToolbarGroup[]): UseToolbarLayoutResult
 
       const width = entry.contentRect.width
       const btnWidth = measureButtonWidth()
-      calculateAndSetLayout(width, btnWidth)
+      calculateAndSetLayout(width, btnWidth, measureReserved())
 
       // DEBUG: логирование при resize
       if (import.meta.env.DEV) {
@@ -113,7 +135,7 @@ export function useToolbarLayout(groups: ToolbarGroup[]): UseToolbarLayoutResult
     observer.observe(toolbarRef.current)
 
     return () => observer.disconnect()
-  }, [calculateAndSetLayout, measureButtonWidth]) // ✅ ТОЛЬКО стабильные функции!
+  }, [calculateAndSetLayout, measureButtonWidth, measureReserved]) // ✅ ТОЛЬКО стабильные функции!
 
   return { toolbarRef, rowsMap }
 }

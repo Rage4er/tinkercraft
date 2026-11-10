@@ -3,7 +3,7 @@
 // Analog of ProjectManager.java from the original TinkerCraft
 // ============================================================
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   listProjects, saveProject, deleteProject, updateProject,
@@ -34,6 +34,18 @@ export default function ProjectManagerModal({ onClose, onLoad, onSave, currentPr
   }, [])
 
   useEffect(() => { refresh() }, [refresh])
+
+  // UX-AUDIT-15: Esc закрывает менеджер (как модалку текста и подтверждение) — откуда бы ни
+  // пришла клавиша (поле имени, кнопка, фон); сочетания App под модалкой и так заблокированы
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') { e.preventDefault(); onCloseRef.current() }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   async function handleSave() {
     if (!newName.trim()) return

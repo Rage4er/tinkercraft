@@ -11,7 +11,6 @@ export interface TinkerCraftFile {
 export type TinkerCraftOperation =
   | AddShapeOperation
   | ImportMeshOperation
-  | Text3DOperation
   | MoveOperation
   | ResizeOperation
   | ResizeDimsOperation
@@ -19,6 +18,8 @@ export type TinkerCraftOperation =
   | MirrorOperation
   | AlignOperation
   | GroupOperation
+  | EditChildParamsOperation
+  | EditStepOperation
   | DeleteOperation
   | HideShowOperation
   | ColorOperation
@@ -31,6 +32,8 @@ export interface AddShapeOperation {
   params: ShapeParams
   color: string
   transform: TransformNR
+  /** UX-AUDIT-13: объект вставлен из буфера (Ctrl+V) — в истории «Вставить …» */
+  pasted?: boolean
 }
 
 /** Импортированный STL/OBJ меш — хранит сырые вершины в истории */
@@ -42,6 +45,10 @@ export interface ImportMeshOperation {
   transform: TransformNR
   vertices: Float32Array | number[]
   indices: Uint32Array | number[]
+  /** UX-AUDIT-13: объект вставлен из буфера (Ctrl+V) — в истории «Вставить …» */
+  pasted?: boolean
+  /** UX-AUDIT-31: 3D-текст — исходная строка (история «Добавить текст: …»); STL — нет */
+  text?: string
 }
 
 export interface MoveOperation {
@@ -61,6 +68,11 @@ export interface ResizeOperation {
   anchor: AnchorPoint
 }
 
+/**
+ * @deprecated Скругление куба удалено из приложения (remove-fillet, до инструмента на B-Rep).
+ * Тип оставлен только для чтения старых `.3dtc`/`.doodle`: при загрузке такие шаги вырезаются
+ * (`io/legacy-fillet.ts::migrateLegacyFillet`), воспроизведение их игнорирует. Не создавать.
+ */
 export interface FilletOperation {
   type: 'fillet'
   id: string
@@ -80,11 +92,41 @@ export type MirrorPlane = 'XY' | 'XZ' | 'YZ'
 export interface AlignOperation {
   type: 'align'
   ids: string[]
+  /** Ось (9 кнопок выравнивания). У выравнивания по плоскости (`plane`) — ось, ближайшая к нормали A (подпись) */
   axis: 'X' | 'Y' | 'Z'
   anchor: 'min' | 'center' | 'max'
-  anchorId: string  // ID of the anchor object (last selected, the one others align to)
-  deltas: Record<string, number>  // { targetId: delta } — movement for each non-anchor object
+  /** Объект-якорь. У выравнивания по плоскости — объект грани A, '' — плоскость по оси X/Y/Z */
+  anchorId: string
+  deltas: Record<string, number>  // { targetId: delta } — movement for each non-anchor object; у `plane` — пусто
+  /** ALIGN-PLANE-RESOLVE: выравнивание режимом «Выровнять» — грань B в плоскость A (произвольная нормаль) */
+  plane?: AlignPlane
 }
+
+/** Грань (нормаль + точка) в системе объекта: v_мир = pos + R·S·v, n_мир ∝ R·S⁻¹·n. */
+export interface AlignFace {
+  normal: Vec3
+  point: Vec3
+  /** Треугольник грани (гладкая поверхность — без поворота, `isSmoothSurfaceAt`) */
+  triangleIndex?: number
+}
+
+/**
+ * ALIGN-PLANE-RESOLVE: шаг выравнивания режимом. Хранит и вход решателя (плоскость A, грани B — в
+ * системах своих объектов: следуют за объектами при правке прошлых шагов), и результат (сдвиг и
+ * дельта углов каждой цели — воспроизведение как у move). Каскад правки шага (9.5) пересчитывает
+ * `moves` по плоскости и граням на этом шаге — объект остаётся выровненным.
+ */
+export interface AlignPlane {
+  /** Плоскость A: в системе объекта `anchorId` (грань A), без якоря — мировая (ось X/Y/Z) */
+  normal: Vec3
+  point: Vec3
+  /** Грань B каждой цели — в системе цели */
+  faces: Record<string, AlignFace>
+  /** Результат: сдвиг и дельта углов каждой цели */
+  moves: Record<string, AlignMove>
+}
+
+export interface AlignMove { delta: Vec3; rotDelta: Vec3 }
 
 export interface GroupOperation {
   type: 'group'
@@ -115,6 +157,136 @@ export interface GroupOperation {
   // ── BuildTree: tree structure for this CSG operation ──
   /** Operation type for tree (union/subtract/intersect) */
   treeOperation?: 'union' | 'subtract' | 'intersect'
+  /**
+   * N-ARY-CSG: число операндов группы A (`ids[0..groupA)`), остальные — группа B:
+   * результат = union(A) op union(B) (union — объединение всех `ids`). Нет — 1
+   * (старые бинарные `ids: [a, b]` → a op b; первый операнд против остальных).
+   */
+  groupA?: number
+  /**
+   * Фаза 9.5.4: группа — результат extrude (пара `add_shape` плиты + эта `group`).
+   * Пишет `extrudeSelected`; по нему шаг правится как extrude (глубина). `depth` —
+   * исходная глубина (сырая операция не меняется; эффективная — через edit_step).
+   * Старые extrude без `source` как extrude не редактируются (EXTRUDE-LEGACY).
+   */
+  source?: ExtrudeSource
+  /**
+   * CSG-INDEPENDENT-COPY: вставленный CSG (`ids: []`) со СВОИМ деревом — снимок
+   * дерева источника на момент копирования. По нему дерево копии строится заново
+   * при перемотке/загрузке; дети правятся (9.2/9.3) независимо от оригинала.
+   * Без поля (старые вставки) — запечённый меш, как раньше.
+   */
+  copyTree?: CopiedTree
+  /** UX-AUDIT-13: вставка CSG (`ids: []`) — в истории «Вставить CSG», а не «Объединение» */
+  pasted?: boolean
+}
+
+/** CSG-INDEPENDENT-COPY: снимок дерева CSG для вставки (буфер обмена → операция group). */
+export interface CopiedTree {
+  /** Id корня источника (узлы копии — `${idКопии}:${idУзлаИсточника}`) */
+  sourceRootId: string
+  /** Узлы поддерева источника (корень первым), без кэшей */
+  nodes: TreeNode[]
+  /**
+   * Система создания дерева (TRS₀ источника): мировые трансформы детей заданы в ней,
+   * вершины корня — в её локальной системе. Нужна правке ребёнка (findCreationTransform).
+   */
+  origin: TransformNR
+}
+
+/** Фаза 9.5.4: откуда взялась группа extrude. */
+export interface ExtrudeSource {
+  kind: 'extrude'
+  /** Объект, который выдавили (операнд A группы) */
+  baseId: string
+  /** Плита-куб (`add_shape` перед группой, операнд B) */
+  slabId: string
+  axis: 'X' | 'Y' | 'Z'
+  /** Глубина со знаком: > 0 — от грани max по оси, < 0 — от грани min */
+  depth: number
+}
+
+/**
+ * Фаза 9.3: правка параметров ребёнка CSG (примитива в Build Tree).
+ * Хранит новые params ребёнка И готовый меш результата (как `group`):
+ * воспроизведение детерминировано и не требует CSG при загрузке.
+ * Вершины — в локальной системе корня (v = S⁻¹Rᵀ·(v_world − posA)), pivot корня
+ * не меняется.
+ */
+export interface EditChildParamsOperation {
+  type: 'edit_child_params'
+  /** id CSG-объекта сцены (корень дерева) */
+  rootId: string
+  /** id узла-примитива в Build Tree */
+  nodeId: string
+  /** Полные новые params ребёнка */
+  params: ShapeParams
+  resultVertices: Float32Array | number[]
+  resultIndices: Uint32Array | number[]
+  resultNormals?: Float32Array | number[]
+  originalBboxSize?: { x: number; y: number; z: number }
+}
+
+/**
+ * Фаза 9.5: новые значения прошлого шага N — по типу шага.
+ * extrude — только для `group` с `source.kind === 'extrude'` (9.5.4).
+ */
+export type StepPatch =
+  | { kind: 'move'; delta: Vec3; rotDelta?: Vec3; scaleDelta?: Vec3 }
+  | { kind: 'mirror'; plane: MirrorPlane }
+  | { kind: 'extrude'; depth: number }
+
+/** Тип шага, к которому применим патч данного вида. */
+export type StepPatchKind = StepPatch['kind']
+
+/**
+ * Фаза 9.5: пересчитанный «замороженный» шаг ниже по течению от правки
+ * (готовый результат — воспроизведение без CSG при загрузке, решение 1 Фазы 9).
+ * Поля, которых нет, остаются как в исходной операции.
+ */
+export interface StepReplacement {
+  /** Индекс заменяемого шага в сырой истории (меньше индекса самой edit_step) */
+  stepIndex: number
+  /**
+   * Ожидаемый тип шага: несовпадение → замена пропускается.
+   * `add_shape` — плита extrude, пересчитанная по рамке базы (9.5.4); может стоять
+   * ДО правленого шага (плита — часть extrude-пары), остальные — только ниже по течению.
+   */
+  kind: 'group' | 'edit_child_params' | 'align' | 'add_shape'
+  resultVertices?: Float32Array | number[]
+  resultIndices?: Uint32Array | number[]
+  resultNormals?: Float32Array | number[]
+  /** group: pivot результата (= TRS операнда A на момент объединения) */
+  resultCenter?: Vec3
+  resultRotation?: Vec3
+  resultScale?: Vec3
+  originalBboxSize?: Vec3
+  /** align: пересчитанные смещения (политика re-solve, решение В2) */
+  deltas?: Record<string, number>
+  /** align по плоскости (ALIGN-PLANE-RESOLVE): пересчитанные сдвиг и поворот целей */
+  alignMoves?: Record<string, AlignMove>
+  /** add_shape (плита extrude, 9.5.4): новые размеры и положение */
+  params?: ShapeParams
+  transform?: TransformNR
+}
+
+/**
+ * Фаза 9.5: правка параметров прошлого шага N. Append-only: `operations[N]` не
+ * трогается, эффективная история строится чистой функцией `projectHistory`
+ * (store/project-history.ts). Undo/redo — по индексу, как у любой операции.
+ */
+export interface EditStepOperation {
+  type: 'edit_step'
+  /** Индекс шага N в сырой истории (префикс неизменен — индекс стабилен) */
+  stepIndex: number
+  /** Отпечаток шага N (тип + id цели): не совпал → правка игнорируется (R7) */
+  stepFingerprint: { type: TinkerCraftOperation['type']; targetId: string }
+  /** Новые значения шага N */
+  patch: StepPatch
+  /** Прежние значения — только для подписи в Timeline / диффа (undo их не использует) */
+  before?: StepPatch
+  /** ОБЯЗАТЕЛЬНО (может быть пустым): пересчитанные замороженные шаги ниже по течению */
+  replacements: StepReplacement[]
 }
 
 export interface ResizeDimsOperation { type: 'resize_dims'; id: string; params: ShapeParams }
@@ -122,7 +294,6 @@ export interface RenameOperation { type: 'rename'; id: string; name: string }
 export interface DeleteOperation { type: 'delete'; ids: string[] }
 export interface HideShowOperation { type: 'visibility'; ids: string[]; visible: boolean }
 export interface ColorOperation { type: 'color'; ids: string[]; color: string }
-export interface Text3DOperation { type: 'text3d'; id: string; name: string; color: string; transform: TransformNR; vertices: number[]; indices: number[] }
 
 // ---- Вспомогательные типы ----
 
@@ -142,7 +313,7 @@ export type AnchorPoint =
 
 export type ShapeType =
   | 'cube' | 'sphere' | 'cylinder' | 'cone'
-  | 'torus' | 'prism' | 'pyramid' | 'import_mesh' | 'csg' | 'text3d'
+  | 'torus' | 'prism' | 'pyramid' | 'import_mesh' | 'csg'
 
 export interface ShapeParams {
   width?: number
@@ -150,7 +321,6 @@ export interface ShapeParams {
   depth?: number
   radius?: number
   segments?: number
-  filletRadius?: number
   // FIX (MED-18-18): Removed index signature `[key: string]: number | undefined` —
   // ShapeParams should only accept known shape parameters for type safety.
   // Additional params (torusRadius, tubeRadius, tubeSegments, sides) are explicit.
@@ -163,6 +333,8 @@ export interface ShapeParams {
 export interface SceneObject {
   id: string
   name?: string
+  /** UX-AUDIT-31: 3D-текст (import_mesh) — исходная строка; «Тип: Текст», иконка текста */
+  text?: string
   shapeType: ShapeType
   params: ShapeParams
   color: string
@@ -245,7 +417,7 @@ export interface ExtractedMesh {
 /**
  * Node in the parameterized build tree.
  * - `primitive` (leaves): cube, sphere, cylinder, etc. with params + localTransform
- * - `boolean` (internal): union, subtract, intersect with children (exactly 2)
+ * - `boolean` (internal): union, subtract, intersect with N children (N-ARY-CSG; старые — 2)
  * - `baked` (leaves): imported STL / non-manifold with raw vertices/indices
  */
 export interface TreeNode {
@@ -273,6 +445,15 @@ export interface TreeNode {
    * Используется primitive- и baked-нодами.
    */
   localTransform?: TransformNR
+  /**
+   * NESTED-MOVED-EDIT: только boolean-узлы. TRS₀ — система, в которой лежат листья
+   * поддерева (трансформ на момент создания CSG / копирования дерева). Пока узел — корень,
+   * `localTransform` следует за объектом (move/rotate/scale), листья не трогаются; когда
+   * узел становится вложенным, воркер переносит его результат на
+   * Mat(localTransform)·Mat(originTransform)⁻¹ (сдвиг ДО объединения). Нет — старое дерево
+   * (поправка не применяется).
+   */
+  originTransform?: TransformNR
 
   // ── Baked nodes (imported STL, non-manifold) ──
   /** Vertex data for baked geometry */
@@ -281,6 +462,15 @@ export interface TreeNode {
   indices?: Uint32Array
   /** Normal data for baked geometry (null = no normals) */
   normals?: Float32Array | null
+
+  /**
+   * Фаза 9.8: упорядоченный список плоскостей зеркала для ЗЕРКАЛЬНОГО ПРИМИТИВА
+   * (`type: 'primitive'`, params — оригинальные). Геометрия = buildPrimitive(params),
+   * отражённая по каждой плоскости в origin (до применения TRS) — как
+   * `SceneObject.mirrored`. В отличие от baked-узла (вершины с зеркалом), params
+   * остаются редактируемыми, а воспроизведение по истории — синхронным.
+   */
+  mirrored?: MirrorPlane[]
 
   /**
    * Mirror plane used when baking this node (Variant B fix for MIRROR-CHIRALITY).
@@ -297,8 +487,16 @@ export interface TreeNode {
   // ── Boolean operations (internal nodes) ──
   /** Boolean operation type */
   operation?: 'union' | 'subtract' | 'intersect'
-  /** IDs of child nodes (exactly 2 for boolean) */
+  /**
+   * IDs of child nodes — N-ARY-CSG: N ≥ 2 (плоский список). Старые бинарные — `[a, b]`.
+   */
   children?: string[]
+  /**
+   * N-ARY-CSG: subtract/intersect — число детей группы A (`children[0..groupA)`), остальные —
+   * группа B: результат = union(A) op union(B). union — объединение всех детей (поле не нужно).
+   * Нет — 1: первый ребёнок против остальных (старые бинарные `[a, b]` → a op b).
+   */
+  groupA?: number
   /** Parent node ID — used for O(depth) cascade cache invalidation */
   parentId?: string
 

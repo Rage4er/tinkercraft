@@ -8,7 +8,7 @@
 import type { ShapeType } from "./csg/types";
 
 // ---- App version ----
-export const APP_VERSION = '1.2.4';
+export const APP_VERSION = '1.3.9';
 
 // ---- Shapes (data only, NO JSX) ----
 // Иконки — это строковые ключи, не React-компоненты.
@@ -42,15 +42,21 @@ export const SNAP_VALUES: { labelKey: string; value: number }[] = [
 
 // ---- Timeline filter labels ----
 // i18n: labels resolved at render time via t('filters.add_shape'), etc.
+// Ключ — категория шага (`filterKeyOf` в Timeline), а не тип операции: UX-AUDIT-29 — фильтр прячет
+// то, что на нём написано («Повернуть», «Масштаб» — не «Переместить»; все «Вставить …» — одна категория).
 export const OP_FILTER_LABELS: Record<string, string> = {
   add_shape: "filters.add_shape",
+  paste: "filters.paste",
   import_mesh: "filters.import_mesh",
   move: "filters.move",
+  rotate: "filters.rotate",
+  scale: "filters.scale",
   resize_dims: "filters.resize_dims",
-  fillet: "filters.fillet",
   mirror: "filters.mirror",
   align: "filters.align",
   group: "filters.group",
+  edit_child_params: "filters.edit_child_params",
+  edit_step: "filters.edit_step",
   delete: "filters.delete",
   visibility: "filters.visibility",
   color: "filters.color",
@@ -72,15 +78,18 @@ export const PASTE_OFFSET = 15;
 /** Delay before autosave triggers after last change (ms). */
 export const AUTOSAVE_DELAY_MS = 3000;
 
+/**
+ * N-ARY-CSG: мягкий лимит операндов одной CSG-операции. Больше — предупреждение
+ * («много объектов, разбейте»), операция всё равно выполняется (не блокирует).
+ */
+export const CSG_SOFT_LIMIT = 30;
+/** UX-AUDIT-9: сколько размещаемая фигура ждёт освобождения стора (долгий CSG), мс. */
+export const ADD_SHAPE_WAIT_MS = 30000;
+
 // ---- Numeric epsilon ----
 /** Epsilon for detecting meaningful position/rotation/scale changes in move operations. */
 export const MOVE_DELTA_EPSILON = 1e-6;
 
-// ---- Fillet ----
-/** Safety margin subtracted from max possible fillet radius. */
-export const FILLET_EPSILON = 0.1;
-/** Minimum allowed fillet radius (mm). */
-export const FILLET_MIN_RADIUS = 0.01;
 
 // ---- Vertex merge precision (STL import) ----
 /** Rounding precision for merging coincident vertices during STL import. */
@@ -96,25 +105,26 @@ export const OBJECT_COLORS = [
 // ---- Wad's Optimum 16 — curated color palette ----
 /**
  * Wad's Optimum 16 — палитра из 16 тщательно подобранных цветов
- * для быстрого выбора цвета объектов.
+ * для быстрого выбора цвета объектов. Подпись цвета — i18n `palette.colors.<name>`
+ * (`name` в нижнем регистре; UX-AUDIT-7: строки интерфейса только через i18n).
  */
-export const WADS_OPTIMUM_16: { name: string; nameRu: string; hex: string; rgb: string }[] = [
-  { name: 'Amethyst', nameRu: 'Аметистовый', hex: '#F0A0FF', rgb: 'rgb(240, 160, 255)' },
-  { name: 'Blue', nameRu: 'Синий', hex: '#0075DC', rgb: 'rgb(0, 117, 220)' },
-  { name: 'Caramel', nameRu: 'Карамельный', hex: '#993F00', rgb: 'rgb(153, 63, 0)' },
-  { name: 'Damson', nameRu: 'Темно-сливовый', hex: '#4C005C', rgb: 'rgb(76, 0, 92)' },
-  { name: 'Ebony', nameRu: 'Черный', hex: '#191919', rgb: 'rgb(25, 25, 25)' },
-  { name: 'Forest', nameRu: 'Лесной зеленый', hex: '#005C31', rgb: 'rgb(0, 92, 49)' },
-  { name: 'Green', nameRu: 'Зеленый', hex: '#2BCE48', rgb: 'rgb(43, 206, 72)' },
-  { name: 'Honeydew', nameRu: 'Бледно-зеленый', hex: '#FFCC99', rgb: 'rgb(255, 204, 153)' },
-  { name: 'Iron', nameRu: 'Серый', hex: '#808080', rgb: 'rgb(128, 128, 128)' },
-  { name: 'Jade', nameRu: 'Нефритовый', hex: '#94FFB5', rgb: 'rgb(148, 255, 181)' },
-  { name: 'Khaki', nameRu: 'Хаки', hex: '#8F7C00', rgb: 'rgb(143, 124, 0)' },
-  { name: 'Lime', nameRu: 'Лайм', hex: '#9DCC00', rgb: 'rgb(157, 204, 0)' },
-  { name: 'Magenta', nameRu: 'Пурпурный', hex: '#C20088', rgb: 'rgb(194, 0, 136)' },
-  { name: 'Navy', nameRu: 'Темно-синий', hex: '#003380', rgb: 'rgb(0, 51, 128)' },
-  { name: 'Orange', nameRu: 'Оранжевый', hex: '#FFA405', rgb: 'rgb(255, 164, 5)' },
-  { name: 'Pink', nameRu: 'Розовый', hex: '#FFA8BB', rgb: 'rgb(255, 168, 187)' },
+export const WADS_OPTIMUM_16: { name: string; hex: string; rgb: string }[] = [
+  { name: 'Amethyst', hex: '#F0A0FF', rgb: 'rgb(240, 160, 255)' },
+  { name: 'Blue', hex: '#0075DC', rgb: 'rgb(0, 117, 220)' },
+  { name: 'Caramel', hex: '#993F00', rgb: 'rgb(153, 63, 0)' },
+  { name: 'Damson', hex: '#4C005C', rgb: 'rgb(76, 0, 92)' },
+  { name: 'Ebony', hex: '#191919', rgb: 'rgb(25, 25, 25)' },
+  { name: 'Forest', hex: '#005C31', rgb: 'rgb(0, 92, 49)' },
+  { name: 'Green', hex: '#2BCE48', rgb: 'rgb(43, 206, 72)' },
+  { name: 'Honeydew', hex: '#FFCC99', rgb: 'rgb(255, 204, 153)' },
+  { name: 'Iron', hex: '#808080', rgb: 'rgb(128, 128, 128)' },
+  { name: 'Jade', hex: '#94FFB5', rgb: 'rgb(148, 255, 181)' },
+  { name: 'Khaki', hex: '#8F7C00', rgb: 'rgb(143, 124, 0)' },
+  { name: 'Lime', hex: '#9DCC00', rgb: 'rgb(157, 204, 0)' },
+  { name: 'Magenta', hex: '#C20088', rgb: 'rgb(194, 0, 136)' },
+  { name: 'Navy', hex: '#003380', rgb: 'rgb(0, 51, 128)' },
+  { name: 'Orange', hex: '#FFA405', rgb: 'rgb(255, 164, 5)' },
+  { name: 'Pink', hex: '#FFA8BB', rgb: 'rgb(255, 168, 187)' },
 ];
 
 // ============================================================
@@ -158,23 +168,18 @@ export const TOOLTIP_DATA: Record<string, TooltipData> = {
   // --- Ruler ---
   ruler: { labelKey: 'tools.ruler', shortcut: 'L', descriptionKey: 'tooltips.ruler' },
 
+  // --- DIMENSIONS ---
+  dimension: { labelKey: 'dimensions.button', shortcut: 'D', descriptionKey: 'tooltips.dimension' },
+
   // --- Mirror ---
   mirror_yz: { labelKey: 'mirror.yz', shortcut: 'M', descriptionKey: 'tooltips.mirrorYz' },
   mirror_xz: { labelKey: 'mirror.xz', shortcut: 'N', descriptionKey: 'tooltips.mirrorXz' },
   mirror_xy: { labelKey: 'mirror.xy', shortcut: 'B', descriptionKey: 'tooltips.mirrorXy' },
 
   // --- Align (9 кнопок: X/Y/Z × min/center/max) ---
-  align_x_min: { labelKey: 'align.x_min', descriptionKey: 'tooltips.alignXMin' },
-  align_x_center: { labelKey: 'align.x_center', descriptionKey: 'tooltips.alignXCenter' },
-  align_x_max: { labelKey: 'align.x_max', descriptionKey: 'tooltips.alignXMax' },
-  align_y_min: { labelKey: 'align.y_min', descriptionKey: 'tooltips.alignYMin' },
-  align_y_center: { labelKey: 'align.y_center', descriptionKey: 'tooltips.alignYCenter' },
-  align_y_max: { labelKey: 'align.y_max', descriptionKey: 'tooltips.alignYMax' },
-  align_z_min: { labelKey: 'align.z_min', descriptionKey: 'tooltips.alignZMin' },
-  align_z_center: { labelKey: 'align.z_center', descriptionKey: 'tooltips.alignZCenter' },
-  align_z_max: { labelKey: 'align.z_max', descriptionKey: 'tooltips.alignZMax' },
 
   // --- CSG operations ---
+  align_tool: { labelKey: 'alignMode.button', descriptionKey: 'tooltips.alignTool' },
   csg_union: { labelKey: 'csg.union', shortcut: 'U', descriptionKey: 'tooltips.csgUnion' },
   csg_subtract: { labelKey: 'csg.subtract', shortcut: 'X', descriptionKey: 'tooltips.csgSubtract' },
   csg_intersect: { labelKey: 'csg.intersect', shortcut: 'I', descriptionKey: 'tooltips.csgIntersect' },

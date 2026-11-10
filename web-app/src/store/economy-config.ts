@@ -7,6 +7,9 @@
 // export (1 ролик) и banner (1 ролик) — ОПЛАТА операций (§3.1/§3.2 ECONOMY.md),
 // токены за показ НЕ начисляются.
 
+import type { ShapeType } from '../csg/types'
+import { isTextObject } from './text-object'
+
 // ─── Тарифы ─────────────────────────────────────────────────────────
 
 /** Стоимость разовых операций */
@@ -313,11 +316,21 @@ export function countSceneObjects(
 }
 
 /**
+ * «Тип» объекта для квестов и кэшбэка. С v1.4.0 (merge main) 3D-текст — объект `import_mesh`
+ * с исходной строкой (`store/text-object.ts::isTextObject`, UX-AUDIT-31), а не отдельный
+ * shapeType `text3d`; для экономики он по-прежнему отдельный тип `text3d` (квест «Гравировка»,
+ * категория «текст» кэшбэка, разнообразие типов) — как до merge.
+ */
+export function economyShapeKind(id: string, obj: { shapeType: string; text?: string }): string {
+  return isTextObject({ id, shapeType: obj.shapeType as ShapeType, text: obj.text }) ? 'text3d' : obj.shapeType
+}
+
+/**
  * Отсканировать объекты и операции для расчёта кэшбэка V2.
  * Общий сканер с квестами V2 (§2.1, §4 ECONOMY.md v2.0).
  */
 export function scanForCashback(
-  objects: Record<string, { shapeType: string; color: string; transform: { scaleX: number; scaleY: number; scaleZ: number } }>,
+  objects: Record<string, { shapeType: string; text?: string; color: string; transform: { scaleX: number; scaleY: number; scaleZ: number } }>,
   operations: Array<{ type: string; ids?: string[] }>
 ): CashbackScanResult {
   const shapeTypes = new Set<string>()
@@ -339,7 +352,8 @@ export function scanForCashback(
   }
 
   for (const [id, obj] of Object.entries(objects)) {
-    shapeTypes.add(obj.shapeType)
+    const kind = economyShapeKind(id, obj)
+    shapeTypes.add(kind)
     if (obj.color && obj.color !== '#808080') coloredCount++
     if (obj.shapeType === 'csg') csgCount++
     // EC-R1: зеркало — создан mirror-операцией ИЛИ legacy scale < 0
@@ -347,7 +361,7 @@ export function scanForCashback(
       mirrorCreatedIds.has(id) ||
       obj.transform.scaleX < 0 || obj.transform.scaleY < 0 || obj.transform.scaleZ < 0
     ) mirrorCount++
-    if (obj.shapeType === 'text3d') textCount++
+    if (kind === 'text3d') textCount++
   }
 
   // Категории инструментов

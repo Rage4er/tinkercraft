@@ -44,6 +44,8 @@ export interface SnapResult {
   snapDistance: number;
   /** Расстояние от курсора до точки (в мировых единицах, 0 если raycast не попал). */
   cursorDistance: number;
+  /** DIMENSIONS: объект, на котором точка (меш под лучом). */
+  objectId?: string;
 }
 
 /**
@@ -94,70 +96,160 @@ export function getScenePivots(
   return pivots;
 }
 
-/**
- * Собрать все вершины меша в мировом пространстве.
- */
-function collectWorldVertices(
-  mesh: THREE.Mesh,
-  vertices: THREE.Vector3[] = [],
-): THREE.Vector3[] {
-  const pos = mesh.geometry.attributes.position;
-  if (!pos) return vertices;
+// ============================================================
+// UX-AUDIT-35: кандидаты привязки — только треугольники рядом с точкой попадания
+// ============================================================
+// Раньше на каждый запрос (каждое движение мыши в режиме линейки) все вершины и рёбра меша
+// переводились в мир и перебирались: импорт 100k — 60–110 мс на движение. Теперь у геометрии —
+// сетка треугольников в локальных координатах (строится один раз, кэш по геометрии: она
+// стабильна, пока объект не изменился — UX-AUDIT-21), а запрос берёт треугольники из ячеек вокруг
+// точки попадания в радиусе привязки. Результат тот же, что у полного перебора: вершина или
+// ребро ближе радиуса привязки лежат в треугольнике, чья рамка задевает зону запроса.
+//
+// UX-AUDIT-22: геометрия бывает и без индекса (CSG, импорт, цилиндр, конус — нормали по излому,
+// UX-AUDIT-20/26): вершина повторена в каждом треугольнике, поэтому общее ребро соседних
+// треугольников склеивается по позициям вершин.
 
-  // FIX (MED-18-30): Reuse a single Vector3 to reduce GC pressure
-  const v = new THREE.Vector3()
-  const m = mesh.matrixWorld
+/** Радиус, в котором ищутся кандидаты (мир): наибольший из радиусов вершины и ребра. */
+const SNAP_QUERY_RADIUS = Math.max(SNAP_VERTEX_RADIUS, SNAP_EDGE_RADIUS);
+/** Ячеек сетки по наибольшей стороне рамки (не меньше минимальной ячейки). */
+const GRID_CELLS_MAX = 64;
+const GRID_CELL_MIN = SNAP_QUERY_RADIUS;
 
-  for (let i = 0; i < pos.count; i++) {
-    v.set(pos.getX(i), pos.getY(i), pos.getZ(i)).applyMatrix4(m)
-    vertices.push(v.clone())
-  }
-  return vertices
+interface TriangleGrid {
+  min: THREE.Vector3;
+  cell: number;
+  nx: number;
+  ny: number;
+  nz: number;
+  cells: Map<number, number[]>;
 }
 
-/**
- * Собрать все рёбра (попарные точки) меша в мировом пространстве.
- */
-function collectWorldEdges(
-  mesh: THREE.Mesh,
-  edges: { from: THREE.Vector3; to: THREE.Vector3 }[] = [],
-): { from: THREE.Vector3; to: THREE.Vector3 }[] {
-  const pos = mesh.geometry.attributes.position;
-  const idx = mesh.geometry.index;
-  if (!pos || !idx) return edges;
+const gridCache = new WeakMap<THREE.BufferGeometry, TriangleGrid>();
 
-  // Deduplicate edges using a Set with canonical key "i1,i2" (i1 < i2)
-  const edgeSet = new Set<string>();
+/** Вершина `k` треугольника `t` — индекс в position (с индексом или без). */
+function cornerIndex(geometry: THREE.BufferGeometry, t: number, k: number): number {
+  const idx = geometry.index;
+  return idx ? idx.getX(t * 3 + k) : t * 3 + k;
+}
 
-  for (let i = 0; i < idx.count; i += 3) {
-    const indices = [idx.getX(i), idx.getX(i + 1), idx.getX(i + 2)];
-    const triEdges = [
-      [0, 1],
-      [1, 2],
-      [2, 0],
-    ];
-    for (const [a, b] of triEdges) {
-      const i1 = indices[a];
-      const i2 = indices[b];
-      const key = i1 < i2 ? `${i1},${i2}` : `${i2},${i1}`;
-      if (edgeSet.has(key)) continue;
-      edgeSet.add(key);
+function triangleCount(geometry: THREE.BufferGeometry): number {
+  const pos = geometry.attributes.position;
+  return Math.floor((geometry.index ? geometry.index.count : pos.count) / 3);
+}
 
-      // FIX (MED-18-31): Reuse Vector3 objects to reduce GC pressure
-      const from = new THREE.Vector3(
-        pos.getX(i1),
-        pos.getY(i1),
-        pos.getZ(i1),
-      ).applyMatrix4(mesh.matrixWorld);
-      const to = new THREE.Vector3(
-        pos.getX(i2),
-        pos.getY(i2),
-        pos.getZ(i2),
-      ).applyMatrix4(mesh.matrixWorld);
-      edges.push({ from, to });
+/** Сетка треугольников геометрии (локальные координаты) — один раз на геометрию. */
+function triangleGrid(geometry: THREE.BufferGeometry): TriangleGrid {
+  const cached = gridCache.get(geometry);
+  if (cached) return cached;
+  const pos = geometry.attributes.position;
+  if (!geometry.boundingBox) geometry.computeBoundingBox();
+  const box = geometry.boundingBox!;
+  const size = new THREE.Vector3().subVectors(box.max, box.min);
+  const cell = Math.max(GRID_CELL_MIN, Math.max(size.x, size.y, size.z) / GRID_CELLS_MAX);
+  const nx = Math.floor(size.x / cell) + 1, ny = Math.floor(size.y / cell) + 1, nz = Math.floor(size.z / cell) + 1;
+  const cells = new Map<number, number[]>();
+  const clampI = (v: number, n: number) => Math.max(0, Math.min(n - 1, Math.floor(v)));
+  const tris = triangleCount(geometry);
+  for (let t = 0; t < tris; t++) {
+    let x0 = Infinity, y0 = Infinity, z0 = Infinity, x1 = -Infinity, y1 = -Infinity, z1 = -Infinity;
+    for (let k = 0; k < 3; k++) {
+      const i = cornerIndex(geometry, t, k);
+      const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+      if (x < x0) x0 = x; if (x > x1) x1 = x;
+      if (y < y0) y0 = y; if (y > y1) y1 = y;
+      if (z < z0) z0 = z; if (z > z1) z1 = z;
+    }
+    const ax = clampI((x0 - box.min.x) / cell, nx), bx = clampI((x1 - box.min.x) / cell, nx);
+    const ay = clampI((y0 - box.min.y) / cell, ny), by = clampI((y1 - box.min.y) / cell, ny);
+    const az = clampI((z0 - box.min.z) / cell, nz), bz = clampI((z1 - box.min.z) / cell, nz);
+    for (let iz = az; iz <= bz; iz++) for (let iy = ay; iy <= by; iy++) for (let ix = ax; ix <= bx; ix++) {
+      const key = ix + nx * (iy + ny * iz);
+      const list = cells.get(key);
+      if (list) list.push(t); else cells.set(key, [t]);
     }
   }
-  return edges;
+  const grid = { min: box.min.clone(), cell, nx, ny, nz, cells };
+  gridCache.set(geometry, grid);
+  return grid;
+}
+
+/** Треугольники из ячеек, задевающих куб «центр ± радиус» (локальные координаты). */
+function trianglesNear(grid: TriangleGrid, c: THREE.Vector3, r: number): number[] {
+  const { min, cell, nx, ny, nz, cells } = grid;
+  const lo = (v: number, m: number) => Math.max(0, Math.floor((v - r - m) / cell));
+  const hi = (v: number, m: number, n: number) => Math.min(n - 1, Math.floor((v + r - m) / cell));
+  const seen = new Set<number>();
+  for (let iz = lo(c.z, min.z); iz <= hi(c.z, min.z, nz); iz++)
+    for (let iy = lo(c.y, min.y); iy <= hi(c.y, min.y, ny); iy++)
+      for (let ix = lo(c.x, min.x); ix <= hi(c.x, min.x, nx); ix++) {
+        const list = cells.get(ix + nx * (iy + ny * iz));
+        if (list) for (const t of list) seen.add(t);
+      }
+  return [...seen];
+}
+
+const _scale = new THREE.Vector3();
+const _q = new THREE.Quaternion();
+const _p = new THREE.Vector3();
+
+/**
+ * Вершины и рёбра (мир) треугольников меша рядом с мировой точкой `hit`. Радиус запроса
+ * пересчитан в локальные единицы с запасом на масштаб (÷ наименьший масштаб): всё, что в мире
+ * ближе SNAP_QUERY_RADIUS, попадает в кандидаты.
+ */
+function nearbyWorldGeometry(
+  mesh: THREE.Mesh,
+  hit: THREE.Vector3,
+): { vertices: THREE.Vector3[]; edges: { from: THREE.Vector3; to: THREE.Vector3 }[] } {
+  const geometry = mesh.geometry as THREE.BufferGeometry;
+  const pos = geometry.attributes.position;
+  const vertices: THREE.Vector3[] = [];
+  const edges: { from: THREE.Vector3; to: THREE.Vector3 }[] = [];
+  if (!pos) return { vertices, edges };
+  mesh.matrixWorld.decompose(_p, _q, _scale);
+  const minScale = Math.max(1e-9, Math.min(Math.abs(_scale.x), Math.abs(_scale.y), Math.abs(_scale.z)));
+  const local = mesh.worldToLocal(hit.clone());
+  const tris = trianglesNear(triangleGrid(geometry), local, SNAP_QUERY_RADIUS / minScale);
+  const m = mesh.matrixWorld;
+  // Канонический индекс вершины: с индексом — сам индекс; без индекса — первый индекс с той же
+  // позицией среди кандидатов (числовые ключи Map — без строк: на 100k это и было узким местом).
+  const byX = new Map<number, Map<number, Map<number, number>>>();
+  const canonical = geometry.index
+    ? (i: number) => i
+    : (i: number) => {
+      const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+      let byY = byX.get(x);
+      if (!byY) { byY = new Map(); byX.set(x, byY); }
+      let byZ = byY.get(y);
+      if (!byZ) { byZ = new Map(); byY.set(y, byZ); }
+      const found = byZ.get(z);
+      if (found !== undefined) return found;
+      byZ.set(z, i);
+      return i;
+    };
+  const world = new Map<number, THREE.Vector3>();
+  const at = (i: number): THREE.Vector3 => {
+    let w = world.get(i);
+    if (!w) {
+      w = new THREE.Vector3(pos.getX(i), pos.getY(i), pos.getZ(i)).applyMatrix4(m);
+      world.set(i, w);
+      vertices.push(w);
+    }
+    return w;
+  };
+  const n = pos.count;
+  const edgeSet = new Set<number>();
+  for (const t of tris) {
+    const c0 = canonical(cornerIndex(geometry, t, 0)), c1 = canonical(cornerIndex(geometry, t, 1)), c2 = canonical(cornerIndex(geometry, t, 2));
+    for (const [a, b] of [[c0, c1], [c1, c2], [c2, c0]]) {
+      const key = a < b ? a * n + b : b * n + a;
+      if (edgeSet.has(key)) continue;
+      edgeSet.add(key);
+      edges.push({ from: at(a), to: at(b) });
+    }
+  }
+  return { vertices, edges };
 }
 
 /**
@@ -319,11 +411,8 @@ export function findNearestSnap(
   raycaster.ray.at(hitDistance, cursorPoint)
   const cursorDistance = hitPoint.distanceTo(cursorPoint)
 
-  // Собираем вершины и рёбра в мировом пространстве
-  const worldVerts: THREE.Vector3[] = [];
-  const worldEdges: { from: THREE.Vector3; to: THREE.Vector3 }[] = [];
-  collectWorldVertices(hitMesh, worldVerts);
-  collectWorldEdges(hitMesh, worldEdges);
+  // UX-AUDIT-35: вершины и рёбра — только рядом с точкой попадания (сетка треугольников)
+  const { vertices: worldVerts, edges: worldEdges } = nearbyWorldGeometry(hitMesh, hitPoint);
 
   // Находим ближайшую вершину
   const vertResult = closestVertex(worldVerts, hitPoint);
@@ -391,6 +480,7 @@ export function findNearestSnap(
       type: best.type,
       snapDistance: best.threshold,
       cursorDistance,
+      objectId: hitMesh.userData.objectId as string | undefined,
     };
   }
 
@@ -400,6 +490,7 @@ export function findNearestSnap(
     type: null,
     snapDistance: Infinity,
     cursorDistance,
+    objectId: hitMesh.userData.objectId as string | undefined,
   };
 }
 

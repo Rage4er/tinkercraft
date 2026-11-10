@@ -1,11 +1,12 @@
 import type { GizmoMode } from "./Viewport3D";
 import { useTranslation } from "react-i18next";
 import MirrorButtons from "./MirrorButtons";
-import AlignButtons from "./AlignButtons";
 import CsgButtons from "./CsgButtons";
+import type { CsgOpButtonStates } from "../store/csg-group-mode";
 import IconButton from "./IconButton";
 import ToolbarRowSplit from "./ToolbarRowSplit";
 import Badge from "./Badge";
+import DimensionMenuButton from "./DimensionMenuButton";
 import { TOOLTIP_DATA, type TooltipData } from "../constants";
 import {
   OpenIcon,
@@ -29,6 +30,7 @@ import {
   PerspectiveIcon,
   ThemeIcon,
   TextIcon,
+  AlignToolIcon,
 } from "./icons";
 import { useToolbarLayout } from "../hooks/useToolbarLayout";
 import type { ToolbarGroup } from "../utils/toolbar-layout";
@@ -45,10 +47,13 @@ export default function Toolbar({
   cameraMode,
   gizmoMode,
   rulerActive,
+  dimensionActive,
+  dimensionsVisible,
   canMirror,
   canAlign,
+  alignActive,
   canCsg,
-  nonManifoldSelected,
+  csgOpStates,
   theme,
   onOpen,
   onSave,
@@ -65,10 +70,13 @@ export default function Toolbar({
   onToggleCamera,
   onGizmo,
   onToggleRuler,
+  onDimensionMode,
+  onDimensionSettings,
+  onToggleDimensions,
   onMirror,
   onPreviewMirror,
   onPreviewMirrorEnd,
-  onAlign,
+  onAlignMode,
   onCsg,
   onToggleTheme,
   onClearScene,
@@ -83,10 +91,17 @@ export default function Toolbar({
   cameraMode: "perspective" | "orthographic";
   gizmoMode: "translate" | "rotate" | "scale" | "none";
   rulerActive: boolean;
+  /** DIMENSIONS: режим «Размер» активен */
+  dimensionActive: boolean;
+  /** DIMENSIONS: слой размеров виден */
+  dimensionsVisible: boolean;
   canMirror: boolean;
   canAlign: boolean;
+  /** Режим выравнивания активен (ALIGN-UI-REVIT) */
+  alignActive: boolean;
   canCsg: boolean;
-  nonManifoldSelected: boolean;
+  /** CSG-GROUP-FIX: доступность / нажатость каждой операции (режим A → B → Enter) */
+  csgOpStates?: CsgOpButtonStates;
   theme: "dark" | "light";
   onOpen: () => void;
   onSave: () => void;
@@ -103,10 +118,15 @@ export default function Toolbar({
   onToggleCamera: () => void;
   onGizmo: (mode: "translate" | "rotate" | "scale" | "none") => void;
   onToggleRuler: () => void;
+  /** DIMENSIONS: меню кнопки «Размер» — «Поставить размер» (режим), «Настройки размера», «Показать / скрыть размеры» */
+  onDimensionMode: () => void;
+  onDimensionSettings: () => void;
+  onToggleDimensions: () => void;
   onMirror: (plane: "XY" | "XZ" | "YZ") => void;
   onPreviewMirror: (plane: "XY" | "XZ" | "YZ") => void;
   onPreviewMirrorEnd: () => void;
-  onAlign: (axis: "X" | "Y" | "Z", anchor: "min" | "center" | "max") => void;
+  /** Кнопка «Выровнять»: вход в режим / выход из него */
+  onAlignMode: () => void;
   onCsg: (op: "union" | "subtract" | "intersect") => void;
   onToggleTheme: () => void;
   onClearScene: () => void;
@@ -135,9 +155,9 @@ export default function Toolbar({
     { id: "edit2", buttonCount: 3 },
     { id: "view", buttonCount: 3 },
     { id: "gizmo", buttonCount: 4 },
-    { id: "ruler", buttonCount: 1 },
+    { id: "ruler", buttonCount: 2 },
     { id: "mirror", buttonCount: 3 },
-    { id: "align", buttonCount: 9 },
+    { id: "align", buttonCount: 1 },
     { id: "csg", buttonCount: 3 },
     { id: "theme", buttonCount: 1 },
     { id: "clear", buttonCount: 1 },
@@ -157,7 +177,7 @@ export default function Toolbar({
       role="toolbar"
       aria-label={t("toolbar.label")}
     >
-      <span className="toolbar-logo"><TCLogoIcon size={34} /> {t("app.name")}</span>
+      <span className="toolbar-logo"><TCLogoIcon size={34} /> <span className="toolbar-logo-text">{t("app.name")}</span></span>
 
       {/* Group 0: File */}
       <ToolbarRowSplit
@@ -165,12 +185,12 @@ export default function Toolbar({
         buttons={[
           <IconButton key="open" icon={<OpenIcon size={32} />} label={t("actions.open")} onClick={onOpen} tooltip={TOOLTIP_DATA.open} />,
           <IconButton key="save" icon={<SaveIcon size={32} />} label={t("actions.save")} onClick={onSave} tooltip={TOOLTIP_DATA.save} />,
-          <div key="export" style={{ position: 'relative' }}>
+          <div key="export" style={{ position: 'relative', display: 'flex' }}>
             <IconButton icon={<ExportIcon size={32} />} label={t('toolbar.stl')} onClick={onExportStl} disabled={objectCount === 0} tooltip={TOOLTIP_DATA.export_stl} />
             <Badge type="tokens" value="50" isActive={exportActive} />
             <Badge type="ad" value="1" isActive={exportActive} />
           </div>,
-          <div key="import" style={{ position: 'relative' }}>
+          <div key="import" style={{ position: 'relative', display: 'flex' }}>
             <IconButton icon={<ImportIcon size={32} />} label={t("actions.import")} onClick={onImportStl} disabled={busy} tooltip={TOOLTIP_DATA.import_stl} />
             <Badge type="tokens" value="100" isActive={importActive} />
             <Badge type="ad" value="2" isActive={importActive} />
@@ -224,11 +244,19 @@ export default function Toolbar({
       />
       <div className="toolbar-separator" />
 
-      {/* Group 5: Ruler */}
+      {/* Group 5: Ruler + Размер (DIMENSIONS: одна кнопка с меню — на 1366 тулбар в одну строку) */}
       <ToolbarRowSplit
         rows={getRows("ruler")}
         buttons={[
           <IconButton key="ruler" icon={<RulerIcon size={32} />} label={t("tools.ruler")} onClick={onToggleRuler} tooltip={TOOLTIP_DATA.ruler} buttonVariant={rulerActive ? "active" : "default"} />,
+          <DimensionMenuButton
+            key="dimension"
+            dimensionActive={dimensionActive}
+            dimensionsVisible={dimensionsVisible}
+            onDimensionMode={onDimensionMode}
+            onDimensionSettings={onDimensionSettings}
+            onToggleDimensions={onToggleDimensions}
+          />,
         ]}
       />
       <div className="toolbar-separator" />
@@ -244,11 +272,24 @@ export default function Toolbar({
       <div className="toolbar-separator" />
 
       {/* Group 7: Align */}
-      <AlignButtons disabled={!canAlign} onAlign={onAlign} maxRows={getRows("align")} />
+      <ToolbarRowSplit
+        rows={getRows("align")}
+        buttons={[
+          <IconButton
+            key="align"
+            icon={<AlignToolIcon size={32} />}
+            label={t("alignMode.button")}
+            onClick={onAlignMode}
+            disabled={!canAlign && !alignActive}
+            tooltip={TOOLTIP_DATA.align_tool}
+            buttonVariant={alignActive ? "active" : "default"}
+          />,
+        ]}
+      />
       <div className="toolbar-separator" />
 
       {/* Group 8: CSG */}
-      <CsgButtons disabled={!canCsg} onCsg={onCsg} nonManifoldSelected={nonManifoldSelected} maxRows={getRows("csg")} />
+      <CsgButtons disabled={!canCsg} onCsg={onCsg} opStates={csgOpStates} maxRows={getRows("csg")} />
       <div className="toolbar-separator" />
 
       {/* Group 9: Theme */}

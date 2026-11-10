@@ -49,12 +49,14 @@ bowler
 # === Node.js (universal) ===
 node_modules/
 dist/
+dist-yandex/
 build/
 *.tsbuildinfo
 
 # === IDE ===
 .idea/
 .vscode/
+.claude/
 *.swp
 .gigacode_vsc/
 

@@ -16,7 +16,21 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { TransformControls } from "three/examples/jsm/controls/TransformControls.js";
 import type { SceneObject, TransformNR } from "../csg/types";
-import { computeAABB } from "../store/helpers";
+import { computeAABB, colorForIndex, defaultShapeParams } from "../store/helpers";
+import { buildObjectGeometry } from "./object-geometry";
+import { VIEWPORT_MOUSE_BUTTONS } from "./viewport-nav";
+import { createAdaptiveGrid, updateAdaptiveGrid, setAdaptiveGridTheme, viewHeightAt, type GridState } from "./adaptive-grid";
+import { shadowFrustumFor, applyShadowFrustum, sameShadowFrustum, type ShadowFrustum } from "./shadow-follow";
+import { SelectionOutlinePass, selectionOutlineTargets, renderWithSelectionOutline, DRAW_OVER_OUTLINE, GROUP_A_OUTLINE } from "./selection-outline";
+import { useCsgGroupModeStore } from "../store/csg-group-mode";
+import { usePlacementModeStore } from "../store/placement-mode";
+import { useDimensionsStore } from "../store/dimensions-store";
+import { useDimensionModeStore } from "../store/dimension-mode";
+import { useUiStore } from "../store/ui-store";
+import { useDocumentStore } from "../store/document-store";
+import { dimensionEnds, dimensionGeometry, formatDimensionValue } from "../store/dimensions";
+import { buildDimensionObject, disposeDimensionObject } from "./dimension-render";
+import { useTranslation } from "react-i18next";
 import {
     findNearestSnap,
     createSnapIndicator,
@@ -41,23 +55,18 @@ const ORTHO_HALF_FOV_DEG = 22.5;
 // Controls
 const CONTROLS_DAMPING = 0.08;
 const CONTROLS_MIN_DIST = 10;
-const CONTROLS_MAX_DIST = 2000;
+// GRID-ADAPTIVE: сетка бесконечная — отдаление до 5 м (шаг сетки 100 мм)
+const CONTROLS_MAX_DIST = 5000;
 const CONTROLS_MAX_POLAR = Math.PI - 0.01;
 const TRANSFORM_SIZE = 0.8;
 
 // Lighting
 const AMBIENT_INTENSITY = 0.45;
 const SUN_INTENSITY = 1.2;
-const SUN_POS = new THREE.Vector3(100, -80, 200);
 const SUN_SHADOW_SIZE = 4096;
-const SUN_SHADOW_RANGE = 200;
-const SUN_SHADOW_NEAR = 0.1;
-const SUN_SHADOW_FAR = 1000;
-// FIX: shadow acne — PCFSoftShadowMap без bias даёт полосатые треугольники на гранях.
-// Вертикальные грани (угол падения света ≈ 90°) требуют БОЛЬШЕГО сдвига, чем
-// горизонтальные — для них -0.0005 было недостаточно.
-const SUN_SHADOW_BIAS = -0.002;
-const SUN_SHADOW_NORMAL_BIAS = 0.05;
+// SHADOW-BOUNDS-400: направление солнца, область теней (следует за видом) и смещения (bias: FIX shadow
+// acne — PCFSoftShadowMap без bias даёт полосатые треугольники на гранях; вертикальным граням нужен
+// больший сдвиг) — shadow-follow.ts
 const FILL_INTENSITY = 0.4;
 const FILL_POS = new THREE.Vector3(-100, 80, 50);
 const FILL_COLOR = 0x8888ff;
@@ -65,12 +74,9 @@ const FILL_COLOR = 0x8888ff;
 // Scene
 const BG_COLOR_DARK = 0x1e1e2e;
 const BG_COLOR_LIGHT = 0xf0f0f5;
+/** Приёмник теней (прозрачная плоскость под объектами): геометрия GRID_SIZE × GRID_SIZE, масштаб — по области
+ *  теней, следует за видом (SHADOW-BOUNDS-400, shadow-follow.ts); сетка — adaptive-grid.ts */
 const GRID_SIZE = 400;
-const GRID_DIVISIONS = 40;
-const GRID_COLOR_MAJOR_DARK = 0x3a3a5c;
-const GRID_COLOR_MINOR_DARK = 0x2a2a4a;
-const GRID_COLOR_MAJOR_LIGHT = 0x999999;
-const GRID_COLOR_MINOR_LIGHT = 0xcccccc;
 const GROUND_Z = -0.5;
 const GROUND_OPACITY = 0.25;
 const AXES_SIZE = 20;
@@ -79,6 +85,9 @@ const AXES_POS = new THREE.Vector3(-170, -170, -0.4);
 // Selection highlight
 const EMISSIVE_SELECTED = 0x444466;
 const EMISSIVE_INTENSITY = 0.5;
+// CSG-GROUP-FIX: группа A режима вычитания / пересечения — тёплая подсветка (B — как выделение)
+const EMISSIVE_GROUP_A = 0xcc6600;
+const EMISSIVE_GROUP_A_INTENSITY = 0.9;
 
 // Material defaults
 const MATERIAL_ROUGHNESS = 0.35;
@@ -128,7 +137,7 @@ export interface ThreeInitResult {
     fitTargetRef: React.MutableRefObject<FitTarget | null>;
     cubeCamera: THREE.PerspectiveCamera | null;
     cubeCtrl: OrbitControls | null;
-    gridRef: React.MutableRefObject<THREE.GridHelper | null>;
+    gridRef: React.MutableRefObject<THREE.Mesh | null>;
 }
 
 // ============================================================
@@ -139,6 +148,8 @@ export function useThreeInit(
     webglOk: boolean,
     cameraMode: 'perspective' | 'orthographic',
     onFpsUpdate: (fps: number) => void,
+    /** SELECTION-OUTLINE: выделенные объекты — кайма в цикле отрисовки */
+    selectedIds: ReadonlySet<string> = new Set(),
 ): ThreeInitResult {
     const [sceneReady, setSceneReady] = useState(false);
     const [cubeCamera, setCubeCamera] = useState<THREE.PerspectiveCamera | null>(null);
@@ -148,7 +159,7 @@ export function useThreeInit(
     const initRanRef = useRef(false);
     const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
     const sceneRef = useRef<THREE.Scene | null>(null);
-    const gridRef = useRef<THREE.GridHelper | null>(null);
+    const gridRef = useRef<THREE.Mesh | null>(null);
     const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
     const orthoCameraRef = useRef<THREE.OrthographicCamera | null>(null);
     const cameraModeRef = useRef<'perspective' | 'orthographic'>(cameraMode);
@@ -166,6 +177,18 @@ export function useThreeInit(
     useEffect(() => {
         cameraModeRef.current = cameraMode;
     }, [cameraMode]);
+
+    // SELECTION-OUTLINE: выделение читается в цикле отрисовки (меши — из meshMapRef каждый кадр)
+    const outlineIdsRef = useRef<ReadonlySet<string>>(selectedIds);
+    useEffect(() => {
+        outlineIdsRef.current = selectedIds;
+    }, [selectedIds]);
+    // CSG-GROUP-UI: группа A режима «Вычитание» / «Пересечение» — тёплая кайма (B — выделение, синяя)
+    const csgGroupA = useCsgGroupModeStore((s) => s.csgGroupMode?.groupA);
+    const groupAIdsRef = useRef<ReadonlySet<string>>(new Set());
+    useEffect(() => {
+        groupAIdsRef.current = new Set(csgGroupA ?? []);
+    }, [csgGroupA]);
 
     // Stabilize onFpsUpdate via ref
     const fpsUpdateRef = useRef(onFpsUpdate);
@@ -215,28 +238,23 @@ export function useThreeInit(
         scene.add(new THREE.AmbientLight(0xffffff, AMBIENT_INTENSITY));
 
         const sun = new THREE.DirectionalLight(0xffffff, SUN_INTENSITY);
-        sun.position.copy(SUN_POS);
         sun.castShadow = true;
         sun.shadow.mapSize.width = sun.shadow.mapSize.height = SUN_SHADOW_SIZE;
-        sun.shadow.camera.left = sun.shadow.camera.bottom = -SUN_SHADOW_RANGE;
-        sun.shadow.camera.right = sun.shadow.camera.top = SUN_SHADOW_RANGE;
-        sun.shadow.camera.near = SUN_SHADOW_NEAR;
-        sun.shadow.camera.far = SUN_SHADOW_FAR;
-        // FIX: bias убирает полосатые артефакты самозатенения на плоских гранях
-        sun.shadow.bias = SUN_SHADOW_BIAS;
-        sun.shadow.normalBias = SUN_SHADOW_NORMAL_BIAS;
         scene.add(sun);
+        // SHADOW-BOUNDS-400: цель солнца в сцене — область теней следует за видом (позиция, цель, камера
+        // тени, bias — applyShadowFrustum в цикле отрисовки)
+        scene.add(sun.target);
 
         const fill = new THREE.DirectionalLight(FILL_COLOR, FILL_INTENSITY);
         fill.position.copy(FILL_POS);
         scene.add(fill);
 
-        // Grid in XY plane (Z=0)
-        const grid = new THREE.GridHelper(GRID_SIZE, GRID_DIVISIONS, GRID_COLOR_MAJOR_DARK, GRID_COLOR_MINOR_DARK);
-        grid.rotation.x = Math.PI / 2;
-        grid.position.z = GROUND_Z;
+        // GRID-ADAPTIVE: сетка в плоскости XY — тонкая + жирная (×10), шаг 1 / 5 / 10 / 50 / 100 по масштабу,
+        // без края (шейдер по мировым координатам, следует за центром вида, гаснет к краю радиуса)
+        const grid = createAdaptiveGrid('dark', GROUND_Z);
         scene.add(grid);
         gridRef.current = grid;
+        let gridState: GridState | null = null;
 
         // Shadow receiver
         const groundGeo = new THREE.PlaneGeometry(GRID_SIZE, GRID_SIZE);
@@ -245,6 +263,20 @@ export function useThreeInit(
         ground.position.z = GROUND_Z;
         ground.receiveShadow = true;
         scene.add(ground);
+        let shadowState: ShadowFrustum | null = null;
+        let shadowKey = "";
+        const updateShadows = (target: THREE.Vector3, viewDist: number) => {
+            const key = `${target.x},${target.y},${target.z},${viewDist}`;
+            if (key === shadowKey) return;
+            shadowKey = key;
+            const sf = shadowFrustumFor(target, viewDist, SUN_SHADOW_SIZE);
+            if (sameShadowFrustum(shadowState, sf)) return;
+            shadowState = sf;
+            applyShadowFrustum(sun, ground, GRID_SIZE, sf);
+            container.dataset.shadowHalf = String(Math.round(sf.half));
+            container.dataset.shadowCenter = `${Math.round(sf.center.x)},${Math.round(sf.center.y)}`;
+        };
+        updateShadows(DEFAULT_CAM_TARGET, DEFAULT_CAM_POS.distanceTo(DEFAULT_CAM_TARGET));
 
         // Axes helper
         const axes = new THREE.AxesHelper(AXES_SIZE);
@@ -257,6 +289,11 @@ export function useThreeInit(
         controls.minDistance = CONTROLS_MIN_DIST;
         controls.maxDistance = CONTROLS_MAX_DIST;
         controls.maxPolarAngle = CONTROLS_MAX_POLAR;
+        // VIEWPORT-NAV: ЛКМ — выбор и рамка (камеру не вращает), ПКМ — вращение, СКМ — сдвиг, колесо — масштаб
+        controls.mouseButtons = { ...VIEWPORT_MOUSE_BUTTONS };
+        // VIEWPORT-NAV: колесо / вращение / сдвиг прерывают анимацию «Вписать в экран» — иначе
+        // после F (из далёкого вида анимация идёт секунды) ввод пользователя затирался анимацией
+        controls.addEventListener("start", () => { fitTargetRef.current = null; });
         controlsRef.current = controls;
         setCubeCamera(camera);
         setCubeCtrl(controls);
@@ -268,8 +305,19 @@ export function useThreeInit(
             controls.enabled = !e.value;
         });
         // FIX: TransformControls must be added to scene via getHelper() to render the gizmo
-        scene.add((tc as unknown as { getHelper(): THREE.Object3D }).getHelper());
+        const gizmoHelper = (tc as unknown as { getHelper(): THREE.Object3D }).getHelper();
+        // SELECTION-OUTLINE: гизмо рисуется поверх каймы
+        gizmoHelper.userData[DRAW_OVER_OUTLINE] = true;
+        scene.add(gizmoHelper);
         transformCtRef.current = tc;
+
+        // SELECTION-OUTLINE: кайма выделенных (OutlinePass поверх канваса, буферы — в CSS px)
+        const outline = new SelectionOutlinePass(w, h, scene, camera);
+        // CSG-GROUP-UI: кайма группы A (тёплая) — рисуется до каймы выделенных (B)
+        const outlineA = new SelectionOutlinePass(w, h, scene, camera, GROUP_A_OUTLINE);
+        const outlinePasses = [outlineA, outline];
+        let outlineCount = -1;
+        let outlineACount = -1;
 
         const ro = new ResizeObserver(() => {
             const cw = container.clientWidth;
@@ -280,6 +328,8 @@ export function useThreeInit(
             renderer.setSize(cw, ch);
             camera.aspect = cw / ch;
             camera.updateProjectionMatrix();
+            outline.setSize(Math.max(1, cw), Math.max(1, ch));
+            outlineA.setSize(Math.max(1, cw), Math.max(1, ch));
         });
         ro.observe(container);
 
@@ -319,7 +369,38 @@ export function useThreeInit(
                 activeCam = orthoC;
             }
             activeCameraRef.current = activeCam;
-            renderer.render(scene, activeCam);
+            // GRID-ADAPTIVE: шаг и радиус сетки — под текущий вид (масштаб у цели камеры)
+            const viewDist = camera.position.distanceTo(controls.target);
+            const gs = updateAdaptiveGrid(grid, {
+                target: controls.target,
+                distance: viewDist,
+                viewHeightMm: viewHeightAt(CAMERA_FOV, viewDist),
+                viewportHeightPx: container.clientHeight || renderer.domElement.clientHeight,
+            });
+            // SHADOW-BOUNDS-400: тени — у центра вида, область по отдалению камеры
+            updateShadows(controls.target, viewDist);
+            if (!gridState || gs.step !== gridState.step || Math.abs(gs.radius - gridState.radius) > 1
+                || Math.abs(gs.center.x - gridState.center.x) > 0.5 || Math.abs(gs.center.y - gridState.center.y) > 0.5) {
+                gridState = gs;
+                container.dataset.gridStep = String(gs.step);
+                container.dataset.gridMajor = String(gs.major);
+                container.dataset.gridRadius = String(Math.round(gs.radius));
+                container.dataset.gridCenter = `${Math.round(gs.center.x)},${Math.round(gs.center.y)}`;
+            }
+            // SELECTION-OUTLINE: есть выделенные — кайма вокруг них; нет — обычный кадр
+            selectionOutlineTargets(outlineIdsRef.current, meshMapRef.current, outline.selectedObjects);
+            selectionOutlineTargets(groupAIdsRef.current, meshMapRef.current, outlineA.selectedObjects);
+            const drawn = renderWithSelectionOutline(renderer, scene, activeCam, outlinePasses);
+            const outlined = drawn ? outline.selectedObjects.length : 0;
+            if (outlined !== outlineCount) {
+                outlineCount = outlined;
+                container.dataset.outlineCount = String(outlined);
+            }
+            const outlinedA = drawn ? outlineA.selectedObjects.length : 0;
+            if (outlinedA !== outlineACount) {
+                outlineACount = outlinedA;
+                container.dataset.outlineACount = String(outlinedA);
+            }
             const now = performance.now();
             fpsRef.current.frames++;
             if (now - fpsRef.current.last >= FPS_INTERVAL_MS) {
@@ -341,6 +422,8 @@ export function useThreeInit(
             setSceneReady(false);
             if (rafRef.current) cancelAnimationFrame(rafRef.current);
             ro.disconnect();
+            outline.dispose();
+            outlineA.dispose();
             renderer.dispose();
             if (container.contains(renderer.domElement))
                 container.removeChild(renderer.domElement);
@@ -373,16 +456,9 @@ export function useThreeInit(
     };
 }
 
-// ---- Тема: смена цвета грида ----
-export function setGridColor(grid: THREE.GridHelper | null, theme: 'dark' | 'light') {
-    if (!grid) return;
-    const major = theme === 'dark' ? GRID_COLOR_MAJOR_DARK : GRID_COLOR_MAJOR_LIGHT;
-    const minor = theme === 'dark' ? GRID_COLOR_MINOR_DARK : GRID_COLOR_MINOR_LIGHT;
-    grid.material = new THREE.LineBasicMaterial({
-        color: minor,
-        transparent: true,
-        opacity: 0.5,
-    });
+// ---- Тема: смена цвета сетки (GRID-ADAPTIVE) ----
+export function setGridColor(grid: THREE.Mesh | null, theme: 'dark' | 'light') {
+    setAdaptiveGridTheme(grid, theme);
 }
 
 // ============================================================
@@ -392,6 +468,20 @@ export function setGridColor(grid: THREE.GridHelper | null, theme: 'dark' | 'lig
 /**
  * Fast hash for vertex array comparison (FNV-1a inspired).
  */
+/**
+ * UX-AUDIT-21: что было источником геометрии меша — длины и хэш вершин `SceneObject`.
+ * Раньше «вершины изменились» сверялось с `geometry.index?.count`, а у геометрии по излому
+ * (CSG, импорт — UX-AUDIT-20) индекса нет → «изменились» на каждый рендер: нормали по излому и
+ * рёбра пересчитывались у всех CSG и импортов при любом действии (импорт 100k — ~170 мс).
+ * Теперь сверка — с тем, из чего геометрия построена (не с самой геометрией); пишется и при
+ * создании меша, чтобы первое же обновление не пересобирало его.
+ */
+function rememberGeometrySource(mesh: THREE.Mesh, obj: Pick<SceneObject, 'vertices' | 'indices'>, hash = computeVertsHash(obj.vertices)): void {
+    mesh.userData.srcVertexLength = obj.vertices.length;
+    mesh.userData.srcIndexLength = obj.indices.length;
+    mesh.userData.srcVertsHash = hash;
+}
+
 function computeVertsHash(vertices: Float32Array): number {
     let hash = 0x811c9dc5;
     const len = vertices.length;
@@ -505,15 +595,22 @@ export function useMeshSync(
     >,
     selectedIds: Set<string>,
 ): void {
-    // ---- Emissive highlight for selected objects ----
+    // ---- Emissive highlight for selected objects (и группы A режима CSG — CSG-GROUP-FIX) ----
+    const csgGroupA = useCsgGroupModeStore((s) => s.csgGroupMode?.groupA);
     useEffect(() => {
         const sel = selectedIds;
+        const groupA = new Set(csgGroupA ?? []);
         for (const [id, entry] of meshMapRef.current) {
             const mat = entry.mesh.material as THREE.MeshStandardMaterial;
+            if (groupA.has(id)) {
+                mat.emissive.setHex(EMISSIVE_GROUP_A);
+                mat.emissiveIntensity = EMISSIVE_GROUP_A_INTENSITY;
+                continue;
+            }
             mat.emissive.setHex(sel.has(id) ? EMISSIVE_SELECTED : 0x000000);
             mat.emissiveIntensity = sel.has(id) ? EMISSIVE_INTENSITY : 0;
         }
-    }, [selectedIds, meshMapRef]);
+    }, [selectedIds, csgGroupA, meshMapRef]);
 
     // ---- Sync objects → Three.js meshes ----
     useEffect(() => {
@@ -546,35 +643,22 @@ export function useMeshSync(
         for (const obj of objects) {
             const existing = map.get(obj.id);
             if (existing) {
-                // Update geometry if raw vertices changed
-                const cachedRaw = existing.mesh.userData.cachedRawVertices as Float32Array | undefined;
-                const cachedHash = existing.mesh.userData.cachedVertsHash as number | undefined;
+                // Update geometry if raw vertices changed (UX-AUDIT-21: сверка с источником геометрии)
+                const src = existing.mesh.userData;
                 const vertsHash = computeVertsHash(obj.vertices);
                 const vertsChanged =
-                    !cachedRaw ||
-                    cachedRaw.length !== obj.vertices.length ||
-                    obj.indices.length !== (existing.mesh.geometry.index?.count ?? 0) ||
-                    cachedHash !== vertsHash;
+                    src.srcVertexLength !== obj.vertices.length ||
+                    src.srcIndexLength !== obj.indices.length ||
+                    src.srcVertsHash !== vertsHash;
                 if (vertsChanged) {
-                    existing.mesh.userData.cachedRawVertices = new Float32Array(obj.vertices);
-                    existing.mesh.userData.cachedVertsHash = vertsHash;
+                    rememberGeometrySource(existing.mesh, obj, vertsHash);
 
-                    // FIX (CRIT-18-4): Dispose old BufferAttribute before replacing to prevent memory leak
-                    const oldPos = existing.mesh.geometry.getAttribute('position');
-                    if (oldPos) (oldPos as unknown as { dispose?: () => void }).dispose?.()
-                    const oldIdx = existing.mesh.geometry.index;
-                    if (oldIdx) (oldIdx as unknown as { dispose?: () => void }).dispose?.()
-
-                    existing.mesh.geometry.setAttribute(
-                        "position",
-                        new THREE.Float32BufferAttribute(obj.vertices, 3),
-                    );
-                    existing.mesh.geometry.setIndex(
-                        new THREE.BufferAttribute(obj.indices, 1),
-                    );
-                    existing.mesh.geometry.computeVertexNormals();
-                    existing.mesh.geometry.computeBoundingBox();
-                    existing.mesh.geometry.computeBoundingSphere();
+                    // UX-AUDIT-20: новая геометрия тем же построителем, что при создании (раньше
+                    // computeVertexNormals по всем вершинам — у куба после правки сглаживались углы).
+                    // FIX (CRIT-18-4): старая геометрия освобождается.
+                    const oldGeometry = existing.mesh.geometry;
+                    existing.mesh.geometry = buildObjectGeometry(obj);
+                    oldGeometry.dispose();
 
                     // FIX (8.5.3): geometry = vertices как есть — centerGeometry удалён.
                     // SceneObject.vertices всегда в origin (COM), pivot несёт позицию.
@@ -631,90 +715,8 @@ export function useMeshSync(
                     indexCount: obj.indices.length,
                     transform: fmtTransform(obj.transform),
                 });
-                const geometry = new THREE.BufferGeometry();
-                geometry.setAttribute(
-                    "position",
-                    new THREE.Float32BufferAttribute(obj.vertices, 3),
-                );
-                geometry.setIndex(new THREE.BufferAttribute(obj.indices, 1));
-
-                // FIX: Для flat-фигур (куб, призма, пирамида, CSG) разворачиваем
-                // индексированную геометрию в неиндексированную — каждая грань
-                // получает уникальные вершины с нормалью по нормали грани.
-                const flatShapes = ['cube', 'prism', 'pyramid'];
-                const isFlat = flatShapes.includes(obj.shapeType) || !obj.params || Object.keys(obj.params).length === 0;
-
-                if (isFlat) {
-                    // Разворачиваем: 3 уникальные вершины на треугольник
-                    // Для flat-shading нормали вычисляются по ГРАНИ (cross product
-                    // рёбер треугольника), а не берутся по вершине — иначе CSG
-                    // без normals даёт (0,1,0) на всех гранях → однотонное пятно.
-                    const numTris = obj.indices.length / 3;
-                    const flatVerts = new Float32Array(numTris * 9);
-                    const flatNormals = new Float32Array(numTris * 9);
-                    const flatIndices = new Uint32Array(numTris * 3);
-
-                    for (let t = 0; t < numTris; t++) {
-                        const i0 = obj.indices[t * 3];
-                        const i1 = obj.indices[t * 3 + 1];
-                        const i2 = obj.indices[t * 3 + 2];
-
-                        // Векторы рёбер треугольника
-                        const v0x = obj.vertices[i0 * 3], v0y = obj.vertices[i0 * 3 + 1], v0z = obj.vertices[i0 * 3 + 2];
-                        const v1x = obj.vertices[i1 * 3], v1y = obj.vertices[i1 * 3 + 1], v1z = obj.vertices[i1 * 3 + 2];
-                        const v2x = obj.vertices[i2 * 3], v2y = obj.vertices[i2 * 3 + 1], v2z = obj.vertices[i2 * 3 + 2];
-                        const e1x = v1x - v0x, e1y = v1y - v0y, e1z = v1z - v0z;
-                        const e2x = v2x - v0x, e2y = v2y - v0y, e2z = v2z - v0z;
-
-                        // Нормаль грани (cross product)
-                        let nx = e1y * e2z - e1z * e2y;
-                        let ny = e1z * e2x - e1x * e2z;
-                        let nz = e1x * e2y - e1y * e2x;
-                        const len = Math.sqrt(nx * nx + ny * ny + nz * nz);
-                        if (len > 0.0001) { nx /= len; ny /= len; nz /= len; }
-                        else { nx = 0; ny = 1; nz = 0; }
-
-                        // Копируем вершины и нормаль грани для всех 3 вершин треугольника
-                        for (let v = 0; v < 3; v++) {
-                            const dstOff = (t * 3 + v) * 3;
-                            const srcIdx = obj.indices[t * 3 + v];
-                            flatVerts[dstOff] = obj.vertices[srcIdx * 3];
-                            flatVerts[dstOff + 1] = obj.vertices[srcIdx * 3 + 1];
-                            flatVerts[dstOff + 2] = obj.vertices[srcIdx * 3 + 2];
-                            flatNormals[dstOff] = nx;
-                            flatNormals[dstOff + 1] = ny;
-                            flatNormals[dstOff + 2] = nz;
-                            flatIndices[t * 3 + v] = t * 3 + v;
-                        }
-                    }
-
-                    geometry.setAttribute("position", new THREE.Float32BufferAttribute(flatVerts, 3));
-                    geometry.setAttribute("normal", new THREE.Float32BufferAttribute(flatNormals, 3));
-                    geometry.setIndex(new THREE.BufferAttribute(flatIndices, 1));
-                } else {
-                    // Smooth shading: используем нормали из воркера (или пересчитываем)
-                    if (obj.normals && obj.normals.length > 0) {
-                        const normalizedNormals = new Float32Array(obj.normals.length);
-                        for (let i = 0; i < obj.normals.length; i += 3) {
-                            const nx = obj.normals[i];
-                            const ny = obj.normals[i + 1];
-                            const nz = obj.normals[i + 2];
-                            const length = Math.sqrt(nx * nx + ny * ny + nz * nz);
-                            if (length > 0.0001) {
-                                normalizedNormals[i] = nx / length;
-                                normalizedNormals[i + 1] = ny / length;
-                                normalizedNormals[i + 2] = nz / length;
-                            } else {
-                                normalizedNormals[i] = 0;
-                                normalizedNormals[i + 1] = 1;
-                                normalizedNormals[i + 2] = 0;
-                            }
-                        }
-                        geometry.setAttribute("normal", new THREE.Float32BufferAttribute(normalizedNormals, 3));
-                    } else {
-                        geometry.computeVertexNormals();
-                    }
-                }
+                // UX-AUDIT-20: затенение (плоское / по углу излома / гладкое) — object-geometry.ts
+                const geometry = buildObjectGeometry(obj);
 
                 const material = new THREE.MeshStandardMaterial({
                     color: obj.color,
@@ -723,6 +725,7 @@ export function useMeshSync(
                     side: THREE.DoubleSide,
                 });
                 const rawMesh = new THREE.Mesh(geometry, material);
+                rememberGeometrySource(rawMesh, obj);          // UX-AUDIT-21
                 rawMesh.castShadow = true;
                 rawMesh.receiveShadow = true;
                 rawMesh.userData.objectId = obj.id;
@@ -1127,4 +1130,170 @@ export function useMirrorPreview(
         mirrorPreviewRef,
         mirrorPlaneRef,
     };
+}
+
+// ============================================================
+// PLUG-AND-PLAY: превью размещаемой фигуры
+// ============================================================
+
+/** Прозрачность превью размещения. */
+export const PLACEMENT_PREVIEW_OPACITY = 0.5;
+
+/**
+ * Полупрозрачное превью фигуры в режиме размещения: меш той же фигуры (из воркера, параметры по
+ * умолчанию), цвет — как у следующего объекта; трансформ — место под курсором (стоит на
+ * плоскости). Вне raycast (не мешает выбору грани под собой). Нет места под курсором — скрыто.
+ */
+export function usePlacementPreview(
+    sceneRef: React.MutableRefObject<THREE.Scene | null>,
+    nextIndex: number,
+): void {
+    const shapeType = usePlacementModeStore((s) => s.placementMode?.shapeType ?? null);
+    const meshData = usePlacementModeStore((s) => s.placementMode?.mesh ?? null);
+    const transform = usePlacementModeStore((s) => s.placementMode?.preview?.transform ?? null);
+    const ref = useRef<THREE.Object3D | null>(null);
+
+    useEffect(() => {
+        const scene = sceneRef.current;
+        if (!scene || !shapeType || !meshData) return;
+        const geometry = buildObjectGeometry({
+            shapeType, params: defaultShapeParams(shapeType),
+            vertices: meshData.vertices, indices: meshData.indices, normals: meshData.normals,
+        });
+        const material = new THREE.MeshStandardMaterial({
+            color: colorForIndex(nextIndex),
+            transparent: true,
+            opacity: PLACEMENT_PREVIEW_OPACITY,
+            roughness: 0.4,
+            metalness: 0,
+            depthWrite: false,
+        });
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.raycast = () => { };
+        mesh.renderOrder = 998;
+        const pivot = new THREE.Object3D();
+        pivot.userData.placementPreview = true;
+        pivot.visible = false;
+        pivot.add(mesh);
+        scene.add(pivot);
+        ref.current = pivot;
+        return () => {
+            scene.remove(pivot);
+            geometry.dispose();
+            material.dispose();
+            ref.current = null;
+        };
+    }, [sceneRef, shapeType, meshData, nextIndex]);
+
+    useEffect(() => {
+        const pivot = ref.current;
+        if (!pivot) return;
+        if (!transform) { pivot.visible = false; return; }
+        applyTransformToPivot(pivot, transform);
+        pivot.visible = true;
+    }, [transform, shapeType, meshData, nextIndex]);
+}
+
+// ============================================================
+// DIMENSIONS: слой размерных линий
+// ============================================================
+
+/**
+ * Размеры в сцене: группа на каждый видимый размер (оба объекта есть и видимы) — линии,
+ * стрелки, число (billboard). Пересобирается при изменении размеров, слоя, выделения, объектов
+ * (сдвиг / поворот / масштаб / геометрия — число пересчитано: ассоциативность) и языка.
+ * Слой скрыт («Показать / скрыть размеры») — групп нет. Возвращает корень для raycast.
+ */
+export function useDimensionsRender(
+    sceneRef: React.MutableRefObject<THREE.Scene | null>,
+    sceneReady: boolean,
+): React.MutableRefObject<THREE.Group | null> {
+    const { t, i18n } = useTranslation();
+    const dimensions = useDimensionsStore((s) => s.dimensions);
+    const show = useDimensionsStore((s) => s.showDimensions);
+    const selectedId = useDimensionsStore((s) => s.selectedDimensionId);
+    const objects = useDocumentStore((s) => s.objects);
+    const rootRef = useRef<THREE.Group | null>(null);
+
+    useEffect(() => {
+        const scene = sceneRef.current;
+        if (!scene) return;
+        const root = new THREE.Group();
+        root.userData.dimensionsRoot = true;
+        root.userData[DRAW_OVER_OUTLINE] = true;   // SELECTION-OUTLINE: размеры — поверх каймы
+        root.renderOrder = 996;
+        if (show) {
+            for (const d of dimensions) {
+                const ends = dimensionEnds(d, objects);
+                if (!ends) continue;
+                const geom = dimensionGeometry(ends, d.style.kind, d.offset, d.style.size * 0.9);
+                const text = t("dimensions.label", { value: formatDimensionValue(geom.value) });
+                root.add(buildDimensionObject(d.id, geom, d.style, text, d.id === selectedId));
+            }
+        }
+        scene.add(root);
+        rootRef.current = root;
+        return () => {
+            scene.remove(root);
+            disposeDimensionObject(root);
+            if (rootRef.current === root) rootRef.current = null;
+        };
+    }, [sceneRef, sceneReady, dimensions, show, selectedId, objects, t, i18n.language]);
+
+    return rootRef;
+}
+
+/**
+ * Режим «Размер»: маркер привязки под курсором (цвет — вид привязки, как у линейки), маркер
+ * точки A и превью размера A → курсор со стилем новых размеров и числом — до второго клика.
+ */
+export function useDimensionModePreview(sceneRef: React.MutableRefObject<THREE.Scene | null>): void {
+    const { t } = useTranslation();
+    const mode = useDimensionModeStore((s) => s.dimensionMode);
+    const defaults = useUiStore((s) => s.dimensionDefaults);
+    const objects = useDocumentStore((s) => s.objects);
+    const first = mode?.first ?? null;
+    const hover = mode?.hover ?? null;
+
+    useEffect(() => {
+        const scene = sceneRef.current;
+        if (!scene || !mode) return;
+        const root = new THREE.Group();
+        root.userData.dimensionPreview = true;
+        root.userData[DRAW_OVER_OUTLINE] = true;
+        const marker = (p: { x: number; y: number; z: number }, color: number) => {
+            const m = new THREE.Mesh(
+                new THREE.SphereGeometry(0.9, 12, 12),
+                new THREE.MeshBasicMaterial({ color, depthTest: false, transparent: true, opacity: 0.95 }),
+            );
+            m.position.set(p.x, p.y, p.z);
+            m.renderOrder = 998;
+            m.raycast = () => { };
+            root.add(m);
+        };
+        if (hover) {
+            const c = hover.snap === "vertex" ? 0xff4444 : hover.snap === "edge" ? 0x44ff44 : hover.snap === "circle" ? 0x4488ff : hover.snap === "face" ? 0xffff44 : 0xffffff;
+            marker(hover.point, c);
+        }
+        if (first) marker(first.point, 0x89b4fa);
+        if (first && hover) {
+            const A = objects[first.objectId], B = objects[hover.objectId];
+            const ends = {
+                a: first.point, b: hover.point,
+                centerA: A ? { x: A.transform.x, y: A.transform.y, z: A.transform.z } : first.point,
+                centerB: B ? { x: B.transform.x, y: B.transform.y, z: B.transform.z } : hover.point,
+            };
+            const geom = dimensionGeometry(ends, defaults.style.kind, defaults.offset, defaults.style.size * 0.9);
+            if (geom.value > 1e-6) {
+                const g = buildDimensionObject("__dimension_preview__", geom, defaults.style, t("dimensions.label", { value: formatDimensionValue(geom.value) }), false);
+                g.traverse((o) => { o.raycast = () => { }; });
+                root.add(g);
+            }
+        }
+        scene.add(root);
+        return () => {
+            scene.remove(root);
+            disposeDimensionObject(root);
+        };
+    }, [sceneRef, mode, first, hover, defaults, objects, t]);
 }

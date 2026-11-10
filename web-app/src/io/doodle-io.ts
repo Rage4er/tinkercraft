@@ -5,6 +5,7 @@
 
 import JSZip from 'jszip'
 import type { TinkerCraftFile, TinkerCraftOperation } from '../csg/types'
+import { isLegacyText3dOp, type LegacyText3DOperation } from './legacy-text3d'
 
 const FORMAT_VERSION = '1.0.0'
 /** Максимальный размер model.json (64 МБ) для защиты от DoS.
@@ -69,7 +70,7 @@ function sanitizeObjectKeys(obj: unknown): unknown {
  * вообще не открывался («операция с неизвестным типом»). */
 const VALID_OP_TYPES = new Set([
   'add_shape', 'import_mesh', 'text3d', 'move', 'resize_dims', 'fillet',
-  'mirror', 'align', 'group', 'delete', 'visibility', 'color', 'rename',
+  'mirror', 'align', 'group', 'edit_child_params', 'edit_step', 'delete', 'visibility', 'color', 'rename',
 ])
 
 /**
@@ -128,12 +129,29 @@ function restoreOperationMeshArrays(operations: TinkerCraftOperation[]): void {
       if (g.resultVertices !== undefined) g.resultVertices = restoreMeshArray(g.resultVertices)
       if (g.resultIndices !== undefined) g.resultIndices = restoreMeshArray(g.resultIndices)
       if (g.resultNormals !== undefined) g.resultNormals = restoreMeshArray(g.resultNormals)
-    } else if (op.type === 'import_mesh' || op.type === 'text3d') {
+    } else if (op.type === 'edit_child_params') {
+      op.resultVertices = restoreMeshArray(op.resultVertices) ?? op.resultVertices
+      op.resultIndices = restoreMeshArray(op.resultIndices) ?? op.resultIndices
+      if (op.resultNormals !== undefined) op.resultNormals = restoreMeshArray(op.resultNormals)
+    } else if (op.type === 'edit_step') {
+      for (const r of op.replacements ?? []) {
+        if (r.resultVertices !== undefined) r.resultVertices = restoreMeshArray(r.resultVertices)
+        if (r.resultIndices !== undefined) r.resultIndices = restoreMeshArray(r.resultIndices)
+        if (r.resultNormals !== undefined) r.resultNormals = restoreMeshArray(r.resultNormals)
+      }
+    } else if (op.type === 'import_mesh') {
       const im = op as import('../csg/types').ImportMeshOperation
       const v = restoreMeshArray(im.vertices)
       const i = restoreMeshArray(im.indices)
       if (v) im.vertices = v
       if (i) im.indices = i
+    } else if (isLegacyText3dOp(op)) {
+      // yandex-games: 3D-текст до v1.4.0 — загрузка переводит в import_mesh (io/legacy-text3d.ts)
+      const t3 = op as LegacyText3DOperation
+      const v = restoreMeshArray(t3.vertices)
+      const i = restoreMeshArray(t3.indices)
+      if (v) t3.vertices = v
+      if (i) t3.indices = i
     }
   }
 }

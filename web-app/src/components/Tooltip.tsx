@@ -30,6 +30,8 @@ export interface TooltipProps {
   delay?: number
   /** Позиция подсказки */
   position?: TooltipPosition
+  /** DIMENSIONS: не показывать (например, у кнопки открыто своё меню) — без перемонтирования кнопки */
+  suppressed?: boolean
   children: React.ReactNode
 }
 
@@ -37,6 +39,7 @@ export default function Tooltip({
   tooltip,
   delay = 1500,
   position = 'bottom',
+  suppressed = false,
   children,
 }: TooltipProps): React.ReactElement {
   const { t } = useTranslation()
@@ -132,7 +135,7 @@ export default function Tooltip({
       style={{ display: 'inline-block' }}
     >
       {children}
-      {isVisible && (
+      {isVisible && !suppressed && (
         <div
           style={getPositionStyle()}
           className="tk-tooltip"

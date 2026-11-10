@@ -42,6 +42,11 @@ interface TreeNode {
   // ⚠️ ВЫЧИСЛЯЕМЫЙ (только для UI)
   localTransform?: TransformNR
 
+  // NESTED-MOVED-EDIT (только boolean): TRS₀ — система, в которой лежат листья
+  // (трансформ на момент создания CSG / копирования дерева). localTransform следует
+  // за объектом; вложенный boolean воркер переносит на Mat(localTransform)·Mat(originTransform)⁻¹
+  originTransform?: TransformNR
+
   // Для baked-нод (импорт STL, CSG-результаты)
   vertices?: Float32Array
   indices?: Uint32Array
@@ -281,6 +286,7 @@ preview) обязан использовать `isPivotCenteredGeometry(shapeTyp
 | **RENDER-PRISM-BBOX-OFFSET** | `centerGeometry` вычитал bboxCenter вместо spawn → сдвиг | Решён в 8.5.3 — `centerGeometry` удалён |
 | **Потеря RS при mirror CSG** | RS в `localTransform`, mirror не трогает | RS в `relativeToParent` |
 | **CSG-CSG drift** | root boolean центрирует, inner — нет | Единая модель: все центрируются в origin |
+| **NESTED-MOVED-EDIT** — правка ребёнка вложенного CSG, трансформированного ДО объединения | листья вложенного boolean — в системе его создания, а объект перед объединением стоял в другом TRS; воркер пропускал вложенный результат как есть | `originTransform` (TRS₀) у boolean; воркер применяет к вложенному результату `Mat(TRS_cur)·Mat(TRS₀)⁻¹` (сдвиг, поворот, неравномерный масштаб); identity — без изменений. Зеркало отражает TRS₀ тем же сопряжением, что `localTransform`; снимок/вставка его копируют |
 
 ---
 
@@ -537,6 +543,7 @@ interface TreeNode {
 |------|--------|-----------|
 | 2026-10-08 | 1.0 | Первая версия, план Фазы 8 |
 | 2026-10-08 | 1.1 | Добавлен чек-лист прогресса этапов (§11); Этап 0 выполнен |
+| 2026-11-07 | 1.2 | `TreeNode.originTransform` (NESTED-MOVED-EDIT): поправка вложенного boolean, трансформированного до объединения (§2.1, §7) |
 
 ---
 

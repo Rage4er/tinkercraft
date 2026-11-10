@@ -15,6 +15,8 @@ import type {
   ShapeParams,
   TransformNR,
   RelativeTransform,
+  SceneObject,
+  MirrorPlane,
 } from './types'
 import {
   getWasm,
@@ -35,6 +37,7 @@ const IDENTITY_TRANSFORM: TransformNR = {
 import { workerRebuildNode } from './worker-client'
 import { treeStore } from './tree-store'
 import { devLog, devWarn } from '../utils/debug'
+import { composeMirroredList } from '../store/helpers'
 
 // ---------------------------------------------------------------------------
 // Re-export treeStore for tests and external access
@@ -84,12 +87,15 @@ export function createPrimitiveNode(
   shapeType: ShapeType,
   params: ShapeParams,
   transform: TransformNR,
+  mirrored?: MirrorPlane[],
 ): TreeNode {
   const node: TreeNode = {
     id,
     type: 'primitive',
     shapeType,
     params: { ...params },
+    // Фаза 9.8: зеркальный примитив — params оригинальные, зеркало отдельным списком
+    ...(mirrored && mirrored.length > 0 ? { mirrored: [...mirrored] } : {}),
     // Корневая нода при создании: relativeToParent = null (Фаза 8)
     relativeToParent: null,
     localTransform: { ...transform },
@@ -100,37 +106,72 @@ export function createPrimitiveNode(
 }
 
 /**
- * Create a boolean operation node.
+ * Create a boolean operation node (N-ARY-CSG: N детей, плоский список).
  * Sets parentId on children and checks for cycles.
- */
-/**
- * Create a boolean node with optional transform.
+ *
+ * - `createBooleanNode(id, op, childIds, transform?, groupA?)` — N ≥ 2 детей; `groupA` —
+ *   число детей группы A для subtract/intersect (union(A) op union(B)); нет — 1.
+ * - `createBooleanNode(id, op, childA, childB, transform?)` — прежняя бинарная форма
+ *   (= `[childA, childB]`), старые вызовы и документы совместимы.
+ *
  * Boolean nodes can have their own transform to position/rotate/scale the result.
  */
+export function createBooleanNode(
+  id: string,
+  operation: 'union' | 'subtract' | 'intersect',
+  childIds: string[],
+  transform?: TransformNR,
+  groupA?: number,
+): TreeNode
 export function createBooleanNode(
   id: string,
   operation: 'union' | 'subtract' | 'intersect',
   childA: string,
   childB: string,
   transform?: TransformNR,
+): TreeNode
+export function createBooleanNode(
+  id: string,
+  operation: 'union' | 'subtract' | 'intersect',
+  childrenOrA: string[] | string,
+  bOrTransform?: string | TransformNR,
+  transformOrGroupA?: TransformNR | number,
 ): TreeNode {
+  const binary = typeof childrenOrA === 'string'
+  const children = binary ? [childrenOrA, bOrTransform as string] : [...childrenOrA]
+  const transform = (binary ? transformOrGroupA : bOrTransform) as TransformNR | undefined
+  const groupA = binary ? undefined : transformOrGroupA as number | undefined
+  if (children.length < 2) {
+    throw new Error(`Boolean node needs at least 2 children: ${id}`)
+  }
+  if (new Set(children).size !== children.length) {
+    throw new Error(`Boolean node has duplicate children: ${id}`)
+  }
   // Guard: self-reference
-  if (childA === id || childB === id) {
+  if (children.includes(id)) {
     throw new Error(`Boolean node cannot reference itself: ${id}`)
   }
   // Guard: cycle detection
-  if (isAncestor(childA, id) || isAncestor(childB, id)) {
-    throw new Error(`Cannot create cycle in tree: ${childA} → ${id} or ${childB} → ${id}`)
+  const cyc = children.find((c) => isAncestor(c, id))
+  if (cyc !== undefined) {
+    throw new Error(`Cannot create cycle in tree: ${cyc} → ${id}`)
   }
+  // N-ARY-CSG: группа A хранится только если она не «первый против остальных»
+  const k = operation === 'union' || groupA === undefined
+    ? 1
+    : Math.min(Math.max(1, Math.floor(groupA)), children.length - 1)
 
   const node: TreeNode = {
     id,
     type: 'boolean',
     operation,
-    children: [childA, childB],
+    children,
+    ...(k > 1 ? { groupA: k } : {}),
     // Корневая нода при создании: relativeToParent = null (Фаза 8)
     relativeToParent: null,
     localTransform: transform ? { ...transform } : undefined,
+    // NESTED-MOVED-EDIT: листья лежат в системе создания — TRS₀ = transform на момент CSG
+    ...(transform ? { originTransform: { ...transform } } : {}),
   }
   treeStore.setNode(id, node)
 
@@ -141,16 +182,15 @@ export function createBooleanNode(
   // relativeToParent = childWorld − parentWorld.
   // localTransform ребёнка НЕ трогаем — обратная совместимость до Этапа 8.
   const parentWorld: TransformNR = transform ?? IDENTITY_TRANSFORM
-  const childANode = treeStore.getNode(childA)
-  const childBNode = treeStore.getNode(childB)
-  for (const childNode of [childANode, childBNode]) {
+  for (const childId of children) {
+    const childNode = treeStore.getNode(childId)
     if (!childNode) continue
     childNode.parentId = id
     const childWorld: TransformNR = childNode.localTransform ?? IDENTITY_TRANSFORM
     childNode.relativeToParent = subtractTransform(childWorld, parentWorld)
   }
 
-  devLog('TREE', { action: 'createBoolean', id, operation, children: [childA, childB], transform })
+  devLog('TREE', { action: 'createBoolean', id, operation, children, groupA: k > 1 ? k : undefined, transform })
   return node
 }
 
@@ -184,6 +224,26 @@ export function createImportedNode(
   transform: TransformNR,
 ): TreeNode {
   return createBakedNode(id, mesh.vertices, mesh.indices, mesh.normals, transform)
+}
+
+/**
+ * Зарегистрировать объект сцены в дереве как операнд будущего CSG/mirror.
+ * - import_mesh / csg → baked (готовый меш);
+ * - примитив → primitive (params); зеркальный примитив (Фаза 9.8) → primitive +
+ *   `mirrored` (params остаются редактируемыми, зеркало воспроизводит воркер).
+ */
+export function registerObjectInTree(id: string, obj: SceneObject): TreeNode {
+  const isPrimitive = obj.shapeType !== 'csg' && obj.shapeType !== 'import_mesh'
+  if (isPrimitive && obj.shapeType && obj.params) {
+    return createPrimitiveNode(id, obj.shapeType, obj.params, obj.transform, obj.mirrored)
+  }
+  return createBakedNode(
+    id,
+    obj.vertices || new Float32Array(),
+    obj.indices || new Uint32Array(),
+    obj.normals || null,
+    obj.transform,
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -329,7 +389,8 @@ function computeNodeHash(node: TreeNode): string {
     const pStr = p
       ? Object.keys(p as Record<string, unknown>).sort().map(k => `${k}:${(p as Record<string, unknown>)[k]}`).join(',')
       : 'none'
-    return `p:${node.shapeType ?? '?'}|${pStr}|${tStr}`
+    const mStr = node.mirrored && node.mirrored.length > 0 ? `|m:${node.mirrored.join('')}` : ''
+    return `p:${node.shapeType ?? '?'}|${pStr}|${tStr}${mStr}`
   }
   if (node.type === 'baked' && node.vertices && node.indices && node.localTransform) {
     const t = node.localTransform
@@ -337,15 +398,19 @@ function computeNodeHash(node: TreeNode): string {
   }
   if (node.type === 'boolean' && node.children) {
     const t = node.localTransform
-    const tStr = t
+    const o = node.originTransform
+    // NESTED-MOVED-EDIT: TRS₀ влияет на геометрию вложенного boolean (поправка воркера)
+    const tStr = (t
       ? `${t.x},${t.y},${t.z},${t.rotX},${t.rotY},${t.rotZ},${t.scaleX},${t.scaleY},${t.scaleZ}`
-      : 'none'
+      : 'none') + (o ? `@${o.x},${o.y},${o.z},${o.rotX},${o.rotY},${o.rotZ},${o.scaleX},${o.scaleY},${o.scaleZ}` : '')
     const childHashes = node.children
       .map(id => {
         const child = treeStore.getNode(id)
         return child ? computeNodeHash(child) : '?'
       })
-    return `${node.operation}|${tStr}|${childHashes.join('|')}`
+    // N-ARY-CSG: граница групп A/B меняет результат subtract/intersect
+    const gStr = node.groupA !== undefined ? `|g${node.groupA}` : ''
+    return `${node.operation}${gStr}|${tStr}|${childHashes.join('|')}`
   }
   return ''
 }
@@ -376,7 +441,7 @@ export function isAncestor(nodeId: string, ancestorId: string): boolean {
  * corrupted tree (e.g., cycles from bugs). Max depth of 100 is far beyond
  * any realistic build tree depth (~5-10 levels).
  */
-function invalidateCache(nodeId: string, depth = 0): void {
+export function invalidateCache(nodeId: string, depth = 0): void {
   if (depth > 100) {
     console.warn(`[history-tree] Cache invalidation exceeded max depth (100) for node ${nodeId}`)
     return
@@ -450,6 +515,25 @@ export async function rebuildNode(nodeId: string, parentWorld: TransformNR = IDE
 }
 
 /**
+ * Фаза 9.3: пересчитать boolean-поддерево в МИРОВЫХ координатах системы создания
+ * CSG (корень не центрируется по COM, его localTransform не применяется).
+ * Это та же система, в которой csgBoolean считал вершины до un-bake'а (RS⁻¹).
+ * Кэш не используется и не заполняется (результат — не меш узла).
+ */
+export async function rebuildBooleanWorld(rootId: string): Promise<ExtractedMesh> {
+  const node = treeStore.getNode(rootId)
+  if (!node || node.type !== 'boolean') throw new Error(`Node ${rootId} is not a boolean node`)
+  const result = await workerRebuildNode(rootId, collectSubtreeForWorker(rootId), { worldSpace: true })
+  return {
+    vertices: result.vertices,
+    indices: result.indices,
+    normals: result.normals,
+    tris: result.tris,
+    ms: result.ms,
+  }
+}
+
+/**
  * Worker-compatible node representation (plain object, no TypedArrays).
  * FIX (CRIT-R16-3): Replaced `any` with a proper interface.
  */
@@ -459,11 +543,15 @@ interface WorkerNode {
   shapeType?: string
   params?: Record<string, number>
   localTransform?: TransformNR
+  originTransform?: TransformNR
   vertices?: number[]
   indices?: number[]
   normals?: number[]
   operation?: 'union' | 'subtract' | 'intersect'
   children?: string[]
+  /** N-ARY-CSG: число детей группы A (subtract/intersect) */
+  groupA?: number
+  mirrored?: MirrorPlane[]
 }
 
 /**
@@ -491,11 +579,14 @@ function collectSubtreeForWorker(rootId: string): WorkerNode[] {
     if (node.shapeType !== undefined) workerNode.shapeType = node.shapeType
     if (node.params !== undefined) workerNode.params = node.params as Record<string, number>
     if (node.localTransform !== undefined) workerNode.localTransform = node.localTransform
+    if (node.originTransform !== undefined) workerNode.originTransform = node.originTransform
     if (node.vertices !== undefined) workerNode.vertices = Array.from(node.vertices)
     if (node.indices !== undefined) workerNode.indices = Array.from(node.indices)
     if (node.normals !== undefined) workerNode.normals = Array.from(node.normals || [])
     if (node.operation !== undefined) workerNode.operation = node.operation
     if (node.children !== undefined) workerNode.children = node.children
+    if (node.groupA !== undefined) workerNode.groupA = node.groupA
+    if (node.mirrored !== undefined) workerNode.mirrored = node.mirrored
 
     nodes.push(workerNode)
 
@@ -520,8 +611,8 @@ function collectSubtreeForWorker(rootId: string): WorkerNode[] {
  * so boolean result is also in world coordinates. We must center it and apply localTransform.
  */
 async function applyCSGMeshes(node: TreeNode, parentWorld: TransformNR): Promise<ExtractedMesh> {
-  if (!node.children || node.children.length !== 2) {
-    throw new Error(`Boolean node needs exactly 2 children`)
+  if (!node.children || node.children.length < 2) {
+    throw new Error(`Boolean node needs at least 2 children`)
   }
 
   // Collect all nodes in the subtree INCLUDING the target node
@@ -548,11 +639,14 @@ async function applyCSGMeshes(node: TreeNode, parentWorld: TransformNR): Promise
       shapeType: n.shapeType,
       params: n.params as Record<string, number> | undefined,
       localTransform: n.localTransform,
+      originTransform: n.originTransform,
       vertices: n.vertices ? Array.from(n.vertices) : undefined,
       indices: n.indices ? Array.from(n.indices) : undefined,
       normals: n.normals ? Array.from(n.normals) : undefined,
       operation: n.operation,
       children: n.children,
+      groupA: n.groupA,
+      mirrored: n.mirrored,
     })
   }
 
@@ -602,6 +696,12 @@ async function applyCSGMeshes(node: TreeNode, parentWorld: TransformNR): Promise
   }
 }
 
+const MIRROR_NORMALS_LOCAL: Record<MirrorPlane, [number, number, number]> = {
+  YZ: [1, 0, 0],
+  XZ: [0, 1, 0],
+  XY: [0, 0, 1],
+}
+
 /** Rebuild a primitive node */
 function rebuildPrimitive(node: TreeNode, worldTransform: TransformNR): ExtractedMesh {
   // FIX (MED-18-21): Use safe access instead of non-null assertions
@@ -612,8 +712,14 @@ function rebuildPrimitive(node: TreeNode, worldTransform: TransformNR): Extracte
   }
 
   const wasm = getWasm()
-  const m = buildPrimitive(shapeType, sanitizeParams(params as Record<string, unknown>))
+  let m = buildPrimitive(shapeType, sanitizeParams(params as Record<string, unknown>))
   try {
+    // Фаза 9.8: зеркальный примитив — отражение в origin до TRS
+    for (const plane of node.mirrored ?? []) {
+      const reflected = m.mirror(MIRROR_NORMALS_LOCAL[plane])
+      m.delete()
+      m = reflected
+    }
     const matrix = buildTransformMatrix(
       { x: worldTransform.x, y: worldTransform.y, z: worldTransform.z },
       { rotX: worldTransform.rotX, rotY: worldTransform.rotY, rotZ: worldTransform.rotZ },
@@ -943,10 +1049,22 @@ function mirrorNodeRecursive(
   //    (e.g. -30 → -29.999999999999993) that breaks exact equality checks.
   const newLocal: TransformNR = newWorld
 
+  // NESTED-MOVED-EDIT: TRS₀ отражается тем же сопряжением, что и localTransform —
+  // поправка копии Mat(L')·Mat(O')⁻¹ = R·(Mat(L)·Mat(O)⁻¹)·R совпадает с отражённой геометрией
+  const o = node.originTransform
+  const newOrigin: TransformNR | undefined = o
+    ? (() => {
+      const p = mirrorPoint({ x: o.x, y: o.y, z: o.z }, plane, center)
+      const r = mirrorEuler({ x: o.rotX, y: o.rotY, z: o.rotZ }, plane)
+      return { x: p.x, y: p.y, z: p.z, rotX: r.x, rotY: r.y, rotZ: r.z, scaleX: Math.abs(o.scaleX), scaleY: Math.abs(o.scaleY), scaleZ: Math.abs(o.scaleZ) }
+    })()
+    : undefined
+
   setNode(node.id, {
     ...node,
     relativeToParent: newRelative,
     localTransform: newLocal,
+    ...(newOrigin ? { originTransform: newOrigin } : {}),
   })
 
   devLog('mirrorNodeRecursive', {
@@ -1018,28 +1136,15 @@ export async function bakeMirroredSubtree(
       indices: mesh.indices,
       normals: mesh.normals ?? null,
       mirroredPlane: plane,
+      // Фаза 9.8: прежнее зеркало уже запечено в вершины (buildOriginMeshForPrimitive)
+      mirrored: undefined,
       cachedMesh: undefined,
       cachedBBox: undefined,
       cacheHash: undefined,
     })
     bakedCount++
   } else if (node.type === 'baked' && node.vertices && node.indices) {
-    // Already-baked child: mirror vertices in-place + swap winding.
-    mirrorVerticesInPlace(node.vertices, node.normals, plane)
-    swapWindingInPlace(node.indices)
-
-    // Track mirror plane for double-mirror detection.
-    // Same plane → double mirror cancels (geometry returns to original).
-    // Different plane → leave as-is (edit flow composes them — separate task).
-    if (!node.mirroredPlane) {
-      node.mirroredPlane = plane
-    } else if (node.mirroredPlane === plane) {
-      delete node.mirroredPlane
-    } else {
-      devWarn('mirror', `bakeMirroredSubtree: node ${nodeId} already mirrored on plane ${node.mirroredPlane}, new plane ${plane} — edit flow must compose (separate task)`)
-    }
-
-    invalidateCache(node.id)
+    mirrorBakedNodeInPlace(node, plane)
     bakedCount++
   } else if (node.type === 'boolean' && node.children) {
     // Recurse into children (boolean node transform is mirrored by mirrorNodeRecursive).
@@ -1049,6 +1154,25 @@ export async function bakeMirroredSubtree(
   }
 
   return bakedCount
+}
+
+/**
+ * Already-baked node: mirror vertices in-place + swap winding (mutates the node).
+ * Track mirror plane for double-mirror detection: same plane → double mirror
+ * cancels (geometry returns to original); different plane → left as-is.
+ */
+function mirrorBakedNodeInPlace(node: TreeNode, plane: 'XY' | 'XZ' | 'YZ'): void {
+  if (!node.vertices || !node.indices) return
+  mirrorVerticesInPlace(node.vertices, node.normals, plane)
+  swapWindingInPlace(node.indices)
+  if (!node.mirroredPlane) {
+    node.mirroredPlane = plane
+  } else if (node.mirroredPlane === plane) {
+    delete node.mirroredPlane
+  } else {
+    devWarn('mirror', `baked node ${node.id} already mirrored on plane ${node.mirroredPlane}, new plane ${plane} — edit flow must compose (separate task)`)
+  }
+  invalidateCache(node.id)
 }
 
 /** Build origin-centered mesh for a primitive node (WASM or worker fallback). */
@@ -1063,6 +1187,7 @@ async function buildOriginMeshForPrimitive(node: TreeNode): Promise<ExtractedMes
     shapeType: node.shapeType,
     params: node.params as Record<string, number>,
     localTransform: IDENTITY_TRANSFORM,
+    mirrored: node.mirrored,
   }])
   return {
     vertices: new Float32Array(mesh.vertices),
@@ -1337,6 +1462,7 @@ function cloneRecursive(
   if (source.type === 'primitive') {
     clone.shapeType = source.shapeType
     clone.params = { ...source.params }
+    if (source.mirrored) clone.mirrored = [...source.mirrored]
     clone.localTransform = { ...source.localTransform! }
   }
 
@@ -1351,6 +1477,7 @@ function cloneRecursive(
 
   if (source.type === 'boolean' && source.children) {
     clone.operation = source.operation
+    if (source.groupA !== undefined) clone.groupA = source.groupA
     // Boolean nodes carry their own transform (especially intermediate CSG
     // results). Omitting it makes the mirrored clone lose the intermediate
     // result's centroid/rotation/scale before mirrorNodeRecursive can mirror
@@ -1369,6 +1496,148 @@ function cloneRecursive(
 
   treeStore.setNode(newId, clone)
   return clone
+}
+
+// ---------------------------------------------------------------------------
+// Независимая параметрическая копия CSG (CSG-INDEPENDENT-COPY)
+// ---------------------------------------------------------------------------
+//
+// Зеркало и вставка CSG-результата дают СВОЁ дерево (копию узлов с params), а
+// не запечённый меш: дети копии правятся как у оригинала (9.2/9.3), и копия с
+// оригиналом не связаны. Id узлов копии детерминированы — `${idКопии}:${idИсточника}`
+// (корень — сам id копии), поэтому правки ребёнка копии (`edit_child_params.nodeId`)
+// воспроизводятся по истории: дерево копии строится заново при перемотке/загрузке.
+
+/** Id узла копии: корень источника → id копии, остальные — `${copyRootId}:${sourceNodeId}`. */
+export function copyNodeId(copyRootId: string, sourceRootId: string, sourceNodeId: string): string {
+  return sourceNodeId === sourceRootId ? copyRootId : `${copyRootId}:${sourceNodeId}`
+}
+
+/** Глубокая копия узла без кэшей (снимок не делит массивы/объекты с деревом). */
+function copyNodeData(n: TreeNode): TreeNode {
+  const c: TreeNode = {
+    id: n.id,
+    type: n.type,
+    relativeToParent: n.relativeToParent
+      ? {
+        positionDelta: { ...n.relativeToParent.positionDelta },
+        rotationDelta: { ...n.relativeToParent.rotationDelta },
+        scaleRatio: { ...n.relativeToParent.scaleRatio },
+      }
+      : null,
+  }
+  if (n.shapeType !== undefined) c.shapeType = n.shapeType
+  if (n.params) c.params = { ...n.params }
+  if (n.localTransform) c.localTransform = { ...n.localTransform }
+  if (n.originTransform) c.originTransform = { ...n.originTransform }
+  if (n.vertices) c.vertices = new Float32Array(n.vertices)
+  if (n.indices) c.indices = new Uint32Array(n.indices)
+  if (n.normals !== undefined) c.normals = n.normals ? new Float32Array(n.normals) : null
+  if (n.mirrored) c.mirrored = [...n.mirrored]
+  if (n.mirroredPlane) c.mirroredPlane = n.mirroredPlane
+  if (n.operation) c.operation = n.operation
+  if (n.children) c.children = [...n.children]
+  if (n.groupA !== undefined) c.groupA = n.groupA
+  if (n.parentId) c.parentId = n.parentId
+  return c
+}
+
+/**
+ * Снимок поддерева (корень первым), глубокая копия без кэшей — для буфера обмена
+ * и операции вставки. Пусто, если узла нет; бросает при цикле.
+ */
+export function snapshotSubtree(rootId: string): TreeNode[] {
+  const out: TreeNode[] = []
+  const visited = new Set<string>()
+  const walk = (id: string): void => {
+    if (visited.has(id)) throw new Error(`Cycle detected during snapshot: ${id}`)
+    visited.add(id)
+    const n = treeStore.getNode(id)
+    if (!n) return
+    const c = copyNodeData(n)
+    if (id === rootId) delete c.parentId
+    out.push(c)
+    if (n.type === 'boolean') for (const ch of n.children ?? []) walk(ch)
+  }
+  walk(rootId)
+  return out
+}
+
+/**
+ * Записать снимок поддерева в дерево под корнем `copyRootId` (id — `copyNodeId`).
+ * Существующие узлы с теми же id ПЕРЕЗАПИСЫВАЮТСЯ — так перемотка возвращает
+ * копию к состоянию на момент её создания (правки детей воспроизводятся дальше по истории).
+ * `rootTransform` — localTransform корня копии (позиция объекта сцены); `rootOrigin` —
+ * её система создания (TRS₀), если снимок её не хранит (NESTED-MOVED-EDIT).
+ */
+export function instantiateSubtree(
+  nodes: TreeNode[],
+  sourceRootId: string,
+  copyRootId: string,
+  rootTransform?: TransformNR,
+  rootOrigin?: TransformNR,
+): void {
+  const map = (id: string) => copyNodeId(copyRootId, sourceRootId, id)
+  for (const n of nodes) {
+    const c = copyNodeData(n)
+    c.id = map(n.id)
+    if (c.children) c.children = c.children.map(map)
+    if (n.id === sourceRootId) {
+      delete c.parentId
+      if (rootTransform) c.localTransform = { ...rootTransform }
+      // NESTED-MOVED-EDIT: система листьев копии — система создания источника
+      // (снимок до этой правки originTransform не хранил — берём `copyTree.origin`)
+      if (c.type === 'boolean' && !c.originTransform && rootOrigin) c.originTransform = { ...rootOrigin }
+    } else if (c.parentId) {
+      c.parentId = map(c.parentId)
+    }
+    treeStore.setNode(c.id, c)
+  }
+  invalidateCache(copyRootId)
+}
+
+/** Отразить ГЕОМЕТРИЮ узлов копии: примитив → список mirrored[] (params редактируемы, 9.8), baked → вершины. */
+function mirrorCopyGeometry(nodeId: string, plane: 'XY' | 'XZ' | 'YZ'): void {
+  const node = treeStore.getNode(nodeId)
+  if (!node) return
+  if (node.type === 'primitive') {
+    const mirrored = composeMirroredList(node.mirrored, plane)
+    const next: TreeNode = { ...node, cachedMesh: undefined, cachedBBox: undefined, cacheHash: undefined }
+    if (mirrored) next.mirrored = mirrored
+    else delete next.mirrored
+    treeStore.setNode(node.id, next)
+  } else if (node.type === 'baked') {
+    mirrorBakedNodeInPlace(node, plane)
+  } else if (node.type === 'boolean') {
+    for (const ch of node.children ?? []) mirrorCopyGeometry(ch, plane)
+  }
+  invalidateCache(node.id)
+}
+
+/**
+ * Независимая параметрическая копия поддерева `sourceId` с корнем `copyRootId`;
+ * с `plane` — зеркальная: мировые трансформы узлов отражены (mirrorTreeNode),
+ * примитивы получают плоскость в `mirrored[]` (а не запекаются), baked-узлы
+ * отражают вершины. Узлы с id копии перезаписываются.
+ */
+export function copySubtree(
+  sourceId: string,
+  copyRootId: string,
+  plane?: 'XY' | 'XZ' | 'YZ',
+  rootTransform?: TransformNR,
+): void {
+  const nodes = snapshotSubtree(sourceId)
+  if (nodes.length === 0) throw new Error(`Source node ${sourceId} not found`)
+  instantiateSubtree(nodes, sourceId, copyRootId)
+  if (plane) {
+    mirrorTreeNode(copyRootId, plane)
+    mirrorCopyGeometry(copyRootId, plane)
+  }
+  if (rootTransform) {
+    const root = treeStore.getNode(copyRootId)
+    if (root) root.localTransform = { ...rootTransform }
+  }
+  invalidateCache(copyRootId)
 }
 
 /** Generate a unique ID for the tree (separate prefix from document store) */

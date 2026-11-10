@@ -1,5 +1,6 @@
 // src/hooks/useYandexInit.test.tsx — Gameplay API: пауза при ЛЮБОЙ открытой модалке
-// (текст, проекты, экспорт, импорт, аренда, онбординг).
+// (текст, проекты, экспорт, импорт, аренда, онбординг; с v1.4.0 — настройки размеров и
+// подтверждение «Очистить сцену» из main).
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import React from 'react'
 import { createRoot } from 'react-dom/client'
@@ -44,6 +45,7 @@ import { useYandexInit, isAnyModalOpen, type ModalFlags } from './useYandexInit'
 const closed: ModalFlags = {
     showTextModal: false, showPM: false, showExportModal: false,
     showImportModal: false, rentalModalKey: null, onboardingOpen: false,
+    showDimensionSettings: false,
 }
 
 describe('isAnyModalOpen', () => {
@@ -59,14 +61,15 @@ describe('isAnyModalOpen', () => {
         ['rentalModalKey', 'text3d'],
         ['rentalModalKey', 'extendedPalette'],
         ['onboardingOpen', true],
+        ['showDimensionSettings', true],
     ] as const)('%s=%s → true', (key, value) => {
         expect(isAnyModalOpen({ ...closed, [key]: value })).toBe(true)
     })
 })
 
 describe('useYandexInit: Gameplay API', () => {
-    function Harness() {
-        useYandexInit()
+    function Harness({ localModalOpen = false }: { localModalOpen?: boolean }) {
+        useYandexInit(localModalOpen)
         return null
     }
     const flush = () => act(async () => { await Promise.resolve(); await Promise.resolve() })
@@ -83,16 +86,23 @@ describe('useYandexInit: Gameplay API', () => {
         useUiStore.setState({
             showTextModal: false, showPM: false, showExportModal: false,
             showImportModal: false, rentalModalKey: null, onboardingOpen: false,
+            showDimensionSettings: false,
         })
     })
 
-    async function mount() {
+    async function mount(localModalOpen = false) {
         const root = createRoot(document.body.appendChild(document.createElement('div')))
-        await act(async () => { root.render(<Harness />) })
+        await act(async () => { root.render(<Harness localModalOpen={localModalOpen} />) })
         await flush()
         roots.push(root)
         return root
     }
+
+    it('UB5-2: с экономикой (SDK) — html[data-economy] (правая панель 240 px, CSS)', async () => {
+        document.documentElement.removeAttribute('data-economy')
+        await mount()
+        expect(document.documentElement.hasAttribute('data-economy')).toBe(true)
+    })
 
     it('без модалок вызывает startGameplay', async () => {
         await mount()
@@ -105,6 +115,7 @@ describe('useYandexInit: Gameplay API', () => {
         ['аренда', { rentalModalKey: 'text3d' as const }],
         ['онбординг', { onboardingOpen: true }],
         ['экспорт', { showExportModal: true }],
+        ['настройки размеров', { showDimensionSettings: true }],
     ])('модалка «%s» → stopGameplay, закрытие → startGameplay', async (_n, flags) => {
         await mount()
         h.platform.startGameplay.mockClear()
@@ -114,6 +125,15 @@ describe('useYandexInit: Gameplay API', () => {
 
         const reset = Object.fromEntries(Object.keys(flags).map(k => [k, k === 'rentalModalKey' ? null : false]))
         await act(async () => { useUiStore.setState(reset) })
+        await flush()
+        expect(h.platform.startGameplay).toHaveBeenCalledTimes(1)
+    })
+
+    it('модалка из App («Очистить сцену?», localModalOpen) → stopGameplay, закрытие → startGameplay', async () => {
+        const root = await mount(true)
+        expect(h.platform.stopGameplay).toHaveBeenCalledTimes(1)
+        expect(h.platform.startGameplay).not.toHaveBeenCalled()
+        await act(async () => { root.render(<Harness localModalOpen={false} />) })
         await flush()
         expect(h.platform.startGameplay).toHaveBeenCalledTimes(1)
     })

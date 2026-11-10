@@ -8,7 +8,7 @@
 import { useEffect, useRef } from 'react'
 import { useUiStore } from '../store/ui-store'
 import { useEconomyStore } from '../store/economy-store'
-import { getPlatform, initPlatform } from '../platform'
+import { getPlatform, initPlatform, isEconomyAvailable } from '../platform'
 import { getInitDonePromise } from '../platform/sdk'
 import { applyDebugTokensGrant, installEconomyDebugHelper } from '../platform/debug-mode'
 
@@ -22,6 +22,8 @@ export interface ModalFlags {
   rentalModalKey: string | null
   /** Онбординг экономики на экране. */
   onboardingOpen: boolean
+  /** «Настройки размеров» (DIMENSIONS, main v1.3.8). */
+  showDimensionSettings: boolean
 }
 
 /** Gameplay API: открыта ли ЛЮБАЯ модалка (геймплей на паузе). Единый список —
@@ -33,14 +35,20 @@ export function isAnyModalOpen(s: ModalFlags): boolean {
     s.showExportModal ||
     s.showImportModal ||
     s.rentalModalKey !== null ||
-    s.onboardingOpen
+    s.onboardingOpen ||
+    s.showDimensionSettings
   )
 }
 
-export function useYandexInit(): void {
+/**
+ * @param localModalOpen модалка, флаг которой живёт в App, а не в ui-store
+ *   (подтверждение «Очистить сцену», UX-AUDIT-2 из main) — тоже пауза геймплея.
+ */
+export function useYandexInit(localModalOpen = false): void {
   const workerOk = useUiStore((s) => s.workerOk)
   // Примитивный boolean: компонент перерисовывается только при смене результата.
-  const anyModalOpen = useUiStore(isAnyModalOpen)
+  const storeModalOpen = useUiStore(isAnyModalOpen)
+  const anyModalOpen = storeModalOpen || localModalOpen
 
   // ── Инициализация платформы + экономика (объединено) ──
   // ⚠️ ВАЖНО: loadFromCloud() вызывается ПОСЛЕ platform.init(),
@@ -69,6 +77,9 @@ export function useYandexInit(): void {
       if (!ok) {
         console.warn('[App] Platform init returned false — running in clean mode')
       }
+      // UB5-2: с экономикой (SDK) правая панель шире (240 px) — CSS `:root[data-economy]`;
+      // без SDK вёрстка как в main (200 px)
+      document.documentElement.toggleAttribute('data-economy', isEconomyAvailable())
 
       // 2. Только ПОСЛЕ platform.init() загружаем экономику
       if (!economyInitialized.current) {

@@ -153,8 +153,10 @@ export interface TreeNode {
   // ── Булевы операции (внутренние узлы) ──
   /** Тип булевой операции */
   operation?: 'union' | 'subtract' | 'intersect'
-  /** ID дочерних узлов (для boolean — ровно 2) */
+  /** ID дочерних узлов (для boolean — N ≥ 2, N-ARY-CSG; старые — 2) */
   children?: string[]
+  /** N-ARY-CSG: subtract/intersect — число детей группы A (union(A) op union(B)); нет — 1 */
+  groupA?: number
   /** ID родительской ноды (для каскадной инвалидации — O(глубина) вместо O(n)) */
   parentId?: string
 
@@ -1375,7 +1377,7 @@ export async function workerRebuildNode(
 - [x] `rebuildBuildTree` в `rebuild.ts` для sync дерева при undo/redo
 - [x] Расширить типы операций для хранения структуры дерева (`treeOperation` в GroupOperation)
 - [x] Обновить `rebuildFromHistory` для работы с деревом (через rebuildBuildTree)
-- [x] Обновить `snapshot` кэш для учёта дерева (`cacheTreeSnapshot`, `restoreTreeFromSnapshot`)
+- [x] Обновить `snapshot` кэш для учёта дерева (`cacheTreeSnapshot`; восстановление дерева из снимка удалено как мёртвый код — CLEANUP-DEAD-CODE: undo/redo строят дерево через `rebuildBuildTree`; запись снимков дерева удалена — CLEANUP-TREE-SNAPSHOT, снимки — только объекты)
 - [x] Финальное тестирование всех сценариев (141 тест, все прошли)
 
 ---

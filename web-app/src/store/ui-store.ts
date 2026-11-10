@@ -8,6 +8,7 @@ import { create } from 'zustand/react'
 import type { GizmoMode } from '../components/Viewport3D'
 import type { SceneObject } from '../csg/types'
 import { DEFAULT_FILTERS } from '../constants'
+import { DEFAULT_DIMENSION_DEFAULTS, clampDimensionOffset, clampDimensionSize, type DimensionDefaults } from './dimensions'
 
 export interface UiStore {
   // Performance
@@ -34,10 +35,6 @@ export interface UiStore {
   tlFilters: Record<string, boolean>
   setTlFilter: (key: string, checked: boolean) => void
 
-  // Fillet
-  filletRadius: number
-  setFilletRadius: (v: number) => void
-
   // Shape search
   shapeSearch: string
   setShapeSearch: (v: string) => void
@@ -47,6 +44,12 @@ export interface UiStore {
   setRulerActive: (v: boolean | ((prev: boolean) => boolean)) => void
   rulerDist: number | null
   setRulerDist: (v: number | null) => void
+
+  // DIMENSIONS: стиль и отступ новых размеров (окно «Настройки размеров»)
+  dimensionDefaults: DimensionDefaults
+  setDimensionDefaults: (v: DimensionDefaults) => void
+  showDimensionSettings: boolean
+  setShowDimensionSettings: (v: boolean) => void
 
   // Modals
   showPM: boolean
@@ -94,6 +97,17 @@ export interface UiStore {
   // «После успешной аренды расширенной палитры — открыть нативный picker»
   palettePickerRequested: boolean
   setPalettePickerRequested: (v: boolean) => void
+  // Фаза 9.1: раскрытые CSG-узлы в дереве компонентов и выбранный ребёнок CSG.
+  // Ребёнок — НЕ объект сцены (операнды удалены из objects), поэтому его выбор
+  // живёт отдельно от document-store.selectedIds; rootId — объект сцены,
+  // которому принадлежит узел (он же выделен в selectedIds для подсветки).
+  expandedTreeIds: Record<string, boolean>
+  toggleTreeExpanded: (id: string) => void
+  selectedChild: { rootId: string; nodeId: string } | null
+  setSelectedChild: (v: { rootId: string; nodeId: string } | null) => void
+  /** Фаза 9.5.2: выбранный в Timeline прошлый шаг (сырой индекс) — панель «Шаг N» */
+  selectedStep: number | null
+  setSelectedStep: (v: number | null) => void
   cameraMode: 'perspective' | 'orthographic'
   setCameraMode: (v: 'perspective' | 'orthographic' | ((prev: 'perspective' | 'orthographic') => 'perspective' | 'orthographic')) => void
 }
@@ -128,9 +142,6 @@ export const useUiStore = create<UiStore>((set) => ({
   setTlFilter: (key, checked) =>
     set((s) => ({ tlFilters: { ...s.tlFilters, [key]: checked } })),
 
-  filletRadius: 2,
-  setFilletRadius: (v) => set({ filletRadius: v }),
-
   shapeSearch: '',
   setShapeSearch: (v) => set({ shapeSearch: v }),
 
@@ -139,6 +150,13 @@ export const useUiStore = create<UiStore>((set) => ({
     set((s) => ({ rulerActive: typeof v === 'function' ? v(s.rulerActive) : v })),
   rulerDist: null,
   setRulerDist: (v) => set({ rulerDist: v }),
+
+  dimensionDefaults: DEFAULT_DIMENSION_DEFAULTS,
+  setDimensionDefaults: (v) => set({
+    dimensionDefaults: { offset: clampDimensionOffset(v.offset), style: { ...v.style, size: clampDimensionSize(v.style.size), units: 'mm' } },
+  }),
+  showDimensionSettings: false,
+  setShowDimensionSettings: (v) => set({ showDimensionSettings: v }),
 
   showPM: false,
   setShowPM: (v) => set({ showPM: v }),
@@ -164,6 +182,13 @@ export const useUiStore = create<UiStore>((set) => ({
   setRentalModalKey: (v) => set({ rentalModalKey: v }),
   palettePickerRequested: false,
   setPalettePickerRequested: (v) => set({ palettePickerRequested: v }),
+  expandedTreeIds: {},
+  toggleTreeExpanded: (id) =>
+    set((s) => ({ expandedTreeIds: { ...s.expandedTreeIds, [id]: !s.expandedTreeIds[id] } })),
+  selectedChild: null,
+  setSelectedChild: (v) => set({ selectedChild: v }),
+  selectedStep: null,
+  setSelectedStep: (v) => set({ selectedStep: v }),
   cameraMode: 'perspective',
   setCameraMode: (v) =>
     set((s) => ({ cameraMode: typeof v === 'function' ? v(s.cameraMode) : v })),

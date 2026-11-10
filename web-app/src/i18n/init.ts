@@ -24,6 +24,7 @@ function normalizeLang(raw: string | undefined): string | undefined {
  *
  * Приоритеты:
  *   1. Yandex SDK: ysdk.environment.i18n.lang (п. 2.14)
+ *   1b. localStorage i18nextLng — выбор переключателем (только clean-сборка, как в main)
  *   2. navigator.language / navigator.languages[0] (язык браузера)
  *   3. document.documentElement.lang (атрибут <html lang>)
  *   4. Fallback → 'en'
@@ -46,6 +47,17 @@ export function determineLanguage(): string {
   } else {
     console.log('[i18n] [SDK] not initialized, skipping SDK')
   }
+
+  // 1b. Выбор пользователя (переключатель языка в статус-баре, ключ i18nextLng — как в main).
+  //     Переключатель есть только в clean-сборке (в build:yandex его нет — язык задаёт SDK, п. 2.14),
+  //     поэтому на платформе с SDK до этого шага не доходит.
+  try {
+    const saved = normalizeLang(localStorage.getItem('i18nextLng') ?? undefined)
+    if (saved === 'ru' || saved === 'en') {
+      console.log(`[i18n] [localStorage] i18nextLng → "${saved}"`)
+      return saved
+    }
+  } catch { /* localStorage недоступен (приватный режим, iframe) */ }
 
   // 2. navigator.language (язык браузера — приоритетнее document.lang)
   if (typeof navigator !== 'undefined' && navigator.language) {

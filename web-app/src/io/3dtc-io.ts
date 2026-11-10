@@ -15,7 +15,9 @@
 // ============================================================
 
 import JSZip from 'jszip'
+import i18n from '../i18n'
 import type { SceneObject, TinkerCraftOperation } from '../csg/types'
+import { sanitizeDimensions, type Dimension } from '../store/dimensions'
 
 export interface ThreeDtcDocument {
   objects: Record<string, SceneObject>
@@ -23,6 +25,8 @@ export interface ThreeDtcDocument {
   operationsTrimmed: boolean
   fileName?: string
   thumbnail?: string   // base64 PNG data-URL
+  /** DIMENSIONS: слой размеров — отдельно от `operations` (не шаги истории). Старые файлы — без поля. */
+  dimensions?: Dimension[]
 }
 
 const FORMAT_VERSION = '3dtc-v1'
@@ -41,7 +45,7 @@ const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype'])
 
 function validateObjectKeys(obj: unknown, path: string, depth = 0): void {
   if (depth > MAX_RECURSION_DEPTH) {
-    throw new Error(`Некорректный model.json: слишком глубокая вложенность (>${MAX_RECURSION_DEPTH}) по пути "${path}"`)
+    throw new Error(i18n.t('errors.file.tooDeep', { max: MAX_RECURSION_DEPTH, path }))
   }
   if (typeof obj !== 'object' || obj === null) return
   if (Array.isArray(obj)) {
@@ -50,7 +54,7 @@ function validateObjectKeys(obj: unknown, path: string, depth = 0): void {
   }
   for (const key of Object.keys(obj as Record<string, unknown>)) {
     if (UNSAFE_KEYS.has(key)) {
-      throw new Error(`Некорректный model.json: обнаружен небезопасный ключ "${key}" по пути "${path}"`)
+      throw new Error(i18n.t('errors.file.unsafeKey', { key, path }))
     }
     validateObjectKeys((obj as Record<string, unknown>)[key], path ? `${path}.${key}` : key, depth + 1)
   }
@@ -69,7 +73,9 @@ function sanitizeObjectKeys(obj: unknown): unknown {
 
 const VALID_OP_TYPES = new Set([
   'add_shape', 'import_mesh', 'move', 'resize_dims', 'fillet',
-  'mirror', 'align', 'group', 'delete', 'visibility', 'color', 'rename',
+  'mirror', 'align', 'group', 'edit_child_params', 'edit_step', 'delete', 'visibility', 'color', 'rename',
+  // yandex-games: 3D-текст до v1.4.0 — загрузка переводит в import_mesh (io/legacy-text3d.ts)
+  'text3d',
 ])
 
 // ────────────────────────────────────────────────────────────
@@ -184,6 +190,24 @@ function restoreOperationMeshArrays(operations: TinkerCraftOperation[]): void {
       if (rv) g.resultVertices = rv
       if (ri) g.resultIndices = ri
       if (rn !== undefined) g.resultNormals = rn
+    } else if (op.type === 'edit_child_params') {
+      // Фаза 9.3: результат правки хранит меш как group
+      const rv = taToNumArray(op.resultVertices)
+      const ri = taToNumArray(op.resultIndices)
+      const rn = taToNumArray(op.resultNormals)
+      if (rv) op.resultVertices = rv
+      if (ri) op.resultIndices = ri
+      if (rn !== undefined) op.resultNormals = rn
+    } else if (op.type === 'edit_step') {
+      // Фаза 9.5: пересчитанные меши каскада — как у group
+      for (const r of op.replacements ?? []) {
+        const rv = taToNumArray(r.resultVertices)
+        const ri = taToNumArray(r.resultIndices)
+        const rn = taToNumArray(r.resultNormals)
+        if (rv) r.resultVertices = rv
+        if (ri) r.resultIndices = ri
+        if (rn !== undefined) r.resultNormals = rn
+      }
     } else if (op.type === 'import_mesh') {
       const im = op as import('../csg/types').ImportMeshOperation
       const v = taToNumArray(im.vertices)
@@ -239,7 +263,8 @@ function restoreSceneObjects(objects: Record<string, unknown>): Record<string, S
 /**
  * Сериализовать документ в Blob (.3dtc ZIP-архив).
  *
- * model.json: { version: "3dtc-v1", fileName, operationsTrimmed, objects, operations }
+ * model.json: { version: "3dtc-v1", fileName, operationsTrimmed, objects, operations, dimensions }
+ * (`dimensions` — слой размеров, DIMENSIONS; формат тот же — поле необязательное)
  * thumbnail.png: PNG или 1×1 прозрачный placeholder.
  */
 export async function serialize3dtc(doc: ThreeDtcDocument): Promise<Blob> {
@@ -251,6 +276,7 @@ export async function serialize3dtc(doc: ThreeDtcDocument): Promise<Blob> {
     operationsTrimmed: doc.operationsTrimmed,
     objects: encodeTypedArrays(doc.objects),
     operations: encodeTypedArrays(doc.operations),
+    dimensions: doc.dimensions ?? [],
   }
 
   zip.file('model.json', JSON.stringify(model, null, 2))
@@ -279,24 +305,20 @@ export async function parse3dtc(source: Blob | ArrayBuffer): Promise<ThreeDtcDoc
   const buffer = source instanceof Blob ? await source.arrayBuffer() : source
 
   if (buffer.byteLength > MAX_3DTC_SIZE) {
-    throw new Error(
-      `Некорректный .3dtc: размер ${buffer.byteLength} байт превышает лимит ${MAX_3DTC_SIZE} байт`,
-    )
+    throw new Error(i18n.t('errors.file.tooLarge', { size: buffer.byteLength, max: MAX_3DTC_SIZE }))
   }
 
   const zip = await JSZip.loadAsync(buffer)
 
   const modelFile = zip.file('model.json')
-  if (!modelFile) throw new Error('Некорректный .3dtc: model.json не найден')
+  if (!modelFile) throw new Error(i18n.t('errors.file.noModel'))
 
   const json = await modelFile.async('string')
   if (typeof json !== 'string') {
-    throw new Error('Некорректный model.json: не является строкой')
+    throw new Error(i18n.t('errors.file.notString'))
   }
   if (json.length > MAX_MODEL_JSON_SIZE) {
-    throw new Error(
-      `Некорректный model.json: размер ${json.length} байт превышает лимит ${MAX_MODEL_JSON_SIZE} байт`,
-    )
+    throw new Error(i18n.t('errors.file.jsonTooLarge', { size: json.length, max: MAX_MODEL_JSON_SIZE }))
   }
 
   const raw = JSON.parse(json)
@@ -304,18 +326,16 @@ export async function parse3dtc(source: Blob | ArrayBuffer): Promise<ThreeDtcDoc
   const sanitized = sanitizeObjectKeys(raw) as typeof raw
 
   if (sanitized.version !== FORMAT_VERSION) {
-    throw new Error(
-      `Неподдерживаемая версия формата "${sanitized.version}". Ожидается "${FORMAT_VERSION}".`,
-    )
+    throw new Error(i18n.t('errors.file.badVersion', { version: String(sanitized.version), expected: FORMAT_VERSION }))
   }
 
   if (!Array.isArray(sanitized.operations)) {
-    throw new Error('Некорректный model.json: отсутствует массив operations')
+    throw new Error(i18n.t('errors.file.noOperations'))
   }
 
   const operations = sanitized.operations as TinkerCraftOperation[]
   if (!operations.every(op => op && typeof op === 'object' && VALID_OP_TYPES.has((op as { type?: string }).type ?? ''))) {
-    throw new Error('Некорректный model.json: обнаружена операция с неизвестным типом')
+    throw new Error(i18n.t('errors.file.unknownOperation'))
   }
 
   // decodeTypedArrays: SerializedTA → Float32Array/Uint32Array
@@ -339,6 +359,7 @@ export async function parse3dtc(source: Blob | ArrayBuffer): Promise<ThreeDtcDoc
     operationsTrimmed: Boolean(sanitized.operationsTrimmed),
     fileName: typeof sanitized.fileName === 'string' ? sanitized.fileName : undefined,
     thumbnail,
+    dimensions: sanitizeDimensions(sanitized.dimensions),
   }
 }
 
@@ -350,7 +371,7 @@ export function open3dtcFilePicker(): Promise<{ file: File; buffer: ArrayBuffer 
   return new Promise(resolve => {
     const input = document.createElement('input')
     input.type = 'file'
-    input.accept = '.3dtc,.zip'
+    input.accept = '.3dtc,.doodle,.zip'   // yandex-games: + старые .doodle (конвертация — io/project-file.ts)
     input.onchange = async () => {
       const file = input.files?.[0]
       if (!file) { resolve(null); return }

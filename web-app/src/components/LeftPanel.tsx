@@ -2,23 +2,18 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import Section from "./Section";
 import Timeline from "./Timeline";
-import ComponentTree from "./ComponentTree";
+import ComponentTree, { displayName } from "./ComponentTree";
 import Badge from "./Badge";
-import { ALL_SHAPES } from "../constants.tsx";
-import { OP_FILTER_LABELS } from "../constants";
-import type { ShapeType, TinkerCraftOperation, SceneObject } from "../csg/types";
-import { ChevronUpIcon, ChevronDownIcon } from "./icons";
-
-// Отображаемое имя фигуры для списка объектов
-function getShapeLabel(obj: SceneObject, t: (key: string) => string): string {
-  if (obj.name) return obj.name
-  if (obj.shapeType === 'csg') return t('csg.result')
-  if (obj.shapeType === 'import_mesh') return t('actions.import')
-  if (obj.shapeType === 'text3d') return t('leftPanel.text3d')
-  return t(`shapes.${obj.shapeType}`)
-}
-
 import { useEconomyStore } from "../store/economy-store";
+import DimensionList from "./DimensionList";
+import { useDimensionsStore } from "../store/dimensions-store";
+import { useDocumentStore } from "../store/document-store";
+import { isDimensionAlive } from "../store/dimensions";
+import { OP_FILTER_LABELS } from "../constants";
+import { ALL_SHAPES } from "../constants.tsx";
+import type { TinkerCraftOperation, SceneObject } from "../csg/types";
+import { usePlacementModeStore, type PlaceableShape } from "../store/placement-mode";
+import { ChevronUpIcon, ChevronDownIcon } from "./icons";
 
 export default function LeftPanel({
   shapeSearch,
@@ -41,14 +36,18 @@ export default function LeftPanel({
   tlFilters,
   onFilterChange,
   onJumpHistory,
+  onTimelineEdit,
 }: {
   shapeSearch: string;
   onShapeSearchChange: (v: string) => void;
   workerOk: boolean;
   busy: boolean;
-  onAddShape: (type: ShapeType) => void;
+  /** PLUG-AND-PLAY: клик по фигуре — режим размещения (фигура — после клика по грани / сетке) */
+  onAddShape: (type: PlaceableShape) => void;
   onShowTextModal: () => void;
-  openEconomy: () => void;
+  /** yandex-games: клик по 3D-тексту без доступа — модалка аренды text3d
+   *  (не передан — гейтинг у родителя в onShowTextModal) */
+  openEconomy?: () => void;
   objectList: SceneObject[];
   selSet: Set<string>;
   activeTab: "objects" | "tree";
@@ -62,10 +61,14 @@ export default function LeftPanel({
   tlFilters: Record<string, boolean>;
   onFilterChange: (key: string, checked: boolean) => void;
   onJumpHistory: (index: number) => void;
+  onTimelineEdit?: (op: import("../csg/types").TinkerCraftOperation, index: number) => void;
 }) {
   const { t } = useTranslation();
-  // EC8: разбивка составного селектора — useShallow не нужен для двух примитивов
-  const tokens = useEconomyStore(s => s.tokens);
+  const placing = usePlacementModeStore((st) => st.placementMode?.shapeType ?? null);
+  // DIMENSIONS: в счётчике — видимые размеры (объекты на месте), как в списке
+  const dimensions = useDimensionsStore((st) => st.dimensions);
+  const docObjects = useDocumentStore((st) => st.objects);
+  const dimensionCount = dimensions.filter((d) => isDimensionAlive(d, docObjects)).length;
   // P1-4: RO-селектор вместо мутирующего hasActiveSubscription() в render-фазе.
   // P1-5: единый хелпер доступа к 3D-тексту (подписка ИЛИ аренда text3d по серверному времени).
   const textActive = useEconomyStore(s => s.canUseText3dRO());
@@ -79,11 +82,6 @@ export default function LeftPanel({
 
   // Filter dropdown state
   const [filtersOpen, setFiltersOpen] = useState(false);
-
-  const handleShapeClick = (type: ShapeType) => {
-    if (type === 'import_mesh') return // handled elsewhere
-    onAddShape(type)
-  };
 
   return (
     <div className="panel-left">
@@ -104,40 +102,28 @@ export default function LeftPanel({
               {t("leftPanel.notFound")}
             </div>
           )}
-          {filteredShapes.map((s) => {
-            // U4: в ALL_SHAPES_DATA фигура 3D-текста объявлена как type: "text",
-            // а в сцене создаётся с shapeType: 'text3d'. Сравниваем именно
-            // "text" — тип из палитры фигур (не переименовываем, чтобы не
-            // сломать создание через addTextMesh).
-            const isText3d = s.type === 'text'
-            return (
-              <button
-                key={s.type}
-                className="shape-btn"
-                title={t('leftPanel.addShape', { label: t(s.labelKey) })}
-                disabled={!workerOk || busy}
-                onClick={() => {
-                  if (isText3d) {
-                    // B2: без доступа к 3D-тексту — НЕ disabled, клик ведёт
-                    // к аренде text3d (75 токенов) в правой панели экономики.
-                    if (!textActive) {
-                      openEconomy()
-                      return
-                    }
-                    onShowTextModal()
-                    return
-                  }
-                  handleShapeClick(s.type as ShapeType)
-                }}
-              >
-                <span className="shape-icon">{s.icon({ size: 32 })}</span>
-                <span className="shape-lbl">{t(s.labelKey)}</span>
-                {isText3d && (
-                  <Badge type="tokens" value="75" isActive={textActive} />
-                )}
-              </button>
-            )
-          })}
+          {filteredShapes.map((s) => (
+            <button
+              key={s.type}
+              className={s.type === placing ? "shape-btn active" : "shape-btn"}
+              title={t(s.type === "text" ? "leftPanel.addShape" : "leftPanel.placeShape", { label: t(`shapesAcc.${s.type}`) })}
+              aria-pressed={s.type === "text" ? undefined : s.type === placing}
+              // UX-AUDIT-9: не блокируется на время busy — поставленная фигура ждёт очереди (add-shape-queue);
+              // PLUG-AND-PLAY: клик — режим размещения, фигура — после клика по грани / сетке или Enter
+              disabled={!workerOk}
+              onClick={() => {
+                if (s.type !== "text") { onAddShape(s.type as PlaceableShape); return }
+                // B2 / UB-1 (yandex-games): без доступа к 3D-тексту — НЕ disabled,
+                // клик ведёт к аренде text3d (75 токенов)
+                if (!textActive) { (openEconomy ?? onShowTextModal)(); return }
+                onShowTextModal()
+              }}
+            >
+              <span className="shape-icon">{s.icon({ size: 32 })}</span>
+              <span className="shape-lbl">{t(s.labelKey)}</span>
+              {s.type === "text" && <Badge type="tokens" value="75" isActive={textActive} />}
+            </button>
+          ))}
         </div>
       </Section>
 
@@ -179,8 +165,9 @@ export default function LeftPanel({
                     opacity: obj.visible ? 1 : 0.35,
                   }}
                 />
+                {/* UX-AUDIT-28: имя — как в «Дереве» («Куб 1», «CSG результат 3»), а не «Куб», «Куб» */}
                 <span className="object-list-label">
-                  {getShapeLabel(obj, t)}
+                  {displayName(obj, t)}
                 </span>
                 {!obj.visible && <span className="obj-hidden">{t("leftPanel.hidden")}</span>}
               </div>
@@ -232,7 +219,13 @@ export default function LeftPanel({
           busy={busy}
           onJump={onJumpHistory}
           filters={tlFilters}
+          onEdit={onTimelineEdit}
         />
+      </Section>
+
+      {/* DIMENSIONS: размеры — список, выделение, корзина */}
+      <Section title={t("dimensions.section")} badge={dimensionCount}>
+        <DimensionList />
       </Section>
     </div>
   );

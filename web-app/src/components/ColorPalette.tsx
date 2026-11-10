@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { WADS_OPTIMUM_16 } from "../constants";
 
 interface ColorPaletteProps {
@@ -12,6 +13,7 @@ interface ColorPaletteProps {
  * Отображается по умолчанию в свойствах объекта.
  */
 export default function ColorPalette({ selectedColor, onChange, onBlur }: ColorPaletteProps) {
+  const { t } = useTranslation();
   const [hoveredColor, setHoveredColor] = useState<string | null>(null);
 
   // Восстановление выбранного цвета при смене палитры
@@ -45,8 +47,8 @@ export default function ColorPalette({ selectedColor, onChange, onBlur }: ColorP
           onMouseEnter={() => setHoveredColor(color.hex)}
           onMouseLeave={() => setHoveredColor(null)}
           onBlur={onBlur}
-          title={`${color.nameRu} (${color.name}) — ${color.hex}`}
-          aria-label={`${color.nameRu} — ${color.hex}`}
+          title={`${t(`palette.colors.${color.name.toLowerCase()}`)} — ${color.hex}`}
+          aria-label={`${t(`palette.colors.${color.name.toLowerCase()}`)} — ${color.hex}`}
         />
       ))}
     </div>

@@ -5,10 +5,10 @@
 
 import {
   handleBuildShape,
-  handleApplyFillet,
   handleBuildImportedMesh,
   handleCsgBoolean,
   handleCsgBooleanSync,
+  handleCsgBooleanMulti,
   handleMirrorObject,
   handleRebuildScene,
   handleSyncObjects,
@@ -27,8 +27,8 @@ import {
 // corrupted autosave) should not crash the worker.
 
 const KNOWN_MESSAGE_TYPES = new Set([
-  'buildShape', 'applyFillet', 'buildImportedMesh', 'csgBoolean',
-  'csgBooleanSync', 'mirrorObject', 'rebuildScene', 'syncObjects',
+  'buildShape', 'buildImportedMesh', 'csgBoolean',
+  'csgBooleanSync', 'csgBooleanMulti', 'mirrorObject', 'rebuildScene', 'syncObjects',
   'syncMesh', 'rebuildTreeNode', 'deleteObjects', 'clearAll',
 ])
 
@@ -62,10 +62,10 @@ self.addEventListener('message', async (e: MessageEvent) => {
   try {
     switch (msg.type) {
       case 'buildShape': await handleBuildShape(msg as unknown as import('./worker-handlers').BuildShapeMessage); break
-      case 'applyFillet': await handleApplyFillet(msg as unknown as import('./worker-handlers').ApplyFilletMessage); break
       case 'buildImportedMesh': await handleBuildImportedMesh(msg as unknown as import('./worker-handlers').BuildImportedMeshMessage); break
       case 'csgBoolean': await handleCsgBoolean(msg as unknown as import('./worker-handlers').CsgBooleanMessage); break
       case 'csgBooleanSync': await handleCsgBooleanSync(msg as unknown as import('./worker-handlers').CsgBooleanSyncMessage); break
+      case 'csgBooleanMulti': await handleCsgBooleanMulti(msg as unknown as import('./worker-handlers').CsgBooleanMultiMessage); break
       case 'mirrorObject': await handleMirrorObject(msg as unknown as import('./worker-handlers').MirrorObjectMessage); break
       case 'rebuildScene': await handleRebuildScene(msg as unknown as import('./worker-handlers').RebuildSceneMessage); break
       case 'syncObjects': await handleSyncObjects(msg as unknown as import('./worker-handlers').SyncObjectsMessage); break

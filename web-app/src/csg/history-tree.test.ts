@@ -21,6 +21,9 @@ import {
   rebuildNode,
   printTree,
   treeStore,
+  snapshotSubtree,
+  instantiateSubtree,
+  syncNodeTransform,
 } from '../csg/history-tree'
 import { subtractTransform, composeTransforms } from '../csg/worker-matrix'
 import type { TreeNode, BoundingBox, ExtractedMesh } from '../csg/types'
@@ -1185,5 +1188,45 @@ describe('rebuildNode — relativeToParent (Stage 5)', () => {
     const csgAWorld = composeTransforms(csgBWorld, csgA.relativeToParent!)
     const obj1World = composeTransforms(csgAWorld, obj1.relativeToParent!)
     expect(obj1World.x).toBeCloseTo(5, 10) // original x=5
+  })
+})
+
+describe('originTransform (NESTED-MOVED-EDIT)', () => {
+  const T = (o: Partial<{ x: number; y: number; z: number; rotX: number; rotY: number; rotZ: number; scaleX: number; scaleY: number; scaleZ: number }> = {}) =>
+    ({ x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1, ...o })
+  beforeEach(() => clearTree())
+
+  it('createBooleanNode: TRS₀ = transform создания; перемещение меняет только localTransform', () => {
+    createPrimitiveNode('a', 'cube', { width: 2, height: 2, depth: 2 }, T())
+    createPrimitiveNode('b', 'sphere', { radius: 1 }, T({ x: 1 }))
+    createBooleanNode('g', 'union', 'a', 'b', T({ x: 0.5, rotZ: 10 }))
+    syncNodeTransform('g', T({ x: 30, rotZ: 40 }))
+    expect(getNode('g')!.originTransform).toEqual(T({ x: 0.5, rotZ: 10 }))
+    expect(getNode('g')!.localTransform).toEqual(T({ x: 30, rotZ: 40 }))
+  })
+
+  it('зеркало: TRS₀ отражается тем же сопряжением, что localTransform (позиция, Эйлер, |масштаб|)', () => {
+    createPrimitiveNode('a', 'cube', { width: 2, height: 2, depth: 2 }, T())
+    createPrimitiveNode('b', 'sphere', { radius: 1 }, T({ x: 1 }))
+    createBooleanNode('g', 'union', 'a', 'b', T({ x: 5, y: 2, rotY: 30, rotZ: 20, scaleX: 2 }))
+    mirrorTreeNode('g', 'YZ')
+    const o = getNode('g')!.originTransform!
+    const l = getNode('g')!.localTransform!
+    expect(o).toEqual(l)                                   // до сдвига TRS₀ = localTransform → после отражения тоже
+    expect(o.x).toBe(-5)
+    expect(o.scaleX).toBe(2)
+  })
+
+  it('снимок/вставка сохраняют TRS₀; снимок без TRS₀ (старый) получает rootOrigin', () => {
+    createPrimitiveNode('a', 'cube', { width: 2, height: 2, depth: 2 }, T())
+    createPrimitiveNode('b', 'sphere', { radius: 1 }, T({ x: 1 }))
+    createBooleanNode('g', 'union', 'a', 'b', T({ x: 3 }))
+    const snap = snapshotSubtree('g')
+    instantiateSubtree(snap, 'g', 'k', T({ x: 50 }), T({ x: 999 }))
+    expect(getNode('k')!.originTransform).toEqual(T({ x: 3 }))  // из снимка, rootOrigin не нужен
+    expect(getNode('k')!.localTransform).toEqual(T({ x: 50 }))
+    const legacy = snap.map((n) => { const { originTransform: _o, ...rest } = n; void _o; return rest })
+    instantiateSubtree(legacy, 'g', 'k2', T({ x: 50 }), T({ x: 3 }))
+    expect(getNode('k2')!.originTransform).toEqual(T({ x: 3 }))
   })
 })

@@ -79,7 +79,7 @@ describe('LeftPanel (U4: бейдж 3D-текста)', () => {
         const textShape = ALL_SHAPES.find((s) => s.type === 'text')
         expect(textShape).toBeTruthy()
         // В палитре фигур тип — "text", не "text3d"
-        expect(ALL_SHAPES.some((s) => s.type === 'text3d')).toBe(false)
+        expect(ALL_SHAPES.some((s) => (s.type as string) === 'text3d')).toBe(false)
     })
 
     it('рендерит бейдж с 75 токенами у кнопки 3D-текста', () => {
