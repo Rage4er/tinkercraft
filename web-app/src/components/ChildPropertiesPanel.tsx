@@ -7,6 +7,8 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useSettingsStore } from '../store/settings'
+import { unitLabelKey } from '../store/units'
 import NumInput from './NumInput'
 import { useDocumentStore } from '../store/document-store'
 import { useUiStore } from '../store/ui-store'
@@ -17,6 +19,7 @@ import type { ShapeParams } from '../csg/types'
 
 export default function ChildPropertiesPanel() {
   const { t } = useTranslation()
+  const lengthUnit = useSettingsStore((s) => s.units)   // APP-SETTINGS: «Размеры (см)»
   const selectedChild = useUiStore((s) => s.selectedChild)
   const setSelectedChild = useUiStore((s) => s.setSelectedChild)
   const objects = useDocumentStore((s) => s.objects)
@@ -108,7 +111,7 @@ export default function ChildPropertiesPanel() {
 
       {fields.length > 0 && (
         <div className="csg-group" data-testid="child-form">
-          <div className="csg-group-title">{t('properties.dimensions')}</div>
+          <div className="csg-group-title">{t('properties.dimensions', { unit: t(unitLabelKey(lengthUnit)) })}</div>
           {fields.map((f) => (
             <NumInput
               key={`${selectedChild.nodeId}:${f.key}`}

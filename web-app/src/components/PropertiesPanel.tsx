@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import NumInput from "./NumInput";
 import CsgButtons from "./CsgButtons";
+import { useSettingsStore } from "../store/settings";
+import { unitLabelKey } from "../store/units";
 import { useCsgGroupModeStore, type CsgOpButtonStates } from "../store/csg-group-mode";
 import type { ShapeParams, SceneObject } from "../csg/types";
 import { EyeIcon, EyeOffIcon, FolderIcon, SaveIcon } from "./icons";
@@ -112,6 +114,8 @@ export default function PropertiesPanel({
     baseColorRef.current = null;
   }, [firstSelected?.id]);
 
+  const lengthUnit = useSettingsStore((st) => st.units);
+  const unitLabel = t(unitLabelKey(lengthUnit));   // APP-SETTINGS: «Позиция (см)» и т.п.
   if (!firstSelected) {
     return (
       <>
@@ -214,7 +218,7 @@ export default function PropertiesPanel({
         </span>
       </div>
 
-      <div className="props-section-title">{t("properties.position")}</div>
+      <div className="props-section-title">{t("properties.position", { unit: unitLabel })}</div>
       <NumInput
         id="num-input-pos-X"
         label="X"
@@ -299,7 +303,7 @@ export default function PropertiesPanel({
           куб — width X, height Y, depth Z (Manifold.cube([w, h, d])); высота цилиндра / конуса / призмы — Z */}
       {canResize && firstSelected.shapeType !== "import_mesh" && (
         <div className="csg-group">
-          <div className="csg-group-title">{t("properties.dimensions")}</div>
+          <div className="csg-group-title">{t("properties.dimensions", { unit: unitLabel })}</div>
           {firstSelected.shapeType === "cube" && !firstSelected.params.width && firstSelected.originalBboxSize ? (
             // CSG result: show real bbox dimensions in mm
             <>

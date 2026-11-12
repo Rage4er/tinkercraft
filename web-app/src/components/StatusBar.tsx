@@ -7,6 +7,8 @@ import { usePlacementModeStore, type PlacementModeState } from "../store/placeme
 import { AXIS_PLANE_NAME } from "../store/placement";
 import { useDimensionModeStore } from "../store/dimension-mode";
 import { displayName } from "./ComponentTree";
+import { GearIcon } from "./icons";
+import { useUiStore } from "../store/ui-store";
 import type { SceneObject } from "../csg/types";
 
 type TFn = (key: string, opts?: Record<string, unknown>) => string;
@@ -212,6 +214,16 @@ export default function StatusBar({
       <span className="status-item status-auto">
         {t("statusbar.fps")} <strong>{fps}</strong>
       </span>
+      {/* APP-SETTINGS: окно «Настройки» — язык, тема, звуки, единицы */}
+      <button
+        className="settings-btn"
+        data-testid="settings-button"
+        aria-label={t("settings.title")}
+        title={t("settings.title")}
+        onClick={() => useUiStore.getState().setShowSettings(true)}
+      >
+        <GearIcon size={14} />
+      </button>
       <button
         className="lang-switcher"
         onClick={toggleLanguage}

@@ -55,7 +55,7 @@
     "place": "Place dimension",
     "settings": "Dimension settings",
     "toggle": "Show / hide dimensions",
-    "label": "{{value}} mm",
+    "label": "{{value}} {{unit}}",
     "hintA": "Dimension: pick the first point — an object vertex, edge or face. Esc / right click — exit",
     "hintB": "Dimension: pick the second point. Esc — exit",
     "created": "Dimensions: {{count}}",
@@ -158,10 +158,10 @@
     "yes": "Yes",
     "no": "No",
     "triangles": "Tris.",
-    "position": "Position (mm)",
+    "position": "Position ({{unit}})",
     "rotation": "Rotation (°)",
     "scale": "Scale",
-    "dimensions": "Dimensions (mm)",
+    "dimensions": "Dimensions ({{unit}})",
     "sizeX": "Width (X)",
     "sizeY": "Depth (Y)",
     "sizeZ": "Height (Z)",
@@ -399,7 +399,9 @@
     "confirm": "Clear"
   },
   "units": {
-    "mm": "mm"
+    "mm": "mm",
+    "cm": "cm",
+    "in": "in"
   },
   "ruler": {
     "distance": "Distance"
@@ -512,5 +514,25 @@
     "done": "Done (Esc)",
     "sameObject": "This is the plane A object — pick a face of another object",
     "locked": "The object is locked — cannot align"
+  },
+  "settings": {
+    "title": "Settings",
+    "language": "Language",
+    "theme": "Theme",
+    "sound": "Sounds",
+    "volume": "Volume",
+    "units": "Length units",
+    "unitsHint": "The model and files are always in millimetres; the unit only changes fields, the ruler and dimensions",
+    "reset": "Reset",
+    "close": "Close",
+    "lang": {
+      "ru": "Russian",
+      "en": "English"
+    },
+    "unitName": {
+      "mm": "Millimetres",
+      "cm": "Centimetres",
+      "in": "Inches"
+    }
   }
 }

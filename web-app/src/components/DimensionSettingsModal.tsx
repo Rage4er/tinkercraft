@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useUiStore } from "../store/ui-store";
+import { useSettingsStore } from "../store/settings";
+import { unitLabelKey } from "../store/units";
 import { useDimensionsStore } from "../store/dimensions-store";
 import { restyleDimension } from "../store/dimension-mode";
 import {
@@ -23,6 +25,7 @@ const FONT_KEY: Record<DimensionFont, string> = { "sans-serif": "dimensions.font
 export default function DimensionSettingsModal({ onClose }: { onClose: () => void }) {
   const { t } = useTranslation();
   const defaults = useUiStore((s) => s.dimensionDefaults);
+  const units = useSettingsStore((s) => s.units);   // APP-SETTINGS: показ — в единице из настроек
   const setDefaults = useUiStore((s) => s.setDimensionDefaults);
   const selected = useDimensionsStore((s) => s.dimensions.find((d) => d.id === s.selectedDimensionId) ?? null);
   const init = selected ? { style: selected.style, offset: selected.offset } : defaults;
@@ -113,7 +116,7 @@ export default function DimensionSettingsModal({ onClose }: { onClose: () => voi
 
         <div className="dim-settings-field">
           <span className="dim-settings-label">{t("dimensions.units")}</span>
-          <span data-testid="dim-units">{t("units.mm")}</span>
+          <span data-testid="dim-units">{t(unitLabelKey(units))}</span>
         </div>
 
         <div className="text-modal-actions">

@@ -3,7 +3,9 @@ import { useTranslation } from "react-i18next";
 import { useDimensionsStore } from "../store/dimensions-store";
 import { useDocumentStore } from "../store/document-store";
 import { deleteDimension } from "../store/dimension-mode";
-import { dimensionValue, formatDimensionValue } from "../store/dimensions";
+import { dimensionValue } from "../store/dimensions";
+import { useSettingsStore } from "../store/settings";
+import { lengthLabel } from "../store/units";
 import { displayName } from "./ComponentTree";
 import { DeleteIcon } from "./icons";
 
@@ -21,13 +23,14 @@ export default function DimensionList() {
   const selectDimension = useDimensionsStore((s) => s.selectDimension);
   const clearSelection = useDocumentStore((s) => s.clearSelection);
   const objects = useDocumentStore((s) => s.objects);
+  const units = useSettingsStore((s) => s.units);   // APP-SETTINGS: значения — в единице из настроек
   const rows = useMemo(() => dimensions.flatMap((d) => {
     const value = dimensionValue(d, objects);
     if (value === null) return [];
     const a = displayName(objects[d.objectIdA], t);
     const b = displayName(objects[d.objectIdB], t);
-    return [{ id: d.id, names: d.objectIdA === d.objectIdB ? a : `${a} — ${b}`, value: formatDimensionValue(value), color: d.style.color }];
-  }), [dimensions, objects, t]);
+    return [{ id: d.id, names: d.objectIdA === d.objectIdB ? a : `${a} — ${b}`, value: lengthLabel(t, value, units), color: d.style.color }];
+  }), [dimensions, objects, t, units]);
 
   if (rows.length === 0) return <div className="ct-empty" data-testid="dimension-empty">{t("dimensions.empty")}</div>;
   return (
@@ -46,7 +49,7 @@ export default function DimensionList() {
         >
           <div className="object-list-swatch" style={{ background: r.color }} />
           <span className="object-list-label" title={r.names}>{r.names}</span>
-          <strong className="dim-list-value" data-testid="dimension-value">{t("dimensions.label", { value: r.value })}</strong>
+          <strong className="dim-list-value" data-testid="dimension-value">{r.value}</strong>
           <button
             type="button"
             className="ct-btn ct-del"

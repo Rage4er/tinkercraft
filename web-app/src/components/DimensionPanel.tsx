@@ -3,7 +3,9 @@ import { useDimensionsStore } from "../store/dimensions-store";
 import { useDocumentStore } from "../store/document-store";
 import { useUiStore } from "../store/ui-store";
 import { deleteDimension, restyleDimension } from "../store/dimension-mode";
-import { DIMENSION_KINDS, DIMENSION_OFFSET_RANGE, dimensionValue, formatDimensionValue, type DimensionKind } from "../store/dimensions";
+import { DIMENSION_KINDS, DIMENSION_OFFSET_RANGE, dimensionValue, type DimensionKind } from "../store/dimensions";
+import { useSettingsStore } from "../store/settings";
+import { lengthLabel } from "../store/units";
 import { displayName } from "./ComponentTree";
 import NumInput from "./NumInput";
 
@@ -18,6 +20,7 @@ export default function DimensionPanel() {
   const { t } = useTranslation();
   const dim = useDimensionsStore((s) => s.dimensions.find((d) => d.id === s.selectedDimensionId) ?? null);
   const selectDimension = useDimensionsStore((s) => s.selectDimension);
+  const units = useSettingsStore((s) => s.units);   // APP-SETTINGS: значение — в единице из настроек
   const objects = useDocumentStore((s) => s.objects);
   const setShowSettings = useUiStore((s) => s.setShowDimensionSettings);
   if (!dim) return null;
@@ -36,7 +39,7 @@ export default function DimensionPanel() {
       <div className="props-row">
         <span className="props-label">{t("dimensions.value")}</span>
         <strong className="props-value" data-testid="dimension-panel-value">
-          {value === null ? "—" : t("dimensions.label", { value: formatDimensionValue(value) })}
+          {value === null ? "—" : lengthLabel(t, value, units)}
         </strong>
       </div>
       <div className="props-row">

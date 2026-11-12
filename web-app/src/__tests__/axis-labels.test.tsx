@@ -44,7 +44,7 @@ function renderDims(o: SceneObject) {
       />,
     )
   })
-  const group = [...host.querySelectorAll('.csg-group')].find((g) => g.querySelector('.csg-group-title')?.textContent === i18n.t('properties.dimensions'))!
+  const group = [...host.querySelectorAll('.csg-group')].find((g) => g.querySelector('.csg-group-title')?.textContent === i18n.t('properties.dimensions', { unit: i18n.t('units.mm') }))!
   const labels = [...group.querySelectorAll('.props-label')].map((l) => l.textContent)
   const set = (label: string, v: number) => {
     const id = [...group.querySelectorAll('.props-label')].find((l) => l.textContent === label)!.getAttribute('for')!
