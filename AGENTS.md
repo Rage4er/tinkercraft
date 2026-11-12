@@ -67,7 +67,7 @@ pnpm e2e:ux-formats-settings  # Пакет A: «Настройки» (язык r
 | **9** | **Параметрическая история** — 9.1–9.4, 9.6–9.9 ✅; 9.5.0 (эффективная история) ✅; 9.5.1 (fillet) ❌ отменена; 9.5.2 move ✅; 9.5.3 mirror ✅; 9.5.4 extrude ✅; CSG-INDEPENDENT-COPY, IMPORT-MESH-CSG, ALIGN-REVIT ✅ | ✅ Завершена (v1.3.0, `phase-9 → main`) |
 | 10 | Яндекс.Игры — монетизация (ветка `yandex-games`) | 🔄 Отдельная ветка (Y.1–Y.5 ✅; v1.4.0 — `main` v1.3.9 + SDK и экономика, PR #52) |
 | 11 | B-Rep и тяжёлая математика (FILLET-CHAMFER-BREP — OCCT WASM, EDIT-VERTICES, SVG-EXTRUDE — настоящий extrude 2D→3D, THREAD-GENERATOR, STEP) | 🔲 Запланирована |
-| 12 | Инструменты моделирования (ARRAY-TOOL — массивы, LOCK-OBJECT — блокировка (v1.3.11), NEW-PRIMITIVES — капсула, труба, пружина) | ✅ Завершена |
+| 12 | Инструменты моделирования (ARRAY-TOOL — массивы, LOCK-OBJECT — блокировка (v1.3.11), NEW-PRIMITIVES — капсула, труба, пружина) | ✅ Завершена (v1.3.12) |
 | 13 | UX, форматы, настройки (APP-SETTINGS, THEME-ENGINE, SFX, FORMATS-OBJ-3MF-GLTF) | ✅ Завершена (v1.3.11) |
 
 **Фаза 8 в деталях:** `web-app/ARCHITECTURE_TRANSFORMS.md`
@@ -83,7 +83,7 @@ pnpm e2e:ux-formats-settings  # Пакет A: «Настройки» (язык r
 | `<задача>` | Короткие ветки задач от `main` → PR в `main` (merge-коммит после зелёного CI), ветка удаляется. Push в `main` → деплой GitHub Pages. До v1.3.1 задачи Фазы 9 шли через `phase-9` (PR #1–#17) |
 | `yandex-games` | Версия для Яндекс.Игр (экономика, реклама, токены); отдельно, Фазу 9 ещё не содержит |
 
-Цепочка: `main` (v1.3.11) → ветки задач → PR в `main`. `yandex-games` — отдельно.
+Цепочка: `main` (v1.3.12) → ветки задач → PR в `main`. `yandex-games` — отдельно.
 
 **`main` — production.** Любой push в `main` (merge PR) сразу выкладывает GitHub Pages (`deploy.yml`). Поэтому: в `main` — только через PR после зелёного CI, ничего «в процессе»; версия в `web-app/package.json` и `APP_VERSION` (`src/constants.ts`) должна соответствовать коду — значимый merge (фича, фикс) сопровождается patch-релизом: версия + CHANGELOG `[x.y.z]` + тег `vX.Y.Z` после зелёного деплоя.
 
