@@ -18,15 +18,18 @@ export interface ParamField {
 }
 
 const RADIUS = (fallback: number, min = 0.1): ParamField => ({ key: 'radius', labelKey: 'properties.radius', min, fallback })
-const HEIGHT = (fallback: number): ParamField => ({ key: 'height', labelKey: 'properties.height', min: 0.1, fallback })
+// AXIS-LABELS: подпись — по оси (вверх — Z): высота цилиндра / конуса / призмы / пирамиды — вдоль Z
+const HEIGHT = (fallback: number): ParamField => ({ key: 'height', labelKey: 'properties.sizeZ', min: 0.1, fallback })
 
 export function getParamFields(shapeType: ShapeType | undefined): ParamField[] {
   switch (shapeType) {
     case 'cube':
       return [
-        { key: 'width', labelKey: 'properties.width', min: 0.1, fallback: 20 },
-        { key: 'height', labelKey: 'properties.height', min: 0.1, fallback: 20 },
-        { key: 'depth', labelKey: 'properties.depth', min: 0.1, fallback: 20 },
+        // AXIS-LABELS: куб — Manifold.cube([width, height, depth]): width — X, height — Y, depth — Z
+        // (ключи params не меняются — они в файлах и истории; меняется только подпись)
+        { key: 'width', labelKey: 'properties.sizeX', min: 0.1, fallback: 20 },
+        { key: 'height', labelKey: 'properties.sizeY', min: 0.1, fallback: 20 },
+        { key: 'depth', labelKey: 'properties.sizeZ', min: 0.1, fallback: 20 },
       ]
     case 'sphere':
       return [RADIUS(12)]
