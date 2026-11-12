@@ -45,6 +45,8 @@ export interface DocumentStore {
   addRawMesh: (name: string, vertices: number[], indices: number[], text?: string) => Promise<void>
   importStl: () => Promise<void>
   deleteSelected: () => Promise<void>
+  /** ARRAY-TOOL: массив копий выбранных (линейный / круговой) — один шаг `array`; выделение — исходные и копии */
+  arraySelected: (params: import('../csg/types').ArrayParams) => Promise<boolean>
   selectObjects: (ids: string[], add: boolean) => void
   clearSelection: () => void
   /**

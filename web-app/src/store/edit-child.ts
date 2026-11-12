@@ -28,6 +28,7 @@ import { sanitizeParams } from '../csg/worker-handlers'
 import { computeAABB } from './helpers'
 import { isChildEditable } from '../csg/tree-view'
 import { projectHistory } from './project-history'
+import { expandForReplay } from '../csg/rebuildOps'
 
 export type EditChildFailure =
   | 'not_found'       // корень/узел не найден
@@ -65,7 +66,8 @@ export function findCreationTransform(
   rawOps: TinkerCraftOperation[],
   rootId: string,
 ): TransformNR | null {
-  const ops = projectHistory(rawOps)
+  // ARRAY-TOOL: копия CSG из массива — шаг вставки внутри шага `array`
+  const ops = projectHistory(rawOps).flatMap(expandForReplay)
   return creationTransformBefore(ops, ops.length, rootId, 0)
 }
 

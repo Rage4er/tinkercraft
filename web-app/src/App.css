@@ -2040,3 +2040,23 @@ body {
 .ct-btn.ct-objlock.active {
   color: var(--accent-yellow);
 }
+
+/* ARRAY-TOOL: окно «Массив» — переключатели типа и оси */
+.array-seg {
+  display: flex;
+  gap: 4px;
+}
+
+.array-seg-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.array-seg-btn.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}

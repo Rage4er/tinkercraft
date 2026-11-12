@@ -29,10 +29,13 @@ export interface ShapeMeta {
 /**
  * ALIGN-PLANE-RESOLVE: для воспроизведения шаг выравнивания по плоскости (`align` с `plane`) — это
  * move каждой цели (сдвиг + дельта углов из `plane.moves`, масштаб не меняется). Остальные шаги —
- * как есть. Циклы воспроизведения (rebuild.ts — мета и дерево, воркер) идут по развёрнутым шагам —
+ * как есть; массив (ARRAY-TOOL) — шаги его копий. Циклы воспроизведения (rebuild.ts — мета и дерево, воркер) идут по развёрнутым шагам —
  * одна ветка move, одна семантика. Нетипизированный вход — для воркера (операции из сообщения).
  */
 export function expandForReplay<T extends { type?: unknown }>(op: T): Array<T | TinkerCraftOperation> {
+  // ARRAY-TOOL: массив — это его запечённые копии (шаги вставки), по порядку
+  const arr = op as unknown as { type?: unknown; ops?: unknown }
+  if (arr.type === 'array') return Array.isArray(arr.ops) ? (arr.ops as T[]).flatMap((o) => expandForReplay(o)) : []
   const a = op as unknown as { type?: unknown; plane?: { moves?: Record<string, { delta: Vec3; rotDelta: Vec3 }> } }
   if (a.type !== 'align' || !a.plane?.moves) return [op]
   return Object.entries(a.plane.moves).map(([id, m]) => ({

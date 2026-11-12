@@ -37,6 +37,7 @@ import {
   EyeIcon,
   LockIcon,
   UnlockIcon,
+  ArrayIcon,
   ColorIcon,
   TextIcon,
 } from "./icons";
@@ -123,6 +124,8 @@ export function opIcon(op: TinkerCraftOperation): React.ReactNode {
       return <EyeIcon size={32} />;
     case "lock":
       return op.locked ? <LockIcon size={32} /> : <UnlockIcon size={32} />;
+    case "array":
+      return <ArrayIcon size={32} />;
     case "color":
       return <ColorIcon size={32} />;
     case "rename":
@@ -194,6 +197,11 @@ export function opLabel(op: TinkerCraftOperation, t: (key: string, opts?: Record
       return t("timeline.visibility");
     case "lock":
       return t(op.locked ? "timeline.lock" : "timeline.unlock");
+    case "array":
+      // ARRAY-TOOL: «Массив: линейный ×3, шаг 20 (X)» / «Массив: круговой ×6, 360° (Y)»
+      return op.params.kind === "circular"
+        ? t("timeline.arrayCircular", { count: op.params.count, angle: Math.round((op.params.angle ?? 360) * 100) / 100, axis: op.params.axis })
+        : t("timeline.arrayLinear", { count: op.params.count, step: Math.round((op.params.step ?? 0) * 100) / 100, axis: op.params.axis });
     case "color":
       return t("timeline.color");
     case "rename":

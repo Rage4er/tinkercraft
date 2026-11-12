@@ -53,6 +53,9 @@ export interface UiStore {
   /** APP-SETTINGS: окно «Настройки» */
   showSettings: boolean
   setShowSettings: (v: boolean) => void
+  /** ARRAY-TOOL: окно «Массив» */
+  showArray: boolean
+  setShowArray: (v: boolean) => void
 
   // Modals
   showPM: boolean
@@ -138,6 +141,8 @@ export const useUiStore = create<UiStore>((set) => ({
   setShowDimensionSettings: (v) => set({ showDimensionSettings: v }),
   showSettings: false,
   setShowSettings: (v) => set({ showSettings: v }),
+  showArray: false,
+  setShowArray: (v) => set({ showArray: v }),
 
   showPM: false,
   setShowPM: (v) => set({ showPM: v }),

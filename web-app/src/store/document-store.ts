@@ -40,10 +40,11 @@ import { computeAABB, extractAndCenterInPlace, extractAndCenterGetAABB, centerMa
 import type { ClipEntry } from './helpers'
 import type { DocumentStore } from './types'
 import { rebuildFromHistory, rebuildBuildTree } from './rebuild'
-import { isTextObject, textFromName } from './text-object'
+import { clipOf, instantiateClip } from './clip-instance'
+import { buildArray, ARRAY_MAX_NEW_OBJECTS } from './array-tool'
 import { computeCsgResultN, groupOperationFromResult, isNonManifoldError } from './csg-result'
 import { resolveCsgOperands } from './csg-operands'
-import { computeEditedChild, editFailureKey, findCreationTransform } from './edit-child'
+import { computeEditedChild, editFailureKey } from './edit-child'
 import { computeStepEdit, editStepFailureKey } from './edit-step'
 import { cacheSnapshot, getCachedSnapshot, clearSnapshots } from './snapshots'
 import { OBJECT_SPACING, PASTE_OFFSET, CSG_SOFT_LIMIT } from '../constants'
@@ -62,8 +63,6 @@ import {
   clearTree,
   resetSubtreeTransform,
   registerObjectInTree,
-  snapshotSubtree,
-  instantiateSubtree,
 } from '../csg/history-tree'
 import { previewMirror as mirrorPreviewFn, mirrorSelected as mirrorConfirmFn, invalidateMirrorCache } from './mirror-store'
 import { devLog, devWarn, devLogCsg, devLogStore } from '../utils/debug'
@@ -360,37 +359,10 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   // ── Copy ──
   copySelected: () => {
     const { selectedIds, objects, operations, historyIndex } = get()
+    const history = operations.slice(0, historyIndex)
     const clips: ClipEntry[] = selectedIds.flatMap(id => {
-      const obj = objects[id]
-      if (!obj) return []
-      const entry: ClipEntry = { shapeType: obj.shapeType, params: obj.params, color: obj.color, transform: obj.transform, mirrored: obj.mirrored }
-      if (obj.shapeType === 'import_mesh') {
-        // PERF-R8-1: Храним TypedArray вместо number[] для экономии памяти (8×)
-        entry.importVertices = new Float32Array(obj.vertices)
-        entry.importIndices = new Uint32Array(obj.indices)
-        // UX-AUDIT-31: копия текста — тоже текст («Вставить текст», имя и строка — с собой)
-        if (isTextObject(obj)) { entry.text = obj.text ?? textFromName(obj.name); entry.name = obj.name }
-      } else if (obj.shapeType === 'csg') {
-        // FIX (PASTE-CSG): Store CSG mesh data for paste
-        entry.csgVertices = new Float32Array(obj.vertices)
-        entry.csgIndices = new Uint32Array(obj.indices)
-        entry.csgNormals = obj.normals ? new Float32Array(obj.normals) : undefined
-        entry.csgAABB = obj.aabb ? { min: { ...obj.aabb.min }, max: { ...obj.aabb.max } } : undefined
-        entry.csgOriginalBboxSize = obj.originalBboxSize ? { ...obj.originalBboxSize } : undefined
-        // CSG-INDEPENDENT-COPY: снимок дерева + система создания — вставка станет
-        // независимой параметрической копией. Нет дерева/системы — вставка мешем (как раньше).
-        const origin = getNode(id)?.type === 'boolean'
-          ? findCreationTransform(operations.slice(0, historyIndex), id)
-          : null
-        if (origin) entry.csgTree = { sourceRootId: id, nodes: snapshotSubtree(id), origin }
-      } else if (obj.mirrored) {
-        // FIX (8.5.12): mirror primitive — copy vertices (mirror baked) + mirrored flag.
-        // Paste will register as baked node with vertices from clip.
-        entry.mirrorVertices = new Float32Array(obj.vertices)
-        entry.mirrorIndices = new Uint32Array(obj.indices)
-        entry.mirrorNormals = obj.normals ? new Float32Array(obj.normals) : undefined
-      }
-      return [entry]
+      const entry = clipOf(objects[id], history)
+      return entry ? [entry] : []
     })
     if (clips.length > 0) set({ clipboard: clips })
   },
@@ -410,71 +382,10 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       for (const clip of clipboard) {
         const id = nextId('obj')
         const transform: TransformNR = { ...clip.transform, x: clip.transform.x + PASTE_OFFSET, y: clip.transform.y + 0, z: clip.transform.z + PASTE_OFFSET }
-
-        if (clip.shapeType === 'import_mesh' && clip.importVertices && clip.importIndices) {
-          const result = await workerBuildImportedMesh(id, clip.importVertices, clip.importIndices)
-          // UX-AUDIT-31: копия текста — текст (строка и имя у объекта и шага)
-          const textName = clip.name ?? 'pasted'
-          const obj: SceneObject = makeObject({ id, shapeType: 'import_mesh', params: {}, color: clip.color, transform, visible: true, locked: false, vertices: result.vertices, indices: result.indices, ...(clip.text !== undefined ? { text: clip.text, name: textName } : {}) })
-          const op: ImportMeshOperation = { type: 'import_mesh', id, name: clip.text !== undefined ? textName : 'pasted', color: clip.color, transform, vertices: clip.importVertices, indices: clip.importIndices, pasted: true, ...(clip.text !== undefined ? { text: clip.text } : {}) }
-          newObjects = { ...newObjects, [id]: obj }
-          newOps.push(op)
-          // Register baked node in build tree for CSG/mirror/align support
-          createBakedNode(id, result.vertices, result.indices, result.normals ?? null, transform)
-        } else if (clip.shapeType === 'csg' && clip.csgVertices && clip.csgIndices) {
-          // FIX (PASTE-CSG): Paste CSG results with their mesh data instead of recreating as primitives
-          const obj: SceneObject = makeObject({
-            id, shapeType: 'csg', params: {}, color: clip.color,
-            transform, visible: true, locked: false,
-            vertices: clip.csgVertices, indices: clip.csgIndices,
-            normals: clip.csgNormals, aabb: clip.csgAABB,
-            originalBboxSize: clip.csgOriginalBboxSize,
-          })
-          const histOp: GroupOperation = {
-            type: 'group', ids: [], resultId: id,
-            resultVertices: clip.csgVertices, resultIndices: clip.csgIndices,
-            resultNormals: clip.csgNormals, resultCenter: { x: transform.x, y: transform.y, z: transform.z },
-            // PASTE-CSG-RS: вершины CSG — без RS (8.5.9), полный TRS вставки — в истории
-            // (иначе после перемотки/загрузки вставленный повёрнутый CSG терял поворот/масштаб)
-            resultRotation: { x: transform.rotX, y: transform.rotY, z: transform.rotZ },
-            resultScale: { x: transform.scaleX, y: transform.scaleY, z: transform.scaleZ },
-            originalBboxSize: clip.csgOriginalBboxSize,
-            treeOperation: 'union', shapeType: 'csg', color: clip.color,
-            pasted: true,   // UX-AUDIT-13: в истории «Вставить CSG»
-          }
-          if (clip.csgTree) histOp.copyTree = clip.csgTree
-          newObjects = { ...newObjects, [id]: obj }
-          newOps.push(histOp)
-          if (clip.csgTree) {
-            // CSG-INDEPENDENT-COPY: своё дерево копии (узлы `${id}:${idИсточника}`)
-            instantiateSubtree(clip.csgTree.nodes, clip.csgTree.sourceRootId, id, transform, clip.csgTree.origin)
-          } else {
-            // Старый буфер без дерева — запечённый меш
-            createBakedNode(id, clip.csgVertices, clip.csgIndices, clip.csgNormals ?? null, transform)
-          }
-        } else if (clip.mirrored && clip.mirrorVertices && clip.mirrorIndices) {
-          // FIX (8.5.12): Paste mirror primitive — use baked vertices (mirror baked),
-          // preserve mirrored flag (multi-level mirror composition).
-          const obj: SceneObject = makeObject({
-            id, shapeType: clip.shapeType, params: clip.params, color: clip.color,
-            transform, visible: true, locked: false,
-            vertices: clip.mirrorVertices, indices: clip.mirrorIndices,
-            normals: clip.mirrorNormals, mirrored: clip.mirrored,
-          })
-          const op: AddShapeOperation = { type: 'add_shape', id, shapeType: clip.shapeType, params: clip.params, color: clip.color, transform, pasted: true }
-          newObjects = { ...newObjects, [id]: obj }
-          newOps.push(op)
-          // Фаза 9.8: зеркальный примитив — primitive + mirrored (params редактируемы)
-          registerObjectInTree(id, obj)
-        } else {
-          const mesh = await workerBuildShape(id, clip.shapeType, clip.params, transform)
-          const obj: SceneObject = makeObject({ id, shapeType: clip.shapeType, params: clip.params, color: clip.color, transform, visible: true, locked: false, vertices: mesh.vertices, indices: mesh.indices, normals: mesh.normals })
-          const op: AddShapeOperation = { type: 'add_shape', id, shapeType: clip.shapeType, params: clip.params, color: clip.color, transform, pasted: true }
-          newObjects = { ...newObjects, [id]: obj }
-          newOps.push(op)
-          // Register primitive node in build tree for CSG/mirror/align support
-          createPrimitiveNode(id, clip.shapeType, clip.params, transform)
-        }
+        // Общее ядро копии (clip-instance): меш, шаг «Вставить …», узел дерева
+        const { obj, op } = await instantiateClip(clip, id, transform)
+        newObjects = { ...newObjects, [id]: obj }
+        newOps.push(op)
         pastedIds.push(id)
       }
 
@@ -490,6 +401,41 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       }
       console.error('paste:', e)
       notify(i18n.t('errors.pasteFailed'), 'error')
+    }
+  },
+
+  // ── ARRAY-TOOL: массив копий выбранных ──
+  arraySelected: async (params) => {
+    if (get().busy) return false
+    const { selectedIds, objects, operations, historyIndex } = get()
+    if (selectedIds.filter((id) => objects[id]).length === 0) return false
+    set({ busy: true })
+    const created: string[] = []
+    try {
+      const t0 = performance.now()
+      const history = operations.slice(0, historyIndex)
+      const res = await buildArray(objects, history, selectedIds, params, created)
+      if (!res.ok) {
+        set({ busy: false })
+        if (res.reason === 'tooMany') notify(i18n.t('array.tooMany', { max: ARRAY_MAX_NEW_OBJECTS }), 'warning')
+        return false
+      }
+      const newOps = [...history, res.op]
+      const newObjects = { ...objects, ...res.objects }
+      set({
+        operations: newOps, historyIndex: newOps.length, objects: newObjects,
+        selectedIds: [...res.op.sourceIds, ...res.newIds], modified: true, busy: false, lastCsgMs: performance.now() - t0,
+      })
+      cacheSnapshot(newOps.length, newObjects)
+      invalidateMirrorCache()
+      return true
+    } catch (e) {
+      set({ busy: false })
+      if (created.length > 0) workerDeleteObjects(created).catch(() => { })
+      for (const id of created) deleteNode(id, true)
+      console.error('array:', e)
+      notify(i18n.t('array.failed'), 'error')
+      return false
     }
   },
 

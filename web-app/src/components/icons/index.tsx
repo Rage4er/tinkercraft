@@ -538,3 +538,23 @@ export const UnlockIcon = (p: any) => (
     <path {...line} d="M32 37v6" />
   </Icon>
 )
+
+/* ===== Массив (ARRAY-TOOL): исходный квадрат и две копии по оси ===== */
+export const ArrayIcon = (p: any) => (
+  <Icon {...p}>
+    <path d="M8 24h14v14H8Z" {...face(0.4)} />
+    <path d="M25 24h14v14H25Z" {...face(0.2)} strokeDasharray="4 3" />
+    <path d="M42 24h14v14H42Z" {...face(0.2)} strokeDasharray="4 3" />
+    <path {...line} d="M10 48h44M48 44l6 4-6 4" />
+  </Icon>
+)
+
+/* Круговой массив: копии по окружности */
+export const ArrayCircularIcon = (p: any) => (
+  <Icon {...p}>
+    <circle {...line} cx="32" cy="32" r="16" strokeDasharray="4 4" />
+    <circle cx="32" cy="16" r="6" {...face(0.4)} />
+    <circle cx="46" cy="40" r="6" {...face(0.2)} />
+    <circle cx="18" cy="40" r="6" {...face(0.2)} />
+  </Icon>
+)

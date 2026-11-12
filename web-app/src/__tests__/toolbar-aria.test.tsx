@@ -57,8 +57,8 @@ describe('Toolbar aria-label (ALIGN-REVIT)', () => {
   for (const lang of ['ru', 'en'] as const) {
     it(`${lang}: у всех кнопок тулбара непустой и уникальный aria-label`, async () => {
       const buttons = await renderToolbar(lang)
-      // file 5 + edit 2+3 + view 3 + gizmo 4 (с «выход») + ruler 1 + «Размер» 1 (DIMENSIONS, меню) + mirror 3 + align 1 (ALIGN-UI-REVIT) + csg 3 + theme 1 + clear 1
-      expect(buttons.length).toBe(28)
+      // file 5 + edit 2+3 + view 3 + gizmo 4 (с «выход») + ruler 1 + «Размер» 1 (DIMENSIONS, меню) + mirror 3 + align 1 (ALIGN-UI-REVIT) + «Массив» 1 (ARRAY-TOOL) + csg 3 + theme 1 + clear 1
+      expect(buttons.length).toBe(29)
       const names = buttons.map((b) => b.getAttribute('aria-label') ?? '')
       const empty = buttons.filter((b) => !(b.getAttribute('aria-label') ?? '').trim()).map((b) => b.outerHTML.slice(0, 80))
       expect(empty).toEqual([])
@@ -75,7 +75,7 @@ describe('Toolbar aria-label (ALIGN-REVIT)', () => {
 
   it('кнопки, на которые опираются e2e, находятся по имени', async () => {
     const names = new Set((await renderToolbar('ru')).map((b) => b.getAttribute('aria-label')))
-    for (const key of ['mirror.yz', 'actions.import', 'alignMode.button', 'csg.union', 'dimensions.button']) {
+    for (const key of ['mirror.yz', 'actions.import', 'alignMode.button', 'csg.union', 'dimensions.button', 'array.button']) {
       expect(names.has(i18n.t(key))).toBe(true)
     }
   })

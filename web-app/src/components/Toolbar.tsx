@@ -31,6 +31,7 @@ import {
   PerspectiveIcon,
   ThemeIcon,
   AlignToolIcon,
+  ArrayIcon,
 } from "./icons";
 import { useToolbarLayout } from "../hooks/useToolbarLayout";
 import type { ToolbarGroup } from "../utils/toolbar-layout";
@@ -50,6 +51,8 @@ export default function Toolbar({
   dimensionsVisible,
   canMirror,
   canAlign,
+  canArray = false,
+  onArray,
   alignActive,
   canCsg,
   csgOpStates,
@@ -96,6 +99,9 @@ export default function Toolbar({
   dimensionsVisible: boolean;
   canMirror: boolean;
   canAlign: boolean;
+  /** ARRAY-TOOL: «Массив» доступен (есть выбранный) */
+  canArray?: boolean;
+  onArray?: () => void;
   /** Режим выравнивания активен (ALIGN-UI-REVIT) */
   alignActive: boolean;
   canCsg: boolean;
@@ -141,7 +147,7 @@ export default function Toolbar({
     { id: "gizmo", buttonCount: 4 },
     { id: "ruler", buttonCount: 2 },
     { id: "mirror", buttonCount: 3 },
-    { id: "align", buttonCount: 1 },
+    { id: "align", buttonCount: 2 },
     { id: "csg", buttonCount: 3 },
     { id: "theme", buttonCount: 1 },
     { id: "clear", buttonCount: 1 },
@@ -259,6 +265,14 @@ export default function Toolbar({
             disabled={!canAlign && !alignActive}
             tooltip={TOOLTIP_DATA.align_tool}
             buttonVariant={alignActive ? "active" : "default"}
+          />,
+          <IconButton
+            key="array"
+            icon={<ArrayIcon size={32} />}
+            label={t("array.button")}
+            onClick={onArray}
+            disabled={!canArray}
+            tooltip={TOOLTIP_DATA.array_tool}
           />,
         ]}
       />

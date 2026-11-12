@@ -53,6 +53,7 @@ export const OP_FILTER_LABELS: Record<string, string> = {
   scale: "filters.scale",
   resize_dims: "filters.resize_dims",
   mirror: "filters.mirror",
+  array: "filters.array",
   align: "filters.align",
   group: "filters.group",
   edit_child_params: "filters.edit_child_params",
@@ -151,6 +152,9 @@ export const TOOLTIP_DATA: Record<string, TooltipData> = {
   mirror_yz: { labelKey: 'mirror.yz', shortcut: 'M', descriptionKey: 'tooltips.mirrorYz' },
   mirror_xz: { labelKey: 'mirror.xz', shortcut: 'N', descriptionKey: 'tooltips.mirrorXz' },
   mirror_xy: { labelKey: 'mirror.xy', shortcut: 'B', descriptionKey: 'tooltips.mirrorXy' },
+
+  // --- ARRAY-TOOL ---
+  array_tool: { labelKey: 'array.button', descriptionKey: 'tooltips.arrayTool' },
 
   // --- Align (9 кнопок: X/Y/Z × min/center/max) ---
 

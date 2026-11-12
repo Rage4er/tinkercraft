@@ -11,6 +11,7 @@
 import type { ImportMeshOperation, SceneObject, TinkerCraftOperation } from '../csg/types'
 import i18n from '../i18n'
 import { projectHistory } from './project-history'
+import { expandForReplay } from '../csg/rebuildOps'
 
 const LEGACY_TEXT_ID = /^txt_\d+$/
 
@@ -57,7 +58,7 @@ export function isTextObject(obj: Pick<SceneObject, 'id' | 'shapeType' | 'text'>
  */
 export function textsByObjectId(ops: TinkerCraftOperation[]): Map<string, string> {
   const map = new Map<string, string>()
-  for (const op of projectHistory(ops)) {
+  for (const op of projectHistory(ops).flatMap(expandForReplay)) {   // ARRAY-TOOL: текст и среди копий массива
     if (op.type === 'import_mesh') {
       const text = textOfOp(op)
       if (text !== undefined) map.set(op.id, text)

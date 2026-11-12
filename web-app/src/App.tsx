@@ -18,6 +18,7 @@ import AlignPanel from "./components/AlignPanel";
 import DimensionPanel from "./components/DimensionPanel";
 import DimensionSettingsModal from "./components/DimensionSettingsModal";
 import SettingsModal from "./components/SettingsModal";
+import ArrayModal from "./components/ArrayModal";
 import { useSettingsStore } from "./store/settings";
 import { lengthLabel } from "./store/units";
 import { themeById, applyTheme } from "./themes";
@@ -75,6 +76,7 @@ export default function App() {
     mirrorPreviewPlane, setMirrorPreviewPlane,
     showDimensionSettings, setShowDimensionSettings,
     showSettings, setShowSettings,
+    showArray, setShowArray,
   } = useUiStore(
     useShallow(s => ({
       fps: s.fps, setFps: s.setFps,
@@ -96,6 +98,7 @@ export default function App() {
       mirrorPreviewPlane: s.mirrorPreviewPlane, setMirrorPreviewPlane: s.setMirrorPreviewPlane,
       showDimensionSettings: s.showDimensionSettings, setShowDimensionSettings: s.setShowDimensionSettings,
       showSettings: s.showSettings, setShowSettings: s.setShowSettings,
+      showArray: s.showArray, setShowArray: s.setShowArray,
     })),
   );
 
@@ -231,7 +234,7 @@ export default function App() {
     objects, selectedIds, busy, deleteSelected, selectObjects,
     saveProject, openProject, clearSelection, copySelected, pasteClipboard,
     mirrorSelected,
-    modalOpen: showTextModal || showPM || showClearConfirm || showDimensionSettings || showSettings,
+    modalOpen: showTextModal || showPM || showClearConfirm || showDimensionSettings || showSettings || showArray,
   };
   const kbRef = useRef(kbState);
   kbRef.current = kbState;
@@ -333,9 +336,9 @@ export default function App() {
   // PLUG-AND-PLAY: клик по фигуре палитры — режим размещения (превью → клик по грани / сетке,
   // X / Y / Z — плоскость оси, Enter — поставить, Esc / правый клик — отмена)
   const handleAddShape = usePlacementModeStore((s) => s.startPlacement);
-  usePlacementMode(showTextModal || showPM || showClearConfirm || showDimensionSettings || showSettings);
+  usePlacementMode(showTextModal || showPM || showClearConfirm || showDimensionSettings || showSettings || showArray);
   // DIMENSIONS: режим «Размер» (Esc), Delete по выделенному размеру, согласованность режимов
-  useDimensionMode(showTextModal || showPM || showClearConfirm || showDimensionSettings || showSettings);
+  useDimensionMode(showTextModal || showPM || showClearConfirm || showDimensionSettings || showSettings || showArray);
   const dimensionActive = useDimensionModeStore((s) => s.dimensionMode !== null);
   const dimensionsVisible = useDimensionsStore((s) => s.showDimensions);
   const hasSelectedDimension = useDimensionsStore((s) => s.selectedDimensionId !== null);
@@ -360,7 +363,7 @@ export default function App() {
   // CSG-GROUP-FIX: «Объединение» — сразу; «Вычитание» / «Пересечение» — режим A → B → Enter
   // (Enter / Esc, исчезнувшие объекты A, выход при «Выровнять» — useCsgGroupMode)
   const csgGroupMode = useCsgGroupModeStore((s) => s.csgGroupMode);
-  useCsgGroupMode(showTextModal || showPM || showClearConfirm || showSettings);
+  useCsgGroupMode(showTextModal || showPM || showClearConfirm || showSettings || showArray);
   const runCsg = useCallback(
     (op: CsgBooleanOp) => void useCsgGroupModeStore.getState().pressCsgOperation(op),
     [],
@@ -391,6 +394,8 @@ export default function App() {
   );
   const canCsg = !busy && (selectedIds.length > 0 || csgGroupMode !== null);
   const canMirror = selectedIds.length > 0 && !busy;
+  // ARRAY-TOOL: «Массив» — нужен выбранный объект
+  const canArray = selectedIds.length > 0 && !busy;
   // ALIGN-UI-REVIT: «Выровнять» — режим (плоскость → грань B), нужен хотя бы один объект
   const canAlign = objectList.length > 0 && !busy;
   const canResize =
@@ -507,6 +512,7 @@ export default function App() {
       {/* DIMENSIONS: «Настройки размеров» */}
       {showDimensionSettings && <DimensionSettingsModal onClose={() => setShowDimensionSettings(false)} />}
       {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
+      {showArray && <ArrayModal onClose={() => setShowArray(false)} />}
 
       {/* ── TOOLBAR ── */}
       <Toolbar
@@ -527,6 +533,8 @@ export default function App() {
         onToggleDimensions={() => useDimensionsStore.getState().toggleShowDimensions()}
         canMirror={canMirror}
         canAlign={canAlign}
+        canArray={canArray}
+        onArray={() => setShowArray(true)}
         alignActive={alignActive}
         canCsg={canCsg}
         csgOpStates={csgOpStates}
