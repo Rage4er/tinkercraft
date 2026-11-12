@@ -33,6 +33,7 @@ import { useShallow } from "zustand/shallow";
 import { isWorkerReady } from "./csg/worker-client";
 import { SNAP_VALUES } from "./constants";
 import { useAutosave } from "./hooks/useAutosave";
+import { useSfx } from "./hooks/useSfx";
 import { addTextObject } from "./store/add-text";
 import { usePlacementModeStore } from "./store/placement-mode";
 import { usePlacementMode } from "./hooks/usePlacementMode";
@@ -215,6 +216,8 @@ export default function App() {
 
   // UX-AUDIT-1: автосохранение + восстановление прошлой сессии при старте
   useAutosave(workerOk);
+  // SFX: звуки интерфейса (клик, создание, успех, ошибка; вкл. / громкость — «Настройки»)
+  useSfx();
 
   // Keyboard shortcuts — stable listener via ref (WARN-1 fix).
   // ref обновляется каждый рендер, но сам listener не переподключается.
