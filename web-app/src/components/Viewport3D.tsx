@@ -541,7 +541,8 @@ export default function Viewport3D({
       // Ruler mode: handled by useRulerMode
       if (rulerMode) {
         // VIEWPORT-NAV: точка линейки — ЛКМ (ПКМ / СКМ — вращение и сдвиг вида)
-        if (e.button === 0) handleRulerPointerDown(e, cameraRef.current, containerRef.current);
+        // ORTHO-RAYCAST: камера вида (в ортографии — ортографическая), а не всегда перспективная
+        if (e.button === 0) handleRulerPointerDown(e, activeCameraRef.current ?? cameraRef.current, containerRef.current);
         e.stopPropagation();
         return;
       }
@@ -557,14 +558,14 @@ export default function Viewport3D({
       pointerDownPos.current = { x: e.clientX, y: e.clientY };
       isDraggingRef.current = false;
     },
-    [rulerMode, handleRulerPointerDown, cameraRef, containerRef, fitViewRef],
+    [rulerMode, handleRulerPointerDown, activeCameraRef, cameraRef, containerRef, fitViewRef],
   );
 
   const handlePointerMove = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
       // Ruler mode: handled by useRulerMode
       if (rulerMode) {
-        handleRulerPointerMove(e, cameraRef.current, containerRef.current);
+        handleRulerPointerMove(e, activeCameraRef.current ?? cameraRef.current, containerRef.current);
         return;
       }
 
@@ -593,7 +594,7 @@ export default function Viewport3D({
         else drawSelRect(pointerDownPos.current.x, pointerDownPos.current.y, e.clientX, e.clientY);
       }
     },
-    [rulerMode, handleRulerPointerMove, cameraRef, containerRef, pickAt, schedulePlacementAim, scheduleDimHover, drawSelRect, hideSelRect, transformCtRef],
+    [rulerMode, handleRulerPointerMove, activeCameraRef, cameraRef, containerRef, pickAt, schedulePlacementAim, scheduleDimHover, drawSelRect, hideSelRect, transformCtRef],
   );
 
   // PLUG-AND-PLAY: курсор ушёл из вьюпорта — превью скрыто (Enter — рядом с прошлыми)
@@ -767,6 +768,7 @@ export default function Viewport3D({
       onPointerLeave={handlePointerLeave}
       onContextMenu={(e) => { if (alignActiveRef.current || isPlacing() || isDimensioning()) e.preventDefault(); }}
       style={alignActive || placementActive || dimMode ? { cursor: "crosshair" } : undefined}
+      data-camera={cameraMode}
       data-dimension-mode={dimMode ? (dimMode.first ? "b" : "a") : undefined}
       data-dimension-hover={dimMode?.hover ? `${dimMode.hover.objectId}|${dimMode.hover.snap ?? ""}|${[dimMode.hover.point.x, dimMode.hover.point.y, dimMode.hover.point.z].map((v) => v.toFixed(4)).join(",")}` : undefined}
       data-dimensions-visible={showDimensions ? "1" : "0"}

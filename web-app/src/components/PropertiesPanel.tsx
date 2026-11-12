@@ -295,7 +295,8 @@ export default function PropertiesPanel({
         onChange={(v) => onScaleAxis("scaleZ", v)}
       />
 
-      {/* Resize dims — только для примитивов и CSG результатов */}
+      {/* Resize dims — только для примитивов и CSG результатов. AXIS-LABELS: подписи по осям (вверх — Z):
+          куб — width X, height Y, depth Z (Manifold.cube([w, h, d])); высота цилиндра / конуса / призмы — Z */}
       {canResize && firstSelected.shapeType !== "import_mesh" && (
         <div className="csg-group">
           <div className="csg-group-title">{t("properties.dimensions")}</div>
@@ -303,21 +304,24 @@ export default function PropertiesPanel({
             // CSG result: show real bbox dimensions in mm
             <>
               <NumInput
-                label={t("properties.width")}
+                label={t("properties.sizeX")}
+                id="num-input-size-X"
                 min={0.1}
                 value={Math.round(firstSelected.originalBboxSize.x * 100) / 100}
                 disabled={busy}
                 onChange={(v) => onResizeObject(firstSelected.id, { width: v })}
               />
               <NumInput
-                label={t("properties.height")}
+                label={t("properties.sizeY")}
+                id="num-input-size-Y"
                 min={0.1}
                 value={Math.round(firstSelected.originalBboxSize.y * 100) / 100}
                 disabled={busy}
                 onChange={(v) => onResizeObject(firstSelected.id, { height: v })}
               />
               <NumInput
-                label={t("properties.depth")}
+                label={t("properties.sizeZ")}
+                id="num-input-size-Z"
                 min={0.1}
                 value={Math.round(firstSelected.originalBboxSize.z * 100) / 100}
                 disabled={busy}
@@ -328,21 +332,24 @@ export default function PropertiesPanel({
             // Regular cube: show params
             <>
               <NumInput
-                label={t("properties.width")}
+                label={t("properties.sizeX")}
+                id="num-input-size-X"
                 min={0.1}
                 value={firstSelected.params.width ?? 20}
                 disabled={busy}
                 onChange={(v) => onResizeDim("width", v)}
               />
               <NumInput
-                label={t("properties.height")}
+                label={t("properties.sizeY")}
+                id="num-input-size-Y"
                 min={0.1}
                 value={firstSelected.params.height ?? 20}
                 disabled={busy}
                 onChange={(v) => onResizeDim("height", v)}
               />
               <NumInput
-                label={t("properties.depth")}
+                label={t("properties.sizeZ")}
+                id="num-input-size-Z"
                 min={0.1}
                 value={firstSelected.params.depth ?? 20}
                 disabled={busy}
@@ -380,7 +387,8 @@ export default function PropertiesPanel({
                   }
                 />
                 <NumInput
-                  label={t("properties.height")}
+                  label={t("properties.sizeZ")}
+                  id="num-input-size-Z"
                   min={0.1}
                   value={firstSelected.params.height ?? 30}
                   disabled={busy}
@@ -427,7 +435,8 @@ export default function PropertiesPanel({
                   }
                 />
                 <NumInput
-                  label={t("properties.height")}
+                  label={t("properties.sizeZ")}
+                  id="num-input-size-Z"
                   min={0.1}
                   value={firstSelected.params.height ?? 20}
                   disabled={busy}

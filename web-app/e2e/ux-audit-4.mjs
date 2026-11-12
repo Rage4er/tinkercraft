@@ -196,7 +196,7 @@ try {
     await s.csg(sp, cb, 'KeyU')
     const c2 = await s.add('Куб'); await s.setF(c2, 'num-input-pos-X', 70)
     await s.pick(c2)
-    const k0 = await s.steps(); const w = page.locator('.panel-right [id="num-input-Ширина"]')
+    const k0 = await s.steps(); const w = page.locator('.panel-right #num-input-size-X')
     await w.fill('30'); await w.press('Enter'); await s.waitSteps(k0 + 1)
     if ((await page.locator('.tl-label').last().innerText()).trim() !== 'Изменить размер') fail('V: правка размера куба — шаг ' + (await page.locator('.tl-label').last().innerText()))
     await s.blur(); await page.keyboard.press('Escape'); await page.keyboard.press('KeyF'); await page.waitForTimeout(1000); await s.shot('v-shapes.png')

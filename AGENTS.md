@@ -14,7 +14,7 @@
 - **manifold-3d** (WASM) — CSG операции в Web Worker
 - **Zustand 5** — стейт-менеджмент
 - **Vite 6** — сборка
-- **Vitest 4** — тесты (965 тестов, 78 файлов; `it.fails` открытых багов нет — UX-прогон 7 нашёл 0 новых, цикл закрыт; UX-AUDIT-1…10 исправлены в `fix-all`, 11…20 — в `fix-all-2`, 21…31 — в `fix-all-3`, 32…35 — в `fix-all-4`, 32-followup и 36…40 — в `fix-all-5`, 41, 42 — в `fix-all-6`)
+- **Vitest 4** — тесты (986 тестов, 80 файлов; `it.fails` открытых багов нет — UX-прогон 7 нашёл 0 новых, цикл закрыт; UX-AUDIT-1…10 исправлены в `fix-all`, 11…20 — в `fix-all-2`, 21…31 — в `fix-all-3`, 32…35 — в `fix-all-4`, 32-followup и 36…40 — в `fix-all-5`, 41, 42 — в `fix-all-6`)
 - **pnpm** — пакетный менеджер
 
 ## Команды
@@ -23,7 +23,7 @@
 cd web-app
 pnpm dev          # dev-сервер (порт 5000)
 pnpm build        # production-сборка
-pnpm test         # запуск тестов (965 тестов, 78 файлов)
+pnpm test         # запуск тестов (986 тестов, 80 файлов)
 pnpm typecheck    # tsc --noEmit
 pnpm e2e:smoke    # дымовой тест в браузере (Playwright; нужен запущенный pnpm dev; см. web-app/e2e/helpers.mjs). В CI все e2e — job `e2e` в ci-web.yml (CI-E2E)
 pnpm e2e:tree     # Фаза 9.1: раскрытие CSG в дереве, выбор ребёнка
@@ -52,6 +52,7 @@ pnpm e2e:dimensions  # DIMENSIONS: меню «Размер» (3 пункта, Es
 pnpm e2e:ux-viewport  # UX-VIEWPORT: ЛКМ-протяжка вид не вращает, ПКМ вращает, СКМ сдвигает; F и двойной клик СКМ — вписать; сетка: шаги 1 → 5 → 10 → 50 → 100 (жирная ×10), не обрывается на отдалении и после сдвига; рамка: слева направо — синяя, только целиком внутри; справа налево — зелёная пунктирная, задетые; Shift — добавить
 pnpm e2e:selection-outline  # SELECTION-OUTLINE: ничего не выделено — каймы нет; клик по кубу — синяя кайма вокруг него (2–4 px); клик в пусто — нет; Shift+клик / рамка — кайма у всех; светлая тема, орто, гизмо; 100k + 24 объекта выделены — FPS ≥ 55
 pnpm e2e:ux-polish  # ux-polish: A — CSG-GROUP-UI (кнопки CSG в тулбаре; «Вычитание» → кайма A оранжевая, B синяя; Esc — каймы A нет); B — CLEANUP-TREE-SNAPSHOT (куб − сфера → X → undo / redo — объекты и дети CSG как были); C — SHADOW-BOUNDS-400 (куб на X = 0 / 600 / 1500 и отдалились — тень есть, центр области теней у куба); D — DIMENSION-UNDO (размер → Delete → Ctrl+Z — вернулся, Ctrl+Y — удалён; кнопки тулбара; история документа не меняется)
+pnpm e2e:ortho-raycast  # ORTHO-RAYCAST: ортография — линейка у краёв вида = сетке под курсором (по режиму размещения), линейка с верха куба у края, гизмо — стрелка X ловится и куб идёт за мышью (+120 px); перспектива — как раньше
 ```
 
 ## Текущий статус
@@ -130,7 +131,7 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 | `src/csg/tree-store.ts` | Zustand-стор для Build Tree |
 | `src/csg/tree-view.ts` | Read-модель Build Tree для UI (`getTreeView` — дети N-арного узла плоским списком, `viewGroupSplit` — заголовки «Группа A»/«Группа B» у subtract/intersect, `findViewNode`, `formatParams`) и единая проверка редактируемости `isChildEditable` — Фаза 9.1/9.9 |
 | `src/hooks/useRootConsistency.ts` | Согласованность дерева CSG-корня с мешем (замки в дереве) — Фаза 9.9 |
-| `src/csg/child-params.ts` | Поля параметров примитива для формы правки ребёнка CSG (`getParamFields`, `clampFieldValue`) — Фаза 9.2 |
+| `src/csg/child-params.ts` | Поля параметров примитива для формы правки ребёнка CSG (`getParamFields`, `clampFieldValue`) — Фаза 9.2. Подписи размеров — по оси (AXIS-LABELS): куб `width` — X, `height` — **Y**, `depth` — **Z** (`Manifold.cube([w, h, d])`, вверх — Z); высота цилиндра / конуса / призмы / пирамиды — Z (`properties.sizeX/Y/Z`) |
 | `src/store/edit-child.ts` | Пересчёт CSG после смены params ребёнка: калибровка дерева ↔ меш, un-bake в локальную систему корня (`computeEditedChild`, `unbakeToLocal`, `findCreationTransform` — в т.ч. система создания копий: зеркало — отражённая, вставка — `copyTree.origin`) — Фаза 9.3 |
 | `src/store/project-history.ts` | **Эффективная история** (Фаза 9.5.0): `projectHistory` подставляет `edit_step` (патч шага N + `replacements` замороженных шагов) и выбрасывает их; идемпотентна, вызывается на входе `rebuild.ts` и `findCreationTransform`. `computeCascade` — замыкание зависимостей правки |
 | `src/store/csg-result.ts` | Общее ядро CSG `computeCsgResult` (sync → boolean → pivot = transformA → un-bake RS) для `csgBoolean` и каскада 9.5; `computeCsgResultN` — N операндов (N-ARY-CSG: union N, subtract/intersect группа A vs B; 2 операнда — бинарный путь); `syncObjectsForOperation`, `groupOperationFromResult`, `groupReplacementFromResult` |
@@ -163,6 +164,7 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 | `src/components/selection-outline.ts` | Кайма выделенных (SELECTION-OUTLINE): `SelectionOutlinePass` — `OutlinePass` прямо на канвас (без EffectComposer: сцена — обычный `renderer.render`, затем проходы каймы, затем накладки с флагом `DRAW_OVER_OUTLINE` — гизмо, размеры); обычное смешивание (светлая тема), маска под тип камеры (`setCamera`), буферы в CSS px; `selectionOutlineTargets` (выделенные видимые меши, каждый кадр), `renderWithSelectionOutline` (несколько проходов: группа A режима CSG — тёплая `GROUP_A_OUTLINE`, затем выделенные — синяя; нет объектов — один `render`); `data-outline-count` / `data-outline-a-count` у вьюпорта (e2e) |
 | `src/components/shadow-follow.ts` | Тени у центра вида (SHADOW-BOUNDS-400): `shadowFrustumFor(target, distance, mapSize)` — область теней (полуразмер `shadowHalfFor` ≥ 200 мм и ≥ расстояния, ступени ×1,25; центр в узле текселей в осях света; солнце по `SUN_DIR`; bias / normalBias — под размер, в мировых единицах как при ±200), `applyShadowFrustum` (солнце, цель, камера тени, приёмник), `sameShadowFrustum`; в цикле отрисовки — `useThreeInit`, `data-shadow-half` / `-center` у вьюпорта |
 | `src/components/selection-rect.ts` | Рамка выделения (SELECTION-RECT): `rectModeOf` (вправо — окно, влево — секущая), `objectsInRect` / `meshInRect` по настоящей геометрии (окно — все вершины в рамке; секущая — вершина или треугольник пересекает рамку, `triangleOverlapsRect` — SAT) |
+| `src/components/view-ray.ts` | Луч из курсора по **активной** камере вида (ORTHO-RAYCAST): `ndcFromClient`, `rayFromCamera` (`setFromCamera` — перспектива / орто), `groundPointOnRay` (луч ∩ плоскость z = 0 — не формула «от позиции камеры»), `syncGizmoCamera` (гизмо на камере вида — каждый кадр). Новый код, бросающий луч из курсора, берёт `activeCameraRef`, не `cameraRef` (та всегда перспективная) |
 | `src/components/camera-fit.ts` | «Вписать в экран» (F): `fitDistance` — расстояние камеры по рамке сцены с учётом угла обзора и соотношения сторон вьюпорта (узкий — сцена не обрезается; широкий — как раньше, 2,5 × размер), `FIT_DIR` — направление (UX-AUDIT-39) |
 | `src/components/snap-utils.ts` | Привязка (snap) к геометрии: vertex, edge, face, circle; кандидаты — треугольники рядом с точкой попадания (сетка треугольников геометрии в локальных координатах, кэш на геометрию — UX-AUDIT-35: 100k — ~6 мс на запрос); рёбра — и у геометрии без индекса (по позициям, UX-AUDIT-22) |
 | `src/components/Toolbar.tsx` | Тулбар (файл, undo, view, gizmo, линейка и «Размер» (меню), CSG, тема); раскладка — `hooks/useToolbarLayout.ts` (ширина кнопки + реальный зазор `.toolbar-group-row`; на 1366 — одна строка с названием); у каждой кнопки `aria-label` = подпись тултипа (`IconButton`), e2e ищут кнопки по нему (`toolbarButton`/`panelButton` в `e2e/helpers.mjs`), не по индексу |
@@ -313,7 +315,7 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 
 - Импортированные меши (STL) не параметризуются (IMPORT-MESH-PARAMETRIC: не требуется); трансформации и CSG работают — CSG допускает замкнутый STL (проверка по manifold в воркере, IMPORT-MESH-CSG), незамкнутый → уведомление `errors.csgNonManifold`; «починка» незамкнутого меша не делается; старые extrude без `group.source` не редактируются как extrude (EXTRUDE-LEGACY: не мигрируем); `extrudeSelected` — движок правки 9.5.4, не UI-инструмент: это «растянуть по оси», а не extrude 2D→3D, кнопку не возвращать (EXTRUDE-3D-SCALE; настоящий extrude — Фаза 11)
 - Скругления (fillet) нет: прежний параметр куба удалён (remove-fillet) до инструмента на B-Rep; старые шаги `fillet` вырезаются при загрузке (`io/legacy-fillet.ts`) — новых не создавать
-- После v1.3.1 открыто: связанное зеркало (linked mirror) не делали — копия CSG всегда независимая; «починка» незамкнутого STL. CI — один workflow `ci-web.yml` (CI-DEDUP ✅): job `ci` (install + typecheck + test + build) и job `e2e` — все 27 e2e (CI-E2E ✅)
+- После v1.3.1 открыто: связанное зеркало (linked mirror) не делали — копия CSG всегда независимая; «починка» незамкнутого STL. CI — один workflow `ci-web.yml` (CI-DEDUP ✅): job `ci` (install + typecheck + test + build) и job `e2e` — все 28 e2e (CI-E2E ✅)
 - Выравнивание режимом «Выровнять» (ALIGN-UI-REVIT) пишется шагом `align` с плоскостью (ALIGN-PLANE-RESOLVE ✅; с поворотом — UX-AUDIT-32; грань гладкой поверхности — цилиндр, сфера — не поворачивает, только касание): правка прошлого шага пересчитывает его; ✎ у самого шага нет (как у обычного align). Плоскость A следует за системой объекта A (TRS), а не за гранью при правке формы A (правка ребёнка CSG A)
 - Дерево живой сессии, начатой до v1.3.2 (boolean-узлы без `originTransform`), для вложенного CSG, сдвинутого до объединения, остаётся под замком `nested_moved` (предохранитель); после перезагрузки/загрузки проекта дерево перестраивается из истории с TRS₀ — правка работает
 - `.doodle` (legacy) в UI не открывается: `parseDoodle` не вызывается

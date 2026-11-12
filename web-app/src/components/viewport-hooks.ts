@@ -30,6 +30,7 @@ import { useUiStore } from "../store/ui-store";
 import { useDocumentStore } from "../store/document-store";
 import { dimensionEnds, dimensionGeometry, formatDimensionValue } from "../store/dimensions";
 import { buildDimensionObject, disposeDimensionObject } from "./dimension-render";
+import { ndcFromClient, rayFromCamera, groundPointOnRay, syncGizmoCamera } from "./view-ray";
 import { useTranslation } from "react-i18next";
 import {
     findNearestSnap,
@@ -369,6 +370,9 @@ export function useThreeInit(
                 activeCam = orthoC;
             }
             activeCameraRef.current = activeCam;
+            // ORTHO-RAYCAST: гизмо — на камере вида (в орто — ортографической): попадание по ручкам,
+            // плоскость перетаскивания и размер считаются её лучами, иначе гизмо «улетает»
+            syncGizmoCamera(tc as unknown as { camera: THREE.Camera }, activeCam);
             // GRID-ADAPTIVE: шаг и радиус сетки — под текущий вид (масштаб у цели камеры)
             const viewDist = camera.position.distanceTo(controls.target);
             const gs = updateAdaptiveGrid(grid, {
@@ -886,12 +890,9 @@ export function useRulerMode(
             const scene = sceneRef.current;
             if (!scene || !camera || !container) return;
 
-            const rect = container.getBoundingClientRect();
-            const x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-            const y = -(((e.clientY - rect.top) / rect.height) * 2 - 1);
-            const screenPos = new THREE.Vector2(x, y);
-            const raycaster = new THREE.Raycaster();
-            raycaster.setFromCamera(screenPos, camera);
+            // ORTHO-RAYCAST: луч — по камере вида (перспектива / орто), см. view-ray.ts
+            const screenPos = ndcFromClient(e.clientX, e.clientY, container.getBoundingClientRect());
+            const raycaster = rayFromCamera(screenPos, camera);
 
             // First try snap to geometry
             const snapResult = findNearestSnap(raycaster, meshMapRef, camera, screenPos, shapeTypeMapRef.current);
@@ -900,14 +901,11 @@ export function useRulerMode(
                 devLogSnap('ruler', { type: snapResult.type ?? 'none', point: { x: snapResult.point.x, y: snapResult.point.y, z: snapResult.point.z }, distance: snapResult.snapDistance });
                 point = snapResult.point;
             } else {
-                // Fallback: project onto work plane (Z=0)
-                const ndc = new THREE.Vector3(x, y, 0);
-                ndc.unproject(camera);
-                const dir = ndc.sub(camera.position).normalize();
-                const groundZ = 0;
-                const distance = (groundZ - camera.position.z) / dir.z;
-                if (!Number.isFinite(distance) || distance < 0) return;
-                point = camera.position.clone().add(dir.clone().multiplyScalar(distance));
+                // Fallback: project onto work plane (Z=0) — пересечение луча с плоскостью
+                // (формула «от позиции камеры» верна только для перспективы)
+                const ground = groundPointOnRay(raycaster, 0);
+                if (!ground) return;
+                point = ground;
             }
 
             if (rulerPointsRef.current.length === 0) {
@@ -934,23 +932,12 @@ export function useRulerMode(
             const scene = sceneRef.current;
             if (!scene || !camera || !container) return;
 
-            const rect = container.getBoundingClientRect();
-            const x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-            const y = -(((e.clientY - rect.top) / rect.height) * 2 - 1);
-            const ndc = new THREE.Vector3(x, y, 0);
-            ndc.unproject(camera);
-
-            const dir = ndc.sub(camera.position).normalize();
-            const groundZ = 0;
-            const distance = (groundZ - camera.position.z) / dir.z;
-            if (!Number.isFinite(distance) || distance < 0) return;
-
-            const worldPoint = camera.position.clone().add(dir.clone().multiplyScalar(distance));
+            // ORTHO-RAYCAST: луч — по камере вида (перспектива / орто), см. view-ray.ts
+            const screenPos = ndcFromClient(e.clientX, e.clientY, container.getBoundingClientRect());
+            const raycaster = rayFromCamera(screenPos, camera);
+            const worldPoint = groundPointOnRay(raycaster, 0);
+            if (!worldPoint) return;
             devLogPointer('rulerMove', { worldX: worldPoint.x, worldY: worldPoint.y, worldZ: worldPoint.z });
-
-            const screenPos = new THREE.Vector2(x, y);
-            const raycaster = new THREE.Raycaster();
-            raycaster.setFromCamera(screenPos, camera);
 
             const result = findNearestSnap(raycaster, meshMapRef, camera, screenPos, shapeTypeMapRef.current);
             if (result) {

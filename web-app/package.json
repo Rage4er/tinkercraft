@@ -37,7 +37,8 @@
     "e2e:dimensions": "node e2e/dimensions.mjs",
     "e2e:ux-viewport": "node e2e/ux-viewport.mjs",
     "e2e:selection-outline": "node e2e/selection-outline.mjs",
-    "e2e:ux-polish": "node e2e/ux-polish.mjs"
+    "e2e:ux-polish": "node e2e/ux-polish.mjs",
+    "e2e:ortho-raycast": "node e2e/ortho-raycast.mjs"
   },
   "dependencies": {
     "i18next": "^26.3.6",
