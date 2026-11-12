@@ -9,11 +9,28 @@
 
 ## [Unreleased]
 
+---
+
+## [1.3.10] — 2026-11-12
+
 ### Fixed
+- **ORTHO-RAYCAST:** в ортографии линейка и гизмо брали перспективную камеру. Линейка показывала неверное расстояние (194 мм вместо 234), гизмо «улетало» от курсора. Теперь `view-ray.ts` (активная камера, `setFromCamera`, пересечение с `z=0`, гизмо — каждый кадр).
+- **AXIS-LABELS:** подписи полей размеров — по оси, которую меняет поле: «X (ширина)», «Y (глубина)», «Z (высота)» (у куба `height` → Y, `depth` → Z). EN: Width (X), Depth (Y), Height (Z).
+
+### Added
+- **ORTHO-RAYCAST:** e2e `pnpm e2e:ortho-raycast` (линейка у краёв вида, гизмо — стрелка X за мышью; в CI) и юнит-тесты `__tests__/ortho-raycast.test.tsx` (12).
+- **AXIS-LABELS:** тесты `__tests__/axis-labels.test.tsx` (9, сверка подписи с осью меша на WASM).
+
+### Known Limitations
+- **`SIZE-LABELS`** (🟢): в дереве CSG сокращения «W20 H20 D20» (H — Y) — заменить на «X20 Y20 Z20» (потом).
+
+### Подробно
+
+#### Fixed
 - **ORTHO-RAYCAST — в ортографии луч из курсора уходил в сторону:** линейка (клик и наведение) получала всегда перспективную камеру (`cameraRef`) и считала точку на сетке формулой «направление от позиции камеры» — в орто-виде промах рос к краю вида (диагональ вида: 0 вместо 271,6 мм); гизмо (`TransformControls`) создавался с перспективной камерой и в ортографии её не менял — ручки ловились и тянулись по чужим лучам: стрелка X у края вида не захватывалась, плоская ручка тянула куб быстрее мыши (+120 px мыши → +134 px куба). Теперь общий путь `components/view-ray.ts`: `rayFromCamera` (луч `Raycaster.setFromCamera` по активной камере — для орто параллельный), `groundPointOnRay` (луч ∩ плоскость z = 0), `syncGizmoCamera` (гизмо на камере вида — каждый кадр в цикле отрисовки); линейка берёт `activeCameraRef`. Выделение, рамка, размещение, выравнивание и размеры и раньше брали активную камеру. Вьюпорт: `data-camera` (perspective / orthographic) для e2e. Тесты: `__tests__/ortho-raycast.test.tsx` (12: центр и края вида, точка на высоте, «было» — перспективная камера и прежняя формула, гизмо в орто-виде — куб за мышью, на перспективной камере — нет), e2e `pnpm e2e:ortho-raycast` (линейка у краёв = сетке под курсором, линейка с верха куба у края, гизмо — стрелка X ловится, куб идёт за мышью вдоль стрелки (+120 px → +119,9 px), Y и Z не меняются; перспектива — как раньше; в CI — группа ux-audit-7) (`components/view-ray.ts`, `components/viewport-hooks.ts`, `components/Viewport3D.tsx`)
 - **AXIS-LABELS — подписи размеров по осям (вверх — Z):** у куба поле «Высота» меняло размер по **Y**, а «Глубина» — по **Z** (`Manifold.cube([width, height, depth])`), при том что вертикаль вида — Z. Теперь подпись — по оси, которую поле меняет: **X (ширина)**, **Y (глубина)**, **Z (высота)** (en: Width (X), Depth (Y), Height (Z)); у цилиндра, конуса, призмы и пирамиды высота — **Z (высота)**. Так же в панели ребёнка CSG (`csg/child-params.ts`). Ключи params (`width` / `height` / `depth`) не менялись — файлы и история прежние; ключи i18n `properties.width/height/depth` → `properties.sizeX/sizeY/sizeZ`, у полей размеров — постоянные id `num-input-size-X/Y/Z`. Тесты: `__tests__/axis-labels.test.tsx` (9: подписи и какой параметр меняет поле, en, сверка с осью меша на WASM, панель ребёнка); e2e `ux-audit`, `ux-audit-4` — новые подписи (`components/PropertiesPanel.tsx`, `csg/child-params.ts`, `i18n/locales/{ru,en}/translation.json`)
 
-### Changed
+#### Changed
 - **DEVELOPMENT_PLAN — план развития после v1.3.9 / v1.4.0:** Фаза 11 «B-Rep и тяжёлая математика» (FILLET-CHAMFER-BREP — скругление / фаска выбранного ребра на OCCT WASM, EDIT-VERTICES — работа с вершинами, SVG-EXTRUDE — SVG-контуры в 3D, THREAD-GENERATOR — метрическая и дюймовая резьба, STEP / IGES), Фаза 12 «Инструменты моделирования» (ARRAY-TOOL — линейный и круговой массивы, LOCK-OBJECT — блокировка фигуры, новые примитивы), Фаза 13 «UX, форматы и настройки» (APP-SETTINGS, THEME-ENGINE, SFX, FORMATS-OBJ-3MF-GLTF); прочие идеи — «Бэклог идей»; Фаза 10 — `yandex-games` v1.4.0 (`DEVELOPMENT_PLAN.md`, `README.md`, `AGENTS.md`)
 - **DEVELOPMENT_PLAN — ID у всех пунктов Фаз 11–13 и бэклога:** STEP-IGES, NEW-PRIMITIVES; бэклог — таблица с ID: DIMENSION-DRIVING, DIMENSION-ANGULAR, PHYSICS (+ гравитация), MULTIPLAYER, ROBOT-LAB
 - **Telegram-пост v1.3.9** — `docs/TELEGRAM_POST_v1.3.9.md`: полный пост (≤ 4096 символов), подпись к видео-демо (≤ 1024), сверка с CHANGELOG — только то, что реально есть в v1.3.9 (OBJ / 3MF / glTF — «в планах», extrude в интерфейсе нет)
