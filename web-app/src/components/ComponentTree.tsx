@@ -20,7 +20,7 @@ import {
   ConeIcon,
   TorusIcon,
   PrismIcon,
-  PyramidIcon,
+  PyramidIcon, CapsuleIcon, TubeIcon, SpringIcon,
   ImportIcon,
   EyeIcon,
   EyeOffIcon,
@@ -76,6 +76,9 @@ function Glyph({ shapeType, operation, text }: { shapeType?: ShapeType | 'csg'; 
     case 'torus': return <TorusIcon size={32} />
     case 'prism': return <PrismIcon size={32} />
     case 'pyramid': return <PyramidIcon size={32} />
+    case 'capsule': return <CapsuleIcon size={32} />
+    case 'tube': return <TubeIcon size={32} />
+    case 'spring': return <SpringIcon size={32} />
     default: return <ImportIcon size={32} />
   }
 }

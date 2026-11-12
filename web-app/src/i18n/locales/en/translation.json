@@ -7,7 +7,10 @@
     "torus": "Torus",
     "prism": "Prism",
     "pyramid": "Pyramid",
-    "text": "Text"
+    "text": "Text",
+    "capsule": "Capsule",
+    "tube": "Tube",
+    "spring": "Spring"
   },
   "shapesAcc": {
     "cube": "Cube",
@@ -17,7 +20,10 @@
     "torus": "Torus",
     "prism": "Prism",
     "pyramid": "Pyramid",
-    "text": "Text"
+    "text": "Text",
+    "capsule": "capsule",
+    "tube": "tube",
+    "spring": "spring"
   },
   "shapesCategory": {
     "basic": "Basic",
@@ -178,7 +184,12 @@
     "inScene": "In scene:",
     "objects": "objects",
     "not_editable_title": "Editing unavailable",
-    "not_editable_body": "Editing this child's parameters is unavailable. Reason: {{reason}}"
+    "not_editable_body": "Editing this child's parameters is unavailable. Reason: {{reason}}",
+    "outerRadius": "Outer radius",
+    "innerRadius": "Inner radius",
+    "coilRadius": "Coil radius",
+    "turns": "Turns",
+    "wireRadius": "Wire radius"
   },
   "leftPanel": {
     "shapes": "Shapes",
@@ -241,7 +252,9 @@
     "extrude": "Extrude {{axis}} by {{depth}}",
     "editExtrudeStep": "Edit this extrusion's depth (CSG below is recomputed)",
     "lock": "Lock",
-    "unlock": "Unlock"
+    "unlock": "Unlock",
+    "arrayLinear": "Array: linear ×{{count}}, spacing {{step}} ({{axis}})",
+    "arrayCircular": "Array: circular ×{{count}}, {{angle}}° ({{axis}})"
   },
   "filters": {
     "add_shape": "Add",
@@ -260,7 +273,8 @@
     "rename": "Rename",
     "edit_child_params": "CSG child edit",
     "edit_step": "Step edit",
-    "lock": "Lock"
+    "lock": "Lock",
+    "array": "Array"
   },
   "snap": {
     "label": "Snap:",
@@ -463,7 +477,8 @@
     "alignTool": "Align mode: pick a plane (a face of object A or X / Y / Z), then click face B — it moves into plane A. With “Multiple” checked you can align several objects in a row. Esc or right click exits.",
     "dimension": "Dimension lines: menu — “Place dimension” (D — directly), “Dimension settings”, “Show / hide dimensions”. A dimension follows its objects — moving, rotating and scaling update the number",
     "dimensionSettings": "Type (standard, offset, projection), color, font and text height of dimensions",
-    "dimensionsToggle": "Show or hide all dimensions (layer)"
+    "dimensionsToggle": "Show or hide all dimensions (layer)",
+    "arrayTool": "Copies of the selection: linear array (along an axis with spacing) or circular (around an axis through a center) — one history step"
   },
   "childProps": {
     "title": "CSG component",
@@ -564,5 +579,25 @@
     "cantDelete": "A locked object cannot be deleted — unlock it first",
     "cantMove": "The object is locked — it cannot be moved or resized",
     "cantCsg": "A locked object cannot take part in CSG — unlock it first"
+  },
+  "array": {
+    "button": "Array",
+    "title": "Array",
+    "kind": "Type",
+    "linear": "Linear",
+    "circular": "Circular",
+    "axis": "Axis",
+    "axisLinear": "Axis (direction)",
+    "axisCircular": "Rotation axis",
+    "count": "Count",
+    "step": "Spacing",
+    "angle": "Angle",
+    "center": "Center (point on the rotation axis)",
+    "hintLinear": "{{count}} in total including the original: copies are spaced along the axis",
+    "hintCircular": "{{count}} in total including the original: 360° — evenly around a full circle, otherwise from 0 to the angle",
+    "create": "Create",
+    "cancel": "Cancel",
+    "tooMany": "Too many copies: at most {{max}} new objects at once",
+    "failed": "Could not create the array"
   }
 }

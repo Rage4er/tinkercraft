@@ -177,6 +177,9 @@ const PARAM_LABELS: Array<[keyof ShapeParams, string]> = [
   ['torusRadius', 'R'],
   ['tubeRadius', 'r'],
   ['sides', 'n'],
+  ['innerRadius', 'r'],
+  ['turns', 'n'],
+  ['wireRadius', 'w'],
 ]
 
 /**

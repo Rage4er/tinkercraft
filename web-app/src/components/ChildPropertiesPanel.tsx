@@ -116,7 +116,7 @@ export default function ChildPropertiesPanel() {
             <NumInput
               key={`${selectedChild.nodeId}:${f.key}`}
               label={t(f.labelKey)}
-              unit={f.integer ? '' : undefined}
+              unit={f.integer || f.unitless ? '' : undefined}
               integer={f.integer}
               min={f.min}
               value={node.params?.[f.key] ?? f.fallback}

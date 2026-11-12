@@ -28,7 +28,8 @@ export const CREASE_ANGLE_DEG = 30;
 
 const FLAT_SHAPES = ["cube", "prism", "pyramid"];
 /** UX-AUDIT-26: гладкий бок + острая кромка торца */
-const CREASE_SHAPES = ["cylinder", "cone"];
+/** NEW-PRIMITIVES: труба — гладкие стенки, острые кромки торцов */
+const CREASE_SHAPES = ["cylinder", "cone", "tube"];
 
 /** Как затенять объект: плоско (грани), по углу излома (CSG, импорт, цилиндр, конус) или гладко. */
 export function shadingOf(obj: Pick<SceneObject, "shapeType" | "params">): "flat" | "crease" | "smooth" {

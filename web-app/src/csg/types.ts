@@ -25,6 +25,7 @@ export type TinkerCraftOperation =
   | LockOperation
   | ColorOperation
   | RenameOperation
+  | ArrayOperation
 
 export interface AddShapeOperation {
   type: 'add_shape'
@@ -296,6 +297,37 @@ export interface DeleteOperation { type: 'delete'; ids: string[] }
 export interface HideShowOperation { type: 'visibility'; ids: string[]; visible: boolean }
 /** LOCK-OBJECT: блокировка объекта (нельзя выбрать во вьюпорте, двигать, менять размеры, удалить, взять в CSG) */
 export interface LockOperation { type: 'lock'; ids: string[]; locked: boolean }
+
+/** ARRAY-TOOL: шаг копии массива — тот же, что у вставки (Ctrl+V): примитив, импорт / текст или CSG */
+export type ArrayCopyOperation = AddShapeOperation | ImportMeshOperation | GroupOperation
+
+/** ARRAY-TOOL: параметры массива (линейный — шаг; круговой — угол и центр) */
+export interface ArrayParams {
+  kind: 'linear' | 'circular'
+  axis: 'X' | 'Y' | 'Z'
+  /** Всего экземпляров вдоль массива, включая исходный (≥ 2) */
+  count: number
+  /** Линейный: расстояние между соседними экземплярами, мм (со знаком) */
+  step?: number
+  /** Круговой: общий угол, ° (360 — полный круг, экземпляры через 360 / N; иначе — от 0 до угла) */
+  angle?: number
+  /** Круговой: точка, через которую проходит ось вращения */
+  center?: Vec3
+}
+
+/**
+ * ARRAY-TOOL: массив — ОДИН шаг истории (undo / redo — целиком). Параметры — в `params`, копии
+ * запечены в `ops` (те же шаги, что у вставки) — для воспроизведения шаг разворачивается в `ops`
+ * (`expandForReplay`), как выравнивание по плоскости. Копии независимы от исходных объектов.
+ */
+export interface ArrayOperation {
+  type: 'array'
+  params: ArrayParams
+  /** Исходные объекты (выделение) */
+  sourceIds: string[]
+  /** Шаги копий, по порядку: экземпляр 2 (все исходные), экземпляр 3, … */
+  ops: ArrayCopyOperation[]
+}
 export interface ColorOperation { type: 'color'; ids: string[]; color: string }
 
 // ---- Вспомогательные типы ----
@@ -316,7 +348,10 @@ export type AnchorPoint =
 
 export type ShapeType =
   | 'cube' | 'sphere' | 'cylinder' | 'cone'
-  | 'torus' | 'prism' | 'pyramid' | 'import_mesh' | 'csg'
+  | 'torus' | 'prism' | 'pyramid'
+  // NEW-PRIMITIVES: капсула (цилиндр + полусферы), труба (полый цилиндр), пружина (спираль)
+  | 'capsule' | 'tube' | 'spring'
+  | 'import_mesh' | 'csg'
 
 export interface ShapeParams {
   width?: number
@@ -331,6 +366,12 @@ export interface ShapeParams {
   tubeRadius?: number
   tubeSegments?: number
   sides?: number
+  /** NEW-PRIMITIVES: труба — внутренний радиус (< `radius`) */
+  innerRadius?: number
+  /** NEW-PRIMITIVES: пружина — число витков */
+  turns?: number
+  /** NEW-PRIMITIVES: пружина — радиус проволоки */
+  wireRadius?: number
 }
 
 export interface SceneObject {

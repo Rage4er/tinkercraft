@@ -8,6 +8,9 @@ import {
   TorusIcon,
   PrismIcon,
   PyramidIcon,
+  CapsuleIcon,
+  TubeIcon,
+  SpringIcon,
   TextIcon,
 } from "./components/icons";
 import { ALL_SHAPES_DATA, SNAP_VALUES, OP_FILTER_LABELS, DEFAULT_FILTERS, OBJECT_SPACING, PASTE_OFFSET, AUTOSAVE_DELAY_MS, MOVE_DELTA_EPSILON, VERTEX_MERGE_PRECISION, OBJECT_COLORS } from "./constants";
@@ -21,6 +24,10 @@ const ICON_MAP: Record<string, React.FC<{ size?: number; className?: string }>> 
   torus: TorusIcon,
   prism: PrismIcon,
   pyramid: PyramidIcon,
+  // NEW-PRIMITIVES
+  capsule: CapsuleIcon,
+  tube: TubeIcon,
+  spring: SpringIcon,
   text: TextIcon,
 };
 

@@ -7,7 +7,7 @@
 // - MAX_ROWS = 3 — максимум строк в группе
 // - Гистерезис = 1W — защитная подушка 1 кнопка
 
-const SEPARATOR_WIDTH = 2 // px — ширина разделителя
+export const SEPARATOR_WIDTH = 2 // px — ширина разделителя в расчёте (реальная — useToolbarLayout › measureReserved)
 const PADDING = 16 // px — горизонтальные отступы тулбара
 const MAX_ROWS = 3 // максимум строк в группе
 const HYSTERESIS = 1 // защита от дребезга (1 кнопка)

@@ -259,7 +259,7 @@ export async function rebuildFromHistory(
   // смещение отдаётся как centerOffset (main loop прибавит его к pivot).
   // Раньше «живая» конвенция была: сырые вершины + transform на pivot.
   const returnedIds = new Set(result.results.map(m => m.objId))
-  for (const op of ops) {
+  for (const op of ops.flatMap(expandForReplay)) {   // ARRAY-TOOL: импорт и среди копий массива
     if (op.type !== 'import_mesh') continue
     if (returnedIds.has(op.id) || !meta[op.id]) continue
     const verts = op.vertices
@@ -660,7 +660,7 @@ export function registerBakedNodes(
   objects: Record<string, SceneObject>,
   rawOps: TinkerCraftOperation[],
 ): void {
-  for (const op of projectHistory(rawOps)) {
+  for (const op of projectHistory(rawOps).flatMap(expandForReplay)) {   // ARRAY-TOOL: и копии массива
     if (op.type === 'import_mesh' && objects[op.id]) {
       const obj = objects[op.id]
       if (obj.vertices && obj.indices) {

@@ -73,7 +73,7 @@ function sanitizeObjectKeys(obj: unknown): unknown {
 
 const VALID_OP_TYPES = new Set([
   'add_shape', 'import_mesh', 'move', 'resize_dims', 'fillet',
-  'mirror', 'align', 'group', 'edit_child_params', 'edit_step', 'delete', 'visibility', 'lock', 'color', 'rename',
+  'mirror', 'align', 'group', 'edit_child_params', 'edit_step', 'delete', 'visibility', 'lock', 'color', 'rename', 'array',
 ])
 
 // ────────────────────────────────────────────────────────────
@@ -180,7 +180,10 @@ function taToNumArray(v: unknown): number[] | undefined {
 
 function restoreOperationMeshArrays(operations: TinkerCraftOperation[]): void {
   for (const op of operations) {
-    if (op.type === 'group') {
+    if (op.type === 'array') {
+      // ARRAY-TOOL: копии массива — шаги вставки внутри шага
+      restoreOperationMeshArrays(Array.isArray(op.ops) ? op.ops : [])
+    } else if (op.type === 'group') {
       const g = op as import('../csg/types').GroupOperation
       const rv = taToNumArray(g.resultVertices)
       const ri = taToNumArray(g.resultIndices)
@@ -334,6 +337,15 @@ export async function parse3dtc(source: Blob | ArrayBuffer): Promise<ThreeDtcDoc
   const operations = sanitized.operations as TinkerCraftOperation[]
   if (!operations.every(op => op && typeof op === 'object' && VALID_OP_TYPES.has((op as { type?: string }).type ?? ''))) {
     throw new Error(i18n.t('errors.file.unknownOperation'))
+  }
+  // ARRAY-TOOL: внутри массива — только шаги копий (как у вставки)
+  const ARRAY_COPY_TYPES = new Set(['add_shape', 'import_mesh', 'group'])
+  for (const op of operations) {
+    if (op.type !== 'array') continue
+    const inner: unknown = (op as { ops?: unknown }).ops
+    if (!Array.isArray(inner) || !inner.every((o) => o && typeof o === 'object' && ARRAY_COPY_TYPES.has((o as { type?: string }).type ?? ''))) {
+      throw new Error(i18n.t('errors.file.unknownOperation'))
+    }
   }
 
   // decodeTypedArrays: SerializedTA → Float32Array/Uint32Array

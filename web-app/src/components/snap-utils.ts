@@ -334,7 +334,7 @@ function faceCenter(mesh: THREE.Mesh): THREE.Vector3 {
  * Вычислить «центр окружности» фигуры:
  * - sphere → центр bounding box
  * - cylinder/cone → центр основания (минимальный Z)
- * - torus → центр bounding box
+ * - torus, capsule, spring → центр bounding box; tube — как цилиндр
  */
 function circleCenter(
   mesh: THREE.Mesh,
@@ -351,11 +351,12 @@ function circleCenter(
     return center;
   }
 
-  if (shapeType === "cylinder" || shapeType === "cone") {
+  // NEW-PRIMITIVES: труба — как цилиндр (центр основания); капсула, пружина — центр
+  if (shapeType === "cylinder" || shapeType === "cone" || shapeType === "tube") {
     return new THREE.Vector3(center.x, center.y, box.min.z);
   }
 
-  if (shapeType === "torus") {
+  if (shapeType === "torus" || shapeType === "capsule" || shapeType === "spring") {
     return center;
   }
 

@@ -15,7 +15,7 @@ import type { TinkerCraftOperation } from '../csg/types'
 
 /** Звук нового шага истории (или null — шаг без звука) */
 export function sfxForOperation(op: TinkerCraftOperation): SfxKind | null {
-  if (op.type === 'add_shape' || op.type === 'import_mesh') return 'create'
+  if (op.type === 'add_shape' || op.type === 'import_mesh' || op.type === 'array') return 'create'
   if (op.type === 'group') return op.pasted ? 'create' : 'success'
   return null
 }

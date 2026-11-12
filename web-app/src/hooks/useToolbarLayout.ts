@@ -12,6 +12,7 @@
 import { useState, useRef, useCallback, useLayoutEffect } from "react"
 import {
   calculateToolbarLayout,
+  SEPARATOR_WIDTH as SEPARATOR_ESTIMATE,
   type ToolbarGroup,
   type GroupLayout,
 } from "../utils/toolbar-layout"
@@ -60,9 +61,23 @@ export function useToolbarLayout(groups: ToolbarGroup[]): UseToolbarLayoutResult
       const cs = getComputedStyle(logo)
       w += logo.getBoundingClientRect().width + (parseFloat(cs.marginLeft) || 0) + (parseFloat(cs.marginRight) || 0)
     }
+    // ARRAY-TOOL (29-я кнопка): оценка — ровно реальная вёрстка. Ширина кнопки в расчёте — с зазором
+    // (`measureButtonWidth`), а в строке группы зазоров на один меньше, чем кнопок: −1 зазор на группу.
+    // Разделитель в расчёте — 2 px (`SEPARATOR_WIDTH`), реальный — меряем. Без этого оценка была на
+    // ~30 px шире настоящей, и на 1366 со шрифтом шире (DejaVu Sans в CI) тулбар уходил в 3 строки.
+    const gapOf = (g: Element) => {
+      const row = g.querySelector(".toolbar-group-row")
+      const gap = row ? parseFloat(getComputedStyle(row).columnGap) : NaN
+      return Number.isFinite(gap) ? gap : 0
+    }
     tb.querySelectorAll(".toolbar-group").forEach((g) => {
       const cs = getComputedStyle(g)
-      w += (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0)
+      w += (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0) - gapOf(g)
+    })
+    tb.querySelectorAll(".toolbar-separator").forEach((s) => {
+      const cs = getComputedStyle(s)
+      const real = s.getBoundingClientRect().width + (parseFloat(cs.marginLeft) || 0) + (parseFloat(cs.marginRight) || 0)
+      w += real - SEPARATOR_ESTIMATE
     })
     return w
   }, [])

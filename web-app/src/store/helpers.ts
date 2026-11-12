@@ -72,6 +72,9 @@ export function localParamsBox(obj: SceneObject): { min: Vec3; max: Vec3 } {
     hx = p.width / 2; hy = p.height / 2; hz = p.depth / 2
   } else if (p.torusRadius !== undefined && p.tubeRadius !== undefined) {
     hx = hy = p.torusRadius + p.tubeRadius; hz = p.tubeRadius
+  } else if (p.wireRadius !== undefined && p.radius !== undefined && p.height !== undefined) {
+    // NEW-PRIMITIVES: пружина — виток до оси проволоки + проволока
+    hx = hy = p.radius + p.wireRadius; hz = p.height / 2
   } else if (p.radius !== undefined && p.height !== undefined) {
     hx = hy = p.radius; hz = p.height / 2
   } else if (p.radius !== undefined) {
@@ -290,7 +293,11 @@ export function defaultShapeParams(shapeType: ShapeType): ShapeParams {
         : shapeType === 'torus' ? { torusRadius: 15, tubeRadius: 4, segments: 32, tubeSegments: 16 }
           : shapeType === 'prism' ? { radius: 12, height: 20, sides: 6 }
             : shapeType === 'pyramid' ? { radius: 12, height: 20, sides: 4 }
-              : { width: 20, height: 20, depth: 20 }
+              // NEW-PRIMITIVES
+              : shapeType === 'capsule' ? { radius: 8, height: 30, segments: 32 }
+                : shapeType === 'tube' ? { radius: 12, innerRadius: 8, height: 20, segments: 48 }
+                  : shapeType === 'spring' ? { radius: 10, height: 30, turns: 5, wireRadius: 1.5, segments: 36 }
+                    : { width: 20, height: 20, depth: 20 }
 }
 
 /** Произведение матриц 3×3 (по строкам). */
