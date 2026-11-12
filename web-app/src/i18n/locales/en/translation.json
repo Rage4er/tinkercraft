@@ -239,7 +239,9 @@
     "editMoveStep": "Edit this step's offset (CSG below is recomputed)",
     "editMirrorStep": "Edit this mirror's plane (CSG below is recomputed)",
     "extrude": "Extrude {{axis}} by {{depth}}",
-    "editExtrudeStep": "Edit this extrusion's depth (CSG below is recomputed)"
+    "editExtrudeStep": "Edit this extrusion's depth (CSG below is recomputed)",
+    "lock": "Lock",
+    "unlock": "Unlock"
   },
   "filters": {
     "add_shape": "Add",
@@ -257,7 +259,8 @@
     "color": "Color",
     "rename": "Rename",
     "edit_child_params": "CSG child edit",
-    "edit_step": "Step edit"
+    "edit_step": "Step edit",
+    "lock": "Lock"
   },
   "snap": {
     "label": "Snap:",
@@ -553,5 +556,13 @@
       "3mf": "3D Manufacturing Format: objects and colours, mm",
       "gltf": "glTF 2.0 (JSON), metres, Y axis up"
     }
+  },
+  "lock": {
+    "lock": "Lock",
+    "unlock": "Unlock",
+    "locked": "Locked",
+    "cantDelete": "A locked object cannot be deleted — unlock it first",
+    "cantMove": "The object is locked — it cannot be moved or resized",
+    "cantCsg": "A locked object cannot take part in CSG — unlock it first"
   }
 }

@@ -2029,3 +2029,14 @@ body {
   border: 1px dashed #3fcf74;
   background: rgba(63, 207, 116, 0.14);
 }
+
+/* ---- LOCK-OBJECT: замок объекта ---- */
+.obj-locked {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 4px;
+  color: var(--accent-yellow);
+}
+.ct-btn.ct-objlock.active {
+  color: var(--accent-yellow);
+}

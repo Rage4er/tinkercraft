@@ -22,6 +22,7 @@ export type TinkerCraftOperation =
   | EditStepOperation
   | DeleteOperation
   | HideShowOperation
+  | LockOperation
   | ColorOperation
   | RenameOperation
 
@@ -293,6 +294,8 @@ export interface ResizeDimsOperation { type: 'resize_dims'; id: string; params: 
 export interface RenameOperation { type: 'rename'; id: string; name: string }
 export interface DeleteOperation { type: 'delete'; ids: string[] }
 export interface HideShowOperation { type: 'visibility'; ids: string[]; visible: boolean }
+/** LOCK-OBJECT: блокировка объекта (нельзя выбрать во вьюпорте, двигать, менять размеры, удалить, взять в CSG) */
+export interface LockOperation { type: 'lock'; ids: string[]; locked: boolean }
 export interface ColorOperation { type: 'color'; ids: string[]; color: string }
 
 // ---- Вспомогательные типы ----

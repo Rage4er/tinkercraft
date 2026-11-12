@@ -138,6 +138,7 @@ export default function App() {
       renameObject: s.renameObject,
       setColor: s.setColor,
       toggleVisible: s.toggleVisible,
+      toggleLocked: s.toggleLocked,
       exportStl: s.exportStl,
       exportMesh: s.exportMesh,
       mirrorSelected: s.mirrorSelected,
@@ -175,6 +176,7 @@ export default function App() {
     renameObject,
     setColor,
     toggleVisible,
+    toggleLocked,
     exportStl,
     exportMesh,
     mirrorSelected,
@@ -264,7 +266,8 @@ export default function App() {
         // DIMENSION-UNDO: Ctrl+Z / Ctrl+Y — и действия с размерами (в общем порядке с шагами документа)
         case "undo": void undoWithDimensions(); break;
         case "redo": void redoWithDimensions(); break;
-        case "selectAll": kb.selectObjects(Object.keys(kb.objects), false); break;
+        // LOCK-OBJECT: Ctrl+A — без заблокированных (как рамка)
+        case "selectAll": kb.selectObjects(Object.keys(kb.objects).filter((id) => !kb.objects[id].locked), false); break;
         // FIX (HIGH-18-18): Ctrl+S сохраняет и при активном гизмо (S без Ctrl — гизмо масштаба)
         case "save": void kb.saveProject(); break;
         case "open": void kb.openProject(); break;
@@ -580,6 +583,7 @@ export default function App() {
           onSelect={handleSelect}
           onRename={renameObject}
           onToggleVis={toggleVisible}
+          onToggleLock={toggleLocked}
           onDeleteObject={(id) => {
             selectObjects([id], false);
             deleteSelected();
@@ -689,6 +693,7 @@ export default function App() {
             onCsg={runCsg}
             onSetColor={setColor}
             onToggleVisible={toggleVisible}
+            onToggleLocked={toggleLocked}
             onShowProjects={() => setShowPM(true)}
             onSaveToProject={saveToProject}
           />}

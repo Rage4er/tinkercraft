@@ -388,14 +388,16 @@ export default function Viewport3D({
       tc.detach();
       return;
     }
-    const entry = meshMapRef.current.get([...selectedIds][0]);
-    if (!entry) {
+    const firstId = [...selectedIds][0];
+    const entry = meshMapRef.current.get(firstId);
+    // LOCK-OBJECT: к заблокированному гизмо не цепляется
+    if (!entry || objectsRef.current.find((o) => o.id === firstId)?.locked) {
       tc.detach();
       return;
     }
     tc.setMode(gizmoMode);
     tc.attach(entry.pivot);
-  }, [gizmoMode, selectedIds, transformCtRef, meshMapRef, placementActive, dimensionActive]);
+  }, [gizmoMode, selectedIds, transformCtRef, meshMapRef, placementActive, dimensionActive, objects]);
 
   // ---- TransformControls mouseUp handler ----
   useEffect(() => {
@@ -516,7 +518,9 @@ export default function Viewport3D({
       const r = container.getBoundingClientRect();
       const mode = rectModeOf(x0, x1);
       const rect = rectToNdc(x0 - r.left, y0 - r.top, x1 - r.left, y1 - r.top, r.width, r.height);
-      const found = objectsInRect(meshMapRef.current, camera, rect, mode);
+      // LOCK-OBJECT: рамка заблокированные не выбирает
+      const locked = new Set(objectsRef.current.filter((o) => o.locked).map((o) => o.id));
+      const found = objectsInRect(meshMapRef.current, camera, rect, mode).filter((id) => !locked.has(id));
       devLogEvent('select', 'rect', { mode, found: found.length });
       if (found.length === 0) return;
       const ids = add ? [...new Set([...selectedIdsRef.current, ...found])] : found;
@@ -718,8 +722,10 @@ export default function Viewport3D({
           }
           if (dims.selectedDimensionId) dims.selectDimension(null);
           const meshes: THREE.Mesh[] = [];
-          for (const entry of meshMapRef.current.values()) {
-            if (entry.mesh.visible) meshes.push(entry.mesh);
+          // LOCK-OBJECT: заблокированные во вьюпорте не выбираются (клик — сквозь них)
+          const locked = new Set(objectsRef.current.filter((o) => o.locked).map((o) => o.id));
+          for (const [id, entry] of meshMapRef.current) {
+            if (entry.mesh.visible && !locked.has(id)) meshes.push(entry.mesh);
           }
           const hits = raycaster.intersectObjects(meshes, false);
           devLogEvent('raycast', 'hits', { count: hits.length, meshes: meshes.length });

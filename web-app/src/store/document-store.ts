@@ -12,7 +12,7 @@ import { create } from 'zustand/react'
 import type {
   TinkerCraftOperation, AddShapeOperation, ImportMeshOperation,
   MirrorOperation, AlignOperation, AlignPlane, ResizeDimsOperation,
-  MoveOperation, ColorOperation, GroupOperation, RenameOperation, HideShowOperation,
+  MoveOperation, ColorOperation, GroupOperation, RenameOperation, HideShowOperation, LockOperation,
   DeleteOperation, EditChildParamsOperation,
   SceneObject, ShapeParams, TransformNR, Vec3,
   TreeNode,
@@ -497,7 +497,10 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   deleteSelected: async () => {
     if (get().busy) return
     const { selectedIds, objects, operations, historyIndex } = get()
-    const ids = selectedIds.filter(id => objects[id])
+    const sel = selectedIds.filter(id => objects[id])
+    // LOCK-OBJECT: заблокированные не удаляются (остальные выбранные — удаляются)
+    const ids = sel.filter(id => !objects[id].locked)
+    if (ids.length < sel.length) notify(i18n.t('lock.cantDelete'), 'warning')
     if (ids.length === 0) return
     const op: DeleteOperation = { type: 'delete', ids }
     const newObjects = { ...objects }
@@ -542,6 +545,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const operands = resolveCsgOperands(selectedIds, groups, objects)
     if (!operands) return
     const { ids, groupA } = operands
+    // LOCK-OBJECT: CSG поглощает операнды — заблокированный в операцию не берётся
+    if (ids.some((id) => objects[id]?.locked)) { notify(i18n.t('lock.cantCsg'), 'warning'); return }
     const idA = ids[0]
     // Мягкий лимит: много операндов — предупреждение, операция выполняется (не блокирует)
     if (ids.length > CSG_SOFT_LIMIT) {
@@ -623,6 +628,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const { objects, operations, historyIndex } = get()
     const obj = objects[id]
     if (!obj) return
+    if (obj.locked) { notify(i18n.t('lock.cantMove'), 'warning'); return }   // LOCK-OBJECT
 
     // FIX (MIRROR-DELTA-EP): Skip near-identical transforms — prevent duplicate
     // history entries and cache invalidation when moveObject is called twice
@@ -711,6 +717,18 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const op: HideShowOperation = { type: 'visibility', ids: [id], visible: newVis }
     const newOps = [...operations.slice(0, historyIndex), op]
     const newObjects = { ...objects, [id]: { ...objects[id], visible: newVis } }
+    set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true })
+    cacheSnapshot(newOps.length, newObjects)
+  },
+
+  // ── LOCK-OBJECT: блокировка (шаг истории, как видимость) ──
+  toggleLocked: (id) => {
+    const { objects, operations, historyIndex, selectedIds } = get()
+    if (!objects[id]) return
+    const locked = !objects[id].locked
+    const op: LockOperation = { type: 'lock', ids: [id], locked }
+    const newOps = [...operations.slice(0, historyIndex), op]
+    const newObjects = { ...objects, [id]: { ...objects[id], locked } }
     set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true })
     cacheSnapshot(newOps.length, newObjects)
   },
@@ -1022,6 +1040,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const { objects, operations, historyIndex } = get()
     const obj = objects[id]
     if (!obj || obj.shapeType === 'import_mesh') return
+    if (obj.locked) { notify(i18n.t('lock.cantMove'), 'warning'); return }   // LOCK-OBJECT
 
     // ВСЕ объекты должны быть зарегистрированы в дереве
     const treeExists = getNode(id) !== undefined
@@ -1155,6 +1174,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const { objects, operations, historyIndex } = get()
     const root = objects[rootId]
     if (!root) return
+    if (root.locked) { notify(i18n.t('lock.cantMove'), 'warning'); return }   // LOCK-OBJECT
     // Значения не изменились — не пишем пустую правку в историю
     const curParams = getNode(nodeId)?.params as Record<string, number | undefined> | undefined
     if (curParams && Object.entries(patch).every(([k, v]) => curParams[k] === v)) return

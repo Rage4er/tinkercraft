@@ -41,6 +41,8 @@ export interface RebuildMeta {
   params: ShapeParams
   transform: TransformNR
   visible: boolean
+  /** LOCK-OBJECT: заблокирован (шаг `lock`) */
+  locked?: boolean
   name?: string
   /** UX-AUDIT-31: 3D-текст — исходная строка */
   text?: string
@@ -164,6 +166,12 @@ export function buildRebuildMeta(rawOps: TinkerCraftOperation[]): {
       // Track visibility — fixes hidden objects becoming visible after undo/redo (WARN-R6-6)
       for (const id of op.ids) {
         if (meta[id]) meta[id] = { ...meta[id], visible: op.visible }
+      }
+
+    } else if (op.type === 'lock') {
+      // LOCK-OBJECT: блокировка — как видимость, переживает undo / redo / загрузку
+      for (const id of op.ids) {
+        if (meta[id]) meta[id] = { ...meta[id], locked: op.locked }
       }
 
     } else if (op.type === 'rename') {
@@ -349,7 +357,7 @@ export async function rebuildFromHistory(
       color: info?.color ?? '#89b4fa',
       transform: finalT,
       visible: info?.visible ?? true,
-      locked: false,
+      locked: info?.locked ?? false,
       vertices: m.vertices,
       indices: m.indices,
       normals: m.normals,

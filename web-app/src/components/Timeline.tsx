@@ -35,6 +35,8 @@ import {
   IntersectIcon,
   DeleteIcon,
   EyeIcon,
+  LockIcon,
+  UnlockIcon,
   ColorIcon,
   TextIcon,
 } from "./icons";
@@ -119,6 +121,8 @@ export function opIcon(op: TinkerCraftOperation): React.ReactNode {
       return <DeleteIcon size={32} />;
     case "visibility":
       return <EyeIcon size={32} />;
+    case "lock":
+      return op.locked ? <LockIcon size={32} /> : <UnlockIcon size={32} />;
     case "color":
       return <ColorIcon size={32} />;
     case "rename":
@@ -188,6 +192,8 @@ export function opLabel(op: TinkerCraftOperation, t: (key: string, opts?: Record
       return t("timeline.delete");
     case "visibility":
       return t("timeline.visibility");
+    case "lock":
+      return t(op.locked ? "timeline.lock" : "timeline.unlock");
     case "color":
       return t("timeline.color");
     case "rename":

@@ -521,3 +521,20 @@ export const GearIcon = (p: any) => (
     <circle cx="32" cy="32" r="8" {...line} />
   </Icon>
 )
+
+/* ===== Блокировка (LOCK-OBJECT) ===== */
+export const LockIcon = (p: any) => (
+  <Icon {...p}>
+    <path {...line} d="M22 28v-8a10 10 0 0 1 20 0v8" />
+    <Shape d="M16 28h32v24H16Z" />
+    <path {...line} d="M32 37v6" />
+  </Icon>
+)
+
+export const UnlockIcon = (p: any) => (
+  <Icon {...p}>
+    <path {...line} d="M22 28v-8a10 10 0 0 1 19.5-3" />
+    <Shape d="M16 28h32v24H16Z" o={0.08} />
+    <path {...line} d="M32 37v6" />
+  </Icon>
+)

@@ -6,7 +6,7 @@ import { useSettingsStore } from "../store/settings";
 import { unitLabelKey } from "../store/units";
 import { useCsgGroupModeStore, type CsgOpButtonStates } from "../store/csg-group-mode";
 import type { ShapeParams, SceneObject } from "../csg/types";
-import { EyeIcon, EyeOffIcon, FolderIcon, SaveIcon } from "./icons";
+import { EyeIcon, EyeOffIcon, FolderIcon, SaveIcon, LockIcon, UnlockIcon } from "./icons";
 import { isTextObject } from '../store/text-object'
 
 export default function PropertiesPanel({
@@ -27,6 +27,7 @@ export default function PropertiesPanel({
   onCsg,
   onSetColor,
   onToggleVisible,
+  onToggleLocked,
   onShowProjects,
   onSaveToProject,
   currentProjectId,
@@ -54,6 +55,8 @@ export default function PropertiesPanel({
   onCsg: (op: "union" | "subtract" | "intersect") => void;
   onSetColor: (id: string, color: string, skipHistory?: boolean) => void;
   onToggleVisible: (id: string) => void;
+  /** LOCK-OBJECT: заблокировать / разблокировать выбранный */
+  onToggleLocked?: (id: string) => void;
   onShowProjects: () => void;
   onSaveToProject: (name: string) => void;
 }) {
@@ -116,6 +119,7 @@ export default function PropertiesPanel({
 
   const lengthUnit = useSettingsStore((st) => st.units);
   const unitLabel = t(unitLabelKey(lengthUnit));   // APP-SETTINGS: «Позиция (см)» и т.п.
+  const locked = !!firstSelected?.locked;   // LOCK-OBJECT
   if (!firstSelected) {
     return (
       <>
@@ -211,6 +215,20 @@ export default function PropertiesPanel({
         </button>
       </div>
 
+      {/* LOCK-OBJECT: заблокированный — поля трансформа и размеров недоступны */}
+      <div className="props-row">
+        <span className="props-label">{t("lock.locked")}</span>
+        <button
+          className={`btn btn-compact${locked ? " active" : ""}`}
+          data-testid="props-lock"
+          aria-pressed={locked}
+          onClick={() => onToggleLocked?.(firstSelected.id)}
+        >
+          {locked ? <LockIcon size={32} /> : <UnlockIcon size={32} />}{" "}
+          {locked ? t("properties.yes") : t("properties.no")}
+        </button>
+      </div>
+
       <div className="props-row">
         <span className="props-label">{t("properties.triangles")}</span>
         <span className="props-value">
@@ -223,21 +241,21 @@ export default function PropertiesPanel({
         id="num-input-pos-X"
         label="X"
         value={firstSelected.transform.x}
-        disabled={busy}
+        disabled={busy || locked}
         onChange={(v) => onMoveAxis("x", v)}
       />
       <NumInput
         id="num-input-pos-Y"
         label="Y"
         value={firstSelected.transform.y}
-        disabled={busy}
+        disabled={busy || locked}
         onChange={(v) => onMoveAxis("y", v)}
       />
       <NumInput
         id="num-input-pos-Z"
         label="Z"
         value={firstSelected.transform.z}
-        disabled={busy}
+        disabled={busy || locked}
         onChange={(v) => onMoveAxis("z", v)}
       />
 
@@ -247,7 +265,7 @@ export default function PropertiesPanel({
         label="rotX"
         unit="°"
         value={firstSelected.transform.rotX}
-        disabled={busy}
+        disabled={busy || locked}
         onChange={(v) => onRotAxis("rotX", v)}
       />
       <NumInput
@@ -255,7 +273,7 @@ export default function PropertiesPanel({
         label="rotY"
         unit="°"
         value={firstSelected.transform.rotY}
-        disabled={busy}
+        disabled={busy || locked}
         onChange={(v) => onRotAxis("rotY", v)}
       />
       <NumInput
@@ -263,7 +281,7 @@ export default function PropertiesPanel({
         label="rotZ"
         unit="°"
         value={firstSelected.transform.rotZ}
-        disabled={busy}
+        disabled={busy || locked}
         onChange={(v) => onRotAxis("rotZ", v)}
       />
 
@@ -275,7 +293,7 @@ export default function PropertiesPanel({
         min={0.01}
         step={0.1}
         value={Math.round(firstSelected.transform.scaleX * 1000) / 1000}
-        disabled={busy}
+        disabled={busy || locked}
         onChange={(v) => onScaleAxis("scaleX", v)}
       />
       <NumInput
@@ -285,7 +303,7 @@ export default function PropertiesPanel({
         min={0.01}
         step={0.1}
         value={Math.round(firstSelected.transform.scaleY * 1000) / 1000}
-        disabled={busy}
+        disabled={busy || locked}
         onChange={(v) => onScaleAxis("scaleY", v)}
       />
       <NumInput
@@ -295,7 +313,7 @@ export default function PropertiesPanel({
         min={0.01}
         step={0.1}
         value={Math.round(firstSelected.transform.scaleZ * 1000) / 1000}
-        disabled={busy}
+        disabled={busy || locked}
         onChange={(v) => onScaleAxis("scaleZ", v)}
       />
 
@@ -312,7 +330,7 @@ export default function PropertiesPanel({
                 id="num-input-size-X"
                 min={0.1}
                 value={Math.round(firstSelected.originalBboxSize.x * 100) / 100}
-                disabled={busy}
+                disabled={busy || locked}
                 onChange={(v) => onResizeObject(firstSelected.id, { width: v })}
               />
               <NumInput
@@ -320,7 +338,7 @@ export default function PropertiesPanel({
                 id="num-input-size-Y"
                 min={0.1}
                 value={Math.round(firstSelected.originalBboxSize.y * 100) / 100}
-                disabled={busy}
+                disabled={busy || locked}
                 onChange={(v) => onResizeObject(firstSelected.id, { height: v })}
               />
               <NumInput
@@ -328,7 +346,7 @@ export default function PropertiesPanel({
                 id="num-input-size-Z"
                 min={0.1}
                 value={Math.round(firstSelected.originalBboxSize.z * 100) / 100}
-                disabled={busy}
+                disabled={busy || locked}
                 onChange={(v) => onResizeObject(firstSelected.id, { depth: v })}
               />
             </>
@@ -340,7 +358,7 @@ export default function PropertiesPanel({
                 id="num-input-size-X"
                 min={0.1}
                 value={firstSelected.params.width ?? 20}
-                disabled={busy}
+                disabled={busy || locked}
                 onChange={(v) => onResizeDim("width", v)}
               />
               <NumInput
@@ -348,7 +366,7 @@ export default function PropertiesPanel({
                 id="num-input-size-Y"
                 min={0.1}
                 value={firstSelected.params.height ?? 20}
-                disabled={busy}
+                disabled={busy || locked}
                 onChange={(v) => onResizeDim("height", v)}
               />
               <NumInput
@@ -356,7 +374,7 @@ export default function PropertiesPanel({
                 id="num-input-size-Z"
                 min={0.1}
                 value={firstSelected.params.depth ?? 20}
-                disabled={busy}
+                disabled={busy || locked}
                 onChange={(v) => onResizeDim("depth", v)}
               />
             </>
@@ -367,7 +385,7 @@ export default function PropertiesPanel({
                 label={t("properties.radius")}
                 min={0.1}
                 value={firstSelected.params.radius ?? 12}
-                disabled={busy}
+                disabled={busy || locked}
                 onChange={(v) =>
                   onResizeObject(firstSelected.id, {
                     radius: Math.max(0.1, v),
@@ -383,7 +401,7 @@ export default function PropertiesPanel({
                   label={t("properties.radius")}
                   min={0.1}
                   value={firstSelected.params.radius ?? 10}
-                  disabled={busy}
+                  disabled={busy || locked}
                   onChange={(v) =>
                     onResizeObject(firstSelected.id, {
                       radius: Math.max(0.1, v),
@@ -395,7 +413,7 @@ export default function PropertiesPanel({
                   id="num-input-size-Z"
                   min={0.1}
                   value={firstSelected.params.height ?? 30}
-                  disabled={busy}
+                  disabled={busy || locked}
                   onChange={(v) =>
                     onResizeObject(firstSelected.id, {
                       height: Math.max(0.1, v),
@@ -410,7 +428,7 @@ export default function PropertiesPanel({
                 label={t("properties.torusRadius")}
                 min={1}
                 value={firstSelected.params.torusRadius ?? 15}
-                disabled={busy}
+                disabled={busy || locked}
                 onChange={(v) =>
                   onResizeObject(firstSelected.id, { torusRadius: Math.max(1, v) })
                 }
@@ -419,7 +437,7 @@ export default function PropertiesPanel({
                 label={t("properties.tubeRadius")}
                 min={0.5}
                 value={firstSelected.params.tubeRadius ?? 4}
-                disabled={busy}
+                disabled={busy || locked}
                 onChange={(v) =>
                   onResizeObject(firstSelected.id, { tubeRadius: Math.max(0.5, v) })
                 }
@@ -433,7 +451,7 @@ export default function PropertiesPanel({
                   label={t("properties.radius")}
                   min={0.5}
                   value={firstSelected.params.radius ?? 12}
-                  disabled={busy}
+                  disabled={busy || locked}
                   onChange={(v) =>
                     onResizeObject(firstSelected.id, { radius: Math.max(0.5, v) })
                   }
@@ -443,7 +461,7 @@ export default function PropertiesPanel({
                   id="num-input-size-Z"
                   min={0.1}
                   value={firstSelected.params.height ?? 20}
-                  disabled={busy}
+                  disabled={busy || locked}
                   onChange={(v) =>
                     onResizeObject(firstSelected.id, { height: Math.max(0.1, v) })
                   }
@@ -454,7 +472,7 @@ export default function PropertiesPanel({
                   integer
                   min={3}
                   value={firstSelected.params.sides ?? (firstSelected.shapeType === "prism" ? 6 : 4)}
-                  disabled={busy}
+                  disabled={busy || locked}
                   onChange={(v) =>
                     onResizeObject(firstSelected.id, { sides: Math.max(3, Math.round(v)) })
                   }

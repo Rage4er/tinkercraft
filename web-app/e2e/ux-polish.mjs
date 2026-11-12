@@ -186,10 +186,10 @@ try {
         await p2.keyboard.press('Escape'); await p2.waitForTimeout(300)
         const on = await frame()
         const ds = await vp2.evaluate((e) => ({ half: Number(e.dataset.shadowHalf), center: e.dataset.shadowCenter }))
-        await row.click(); await p2.locator('.panel-right button', { hasText: 'Да' }).click(); await p2.waitForTimeout(200)
+        await row.click(); await p2.locator('.panel-right .props-row', { hasText: 'Видим' }).locator('button', { hasText: 'Да' }).click(); await p2.waitForTimeout(200)
         await p2.keyboard.press('Escape'); await p2.waitForTimeout(400)
         const off = await frame()
-        await row.click(); await p2.locator('.panel-right button', { hasText: 'Нет' }).click(); await p2.waitForTimeout(200)
+        await row.click(); await p2.locator('.panel-right .props-row', { hasText: 'Видим' }).locator('button', { hasText: 'Нет' }).click(); await p2.waitForTimeout(200)
         const n = await p2.evaluate(async ([a, c]) => {
           const load = async (b64) => { const img = new Image(); img.src = 'data:image/png;base64,' + b64; await img.decode(); const cv = document.createElement('canvas'); cv.width = img.width; cv.height = img.height; const x = cv.getContext('2d'); x.drawImage(img, 0, 0); return x.getImageData(0, 0, img.width, img.height).data }
           const p = await load(a), q = await load(c)
