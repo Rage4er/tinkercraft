@@ -139,6 +139,7 @@ export default function App() {
       setColor: s.setColor,
       toggleVisible: s.toggleVisible,
       exportStl: s.exportStl,
+      exportMesh: s.exportMesh,
       mirrorSelected: s.mirrorSelected,
       previewMirror: s.previewMirror,
       copySelected: s.copySelected,
@@ -175,6 +176,7 @@ export default function App() {
     setColor,
     toggleVisible,
     exportStl,
+    exportMesh,
     mirrorSelected,
     previewMirror,
     copySelected,
@@ -528,7 +530,7 @@ export default function App() {
         theme={theme}
         onOpen={openProject}
         onSave={saveProject}
-        onExportStl={exportStl}
+        onExportStl={(f) => void exportMesh(f)}
         onImportStl={importStl}
         onShowProjects={() => setShowPM(true)}
         onUndo={() => void undoWithDimensions()}

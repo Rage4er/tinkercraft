@@ -155,7 +155,7 @@ function stlCenter(file, filter) {
   return lo.map((x, k) => +((x + hi[k]) / 2).toFixed(2))
 }
 const exportCenter = async (page, filter) => {
-  const dl = page.waitForEvent('download'); await toolbarButton(page, 'Экспорт').click()
+  const dl = page.waitForEvent('download'); await toolbarButton(page, 'Экспорт').click(); await page.locator('[data-testid=export-menu-stl]').click()
   const f = path.join(tmp, `e${Date.now()}.stl`); await (await dl).saveAs(f)
   return stlCenter(f, filter)
 }

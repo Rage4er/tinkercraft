@@ -161,7 +161,7 @@ try {
     const lastStep = await page.locator('.tl-item').last().innerText()
     if (!lastStep.includes('Вычитание')) fail('UX-AUDIT-11: шаг вычитания в истории — ' + lastStep.replace(/\s+/g, ' '))
     const inScene = (await s.status()).match(/Треуг\.: ([\d\s]+)/)[1].replace(/\s/g, '')
-    const dl = page.waitForEvent('download'); await toolbarButton(page, 'Экспорт').click()
+    const dl = page.waitForEvent('download'); await toolbarButton(page, 'Экспорт').click(); await page.locator('[data-testid=export-menu-stl]').click()
     const stl = path.join(tmp, 'e.stl'); await (await dl).saveAs(stl)
     const n = fs.readFileSync(stl).readUInt32LE(80)
     if (String(n) !== inScene) fail(`J: в STL ${n} треугольников, в сцене ${inScene}`)

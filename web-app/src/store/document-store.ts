@@ -28,6 +28,7 @@ import { notify } from './notifications'
 import { saveProject as pmSave, updateProject as pmUpdate, loadProject as pmLoad, listProjects as pmList } from '../io/project-manager'
 import { exportToStl, downloadStlBlob, StlTooLargeError } from '../io/stl-export'
 import { openStlFilePicker, parseStlFile } from '../io/stl-import'
+import { exportToFormat, parseMeshFile, FORMAT_EXT, type ExportFormat } from '../io/mesh-formats'
 import { autosaveSession, restoreSession, clearAutosave } from '../io/autosave'
 import { useDimensionsStore } from './dimensions-store'
 import { sanitizeDimensions, type Dimension } from './dimensions'
@@ -320,7 +321,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     if (get().busy) return
     const file = await openStlFilePicker()
     if (!file) return
-    const result = await parseStlFile(file)
+    // FORMATS-OBJ-3MF-GLTF: OBJ и 3MF — свой разбор, дальше — как STL (один меш import_mesh)
+    const result = (await parseMeshFile(file)) ?? await parseStlFile(file)
     if (!result.success) { notify(result.error, 'error'); return }
 
     const { objects, operations, historyIndex } = get()
@@ -997,6 +999,21 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       return
     }
     downloadStlBlob(blob, (fileName?.replace(/\.3dtc$/, '') ?? i18n.t('app.name')) + '.stl')
+  },
+
+  // ── FORMATS-OBJ-3MF-GLTF: экспорт в формат (меню «Экспорт») ──
+  exportMesh: async (format: ExportFormat) => {
+    if (format === 'stl') { get().exportStl(); return }
+    const { objects, fileName } = get()
+    let blob: Blob
+    try {
+      blob = await exportToFormat(Object.values(objects), format)
+    } catch (e) {
+      console.error(`[Document] ${format} export failed:`, e)
+      notify(e instanceof StlTooLargeError ? e.message : i18n.t('errors.exportFailed', { format: format.toUpperCase() }), 'error')
+      return
+    }
+    downloadBlob(blob, (fileName?.replace(/\.3dtc$/, '') ?? i18n.t('app.name')) + FORMAT_EXT[format])
   },
 
   // ── Resize dims ──

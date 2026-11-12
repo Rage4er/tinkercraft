@@ -146,7 +146,7 @@ function stlBox(file, filter = () => true) {
   return { lo: lo.map(r), hi: hi.map(r), c: lo.map((x, k) => r((x + hi[k]) / 2)) }
 }
 async function exportBox(page, filter) {
-  const dl = page.waitForEvent('download'); await toolbarButton(page, 'Экспорт').click()
+  const dl = page.waitForEvent('download'); await toolbarButton(page, 'Экспорт').click(); await page.locator('[data-testid=export-menu-stl]').click()
   const f = path.join(tmp, `e${Date.now()}.stl`); await (await dl).saveAs(f)
   return stlBox(f, filter)
 }

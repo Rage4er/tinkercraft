@@ -179,8 +179,9 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 | `src/components/Timeline.tsx` | История операций + opIcon/opLabel; `filterKeyOf` — категория шага для фильтра («Вставить», «Повернуть», «Масштаб» — UX-AUDIT-29); подпись правки шага move — группы, которые правка меняет: сдвиг / поворот / масштаб (UX-AUDIT-40); к текущему шагу прокручивается только `.tl-list`, не левая панель (`scrollListToItem`, DOUBLE-CLICK-TIMING) |
 | `src/components/list-scroll.ts` | `scrollListToItem` — прокрутить список к элементу (как `block: 'nearest'`) без прокрутки предков; `scrollIntoView` двигал `.panel-left` — палитра уезжала из-под курсора (DOUBLE-CLICK-TIMING) |
 | **IO** | |
-| `src/io/stl-import.ts` | Импорт STL (бинарный + ASCII) |
+| `src/io/stl-import.ts` | Импорт STL (бинарный + ASCII); диалог «Импорт» — `.stl,.obj,.3mf` (OBJ / 3MF — `io/mesh-formats.ts`) |
 | `src/io/stl-export.ts` | Экспорт в бинарный STL |
+| `src/io/mesh-formats.ts` | Форматы (FORMATS-OBJ-3MF-GLTF): `worldMeshes` (видимые объекты в мире, как STL), экспорт `exportToObj` / `exportTo3mf` (ZIP + XML, цвета) / `exportToGltf` (`GLTFExporter`, корень Y-вверх и метры), импорт `parseObjText` / `parse3mf` / `parseMeshFile` (по расширению; STL — `stl-import`). UI — меню «Экспорт» (`ExportMenuButton`), «Импорт» — `.stl,.obj,.3mf`; стор — `exportMesh(format)` |
 | `src/io/doodle-io.ts` | **УСТАРЕЛО**: формат .doodle (legacy, не поддерживается) |
 | `src/io/3dtc-io.ts` | Формат .3dtc (ZIP + JSON) — основной формат проекта (v1.2.0+); `dimensions` — слой размеров отдельным полем рядом с `operations` (DIMENSIONS) |
 | `src/io/autosave.ts` | Автосохранение в IndexedDB (запись с `modified`); `clearScene` чистит запись |

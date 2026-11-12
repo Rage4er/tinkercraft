@@ -6,6 +6,8 @@ import type { CsgOpButtonStates } from "../store/csg-group-mode";
 import IconButton from "./IconButton";
 import ToolbarRowSplit from "./ToolbarRowSplit";
 import DimensionMenuButton from "./DimensionMenuButton";
+import ExportMenuButton from "./ExportMenuButton";
+import type { ExportFormat } from "../io/mesh-formats";
 import { TOOLTIP_DATA, type TooltipData } from "../constants";
 import {
   OpenIcon,
@@ -102,7 +104,8 @@ export default function Toolbar({
   theme: "dark" | "light";
   onOpen: () => void;
   onSave: () => void;
-  onExportStl: () => void;
+  /** FORMATS-OBJ-3MF-GLTF: экспорт в формат (меню «Экспорт») */
+  onExportStl: (format: ExportFormat) => void;
   onImportStl: () => void;
   onShowProjects: () => void;
   onUndo: () => void;
@@ -166,7 +169,7 @@ export default function Toolbar({
         buttons={[
           <IconButton key="open" icon={<OpenIcon size={32} />} label={t("actions.open")} onClick={onOpen} tooltip={TOOLTIP_DATA.open} />,
           <IconButton key="save" icon={<SaveIcon size={32} />} label={t("actions.save")} onClick={onSave} tooltip={TOOLTIP_DATA.save} />,
-          <IconButton key="export" icon={<ExportIcon size={32} />} label="STL" onClick={onExportStl} disabled={objectCount === 0} tooltip={TOOLTIP_DATA.export_stl} />,
+          <ExportMenuButton key="export" disabled={objectCount === 0} onExport={onExportStl} />,
           <IconButton key="import" icon={<ImportIcon size={32} />} label={t("actions.import")} onClick={onImportStl} disabled={busy} tooltip={TOOLTIP_DATA.import_stl} />,
           <IconButton key="projects" icon={<FolderIcon size={32} />} label={t("properties.projectManager")} onClick={onShowProjects} tooltip={TOOLTIP_DATA.projects} />,
         ]}

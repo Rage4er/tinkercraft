@@ -166,7 +166,7 @@ try {
   const dl = page.waitForEvent('download'); await toolbarButton(page, 'Сохранить').click()
   const proj = path.join(tmp, 'p.3dtc'); await (await dl).saveAs(proj)
   if ((await status()).includes('Не сохранено')) fail('после сохранения остался «Не сохранено»')
-  const dl2 = page.waitForEvent('download'); await toolbarButton(page, 'Экспорт').click()
+  const dl2 = page.waitForEvent('download'); await toolbarButton(page, 'Экспорт').click(); await page.locator('[data-testid=export-menu-stl]').click()
   const stl = path.join(tmp, 'e.stl'); await (await dl2).saveAs(stl)
   const sbuf = fs.readFileSync(stl)
   if (String(sbuf.readUInt32LE(80)) !== tris0 || sbuf.length !== 84 + sbuf.readUInt32LE(80) * 50) fail(`STL: ${sbuf.readUInt32LE(80)} треугольников, в сцене ${tris0}`)

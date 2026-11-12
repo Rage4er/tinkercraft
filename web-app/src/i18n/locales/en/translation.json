@@ -391,7 +391,11 @@
       "childFailed": "Step {{step}}: the CSG component edit could not be replayed — edit rejected",
       "failed": "Could not recompute the history (step {{step}})"
     },
-    "csgTooMany": "Many objects in one CSG operation ({{count}}, more than {{limit}}) — it may be slow; consider splitting it into several operations"
+    "csgTooMany": "Many objects in one CSG operation ({{count}}, more than {{limit}}) — it may be slow; consider splitting it into several operations",
+    "exportFailed": "Could not export to {{format}}",
+    "meshEmpty": "The file has no triangles",
+    "objBadLine": "OBJ file error: “{{line}}”",
+    "threeMfBad": "The 3MF file is damaged or not supported"
   },
   "confirmClear": {
     "title": "Clear the scene?",
@@ -429,8 +433,8 @@
   "tooltips": {
     "open": "Opens a project from a .doodle file",
     "save": "Saves the project to a .doodle file",
-    "exportStl": "Exports the scene to a binary STL file",
-    "importStl": "Imports a 3D model from an STL file",
+    "exportStl": "Exports the scene to a file: STL, OBJ, 3MF or glTF",
+    "importStl": "Imports a 3D model from an STL, OBJ or 3MF file",
     "projects": "Opens the project manager",
     "undo": "Undoes the last action",
     "redo": "Redoes the undone action",
@@ -533,6 +537,21 @@
       "mm": "Millimetres",
       "cm": "Centimetres",
       "in": "Inches"
+    }
+  },
+  "export": {
+    "menuLabel": "Export",
+    "format": {
+      "stl": "STL — for printing",
+      "obj": "OBJ — mesh",
+      "3mf": "3MF — for printing (with colours)",
+      "gltf": "glTF — for 3D viewers and engines"
+    },
+    "formatTip": {
+      "stl": "Binary STL, mm",
+      "obj": "Text OBJ: one object per object, mm",
+      "3mf": "3D Manufacturing Format: objects and colours, mm",
+      "gltf": "glTF 2.0 (JSON), metres, Y axis up"
     }
   }
 }

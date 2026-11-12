@@ -86,6 +86,8 @@ export interface DocumentStore {
   openProject: () => Promise<void>
   saveProject: () => Promise<void>
   exportStl: () => void
+  /** FORMATS-OBJ-3MF-GLTF: экспорт сцены в формат (STL — `exportStl`) */
+  exportMesh: (format: import('../io/mesh-formats').ExportFormat) => Promise<void>
   triggerAutosave: () => Promise<void>
   restoreAutosave: () => Promise<boolean>
   saveToProject: (name: string) => Promise<void>
