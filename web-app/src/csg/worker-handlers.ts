@@ -63,6 +63,8 @@ export interface ManifoldConstructor {
 }
 
 export interface CrossSectionConstructor {
+  /** NEW-PRIMITIVES: контур (точки против часовой) — профиль капсулы / трубы для revolve */
+  new(contours: Array<Array<[number, number]>>): CrossSection
   circle(radius: number, segments: number): CrossSection
 }
 
@@ -343,6 +345,15 @@ export function buildPrimitive(shapeType: string, params: Record<string, number>
       m = centerManifoldToCOM(m)
       break
     }
+    case 'capsule':
+      m = buildCapsule(params)
+      break
+    case 'tube':
+      m = buildTube(params)
+      break
+    case 'spring':
+      m = buildSpring(params)
+      break
     default:
       m = Manifold.cube([20, 20, 20], true)
   }
@@ -356,6 +367,125 @@ export function buildPrimitive(shapeType: string, params: Record<string, number>
   return m
 }
 
+
+// --- NEW-PRIMITIVES: капсула, труба, пружина ---
+// Ось — локальная Z (как цилиндр). Капсула и труба — вращение профиля (Manifold.revolve: 2D x — радиус,
+// 2D y — высота Z), симметричны — центр масс в origin. Пружина — круг проволоки, заметённый вдоль
+// спирали, с плоскими торцами: замкнутый меш (CSG), центр масс — centerManifoldToCOM.
+
+const finite = (v: number | undefined, fallback: number) => (typeof v === 'number' && Number.isFinite(v) ? v : fallback)
+
+/** Профиль (x ≥ 0, y) через revolve: замкнутое тело вращения вокруг Z. */
+function revolveProfile(points: Array<[number, number]>, segments: number): ManifoldObject {
+  const { Manifold, CrossSection } = getWasm()
+  const cs = new CrossSection([points])
+  const m = Manifold.revolve(cs, segments)
+  cs.delete()
+  return m
+}
+
+/** Капсула: радиус r, полная высота h (≥ 2r: цилиндр h − 2r + две полусферы). */
+export function buildCapsule(params: Record<string, number>): ManifoldObject {
+  const r = Math.max(0.1, finite(params.radius, 8))
+  const h = Math.max(2 * r, finite(params.height, 30))
+  const seg = Math.max(12, Math.round(finite(params.segments, 32)))
+  const a = h / 2 - r                       // полувысота цилиндрической части
+  const q = Math.max(3, Math.round(seg / 4)) // сегментов на четверть дуги
+  const pts: Array<[number, number]> = []
+  // против часовой: нижний полюс → дуга вниз-вправо → бок → дуга вверх → верхний полюс (ось — замыкание)
+  for (let i = 0; i <= q; i++) {
+    const t = -Math.PI / 2 + (i / q) * (Math.PI / 2)
+    pts.push([r * Math.cos(t), -a + r * Math.sin(t)])
+  }
+  for (let i = 0; i <= q; i++) {
+    const t = (i / q) * (Math.PI / 2)
+    pts.push([r * Math.cos(t), a + r * Math.sin(t)])
+  }
+  // полюса — ровно на оси (cos(±π/2) ≠ 0 в float)
+  pts[0][0] = 0
+  pts[pts.length - 1][0] = 0
+  // при h = 2r (сфера) соседние точки экватора совпадают — убрать дубль
+  const uniq = pts.filter((p, i) => i === 0 || Math.hypot(p[0] - pts[i - 1][0], p[1] - pts[i - 1][1]) > 1e-9)
+  return revolveProfile(uniq, seg)
+}
+
+/** Труба: наружный радиус R, внутренний r (< R), высота h. */
+export function buildTube(params: Record<string, number>): ManifoldObject {
+  const R = Math.max(0.2, finite(params.radius, 12))
+  const r = Math.min(R - 0.1, Math.max(0.05, finite(params.innerRadius, 8)))
+  const h = Math.max(0.1, finite(params.height, 20))
+  const seg = Math.max(12, Math.round(finite(params.segments, 48)))
+  return revolveProfile([[r, -h / 2], [R, -h / 2], [R, h / 2], [r, h / 2]], seg)
+}
+
+/**
+ * Пружина: радиус витка R (до оси проволоки), полная высота h, витков n, радиус проволоки w.
+ * Проволока ограничена, чтобы витки не касались (w ≤ 0,45 · шаг) и не пересекали ось (w ≤ 0,9 R).
+ */
+export function springGeometry(params: Record<string, number>): { R: number; h: number; turns: number; wire: number } {
+  const R = Math.max(1, finite(params.radius, 10))
+  const h = Math.max(1, finite(params.height, 30))
+  const turns = Math.max(0.5, Math.min(100, finite(params.turns, 5)))
+  // шаг = (h − 2w) / n ≥ 2w / 0,9  ⇔  w ≤ 0,45 h / (n + 0,9)
+  const wire = Math.max(0.05, Math.min(finite(params.wireRadius, 1.5), 0.9 * R, (0.45 * h) / (turns + 0.9)))
+  return { R, h, turns, wire }
+}
+
+export function buildSpring(params: Record<string, number>): ManifoldObject {
+  const { Manifold } = getWasm()
+  const { R, h, turns, wire } = springGeometry(params)
+  const perTurn = Math.max(12, Math.round(finite(params.segments, 36)))
+  const n = Math.max(2, Math.ceil(turns * perTurn))  // участков вдоль спирали
+  const m = 12                                       // сегментов круга проволоки
+  const z0 = -h / 2 + wire, z1 = h / 2 - wire
+  const L = 2 * Math.PI * turns
+  const dz = (z1 - z0) / L                           // подъём на радиан
+  const verts: number[] = []
+  const center = (i: number) => {
+    const t = (L * i) / n
+    return { t, c: [R * Math.cos(t), R * Math.sin(t), z0 + dz * t] }
+  }
+  for (let i = 0; i <= n; i++) {
+    const { t, c } = center(i)
+    // касательная T, нормаль N — к оси (⊥ T), бинормаль B = T × N
+    const T = [-R * Math.sin(t), R * Math.cos(t), dz]
+    const tl = Math.hypot(T[0], T[1], T[2])
+    T[0] /= tl; T[1] /= tl; T[2] /= tl
+    const N = [-Math.cos(t), -Math.sin(t), 0]
+    const B = [T[1] * N[2] - T[2] * N[1], T[2] * N[0] - T[0] * N[2], T[0] * N[1] - T[1] * N[0]]
+    for (let j = 0; j < m; j++) {
+      const p = (2 * Math.PI * j) / m, cp = Math.cos(p) * wire, sp = Math.sin(p) * wire
+      verts.push(c[0] + cp * N[0] + sp * B[0], c[1] + cp * N[1] + sp * B[1], c[2] + cp * N[2] + sp * B[2])
+    }
+  }
+  const s0 = verts.length / 3
+  verts.push(...center(0).c)
+  const s1 = verts.length / 3
+  verts.push(...center(n).c)
+  const tris: number[] = []
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < m; j++) {
+      const a = i * m + j, b = i * m + ((j + 1) % m), c = (i + 1) * m + j, d = (i + 1) * m + ((j + 1) % m)
+      tris.push(a, c, b, b, c, d)
+    }
+  }
+  // торцы — веер к центру; направление обхода согласовано с боком (ребро кольца — встречно)
+  for (let j = 0; j < m; j++) {
+    const a = j, b = (j + 1) % m
+    tris.push(s0, a, b)
+    const c = n * m + j, d = n * m + ((j + 1) % m)
+    tris.push(s1, d, c)
+  }
+  // ориентация наружу: объём (сумма тетраэдров от начала координат) > 0, иначе — обратный обход
+  let vol = 0
+  for (let k = 0; k < tris.length; k += 3) {
+    const [p, q, r] = [tris[k], tris[k + 1], tris[k + 2]].map((v) => [verts[v * 3], verts[v * 3 + 1], verts[v * 3 + 2]])
+    vol += p[0] * (q[1] * r[2] - q[2] * r[1]) - p[1] * (q[0] * r[2] - q[2] * r[0]) + p[2] * (q[0] * r[1] - q[1] * r[0])
+  }
+  if (vol < 0) for (let k = 0; k < tris.length; k += 3) { const x = tris[k + 1]; tris[k + 1] = tris[k + 2]; tris[k + 2] = x }
+  const spring = new Manifold({ numProp: 3, vertProperties: new Float32Array(verts), triVerts: new Uint32Array(tris) })
+  return centerManifoldToCOM(spring)
+}
 
 // --- Transform helpers ---
 

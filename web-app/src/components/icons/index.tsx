@@ -558,3 +558,25 @@ export const ArrayCircularIcon = (p: any) => (
     <circle cx="18" cy="40" r="6" {...face(0.2)} />
   </Icon>
 )
+
+/* ===== NEW-PRIMITIVES: капсула, труба, пружина ===== */
+export const CapsuleIcon = (p: any) => (
+  <Icon {...p}>
+    <path d="M20 20a12 12 0 0 1 24 0v24a12 12 0 0 1-24 0Z" {...face(0.22)} />
+    <ellipse {...line} cx="32" cy="22" rx="12" ry="4" strokeDasharray="3 3" />
+  </Icon>
+)
+
+export const TubeIcon = (p: any) => (
+  <Icon {...p}>
+    <path fillRule="evenodd" d="M14 18v28a18 7 0 0 0 36 0V18a18 7 0 0 0-36 0Z" {...face(0.22)} />
+    <path fillRule="evenodd" d="M14 18a18 7 0 1 0 36 0 18 7 0 1 0-36 0ZM23 18a9 3.5 0 1 0 18 0 9 3.5 0 1 0-18 0Z" {...face(0.4)} />
+  </Icon>
+)
+
+export const SpringIcon = (p: any) => (
+  <Icon {...p}>
+    <path {...line} d="M18 12h28M18 52h28" />
+    <path {...line} d="M18 12 46 19 18 26 46 33 18 40 46 47 18 52" />
+  </Icon>
+)

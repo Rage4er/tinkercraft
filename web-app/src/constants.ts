@@ -26,6 +26,10 @@ export const ALL_SHAPES_DATA: {
     { type: "torus", labelKey: "shapes.torus", iconKey: "torus", categoryKey: "shapesCategory.basic" },
     { type: "prism", labelKey: "shapes.prism", iconKey: "prism", categoryKey: "shapesCategory.basic" },
     { type: "pyramid", labelKey: "shapes.pyramid", iconKey: "pyramid", categoryKey: "shapesCategory.basic" },
+    // NEW-PRIMITIVES
+    { type: "capsule", labelKey: "shapes.capsule", iconKey: "capsule", categoryKey: "shapesCategory.basic" },
+    { type: "tube", labelKey: "shapes.tube", iconKey: "tube", categoryKey: "shapesCategory.basic" },
+    { type: "spring", labelKey: "shapes.spring", iconKey: "spring", categoryKey: "shapesCategory.basic" },
     { type: "text", labelKey: "shapes.text", iconKey: "text", categoryKey: "shapesCategory.special" },
   ];
 

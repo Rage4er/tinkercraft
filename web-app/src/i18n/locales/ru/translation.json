@@ -7,7 +7,10 @@
     "torus": "Тор",
     "prism": "Призма",
     "pyramid": "Пирамида",
-    "text": "Текст"
+    "text": "Текст",
+    "capsule": "Капсула",
+    "tube": "Труба",
+    "spring": "Пружина"
   },
   "shapesAcc": {
     "cube": "куб",
@@ -17,7 +20,10 @@
     "torus": "тор",
     "prism": "призму",
     "pyramid": "пирамиду",
-    "text": "текст"
+    "text": "текст",
+    "capsule": "капсулу",
+    "tube": "трубу",
+    "spring": "пружину"
   },
   "shapesCategory": {
     "basic": "Основные",
@@ -178,7 +184,12 @@
     "inScene": "В сцене:",
     "objects": "объектов",
     "not_editable_title": "Правка недоступна",
-    "not_editable_body": "Правка параметров этого ребёнка недоступна. Причина: {{reason}}"
+    "not_editable_body": "Правка параметров этого ребёнка недоступна. Причина: {{reason}}",
+    "outerRadius": "Наружный радиус",
+    "innerRadius": "Внутренний радиус",
+    "coilRadius": "Радиус витка",
+    "turns": "Витков",
+    "wireRadius": "Радиус проволоки"
   },
   "leftPanel": {
     "shapes": "Фигуры",

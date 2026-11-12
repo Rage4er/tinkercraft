@@ -7,7 +7,10 @@
     "torus": "Torus",
     "prism": "Prism",
     "pyramid": "Pyramid",
-    "text": "Text"
+    "text": "Text",
+    "capsule": "Capsule",
+    "tube": "Tube",
+    "spring": "Spring"
   },
   "shapesAcc": {
     "cube": "Cube",
@@ -17,7 +20,10 @@
     "torus": "Torus",
     "prism": "Prism",
     "pyramid": "Pyramid",
-    "text": "Text"
+    "text": "Text",
+    "capsule": "capsule",
+    "tube": "tube",
+    "spring": "spring"
   },
   "shapesCategory": {
     "basic": "Basic",
@@ -178,7 +184,12 @@
     "inScene": "In scene:",
     "objects": "objects",
     "not_editable_title": "Editing unavailable",
-    "not_editable_body": "Editing this child's parameters is unavailable. Reason: {{reason}}"
+    "not_editable_body": "Editing this child's parameters is unavailable. Reason: {{reason}}",
+    "outerRadius": "Outer radius",
+    "innerRadius": "Inner radius",
+    "coilRadius": "Coil radius",
+    "turns": "Turns",
+    "wireRadius": "Wire radius"
   },
   "leftPanel": {
     "shapes": "Shapes",

@@ -8,6 +8,9 @@ import {
   TorusIcon,
   PrismIcon,
   PyramidIcon,
+  CapsuleIcon,
+  TubeIcon,
+  SpringIcon,
   TextIcon,
 } from "./components/icons";
 import { ALL_SHAPES_DATA } from "./constants";
@@ -27,6 +30,9 @@ export const ALL_SHAPES_ICONS: {
     torus: TorusIcon,
     prism: PrismIcon,
     pyramid: PyramidIcon,
+    capsule: CapsuleIcon,
+    tube: TubeIcon,
+    spring: SpringIcon,
     text: TextIcon,
   };
 

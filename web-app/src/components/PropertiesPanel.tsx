@@ -8,7 +8,11 @@ import { useCsgGroupModeStore, type CsgOpButtonStates } from "../store/csg-group
 import type { ShapeParams, SceneObject } from "../csg/types";
 import { EyeIcon, EyeOffIcon, FolderIcon, SaveIcon, LockIcon, UnlockIcon } from "./icons";
 import { isTextObject } from '../store/text-object'
+import { getParamFields, clampFieldValue } from '../csg/child-params'
 
+
+/** NEW-PRIMITIVES: фигуры, у которых поля размеров — из getParamFields */
+const NEW_PRIMITIVES = new Set(["capsule", "tube", "spring"]);
 export default function PropertiesPanel({
   firstSelected,
   busy,
@@ -479,6 +483,20 @@ export default function PropertiesPanel({
                 />
               </>
             )}
+          {/* NEW-PRIMITIVES: капсула, труба, пружина — поля из getParamFields (те же, что у правки ребёнка CSG) */}
+          {NEW_PRIMITIVES.has(firstSelected.shapeType) &&
+            getParamFields(firstSelected.shapeType).map((f) => (
+              <NumInput
+                key={f.key}
+                label={t(f.labelKey)}
+                id={f.key === "height" ? "num-input-size-Z" : `num-input-param-${f.key}`}
+                unit={f.unitless ? "" : undefined}
+                min={f.min}
+                value={firstSelected.params[f.key] ?? f.fallback}
+                disabled={busy || locked}
+                onChange={(v) => onResizeObject(firstSelected.id, { [f.key]: clampFieldValue(f, v) })}
+              />
+            ))}
         </div>
       )}
 

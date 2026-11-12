@@ -348,7 +348,10 @@ export type AnchorPoint =
 
 export type ShapeType =
   | 'cube' | 'sphere' | 'cylinder' | 'cone'
-  | 'torus' | 'prism' | 'pyramid' | 'import_mesh' | 'csg'
+  | 'torus' | 'prism' | 'pyramid'
+  // NEW-PRIMITIVES: капсула (цилиндр + полусферы), труба (полый цилиндр), пружина (спираль)
+  | 'capsule' | 'tube' | 'spring'
+  | 'import_mesh' | 'csg'
 
 export interface ShapeParams {
   width?: number
@@ -363,6 +366,12 @@ export interface ShapeParams {
   tubeRadius?: number
   tubeSegments?: number
   sides?: number
+  /** NEW-PRIMITIVES: труба — внутренний радиус (< `radius`) */
+  innerRadius?: number
+  /** NEW-PRIMITIVES: пружина — число витков */
+  turns?: number
+  /** NEW-PRIMITIVES: пружина — радиус проволоки */
+  wireRadius?: number
 }
 
 export interface SceneObject {

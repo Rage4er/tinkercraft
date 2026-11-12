@@ -13,7 +13,7 @@ import {
   ConeIcon,
   TorusIcon,
   PrismIcon,
-  PyramidIcon,
+  PyramidIcon, CapsuleIcon, TubeIcon, SpringIcon,
   ImportIcon,
   PasteIcon,
   MoveIcon,
@@ -87,6 +87,9 @@ export function opIcon(op: TinkerCraftOperation): React.ReactNode {
         case "torus": return <TorusIcon size={32} />;
         case "prism": return <PrismIcon size={32} />;
         case "pyramid": return <PyramidIcon size={32} />;
+        case "capsule": return <CapsuleIcon size={32} />;
+        case "tube": return <TubeIcon size={32} />;
+        case "spring": return <SpringIcon size={32} />;
         case "csg": return <UnionIcon size={32} />;
         default: return <CubeIcon size={32} />;
       }

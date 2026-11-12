@@ -1,4 +1,4 @@
-// e2e/modeling-tools.mjs — Пакет B (Фаза 12): массивы (ARRAY-TOOL).
+// e2e/modeling-tools.mjs — Пакет B (Фаза 12): массивы (ARRAY-TOOL), новые примитивы (NEW-PRIMITIVES).
 //
 //  A. Линейный: куб → «Массив» (тулбар) → окно: линейный, X, ×3, шаг 30 → «Создать» — три куба
 //     через 30 мм по X (поля позиции), один шаг «Массив: линейный ×3, шаг 30 (X)»; Ctrl+Z — один
@@ -6,6 +6,9 @@
 //  B. Круговой: брусок 30×6×6 → «Массив» → круговой, Z, ×6, центр на 40 мм левее → шесть брусков на
 //     окружности радиуса 40 вокруг центра, «Вращение Z» 0, 60 … 300; перезагрузка (автосохранение,
 //     перестроение по истории) — те же позиции и углы.
+//  C. Новые примитивы: «Капсула», «Труба», «Пружина» из палитры — в сцене (строки дерева, шаги
+//     «Добавить …»); поля пружины (радиус витка, высота, витков, проволока), «Витков» 5 → 8 —
+//     меш пересобран (треугольников больше); труба ∪ пружина — «Объединение» → один CSG.
 // Ошибок консоли нет. Запуск: `pnpm dev` в одном терминале, `pnpm e2e:modeling-tools` в другом.
 import fs from 'node:fs'
 import path from 'node:path'
@@ -118,6 +121,39 @@ try {
   const again = await circ()
   if (again.map((p) => `${p.x},${p.y},${p.z},${p.rotZ}`).join(' ') !== ring.map((p) => `${p.x},${p.y},${p.z},${p.rotZ}`).join(' ')) fail('B: после перезагрузки ' + JSON.stringify(again))
   ok.push(`B: круговой ×6, ось Z через (${c.x}, ${c.y}) — радиус 40, «Вращение Z» ${angles.join(' / ')}; перезагрузка — то же`)
+
+  // ── C. Новые примитивы ──
+  stage = 'C. примитивы'
+  await page.evaluate(() => document.activeElement?.blur())
+  await page.keyboard.press('Control+a'); await page.keyboard.press('Delete'); await waitRows(0)
+  for (const [i, label] of ['Капсула', 'Труба', 'Пружина'].entries()) {
+    await placeShape(page, label)
+    await waitRows(i + 1)
+  }
+  const names = await page.locator('.ct-item[data-object-id] .ct-name').allInnerTexts()
+  if (!['Капсула', 'Труба', 'Пружина'].every((n, i) => names[i]?.startsWith(n + ' '))) fail('C: строки дерева ' + names.join())
+  const st3 = await steps()
+  if (!['Добавить капсулу', 'Добавить трубу', 'Добавить пружину'].every((s, i) => st3.at(-3 + i).includes(s))) fail('C: шаги ' + st3.slice(-3).join(' | '))
+  const [, tube, spring] = await ids()
+  await page.locator(`.ct-item[data-object-id="${spring}"] .ct-name`).click()
+  for (const label of ['Радиус витка', 'Z (высота)', 'Витков', 'Радиус проволоки']) {
+    if (!(await page.locator('.panel-right').getByText(label, { exact: true }).count())) fail('C: нет поля ' + label)
+  }
+  if (!(await fieldIs('num-input-param-turns', 5))) fail('C: витков не 5')
+  const tris = async () => Number((await page.locator('.statusbar').innerText()).match(/Треуг\.: ([\d\s]+)/)[1].replace(/\s/g, ''))
+  const t0 = await tris()
+  await setField('num-input-param-turns', 8)
+  await page.waitForFunction((n) => {
+    const m = document.querySelector('.statusbar')?.textContent?.match(/Треуг\.: ([\d\s]+)/)
+    return m && Number(m[1].replace(/\s/g, '')) > n
+  }, t0, { timeout: 10000 })
+  await shot('c-primitives.png')
+  await page.locator(`.ct-item[data-object-id="${tube}"] .ct-name`).click()
+  await page.locator(`.ct-item[data-object-id="${spring}"] .ct-name`).click({ modifiers: ['Shift'] })
+  await toolbarButton(page, 'Объединение').click()
+  await waitRows(2)
+  if (!(await page.locator('.ct-item[data-object-id] .ct-name').allInnerTexts()).some((n) => n.startsWith('CSG'))) fail('C: CSG не создан')
+  ok.push(`C: «Капсула», «Труба», «Пружина» из палитры — в сцене; поля пружины, «Витков» 5 → 8 — треугольников ${t0} → больше; труба ∪ пружина — CSG`)
 
   if (errors.length) fail('ошибки консоли: ' + errors.join(' | '))
   console.log('e2e modeling-tools OK')

@@ -15,6 +15,8 @@ export interface ParamField {
   fallback: number
   /** Целое (число граней) */
   integer?: boolean
+  /** Не длина (число витков) — без единицы и пересчёта мм / см / дюймы */
+  unitless?: boolean
 }
 
 const RADIUS = (fallback: number, min = 0.1): ParamField => ({ key: 'radius', labelKey: 'properties.radius', min, fallback })
@@ -48,6 +50,22 @@ export function getParamFields(shapeType: ShapeType | undefined): ParamField[] {
         RADIUS(12, 0.5),
         HEIGHT(20),
         { key: 'sides', labelKey: 'properties.sides', min: 3, fallback: shapeType === 'prism' ? 6 : 4, integer: true },
+      ]
+    // NEW-PRIMITIVES: ось — Z (как цилиндр)
+    case 'capsule':
+      return [RADIUS(8, 0.1), { ...HEIGHT(30) }]
+    case 'tube':
+      return [
+        { key: 'radius', labelKey: 'properties.outerRadius', min: 0.2, fallback: 12 },
+        { key: 'innerRadius', labelKey: 'properties.innerRadius', min: 0.05, fallback: 8 },
+        HEIGHT(20),
+      ]
+    case 'spring':
+      return [
+        { key: 'radius', labelKey: 'properties.coilRadius', min: 1, fallback: 10 },
+        HEIGHT(30),
+        { key: 'turns', labelKey: 'properties.turns', min: 0.5, fallback: 5, unitless: true },
+        { key: 'wireRadius', labelKey: 'properties.wireRadius', min: 0.05, fallback: 1.5 },
       ]
     default:
       return []

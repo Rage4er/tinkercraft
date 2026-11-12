@@ -14,7 +14,7 @@
 - **manifold-3d** (WASM) — CSG операции в Web Worker
 - **Zustand 5** — стейт-менеджмент
 - **Vite 6** — сборка
-- **Vitest 4** — тесты (1031 тест, 86 файлов; `it.fails` открытых багов нет — UX-прогон 7 нашёл 0 новых, цикл закрыт; UX-AUDIT-1…10 исправлены в `fix-all`, 11…20 — в `fix-all-2`, 21…31 — в `fix-all-3`, 32…35 — в `fix-all-4`, 32-followup и 36…40 — в `fix-all-5`, 41, 42 — в `fix-all-6`)
+- **Vitest 4** — тесты (1039 тестов, 87 файлов; `it.fails` открытых багов нет — UX-прогон 7 нашёл 0 новых, цикл закрыт; UX-AUDIT-1…10 исправлены в `fix-all`, 11…20 — в `fix-all-2`, 21…31 — в `fix-all-3`, 32…35 — в `fix-all-4`, 32-followup и 36…40 — в `fix-all-5`, 41, 42 — в `fix-all-6`)
 - **pnpm** — пакетный менеджер
 
 ## Команды
@@ -23,7 +23,7 @@
 cd web-app
 pnpm dev          # dev-сервер (порт 5000)
 pnpm build        # production-сборка
-pnpm test         # запуск тестов (1031 тест, 86 файлов)
+pnpm test         # запуск тестов (1039 тестов, 87 файлов)
 pnpm typecheck    # tsc --noEmit
 pnpm e2e:smoke    # дымовой тест в браузере (Playwright; нужен запущенный pnpm dev; см. web-app/e2e/helpers.mjs). В CI все e2e — job `e2e` в ci-web.yml (CI-E2E)
 pnpm e2e:tree     # Фаза 9.1: раскрытие CSG в дереве, выбор ребёнка
@@ -53,7 +53,7 @@ pnpm e2e:ux-viewport  # UX-VIEWPORT: ЛКМ-протяжка вид не вра�
 pnpm e2e:selection-outline  # SELECTION-OUTLINE: ничего не выделено — каймы нет; клик по кубу — синяя кайма вокруг него (2–4 px); клик в пусто — нет; Shift+клик / рамка — кайма у всех; светлая тема, орто, гизмо; 100k + 24 объекта выделены — FPS ≥ 55
 pnpm e2e:ux-polish  # ux-polish: A — CSG-GROUP-UI (кнопки CSG в тулбаре; «Вычитание» → кайма A оранжевая, B синяя; Esc — каймы A нет); B — CLEANUP-TREE-SNAPSHOT (куб − сфера → X → undo / redo — объекты и дети CSG как были); C — SHADOW-BOUNDS-400 (куб на X = 0 / 600 / 1500 и отдалились — тень есть, центр области теней у куба); D — DIMENSION-UNDO (размер → Delete → Ctrl+Z — вернулся, Ctrl+Y — удалён; кнопки тулбара; история документа не меняется)
 pnpm e2e:ortho-raycast  # ORTHO-RAYCAST: ортография — линейка у краёв вида = сетке под курсором (по режиму размещения), линейка с верха куба у края, гизмо — стрелка X ловится и куб идёт за мышью (+120 px); перспектива — как раньше
-pnpm e2e:modeling-tools  # Пакет B: «Массив» — линейный ×3 шаг 30 (X копий, один шаг истории, Ctrl+Z / Ctrl+Y), круговой ×6 вокруг Z через центр (позиции на окружности, «Вращение Z» 0…300; перезагрузка — то же)
+pnpm e2e:modeling-tools  # Пакет B: «Массив» — линейный ×3 шаг 30 (X копий, один шаг истории, Ctrl+Z / Ctrl+Y), круговой ×6 вокруг Z через центр (позиции на окружности, «Вращение Z» 0…300; перезагрузка — то же); «Капсула» / «Труба» / «Пружина» из палитры, поля пружины, «Витков» 5 → 8, труба ∪ пружина
 pnpm e2e:ux-formats-settings  # Пакет A: «Настройки» (язык ru → en → ru, единицы см — поле «2.00 см», ввод 5 см → 50 мм, перезагрузка, «Сбросить», Esc), «Высокий контраст» (панель и фон сцены чёрные), звуки (click / create / success, выкл. — тишина), «Экспорт» STL / OBJ / 3MF / glTF и «Импорт» OBJ, замок (клик и Ctrl+A не выбирают, Delete — остаётся, снять — выбирается)
 ```
 
@@ -67,7 +67,7 @@ pnpm e2e:ux-formats-settings  # Пакет A: «Настройки» (язык r
 | **9** | **Параметрическая история** — 9.1–9.4, 9.6–9.9 ✅; 9.5.0 (эффективная история) ✅; 9.5.1 (fillet) ❌ отменена; 9.5.2 move ✅; 9.5.3 mirror ✅; 9.5.4 extrude ✅; CSG-INDEPENDENT-COPY, IMPORT-MESH-CSG, ALIGN-REVIT ✅ | ✅ Завершена (v1.3.0, `phase-9 → main`) |
 | 10 | Яндекс.Игры — монетизация (ветка `yandex-games`) | 🔄 Отдельная ветка (Y.1–Y.5 ✅; v1.4.0 — `main` v1.3.9 + SDK и экономика, PR #52) |
 | 11 | B-Rep и тяжёлая математика (FILLET-CHAMFER-BREP — OCCT WASM, EDIT-VERTICES, SVG-EXTRUDE — настоящий extrude 2D→3D, THREAD-GENERATOR, STEP) | 🔲 Запланирована |
-| 12 | Инструменты моделирования (ARRAY-TOOL — массивы ✅, LOCK-OBJECT — блокировка ✅ (v1.3.11), NEW-PRIMITIVES — новые примитивы) | 🔄 В работе |
+| 12 | Инструменты моделирования (ARRAY-TOOL — массивы, LOCK-OBJECT — блокировка (v1.3.11), NEW-PRIMITIVES — капсула, труба, пружина) | ✅ Завершена |
 | 13 | UX, форматы, настройки (APP-SETTINGS, THEME-ENGINE, SFX, FORMATS-OBJ-3MF-GLTF) | ✅ Завершена (v1.3.11) |
 
 **Фаза 8 в деталях:** `web-app/ARCHITECTURE_TRANSFORMS.md`
@@ -136,6 +136,7 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 | `src/csg/tree-view.ts` | Read-модель Build Tree для UI (`getTreeView` — дети N-арного узла плоским списком, `viewGroupSplit` — заголовки «Группа A»/«Группа B» у subtract/intersect, `findViewNode`, `formatParams`) и единая проверка редактируемости `isChildEditable` — Фаза 9.1/9.9 |
 | `src/hooks/useRootConsistency.ts` | Согласованность дерева CSG-корня с мешем (замки в дереве) — Фаза 9.9 |
 | `src/csg/child-params.ts` | Поля параметров примитива для формы правки ребёнка CSG (`getParamFields`, `clampFieldValue`) — Фаза 9.2. Подписи размеров — по оси (AXIS-LABELS): куб `width` — X, `height` — **Y**, `depth` — **Z** (`Manifold.cube([w, h, d])`, вверх — Z); высота цилиндра / конуса / призмы / пирамиды — Z (`properties.sizeX/Y/Z`) |
+| `src/csg/worker-handlers.ts` › `buildCapsule` / `buildTube` / `buildSpring` | **Новые примитивы** (NEW-PRIMITIVES), ось — Z: капсула и труба — `Manifold.revolve` профиля (симметричны, центр масс в 0), пружина — круг проволоки вдоль спирали + плоские торцы (меш → `new Manifold`, обход наружу по знаку объёма, `centerManifoldToCOM`; `springGeometry` — проволока ≤ 0,45 шага и ≤ 0,9 радиуса витка). Новая фигура: тип в `ShapeType`, `buildPrimitive`, `getParamFields` (поля свойств и правки ребёнка), `defaultShapeParams`, `localParamsBox`, палитра `ALL_SHAPES_DATA` + **обе** карты иконок (`constants.tsx` — палитра, `constants-react.tsx`), иконки в `ComponentTree` / `Timeline`, `shapes.*` / `shapesAcc.*` |
 | `src/store/edit-child.ts` | Пересчёт CSG после смены params ребёнка: калибровка дерева ↔ меш, un-bake в локальную систему корня (`computeEditedChild`, `unbakeToLocal`, `findCreationTransform` — в т.ч. система создания копий: зеркало — отражённая, вставка — `copyTree.origin`) — Фаза 9.3 |
 | `src/store/project-history.ts` | **Эффективная история** (Фаза 9.5.0): `projectHistory` подставляет `edit_step` (патч шага N + `replacements` замороженных шагов) и выбрасывает их; идемпотентна, вызывается на входе `rebuild.ts` и `findCreationTransform`. `computeCascade` — замыкание зависимостей правки |
 | `src/store/csg-result.ts` | Общее ядро CSG `computeCsgResult` (sync → boolean → pivot = transformA → un-bake RS) для `csgBoolean` и каскада 9.5; `computeCsgResultN` — N операндов (N-ARY-CSG: union N, subtract/intersect группа A vs B; 2 операнда — бинарный путь); `syncObjectsForOperation`, `groupOperationFromResult`, `groupReplacementFromResult` |
