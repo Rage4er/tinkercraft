@@ -63,6 +63,8 @@ export interface DocumentStore {
   renameObject: (id: string, name: string) => void
   setColor: (id: string, color: string, skipHistory?: boolean) => void
   toggleVisible: (id: string) => void
+  /** LOCK-OBJECT: заблокировать / разблокировать (шаг истории `lock`) */
+  toggleLocked: (id: string) => void
   mirrorSelected: (plane: 'XY' | 'XZ' | 'YZ') => Promise<void>
   previewMirror: (plane: 'XY' | 'XZ' | 'YZ') => Promise<void>
   alignSelected: (axis: 'X' | 'Y' | 'Z', anchor: 'min' | 'center' | 'max') => Promise<void>
@@ -86,6 +88,8 @@ export interface DocumentStore {
   openProject: () => Promise<void>
   saveProject: () => Promise<void>
   exportStl: () => void
+  /** FORMATS-OBJ-3MF-GLTF: экспорт сцены в формат (STL — `exportStl`) */
+  exportMesh: (format: import('../io/mesh-formats').ExportFormat) => Promise<void>
   triggerAutosave: () => Promise<void>
   restoreAutosave: () => Promise<boolean>
   saveToProject: (name: string) => Promise<void>

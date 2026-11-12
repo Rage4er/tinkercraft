@@ -17,6 +17,10 @@ import StepPanel from "./components/StepPanel";
 import AlignPanel from "./components/AlignPanel";
 import DimensionPanel from "./components/DimensionPanel";
 import DimensionSettingsModal from "./components/DimensionSettingsModal";
+import SettingsModal from "./components/SettingsModal";
+import { useSettingsStore } from "./store/settings";
+import { lengthLabel } from "./store/units";
+import { themeById, applyTheme } from "./themes";
 import { useDimensionModeStore } from "./store/dimension-mode";
 import { useDimensionsStore } from "./store/dimensions-store";
 import { useDimensionMode } from "./hooks/useDimensionMode";
@@ -29,6 +33,7 @@ import { useShallow } from "zustand/shallow";
 import { isWorkerReady } from "./csg/worker-client";
 import { SNAP_VALUES } from "./constants";
 import { useAutosave } from "./hooks/useAutosave";
+import { useSfx } from "./hooks/useSfx";
 import { addTextObject } from "./store/add-text";
 import { usePlacementModeStore } from "./store/placement-mode";
 import { usePlacementMode } from "./hooks/usePlacementMode";
@@ -69,6 +74,7 @@ export default function App() {
     previewObject, setPreviewObject,
     mirrorPreviewPlane, setMirrorPreviewPlane,
     showDimensionSettings, setShowDimensionSettings,
+    showSettings, setShowSettings,
   } = useUiStore(
     useShallow(s => ({
       fps: s.fps, setFps: s.setFps,
@@ -89,6 +95,7 @@ export default function App() {
       previewObject: s.previewObject, setPreviewObject: s.setPreviewObject,
       mirrorPreviewPlane: s.mirrorPreviewPlane, setMirrorPreviewPlane: s.setMirrorPreviewPlane,
       showDimensionSettings: s.showDimensionSettings, setShowDimensionSettings: s.setShowDimensionSettings,
+      showSettings: s.showSettings, setShowSettings: s.setShowSettings,
     })),
   );
 
@@ -131,7 +138,9 @@ export default function App() {
       renameObject: s.renameObject,
       setColor: s.setColor,
       toggleVisible: s.toggleVisible,
+      toggleLocked: s.toggleLocked,
       exportStl: s.exportStl,
+      exportMesh: s.exportMesh,
       mirrorSelected: s.mirrorSelected,
       previewMirror: s.previewMirror,
       copySelected: s.copySelected,
@@ -167,7 +176,9 @@ export default function App() {
     renameObject,
     setColor,
     toggleVisible,
+    toggleLocked,
     exportStl,
+    exportMesh,
     mirrorSelected,
     previewMirror,
     copySelected,
@@ -177,6 +188,16 @@ export default function App() {
     setCurrentProject,
   } = docStore;
 
+  // APP-SETTINGS: тема — из настроек (localStorage); ui-store.theme — её база (dark / light) для сцены и стилей
+  const themeId = useSettingsStore((s) => s.theme);
+  const setThemeId = useSettingsStore((s) => s.setTheme);
+  const lengthUnit = useSettingsStore((s) => s.units);
+  useEffect(() => {
+    // THEME-ENGINE: CSS-переменные темы (src/themes/*.json) на <html>, база — в ui-store
+    const def = themeById(themeId);
+    applyTheme(def);
+    setTheme(def.base);
+  }, [themeId, setTheme]);
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
   }, [theme]);
@@ -199,6 +220,8 @@ export default function App() {
 
   // UX-AUDIT-1: автосохранение + восстановление прошлой сессии при старте
   useAutosave(workerOk);
+  // SFX: звуки интерфейса (клик, создание, успех, ошибка; вкл. / громкость — «Настройки»)
+  useSfx();
 
   // Keyboard shortcuts — stable listener via ref (WARN-1 fix).
   // ref обновляется каждый рендер, но сам listener не переподключается.
@@ -208,7 +231,7 @@ export default function App() {
     objects, selectedIds, busy, deleteSelected, selectObjects,
     saveProject, openProject, clearSelection, copySelected, pasteClipboard,
     mirrorSelected,
-    modalOpen: showTextModal || showPM || showClearConfirm || showDimensionSettings,
+    modalOpen: showTextModal || showPM || showClearConfirm || showDimensionSettings || showSettings,
   };
   const kbRef = useRef(kbState);
   kbRef.current = kbState;
@@ -243,7 +266,8 @@ export default function App() {
         // DIMENSION-UNDO: Ctrl+Z / Ctrl+Y — и действия с размерами (в общем порядке с шагами документа)
         case "undo": void undoWithDimensions(); break;
         case "redo": void redoWithDimensions(); break;
-        case "selectAll": kb.selectObjects(Object.keys(kb.objects), false); break;
+        // LOCK-OBJECT: Ctrl+A — без заблокированных (как рамка)
+        case "selectAll": kb.selectObjects(Object.keys(kb.objects).filter((id) => !kb.objects[id].locked), false); break;
         // FIX (HIGH-18-18): Ctrl+S сохраняет и при активном гизмо (S без Ctrl — гизмо масштаба)
         case "save": void kb.saveProject(); break;
         case "open": void kb.openProject(); break;
@@ -309,9 +333,9 @@ export default function App() {
   // PLUG-AND-PLAY: клик по фигуре палитры — режим размещения (превью → клик по грани / сетке,
   // X / Y / Z — плоскость оси, Enter — поставить, Esc / правый клик — отмена)
   const handleAddShape = usePlacementModeStore((s) => s.startPlacement);
-  usePlacementMode(showTextModal || showPM || showClearConfirm || showDimensionSettings);
+  usePlacementMode(showTextModal || showPM || showClearConfirm || showDimensionSettings || showSettings);
   // DIMENSIONS: режим «Размер» (Esc), Delete по выделенному размеру, согласованность режимов
-  useDimensionMode(showTextModal || showPM || showClearConfirm || showDimensionSettings);
+  useDimensionMode(showTextModal || showPM || showClearConfirm || showDimensionSettings || showSettings);
   const dimensionActive = useDimensionModeStore((s) => s.dimensionMode !== null);
   const dimensionsVisible = useDimensionsStore((s) => s.showDimensions);
   const hasSelectedDimension = useDimensionsStore((s) => s.selectedDimensionId !== null);
@@ -336,7 +360,7 @@ export default function App() {
   // CSG-GROUP-FIX: «Объединение» — сразу; «Вычитание» / «Пересечение» — режим A → B → Enter
   // (Enter / Esc, исчезнувшие объекты A, выход при «Выровнять» — useCsgGroupMode)
   const csgGroupMode = useCsgGroupModeStore((s) => s.csgGroupMode);
-  useCsgGroupMode(showTextModal || showPM || showClearConfirm);
+  useCsgGroupMode(showTextModal || showPM || showClearConfirm || showSettings);
   const runCsg = useCallback(
     (op: CsgBooleanOp) => void useCsgGroupModeStore.getState().pressCsgOperation(op),
     [],
@@ -482,6 +506,7 @@ export default function App() {
 
       {/* DIMENSIONS: «Настройки размеров» */}
       {showDimensionSettings && <DimensionSettingsModal onClose={() => setShowDimensionSettings(false)} />}
+      {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
 
       {/* ── TOOLBAR ── */}
       <Toolbar
@@ -508,7 +533,7 @@ export default function App() {
         theme={theme}
         onOpen={openProject}
         onSave={saveProject}
-        onExportStl={exportStl}
+        onExportStl={(f) => void exportMesh(f)}
         onImportStl={importStl}
         onShowProjects={() => setShowPM(true)}
         onUndo={() => void undoWithDimensions()}
@@ -533,7 +558,7 @@ export default function App() {
         onPreviewMirrorEnd={handlePreviewMirrorEnd}
         onAlignMode={() => (alignActive ? exitAlignMode() : startAlignMode())}
         onCsg={runCsg}
-        onToggleTheme={() => setTheme(theme === "dark" ? "light" : "dark")}
+        onToggleTheme={() => setThemeId(theme === "dark" ? "light" : "dark")}
         onClearScene={() => {
           if (objectList.length > 0 || operations.length > 0) setShowClearConfirm(true);
         }}
@@ -558,6 +583,7 @@ export default function App() {
           onSelect={handleSelect}
           onRename={renameObject}
           onToggleVis={toggleVisible}
+          onToggleLock={toggleLocked}
           onDeleteObject={(id) => {
             selectObjects([id], false);
             deleteSelected();
@@ -637,7 +663,7 @@ export default function App() {
           {/* ── Ruler distance display — UX-AUDIT-24: во вьюпорте (под тулбаром любой высоты) ── */}
           {rulerDist !== null && (
             <div className="ruler-display">
-              📏 {t("ruler.distance")}: <strong>{rulerDist.toFixed(2)} {t("units.mm")}</strong>
+              📏 {t("ruler.distance")}: <strong>{lengthLabel(t, rulerDist, lengthUnit, 2)}</strong>
             </div>
           )}
         </div>
@@ -667,6 +693,7 @@ export default function App() {
             onCsg={runCsg}
             onSetColor={setColor}
             onToggleVisible={toggleVisible}
+            onToggleLocked={toggleLocked}
             onShowProjects={() => setShowPM(true)}
             onSaveToProject={saveToProject}
           />}

@@ -31,7 +31,8 @@ async function importStl(name) {
   const chooser = page.waitForEvent('filechooser')
   await toolbarButton(page, 'Импорт').click()
   const fc = await chooser
-  if ((await fc.element().getAttribute('accept')) !== '.stl') fail('кнопка «Импорт» тулбара — не импорт STL')
+  // FORMATS-OBJ-3MF-GLTF: «Импорт» принимает STL, OBJ и 3MF
+  if (!((await fc.element().getAttribute('accept')) ?? '').split(',').includes('.stl')) fail('кнопка «Импорт» тулбара — не импорт STL')
   await fc.setFiles(fixture(name))
   await page.waitForFunction((n) => document.querySelectorAll('.ct-item[data-object-id]').length === n, before.size + 1, { timeout: 15000 })
   return (await ids()).find((id) => !before.has(id))

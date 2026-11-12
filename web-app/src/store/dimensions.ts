@@ -16,6 +16,7 @@
 //  • projection — проекция на горизонтальную плоскость (параллельна XY) на уровне нижней из двух
 //                 точек, выносные — вертикально; число — длина проекции √(Δx² + Δy²).
 
+import { formatLength, type LengthUnit } from './units'
 import type { SceneObject, TransformNR, Vec3 } from '../csg/types'
 import { computeRSMatrix, computeInverseRSMatrix } from '../csg/worker-matrix'
 import { computeAABB } from './helpers'
@@ -191,9 +192,9 @@ export function dimensionGeometry(ends: DimensionEnds, kind: DimensionKind, offs
   return { value, line: [a, b], extensions: [], label: labelAt(a, b, center), dir }
 }
 
-/** Число размера: мм, один знак после точки (как поля размеров). */
-export function formatDimensionValue(value: number): string {
-  return (Math.round(value * 10) / 10 + 0).toFixed(1)
+/** Число размера (значение — мм): в единице из настроек (APP-SETTINGS), как поля размеров — мм с одним знаком. */
+export function formatDimensionValue(value: number, unit: LengthUnit = 'mm'): string {
+  return formatLength(value, unit, 1)
 }
 
 /** Значение размера сейчас (null — размер скрыт: объекта нет). */

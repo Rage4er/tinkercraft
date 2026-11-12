@@ -28,9 +28,11 @@ import { useDimensionsStore } from "../store/dimensions-store";
 import { useDimensionModeStore } from "../store/dimension-mode";
 import { useUiStore } from "../store/ui-store";
 import { useDocumentStore } from "../store/document-store";
-import { dimensionEnds, dimensionGeometry, formatDimensionValue } from "../store/dimensions";
+import { dimensionEnds, dimensionGeometry } from "../store/dimensions";
 import { buildDimensionObject, disposeDimensionObject } from "./dimension-render";
 import { ndcFromClient, rayFromCamera, groundPointOnRay, syncGizmoCamera } from "./view-ray";
+import { useSettingsStore } from "../store/settings";
+import { lengthLabel } from "../store/units";
 import { useTranslation } from "react-i18next";
 import {
     findNearestSnap,
@@ -461,8 +463,8 @@ export function useThreeInit(
 }
 
 // ---- Тема: смена цвета сетки (GRID-ADAPTIVE) ----
-export function setGridColor(grid: THREE.Mesh | null, theme: 'dark' | 'light') {
-    setAdaptiveGridTheme(grid, theme);
+export function setGridColor(grid: THREE.Mesh | null, theme: 'dark' | 'light', colors?: { minor: number; major: number }) {
+    setAdaptiveGridTheme(grid, theme, colors);
 }
 
 // ============================================================
@@ -1200,6 +1202,7 @@ export function useDimensionsRender(
     const show = useDimensionsStore((s) => s.showDimensions);
     const selectedId = useDimensionsStore((s) => s.selectedDimensionId);
     const objects = useDocumentStore((s) => s.objects);
+    const units = useSettingsStore((s) => s.units);   // APP-SETTINGS: число — в единице из настроек
     const rootRef = useRef<THREE.Group | null>(null);
 
     useEffect(() => {
@@ -1214,7 +1217,7 @@ export function useDimensionsRender(
                 const ends = dimensionEnds(d, objects);
                 if (!ends) continue;
                 const geom = dimensionGeometry(ends, d.style.kind, d.offset, d.style.size * 0.9);
-                const text = t("dimensions.label", { value: formatDimensionValue(geom.value) });
+                const text = lengthLabel(t, geom.value, units);
                 root.add(buildDimensionObject(d.id, geom, d.style, text, d.id === selectedId));
             }
         }
@@ -1225,7 +1228,7 @@ export function useDimensionsRender(
             disposeDimensionObject(root);
             if (rootRef.current === root) rootRef.current = null;
         };
-    }, [sceneRef, sceneReady, dimensions, show, selectedId, objects, t, i18n.language]);
+    }, [sceneRef, sceneReady, dimensions, show, selectedId, objects, t, i18n.language, units]);
 
     return rootRef;
 }
@@ -1239,6 +1242,7 @@ export function useDimensionModePreview(sceneRef: React.MutableRefObject<THREE.S
     const mode = useDimensionModeStore((s) => s.dimensionMode);
     const defaults = useUiStore((s) => s.dimensionDefaults);
     const objects = useDocumentStore((s) => s.objects);
+    const units = useSettingsStore((s) => s.units);
     const first = mode?.first ?? null;
     const hover = mode?.hover ?? null;
 
@@ -1272,7 +1276,7 @@ export function useDimensionModePreview(sceneRef: React.MutableRefObject<THREE.S
             };
             const geom = dimensionGeometry(ends, defaults.style.kind, defaults.offset, defaults.style.size * 0.9);
             if (geom.value > 1e-6) {
-                const g = buildDimensionObject("__dimension_preview__", geom, defaults.style, t("dimensions.label", { value: formatDimensionValue(geom.value) }), false);
+                const g = buildDimensionObject("__dimension_preview__", geom, defaults.style, lengthLabel(t, geom.value, units), false);
                 g.traverse((o) => { o.raycast = () => { }; });
                 root.add(g);
             }
@@ -1282,5 +1286,5 @@ export function useDimensionModePreview(sceneRef: React.MutableRefObject<THREE.S
             scene.remove(root);
             disposeDimensionObject(root);
         };
-    }, [sceneRef, mode, first, hover, defaults, objects, t]);
+    }, [sceneRef, mode, first, hover, defaults, objects, t, units]);
 }

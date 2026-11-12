@@ -513,3 +513,28 @@ export const TextIcon = (p: any) => (
     <path d="M12 22h32v10H33v20H23V32H12Z" {...face(0.25)} />
   </Icon>
 )
+
+/* ===== Настройки (APP-SETTINGS) ===== */
+export const GearIcon = (p: any) => (
+  <Icon {...p}>
+    <Shape d="M54.4 23.4 L56.0 31.4 L50.0 32.5 L48.8 38.4 L53.9 41.8 L49.4 48.5 L44.4 45.1 L39.3 48.4 L40.6 54.4 L32.6 56.0 L31.5 50.0 L25.6 48.8 L22.2 53.9 L15.5 49.4 L18.9 44.4 L15.6 39.3 L9.6 40.6 L8.0 32.6 L14.0 31.5 L15.2 25.6 L10.1 22.2 L14.6 15.5 L19.6 18.9 L24.7 15.6 L23.4 9.6 L31.4 8.0 L32.5 14.0 L38.4 15.2 L41.8 10.1 L48.5 14.6 L45.1 19.6 L48.4 24.7Z" />
+    <circle cx="32" cy="32" r="8" {...line} />
+  </Icon>
+)
+
+/* ===== Блокировка (LOCK-OBJECT) ===== */
+export const LockIcon = (p: any) => (
+  <Icon {...p}>
+    <path {...line} d="M22 28v-8a10 10 0 0 1 20 0v8" />
+    <Shape d="M16 28h32v24H16Z" />
+    <path {...line} d="M32 37v6" />
+  </Icon>
+)
+
+export const UnlockIcon = (p: any) => (
+  <Icon {...p}>
+    <path {...line} d="M22 28v-8a10 10 0 0 1 19.5-3" />
+    <Shape d="M16 28h32v24H16Z" o={0.08} />
+    <path {...line} d="M32 37v6" />
+  </Icon>
+)

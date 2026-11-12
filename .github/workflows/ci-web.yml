@@ -68,8 +68,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - group: ux-audit-7, selection-outline, ortho-raycast
-            specs: ux-audit-7 selection-outline ortho-raycast
+          - group: ux-audit-7, selection-outline, ortho-raycast, ux-formats-settings
+            specs: ux-audit-7 selection-outline ortho-raycast ux-formats-settings
           - group: ux-audit-6 + базовые
             specs: >-
               ux-audit-6 smoke tree edit-child edit-step-move edit-step-mirror edit-step-extrude
@@ -104,6 +104,16 @@ jobs:
         run: |
           pnpm exec playwright install --with-deps chromium
           sudo apt-get install -y --no-install-recommends libegl1 libegl-mesa0 libgl1-mesa-dri libgles2 libgbm1
+
+      - name: Locale ru_RU.UTF-8
+        # LANG=ru_RU.UTF-8 ниже без сгенерированной локали откатывается на C: Chromium не может записать
+        # имя файла с кириллицей и сохраняет скачанное как «download» (ux-formats-settings, раздел D) —
+        # у пользователей локаль UTF-8, CI должен совпадать
+        run: |
+          sudo apt-get install -y --no-install-recommends locales
+          sudo locale-gen ru_RU.UTF-8
+          locale -a | grep -qi '^ru_RU\.utf8$' || { echo "::error::локаль ru_RU.UTF-8 не сгенерирована"; exit 1; }
+          LANG=ru_RU.UTF-8 locale charmap
 
       - name: WebGL check
         # те же флаги, что у openApp (e2e/helpers.mjs › GL_ARGS); без WebGL приложение

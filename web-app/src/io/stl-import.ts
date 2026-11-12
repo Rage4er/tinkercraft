@@ -62,7 +62,7 @@ export function openStlFilePicker(): Promise<File | null> {
   return new Promise(resolve => {
     const input = document.createElement('input')
     input.type = 'file'
-    input.accept = '.stl'
+    input.accept = '.stl,.obj,.3mf'   // FORMATS-OBJ-3MF-GLTF: + OBJ, 3MF (io/mesh-formats.ts)
     input.onchange = () => resolve(input.files?.[0] ?? null)
     input.oncancel = () => resolve(null)
     input.click()

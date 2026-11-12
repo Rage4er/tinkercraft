@@ -50,6 +50,9 @@ export interface UiStore {
   setDimensionDefaults: (v: DimensionDefaults) => void
   showDimensionSettings: boolean
   setShowDimensionSettings: (v: boolean) => void
+  /** APP-SETTINGS: окно «Настройки» */
+  showSettings: boolean
+  setShowSettings: (v: boolean) => void
 
   // Modals
   showPM: boolean
@@ -133,6 +136,8 @@ export const useUiStore = create<UiStore>((set) => ({
   }),
   showDimensionSettings: false,
   setShowDimensionSettings: (v) => set({ showDimensionSettings: v }),
+  showSettings: false,
+  setShowSettings: (v) => set({ showSettings: v }),
 
   showPM: false,
   setShowPM: (v) => set({ showPM: v }),

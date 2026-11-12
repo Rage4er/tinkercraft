@@ -22,7 +22,7 @@ import i18n from '../i18n'
  * асимметричных примитивов (cone/prism/pyramid) расходился с рендером на
  * (bboxCenter − COM), например h/4 для конуса.
  */
-function applyTransformToVertices(
+export function applyTransformToVertices(
   vertices: Float32Array,
   transform: { x: number; y: number; z: number; rotX: number; rotY: number; rotZ: number; scaleX: number; scaleY: number; scaleZ: number },
 ): Float32Array {

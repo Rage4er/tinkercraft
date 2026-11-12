@@ -30,6 +30,8 @@ import { useDimensionsStore } from "../store/dimensions-store";
 import { useDocumentStore } from "../store/document-store";
 import { isDimensionAlive } from "../store/dimensions";
 import { findNearestSnap } from "./snap-utils";
+import { useSettingsStore } from "../store/settings";
+import { themeById, hexColor } from "../themes";
 import { pickDimension } from "./dimension-render";
 import { createMiddleDoubleClick } from "./viewport-nav";
 import { objectsInRect, rectModeOf, rectToNdc, type RectMode } from "./selection-rect";
@@ -178,13 +180,15 @@ export default function Viewport3D({
   }, [objects]);
 
   // ---- Смена фона и грида при смене темы ----
+  // THEME-ENGINE: цвета сцены — из темы настроек (src/themes/*.json); база темы — проп `theme`
+  const themeId = useSettingsStore((s) => s.theme);
   useEffect(() => {
     if (!sceneRef.current) return;
-    sceneRef.current.background = theme === 'dark'
-      ? new THREE.Color(0x1e1e2e)
-      : new THREE.Color(0xf0f0f5);
-    setGridColor(gridRef.current, theme);
-  }, [theme, sceneRef, gridRef]);
+    const chosen = themeById(themeId);
+    const def = chosen.base === theme ? chosen : themeById(theme);
+    sceneRef.current.background = new THREE.Color(hexColor(def.scene.background));
+    setGridColor(gridRef.current, theme, { minor: hexColor(def.scene.gridMinor), major: hexColor(def.scene.gridMajor) });
+  }, [theme, themeId, sceneRef, gridRef]);
 
   // ---- Хук 2: Синхронизация mesh ----
   useMeshSync(objects, sceneReady, sceneRef, meshMapRef, selectedIds);
@@ -384,14 +388,16 @@ export default function Viewport3D({
       tc.detach();
       return;
     }
-    const entry = meshMapRef.current.get([...selectedIds][0]);
-    if (!entry) {
+    const firstId = [...selectedIds][0];
+    const entry = meshMapRef.current.get(firstId);
+    // LOCK-OBJECT: к заблокированному гизмо не цепляется
+    if (!entry || objectsRef.current.find((o) => o.id === firstId)?.locked) {
       tc.detach();
       return;
     }
     tc.setMode(gizmoMode);
     tc.attach(entry.pivot);
-  }, [gizmoMode, selectedIds, transformCtRef, meshMapRef, placementActive, dimensionActive]);
+  }, [gizmoMode, selectedIds, transformCtRef, meshMapRef, placementActive, dimensionActive, objects]);
 
   // ---- TransformControls mouseUp handler ----
   useEffect(() => {
@@ -512,7 +518,9 @@ export default function Viewport3D({
       const r = container.getBoundingClientRect();
       const mode = rectModeOf(x0, x1);
       const rect = rectToNdc(x0 - r.left, y0 - r.top, x1 - r.left, y1 - r.top, r.width, r.height);
-      const found = objectsInRect(meshMapRef.current, camera, rect, mode);
+      // LOCK-OBJECT: рамка заблокированные не выбирает
+      const locked = new Set(objectsRef.current.filter((o) => o.locked).map((o) => o.id));
+      const found = objectsInRect(meshMapRef.current, camera, rect, mode).filter((id) => !locked.has(id));
       devLogEvent('select', 'rect', { mode, found: found.length });
       if (found.length === 0) return;
       const ids = add ? [...new Set([...selectedIdsRef.current, ...found])] : found;
@@ -714,8 +722,10 @@ export default function Viewport3D({
           }
           if (dims.selectedDimensionId) dims.selectDimension(null);
           const meshes: THREE.Mesh[] = [];
-          for (const entry of meshMapRef.current.values()) {
-            if (entry.mesh.visible) meshes.push(entry.mesh);
+          // LOCK-OBJECT: заблокированные во вьюпорте не выбираются (клик — сквозь них)
+          const locked = new Set(objectsRef.current.filter((o) => o.locked).map((o) => o.id));
+          for (const [id, entry] of meshMapRef.current) {
+            if (entry.mesh.visible && !locked.has(id)) meshes.push(entry.mesh);
           }
           const hits = raycaster.intersectObjects(meshes, false);
           devLogEvent('raycast', 'hits', { count: hits.length, meshes: meshes.length });

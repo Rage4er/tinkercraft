@@ -55,7 +55,7 @@
     "place": "Place dimension",
     "settings": "Dimension settings",
     "toggle": "Show / hide dimensions",
-    "label": "{{value}} mm",
+    "label": "{{value}} {{unit}}",
     "hintA": "Dimension: pick the first point — an object vertex, edge or face. Esc / right click — exit",
     "hintB": "Dimension: pick the second point. Esc — exit",
     "created": "Dimensions: {{count}}",
@@ -158,10 +158,10 @@
     "yes": "Yes",
     "no": "No",
     "triangles": "Tris.",
-    "position": "Position (mm)",
+    "position": "Position ({{unit}})",
     "rotation": "Rotation (°)",
     "scale": "Scale",
-    "dimensions": "Dimensions (mm)",
+    "dimensions": "Dimensions ({{unit}})",
     "sizeX": "Width (X)",
     "sizeY": "Depth (Y)",
     "sizeZ": "Height (Z)",
@@ -239,7 +239,9 @@
     "editMoveStep": "Edit this step's offset (CSG below is recomputed)",
     "editMirrorStep": "Edit this mirror's plane (CSG below is recomputed)",
     "extrude": "Extrude {{axis}} by {{depth}}",
-    "editExtrudeStep": "Edit this extrusion's depth (CSG below is recomputed)"
+    "editExtrudeStep": "Edit this extrusion's depth (CSG below is recomputed)",
+    "lock": "Lock",
+    "unlock": "Unlock"
   },
   "filters": {
     "add_shape": "Add",
@@ -257,7 +259,8 @@
     "color": "Color",
     "rename": "Rename",
     "edit_child_params": "CSG child edit",
-    "edit_step": "Step edit"
+    "edit_step": "Step edit",
+    "lock": "Lock"
   },
   "snap": {
     "label": "Snap:",
@@ -391,7 +394,11 @@
       "childFailed": "Step {{step}}: the CSG component edit could not be replayed — edit rejected",
       "failed": "Could not recompute the history (step {{step}})"
     },
-    "csgTooMany": "Many objects in one CSG operation ({{count}}, more than {{limit}}) — it may be slow; consider splitting it into several operations"
+    "csgTooMany": "Many objects in one CSG operation ({{count}}, more than {{limit}}) — it may be slow; consider splitting it into several operations",
+    "exportFailed": "Could not export to {{format}}",
+    "meshEmpty": "The file has no triangles",
+    "objBadLine": "OBJ file error: “{{line}}”",
+    "threeMfBad": "The 3MF file is damaged or not supported"
   },
   "confirmClear": {
     "title": "Clear the scene?",
@@ -399,7 +406,9 @@
     "confirm": "Clear"
   },
   "units": {
-    "mm": "mm"
+    "mm": "mm",
+    "cm": "cm",
+    "in": "in"
   },
   "ruler": {
     "distance": "Distance"
@@ -427,8 +436,8 @@
   "tooltips": {
     "open": "Opens a project from a .doodle file",
     "save": "Saves the project to a .doodle file",
-    "exportStl": "Exports the scene to a binary STL file",
-    "importStl": "Imports a 3D model from an STL file",
+    "exportStl": "Exports the scene to a file: STL, OBJ, 3MF or glTF",
+    "importStl": "Imports a 3D model from an STL, OBJ or 3MF file",
     "projects": "Opens the project manager",
     "undo": "Undoes the last action",
     "redo": "Redoes the undone action",
@@ -512,5 +521,48 @@
     "done": "Done (Esc)",
     "sameObject": "This is the plane A object — pick a face of another object",
     "locked": "The object is locked — cannot align"
+  },
+  "settings": {
+    "title": "Settings",
+    "language": "Language",
+    "theme": "Theme",
+    "sound": "Sounds",
+    "volume": "Volume",
+    "units": "Length units",
+    "unitsHint": "The model and files are always in millimetres; the unit only changes fields, the ruler and dimensions",
+    "reset": "Reset",
+    "close": "Close",
+    "lang": {
+      "ru": "Russian",
+      "en": "English"
+    },
+    "unitName": {
+      "mm": "Millimetres",
+      "cm": "Centimetres",
+      "in": "Inches"
+    }
+  },
+  "export": {
+    "menuLabel": "Export",
+    "format": {
+      "stl": "STL — for printing",
+      "obj": "OBJ — mesh",
+      "3mf": "3MF — for printing (with colours)",
+      "gltf": "glTF — for 3D viewers and engines"
+    },
+    "formatTip": {
+      "stl": "Binary STL, mm",
+      "obj": "Text OBJ: one object per object, mm",
+      "3mf": "3D Manufacturing Format: objects and colours, mm",
+      "gltf": "glTF 2.0 (JSON), metres, Y axis up"
+    }
+  },
+  "lock": {
+    "lock": "Lock",
+    "unlock": "Unlock",
+    "locked": "Locked",
+    "cantDelete": "A locked object cannot be deleted — unlock it first",
+    "cantMove": "The object is locked — it cannot be moved or resized",
+    "cantCsg": "A locked object cannot take part in CSG — unlock it first"
   }
 }

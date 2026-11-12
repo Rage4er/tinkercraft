@@ -22,6 +22,7 @@ import { usePlacementModeStore } from './placement-mode'
 import { useDimensionsStore } from './dimensions-store'
 import { anchorOf, newDimensionId, type Dimension, type DimensionStyle } from './dimensions'
 import { recordDimensionChange } from './dimension-undo'
+import { playSfx } from '../sfx'
 
 /** Точка, выбранная в режиме: объект и мировая точка на нём (с привязкой). */
 export interface DimensionPick { objectId: string; point: Vec3 }
@@ -67,6 +68,7 @@ export function createDimension(a: DimensionPick, b: DimensionPick): Dimension |
   }
   useDimensionsStore.getState().addDimension(dim)
   recordDimensionChange('create', null, dim, useDimensionsStore.getState().dimensions.length - 1)
+  playSfx('success')   // SFX: размер поставлен
   markModified()
   return dim
 }

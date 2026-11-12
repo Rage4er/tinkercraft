@@ -66,7 +66,7 @@ function sanitizeObjectKeys(obj: unknown): unknown {
 /** WARN-R8-7: Валидные типы операций для проверки схемы .doodle */
 const VALID_OP_TYPES = new Set([
   'add_shape', 'import_mesh', 'move', 'resize_dims', 'fillet',
-  'mirror', 'align', 'group', 'edit_child_params', 'edit_step', 'delete', 'visibility', 'color', 'rename',
+  'mirror', 'align', 'group', 'edit_child_params', 'edit_step', 'delete', 'visibility', 'lock', 'color', 'rename',
 ])
 
 /**

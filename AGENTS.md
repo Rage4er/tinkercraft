@@ -14,7 +14,7 @@
 - **manifold-3d** (WASM) — CSG операции в Web Worker
 - **Zustand 5** — стейт-менеджмент
 - **Vite 6** — сборка
-- **Vitest 4** — тесты (986 тестов, 80 файлов; `it.fails` открытых багов нет — UX-прогон 7 нашёл 0 новых, цикл закрыт; UX-AUDIT-1…10 исправлены в `fix-all`, 11…20 — в `fix-all-2`, 21…31 — в `fix-all-3`, 32…35 — в `fix-all-4`, 32-followup и 36…40 — в `fix-all-5`, 41, 42 — в `fix-all-6`)
+- **Vitest 4** — тесты (1022 теста, 85 файлов; `it.fails` открытых багов нет — UX-прогон 7 нашёл 0 новых, цикл закрыт; UX-AUDIT-1…10 исправлены в `fix-all`, 11…20 — в `fix-all-2`, 21…31 — в `fix-all-3`, 32…35 — в `fix-all-4`, 32-followup и 36…40 — в `fix-all-5`, 41, 42 — в `fix-all-6`)
 - **pnpm** — пакетный менеджер
 
 ## Команды
@@ -23,7 +23,7 @@
 cd web-app
 pnpm dev          # dev-сервер (порт 5000)
 pnpm build        # production-сборка
-pnpm test         # запуск тестов (986 тестов, 80 файлов)
+pnpm test         # запуск тестов (1022 теста, 85 файлов)
 pnpm typecheck    # tsc --noEmit
 pnpm e2e:smoke    # дымовой тест в браузере (Playwright; нужен запущенный pnpm dev; см. web-app/e2e/helpers.mjs). В CI все e2e — job `e2e` в ci-web.yml (CI-E2E)
 pnpm e2e:tree     # Фаза 9.1: раскрытие CSG в дереве, выбор ребёнка
@@ -53,6 +53,7 @@ pnpm e2e:ux-viewport  # UX-VIEWPORT: ЛКМ-протяжка вид не вра�
 pnpm e2e:selection-outline  # SELECTION-OUTLINE: ничего не выделено — каймы нет; клик по кубу — синяя кайма вокруг него (2–4 px); клик в пусто — нет; Shift+клик / рамка — кайма у всех; светлая тема, орто, гизмо; 100k + 24 объекта выделены — FPS ≥ 55
 pnpm e2e:ux-polish  # ux-polish: A — CSG-GROUP-UI (кнопки CSG в тулбаре; «Вычитание» → кайма A оранжевая, B синяя; Esc — каймы A нет); B — CLEANUP-TREE-SNAPSHOT (куб − сфера → X → undo / redo — объекты и дети CSG как были); C — SHADOW-BOUNDS-400 (куб на X = 0 / 600 / 1500 и отдалились — тень есть, центр области теней у куба); D — DIMENSION-UNDO (размер → Delete → Ctrl+Z — вернулся, Ctrl+Y — удалён; кнопки тулбара; история документа не меняется)
 pnpm e2e:ortho-raycast  # ORTHO-RAYCAST: ортография — линейка у краёв вида = сетке под курсором (по режиму размещения), линейка с верха куба у края, гизмо — стрелка X ловится и куб идёт за мышью (+120 px); перспектива — как раньше
+pnpm e2e:ux-formats-settings  # Пакет A: «Настройки» (язык ru → en → ru, единицы см — поле «2.00 см», ввод 5 см → 50 мм, перезагрузка, «Сбросить», Esc), «Высокий контраст» (панель и фон сцены чёрные), звуки (click / create / success, выкл. — тишина), «Экспорт» STL / OBJ / 3MF / glTF и «Импорт» OBJ, замок (клик и Ctrl+A не выбирают, Delete — остаётся, снять — выбирается)
 ```
 
 ## Текущий статус
@@ -149,7 +150,7 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 | `src/components/StepPanel.tsx` | Панель «Шаг N» (вместо `PropertiesPanel`, пока `ui-store.selectedStep` задан): ΔX/ΔY/ΔZ шага move (коммит по Enter/blur), плоскость шага mirror (сразу по выбору), глубина шага extrude (ось — просмотр) → `editStepParams` — Фаза 9.5.2–9.5.4; заголовок шага move — по виду (`kind`): «Повернуть» / «Масштаб» / «Перемещение», «Исходно» — сдвиг, поворот и масштаб (UX-AUDIT-38) |
 | `src/hooks/useSelectedStepGuard.ts` | Сброс выбора шага (undo до шага, выделение в сцене, выбор ребёнка CSG) — Фаза 9.5.2 |
 | `src/components/ChildPropertiesPanel.tsx` | Панель свойств выбранного ребёнка CSG (вместо `PropertiesPanel`, пока `ui-store.selectedChild` задан) — Фаза 9.2 |
-| `src/components/ComponentTree.tsx` | Дерево объектов сцены; CSG-результат раскрывается в детей из Build Tree, выбор ребёнка → `ui-store.selectedChild` — Фаза 9.1 |
+| `src/components/ComponentTree.tsx` | Дерево объектов сцены; CSG-результат раскрывается в детей из Build Tree, выбор ребёнка → `ui-store.selectedChild` — Фаза 9.1; замок объекта (LOCK-OBJECT, `onToggleLock`) |
 | `src/csg/rebuildOps.ts` | `applyMoveDelta`, `applyMirrorToTransform`, `applyAlignToTransform`; `expandForReplay` — шаг `align` с плоскостью (режим «Выровнять») воспроизводится как move каждой цели (мета, дерево, воркер — ALIGN-PLANE-RESOLVE) |
 | `src/csg/worker.ts` | WASM worker — manifold-3d операции, типобезопасные интерфейсы |
 | `src/csg/worker-client.ts` | Promise-обёртка над воркером |
@@ -164,6 +165,8 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 | `src/components/selection-outline.ts` | Кайма выделенных (SELECTION-OUTLINE): `SelectionOutlinePass` — `OutlinePass` прямо на канвас (без EffectComposer: сцена — обычный `renderer.render`, затем проходы каймы, затем накладки с флагом `DRAW_OVER_OUTLINE` — гизмо, размеры); обычное смешивание (светлая тема), маска под тип камеры (`setCamera`), буферы в CSS px; `selectionOutlineTargets` (выделенные видимые меши, каждый кадр), `renderWithSelectionOutline` (несколько проходов: группа A режима CSG — тёплая `GROUP_A_OUTLINE`, затем выделенные — синяя; нет объектов — один `render`); `data-outline-count` / `data-outline-a-count` у вьюпорта (e2e) |
 | `src/components/shadow-follow.ts` | Тени у центра вида (SHADOW-BOUNDS-400): `shadowFrustumFor(target, distance, mapSize)` — область теней (полуразмер `shadowHalfFor` ≥ 200 мм и ≥ расстояния, ступени ×1,25; центр в узле текселей в осях света; солнце по `SUN_DIR`; bias / normalBias — под размер, в мировых единицах как при ±200), `applyShadowFrustum` (солнце, цель, камера тени, приёмник), `sameShadowFrustum`; в цикле отрисовки — `useThreeInit`, `data-shadow-half` / `-center` у вьюпорта |
 | `src/components/selection-rect.ts` | Рамка выделения (SELECTION-RECT): `rectModeOf` (вправо — окно, влево — секущая), `objectsInRect` / `meshInRect` по настоящей геометрии (окно — все вершины в рамке; секущая — вершина или треугольник пересекает рамку, `triangleOverlapsRect` — SAT) |
+| `src/store/settings.ts` / `src/store/units.ts` / `src/themes/` / `src/components/SettingsModal.tsx` | **Настройки** (APP-SETTINGS): `useSettingsStore` — тема, звуки, единицы (localStorage `tinkercraft-settings`, `sanitizeSettings`), язык — i18next (`setLanguage`), `reset`; окно — шестерёнка в статус-баре (`ui-store.showSettings`). Единицы длины — только показ и ввод (модель в мм): `NumInput` без `unit` — поле длины (пересчёт там), линейка и размеры — `lengthLabel`. **Темы** (THEME-ENGINE): `src/themes/<id>.json` (id, order, name ru/en, base, vars, scene) — новая тема = новый JSON, `themes/index.ts` (`THEMES`, `applyTheme`, `parseTheme`); стили светлых тем — `[data-theme="light"]` в `App.css` |
+| `src/sfx.ts` / `src/hooks/useSfx.ts` | **Звуки** (SFX): `playSfx(kind)` — Web Audio-тоны `SFX_RECIPES` (click / create / success / error), вкл. и громкость — `useSettingsStore.sound`; `setSfxBackend` — подмена вывода в тестах; `<html data-sfx-last / data-sfx-count>` — для e2e. Когда звучит — `useSfx` (клик по кнопке, новый шаг истории `newOperation` → `sfxForOperation`, уведомление error / warning); размер — `createDimension` |
 | `src/components/view-ray.ts` | Луч из курсора по **активной** камере вида (ORTHO-RAYCAST): `ndcFromClient`, `rayFromCamera` (`setFromCamera` — перспектива / орто), `groundPointOnRay` (луч ∩ плоскость z = 0 — не формула «от позиции камеры»), `syncGizmoCamera` (гизмо на камере вида — каждый кадр). Новый код, бросающий луч из курсора, берёт `activeCameraRef`, не `cameraRef` (та всегда перспективная) |
 | `src/components/camera-fit.ts` | «Вписать в экран» (F): `fitDistance` — расстояние камеры по рамке сцены с учётом угла обзора и соотношения сторон вьюпорта (узкий — сцена не обрезается; широкий — как раньше, 2,5 × размер), `FIT_DIR` — направление (UX-AUDIT-39) |
 | `src/components/snap-utils.ts` | Привязка (snap) к геометрии: vertex, edge, face, circle; кандидаты — треугольники рядом с точкой попадания (сетка треугольников геометрии в локальных координатах, кэш на геометрию — UX-AUDIT-35: 100k — ~6 мс на запрос); рёбра — и у геометрии без индекса (по позициям, UX-AUDIT-22) |
@@ -177,8 +180,9 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 | `src/components/Timeline.tsx` | История операций + opIcon/opLabel; `filterKeyOf` — категория шага для фильтра («Вставить», «Повернуть», «Масштаб» — UX-AUDIT-29); подпись правки шага move — группы, которые правка меняет: сдвиг / поворот / масштаб (UX-AUDIT-40); к текущему шагу прокручивается только `.tl-list`, не левая панель (`scrollListToItem`, DOUBLE-CLICK-TIMING) |
 | `src/components/list-scroll.ts` | `scrollListToItem` — прокрутить список к элементу (как `block: 'nearest'`) без прокрутки предков; `scrollIntoView` двигал `.panel-left` — палитра уезжала из-под курсора (DOUBLE-CLICK-TIMING) |
 | **IO** | |
-| `src/io/stl-import.ts` | Импорт STL (бинарный + ASCII) |
+| `src/io/stl-import.ts` | Импорт STL (бинарный + ASCII); диалог «Импорт» — `.stl,.obj,.3mf` (OBJ / 3MF — `io/mesh-formats.ts`) |
 | `src/io/stl-export.ts` | Экспорт в бинарный STL |
+| `src/io/mesh-formats.ts` | Форматы (FORMATS-OBJ-3MF-GLTF): `worldMeshes` (видимые объекты в мире, как STL), экспорт `exportToObj` / `exportTo3mf` (ZIP + XML, цвета) / `exportToGltf` (`GLTFExporter`, корень Y-вверх и метры), импорт `parseObjText` / `parse3mf` / `parseMeshFile` (по расширению; STL — `stl-import`). UI — меню «Экспорт» (`ExportMenuButton`), «Импорт» — `.stl,.obj,.3mf`; стор — `exportMesh(format)` |
 | `src/io/doodle-io.ts` | **УСТАРЕЛО**: формат .doodle (legacy, не поддерживается) |
 | `src/io/3dtc-io.ts` | Формат .3dtc (ZIP + JSON) — основной формат проекта (v1.2.0+); `dimensions` — слой размеров отдельным полем рядом с `operations` (DIMENSIONS) |
 | `src/io/autosave.ts` | Автосохранение в IndexedDB (запись с `modified`); `clearScene` чистит запись |
@@ -241,7 +245,7 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 - Навигация вьюпорта (VIEWPORT-NAV): протяжка ЛКМ — рамка выделения, вид вращает ПКМ, сдвигает СКМ (e2e — `page.mouse.down({ button: 'right' | 'middle' })`); захват указателя на контейнере вьюпорта не брать — OrbitControls сам захватывает его на канвасе и иначе «залипает»
 
 ### CSS
-- Тёмная/светлая темы через CSS-переменные в `App.css`
+- Темы — CSS-переменные из `src/themes/*.json` (THEME-ENGINE, `applyTheme`); `:root` в `App.css` — запас тёмной; правила «для светлых» — `[data-theme="light"]`
 - Инлайн-стили допустимы для динамических значений (position, color из объекта)
 
 ## Документирование изменений (обязательно)
@@ -315,9 +319,10 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 
 - Импортированные меши (STL) не параметризуются (IMPORT-MESH-PARAMETRIC: не требуется); трансформации и CSG работают — CSG допускает замкнутый STL (проверка по manifold в воркере, IMPORT-MESH-CSG), незамкнутый → уведомление `errors.csgNonManifold`; «починка» незамкнутого меша не делается; старые extrude без `group.source` не редактируются как extrude (EXTRUDE-LEGACY: не мигрируем); `extrudeSelected` — движок правки 9.5.4, не UI-инструмент: это «растянуть по оси», а не extrude 2D→3D, кнопку не возвращать (EXTRUDE-3D-SCALE; настоящий extrude — Фаза 11)
 - Скругления (fillet) нет: прежний параметр куба удалён (remove-fillet) до инструмента на B-Rep; старые шаги `fillet` вырезаются при загрузке (`io/legacy-fillet.ts`) — новых не создавать
-- После v1.3.1 открыто: связанное зеркало (linked mirror) не делали — копия CSG всегда независимая; «починка» незамкнутого STL. CI — один workflow `ci-web.yml` (CI-DEDUP ✅): job `ci` (install + typecheck + test + build) и job `e2e` — все 28 e2e (CI-E2E ✅)
+- После v1.3.1 открыто: связанное зеркало (linked mirror) не делали — копия CSG всегда независимая; «починка» незамкнутого STL. CI — один workflow `ci-web.yml` (CI-DEDUP ✅): job `ci` (install + typecheck + test + build) и job `e2e` — все 29 e2e (CI-E2E ✅)
 - Выравнивание режимом «Выровнять» (ALIGN-UI-REVIT) пишется шагом `align` с плоскостью (ALIGN-PLANE-RESOLVE ✅; с поворотом — UX-AUDIT-32; грань гладкой поверхности — цилиндр, сфера — не поворачивает, только касание): правка прошлого шага пересчитывает его; ✎ у самого шага нет (как у обычного align). Плоскость A следует за системой объекта A (TRS), а не за гранью при правке формы A (правка ребёнка CSG A)
 - Дерево живой сессии, начатой до v1.3.2 (boolean-узлы без `originTransform`), для вложенного CSG, сдвинутого до объединения, остаётся под замком `nested_moved` (предохранитель); после перезагрузки/загрузки проекта дерево перестраивается из истории с TRS₀ — правка работает
+- Блокировка (LOCK-OBJECT) — шаг истории `lock`; заблокированный не выбирается во вьюпорте, не двигается, не удаляется, не идёт в CSG (`document-store` — `notify`), выбрать можно из списка / дерева. Новые действия, меняющие объект, должны проверять `obj.locked`
 - `.doodle` (legacy) в UI не открывается: `parseDoodle` не вызывается
 - Размещение (PLUG-AND-PLAY): плоскости X / Y / Z — мировые, через начало координат (не через грань под курсором); на наклонной грани шаг привязки не действует (точка — точно в попадании); поворот вокруг нормали при размещении не задаётся (только «стоит на плоскости»); после размещения режим выключается (одна фигура на клик по иконке); «Текст» — по-прежнему окно ввода, без размещения
 - Размеры (DIMENSIONS) — аннотации, не шаги «Истории» (своя отмена — Ctrl+Z / Ctrl+Y в общем порядке с шагами, DIMENSION-UNDO ✅; в «Истории» не видны); размер к объекту, ушедшему в CSG, скрыт и на результат не переносится (DIMENSION-CSG-TRANSFER); при перетаскивании гизмо число — по отпусканию (DIMENSION-LIVE-DRAG); только линейные (угловые / радиусы — позже); управляющий размер (вариант C: число задаёт геометрию) — бэклог `DEVELOPMENT_PLAN.md`

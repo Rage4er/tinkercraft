@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import Section from "./Section";
 import Timeline from "./Timeline";
 import ComponentTree, { displayName } from "./ComponentTree";
+import { LockIcon } from "./icons";
 import DimensionList from "./DimensionList";
 import { useDimensionsStore } from "../store/dimensions-store";
 import { useDocumentStore } from "../store/document-store";
@@ -27,6 +28,7 @@ export default function LeftPanel({
   onSelect,
   onRename,
   onToggleVis,
+  onToggleLock,
   onDeleteObject,
   historyIndex,
   operations,
@@ -49,6 +51,8 @@ export default function LeftPanel({
   onSelect: (id: string | null, add: boolean) => void;
   onRename: (id: string, name: string) => void;
   onToggleVis: (id: string) => void;
+  /** LOCK-OBJECT: замок в строке объекта (дерево) */
+  onToggleLock?: (id: string) => void;
   onDeleteObject: (id: string) => void;
   historyIndex: number;
   operations: TinkerCraftOperation[];
@@ -158,6 +162,7 @@ export default function LeftPanel({
                   {displayName(obj, t)}
                 </span>
                 {!obj.visible && <span className="obj-hidden">{t("leftPanel.hidden")}</span>}
+                {obj.locked && <span className="obj-locked" data-testid="list-locked" title={t("lock.locked")}><LockIcon size={14} /></span>}
               </div>
             ))}
           </div>
@@ -168,6 +173,7 @@ export default function LeftPanel({
             onSelect={onSelect}
             onRename={onRename}
             onToggleVis={onToggleVis}
+            onToggleLock={onToggleLock}
             onDelete={onDeleteObject}
           />
         )}

@@ -24,6 +24,8 @@ import {
   ImportIcon,
   EyeIcon,
   EyeOffIcon,
+  LockIcon,
+  UnlockIcon,
   DeleteIcon,
   UnionIcon,
   SubtractIcon,
@@ -41,6 +43,8 @@ interface Props {
   onRename: (id: string, name: string) => void
   onToggleVis: (id: string) => void
   onDelete: (id: string) => void
+  /** LOCK-OBJECT: замок в строке объекта */
+  onToggleLock?: (id: string) => void
 }
 
 // FIX (LOW-18-30): Named constant instead of magic number
@@ -81,7 +85,7 @@ function rootOperation(obj: SceneObject, view: TreeViewNode | undefined): 'union
   return view?.operation ?? obj.operation
 }
 
-export default function ComponentTree({ objects, selectedIds, onSelect, onRename, onToggleVis, onDelete }: Props) {
+export default function ComponentTree({ objects, selectedIds, onSelect, onRename, onToggleVis, onDelete, onToggleLock }: Props) {
   const { t } = useTranslation()
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editValue, setEditValue] = useState('')
@@ -317,9 +321,21 @@ export default function ComponentTree({ objects, selectedIds, onSelect, onRename
               >
                 {obj.visible ? <EyeIcon size={32} /> : <EyeOffIcon size={32} />}
               </button>
+              {onToggleLock && (
+                <button
+                  className={`ct-btn ct-objlock${obj.locked ? ' active' : ''}`}
+                  data-testid="obj-lock"
+                  aria-pressed={!!obj.locked}
+                  title={obj.locked ? t("lock.unlock") : t("lock.lock")}
+                  onClick={e => { e.stopPropagation(); onToggleLock(obj.id) }}
+                >
+                  {obj.locked ? <LockIcon size={32} /> : <UnlockIcon size={32} />}
+                </button>
+              )}
               <button
                 className="ct-btn ct-del"
                 title={t("componentTree.delete")}
+                disabled={!!obj.locked}
                 onClick={e => { e.stopPropagation(); onDelete(obj.id) }}
               >
                 <DeleteIcon size={32} />
