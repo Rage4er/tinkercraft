@@ -1,0 +1,32 @@
+{
+  "id": "high-contrast",
+  "order": 2,
+  "name": {
+    "ru": "Высокий контраст",
+    "en": "High contrast"
+  },
+  "base": "dark",
+  "vars": {
+    "--bg-deep": "#000000",
+    "--bg-panel": "#000000",
+    "--bg-surface": "#101010",
+    "--bg-hover": "#2a2a00",
+    "--bg-selected": "#4a4000",
+    "--border": "#ffffff",
+    "--text-primary": "#ffffff",
+    "--text-muted": "#e0e0e0",
+    "--accent": "#ffd400",
+    "--accent-red": "#ff5c5c",
+    "--accent-green": "#4cff7a",
+    "--accent-yellow": "#ffd400",
+    "--accent-mauve": "#ff9cff",
+    "--btn-bg": "#000000",
+    "--btn-hover": "#333300",
+    "--btn-active": "#5c5200"
+  },
+  "scene": {
+    "background": "#000000",
+    "gridMinor": "#5a5a5a",
+    "gridMajor": "#c0c0c0"
+  }
+}

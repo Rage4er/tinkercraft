@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSettingsStore, currentLanguage, setLanguage, LANGUAGES, type Language } from "../store/settings";
 import { LENGTH_UNITS, unitLabelKey, type LengthUnit } from "../store/units";
-import { THEMES } from "../themes";
+import { THEMES, themeName } from "../themes";
 
 /**
  * APP-SETTINGS: окно «Настройки» (шестерёнка в статус-баре). Меняется сразу (без «Применить»):
@@ -63,7 +63,7 @@ export default function SettingsModal({ onClose }: { onClose: () => void }) {
             value={theme}
             onChange={(e) => setTheme(e.target.value)}
           >
-            {THEMES.map((th) => <option key={th.id} value={th.id}>{t(th.labelKey)}</option>)}
+            {THEMES.map((th) => <option key={th.id} value={th.id}>{themeName(th, i18n.language)}</option>)}
           </select>
         </label>
 

@@ -20,7 +20,7 @@ import DimensionSettingsModal from "./components/DimensionSettingsModal";
 import SettingsModal from "./components/SettingsModal";
 import { useSettingsStore } from "./store/settings";
 import { lengthLabel } from "./store/units";
-import { themeById } from "./themes";
+import { themeById, applyTheme } from "./themes";
 import { useDimensionModeStore } from "./store/dimension-mode";
 import { useDimensionsStore } from "./store/dimensions-store";
 import { useDimensionMode } from "./hooks/useDimensionMode";
@@ -188,7 +188,10 @@ export default function App() {
   const setThemeId = useSettingsStore((s) => s.setTheme);
   const lengthUnit = useSettingsStore((s) => s.units);
   useEffect(() => {
-    setTheme(themeById(themeId).base);
+    // THEME-ENGINE: CSS-переменные темы (src/themes/*.json) на <html>, база — в ui-store
+    const def = themeById(themeId);
+    applyTheme(def);
+    setTheme(def.base);
   }, [themeId, setTheme]);
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);

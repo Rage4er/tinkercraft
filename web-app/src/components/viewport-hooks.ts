@@ -463,8 +463,8 @@ export function useThreeInit(
 }
 
 // ---- Тема: смена цвета сетки (GRID-ADAPTIVE) ----
-export function setGridColor(grid: THREE.Mesh | null, theme: 'dark' | 'light') {
-    setAdaptiveGridTheme(grid, theme);
+export function setGridColor(grid: THREE.Mesh | null, theme: 'dark' | 'light', colors?: { minor: number; major: number }) {
+    setAdaptiveGridTheme(grid, theme, colors);
 }
 
 // ============================================================

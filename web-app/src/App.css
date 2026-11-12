@@ -1,6 +1,7 @@
 /* ============================================================
    TinkerCraft Web — стили
-   Тёмная тема (default) + светлая через [data-theme="light"]
+   Темы — src/themes/*.json (THEME-ENGINE): переменные ставит applyTheme на <html>;
+   :root ниже — запас (тёмная) до старта приложения. [data-theme="light"] — база светлых тем.
    ============================================================ */
 
 :root {
@@ -24,24 +25,6 @@
   --radius-sm: 4px;
 }
 
-[data-theme="light"] {
-  --bg-deep: #e8e8f0;
-  --bg-panel: #f4f4f8;
-  --bg-surface: #ffffff;
-  --bg-hover: #eaeaf8;
-  --bg-selected: #d8daf8;
-  --border: #c8c8e0;
-  --text-primary: #2d2d40;
-  --text-muted: #7878a0;
-  --accent: #4a80d8;
-  --accent-red: #d04060;
-  --accent-green: #40a860;
-  --accent-yellow: #c09020;
-  --accent-mauve: #8050c8;
-  --btn-bg: #ededf8;
-  --btn-hover: #dcdcf0;
-  --btn-active: #cccce8;
-}
 
 * {
   box-sizing: border-box;

@@ -146,11 +146,11 @@ export function updateAdaptiveGrid(grid: THREE.Mesh, view: { target: { x: number
   return { step, major: step * GRID_MAJOR_FACTOR, radius, center: { x: view.target.x, y: view.target.y } }
 }
 
-/** Цвета сетки по теме. */
-export function setAdaptiveGridTheme(grid: THREE.Mesh | null, theme: 'dark' | 'light'): void {
+/** Цвета сетки по теме (`colors` — из темы, THEME-ENGINE; без них — по базе). */
+export function setAdaptiveGridTheme(grid: THREE.Mesh | null, theme: 'dark' | 'light', colors?: GridColors): void {
   if (!grid) return
   const u = (grid.material as THREE.ShaderMaterial).uniforms
-  const c = GRID_COLORS[theme]
+  const c = colors ?? GRID_COLORS[theme]
   ;(u.uMinorColor.value as THREE.Color).setHex(c.minor)
   ;(u.uMajorColor.value as THREE.Color).setHex(c.major)
 }

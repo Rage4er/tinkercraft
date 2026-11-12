@@ -30,6 +30,8 @@ import { useDimensionsStore } from "../store/dimensions-store";
 import { useDocumentStore } from "../store/document-store";
 import { isDimensionAlive } from "../store/dimensions";
 import { findNearestSnap } from "./snap-utils";
+import { useSettingsStore } from "../store/settings";
+import { themeById, hexColor } from "../themes";
 import { pickDimension } from "./dimension-render";
 import { createMiddleDoubleClick } from "./viewport-nav";
 import { objectsInRect, rectModeOf, rectToNdc, type RectMode } from "./selection-rect";
@@ -178,13 +180,15 @@ export default function Viewport3D({
   }, [objects]);
 
   // ---- Смена фона и грида при смене темы ----
+  // THEME-ENGINE: цвета сцены — из темы настроек (src/themes/*.json); база темы — проп `theme`
+  const themeId = useSettingsStore((s) => s.theme);
   useEffect(() => {
     if (!sceneRef.current) return;
-    sceneRef.current.background = theme === 'dark'
-      ? new THREE.Color(0x1e1e2e)
-      : new THREE.Color(0xf0f0f5);
-    setGridColor(gridRef.current, theme);
-  }, [theme, sceneRef, gridRef]);
+    const chosen = themeById(themeId);
+    const def = chosen.base === theme ? chosen : themeById(theme);
+    sceneRef.current.background = new THREE.Color(hexColor(def.scene.background));
+    setGridColor(gridRef.current, theme, { minor: hexColor(def.scene.gridMinor), major: hexColor(def.scene.gridMajor) });
+  }, [theme, themeId, sceneRef, gridRef]);
 
   // ---- Хук 2: Синхронизация mesh ----
   useMeshSync(objects, sceneReady, sceneRef, meshMapRef, selectedIds);
