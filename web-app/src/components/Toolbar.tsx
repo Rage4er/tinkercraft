@@ -13,6 +13,7 @@ import {
   OpenIcon,
   SaveIcon,
   ImportIcon,
+  SvgIcon,
   ExportIcon,
   FolderIcon,
   UndoIcon,
@@ -61,6 +62,7 @@ export default function Toolbar({
   onSave,
   onExportStl,
   onImportStl,
+  onImportSvg,
   onShowProjects,
   onUndo,
   onRedo,
@@ -113,6 +115,8 @@ export default function Toolbar({
   /** FORMATS-OBJ-3MF-GLTF: экспорт в формат (меню «Экспорт») */
   onExportStl: (format: ExportFormat) => void;
   onImportStl: () => void;
+  /** SVG-EXTRUDE: импорт контура .svg → 3D-тело (окно «SVG → 3D») */
+  onImportSvg: () => void;
   onShowProjects: () => void;
   onUndo: () => void;
   onRedo: () => void;
@@ -140,7 +144,7 @@ export default function Toolbar({
   const { t } = useTranslation();
   // Определяем группы для алгоритма
   const groups: ToolbarGroup[] = [
-    { id: "file", buttonCount: 5 },
+    { id: "file", buttonCount: 6 },
     { id: "edit1", buttonCount: 2 },
     { id: "edit2", buttonCount: 3 },
     { id: "view", buttonCount: 3 },
@@ -177,6 +181,7 @@ export default function Toolbar({
           <IconButton key="save" icon={<SaveIcon size={32} />} label={t("actions.save")} onClick={onSave} tooltip={TOOLTIP_DATA.save} />,
           <ExportMenuButton key="export" disabled={objectCount === 0} onExport={onExportStl} />,
           <IconButton key="import" icon={<ImportIcon size={32} />} label={t("actions.import")} onClick={onImportStl} disabled={busy} tooltip={TOOLTIP_DATA.import_stl} />,
+          <IconButton key="import-svg" icon={<SvgIcon size={32} />} label={t("actions.importSvg")} onClick={onImportSvg} disabled={busy} tooltip={TOOLTIP_DATA.import_svg} />,
           <IconButton key="projects" icon={<FolderIcon size={32} />} label={t("properties.projectManager")} onClick={onShowProjects} tooltip={TOOLTIP_DATA.projects} />,
         ]}
       />

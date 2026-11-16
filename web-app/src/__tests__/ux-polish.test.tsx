@@ -84,7 +84,7 @@ describe('CSG-GROUP-UI — кнопки CSG в тулбаре', () => {
           objectCount={4} selectedCount={2} canUndo canRedo hasCopied busy={false} workerOk
           cameraMode="perspective" gizmoMode="none" rulerActive={false} dimensionActive={false} dimensionsVisible
           canMirror canAlign canCsg csgOpStates={opStates} theme="dark"
-          onOpen={noop} onSave={noop} onExportStl={noop} onImportStl={noop} onShowProjects={noop}
+          onOpen={noop} onSave={noop} onExportStl={noop} onImportStl={noop} onImportSvg={noop} onShowProjects={noop}
           onUndo={noop} onRedo={noop} onCopy={noop} onPaste={noop} onDelete={noop}
           onFitView={noop} onResetView={noop} onToggleCamera={noop} onGizmo={noop} onToggleRuler={noop}
           onDimensionMode={noop} onDimensionSettings={noop} onToggleDimensions={noop}

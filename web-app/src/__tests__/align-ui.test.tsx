@@ -121,7 +121,7 @@ function renderToolbar(): HTMLButtonElement[] {
       cameraMode="perspective" gizmoMode="none" rulerActive={false} dimensionActive={false} dimensionsVisible
       onDimensionMode={noop} onDimensionSettings={noop} onToggleDimensions={noop}
       canMirror canAlign alignActive={false} canCsg theme="dark"
-      onOpen={noop} onSave={noop} onExportStl={noop} onImportStl={noop} onShowProjects={noop}
+      onOpen={noop} onSave={noop} onExportStl={noop} onImportStl={noop} onImportSvg={noop} onShowProjects={noop}
       onUndo={noop} onRedo={noop} onCopy={noop} onPaste={noop} onDelete={noop}
       onFitView={noop} onResetView={noop} onToggleCamera={noop} onGizmo={noop} onToggleRuler={noop}
       onMirror={noop} onPreviewMirror={noop} onPreviewMirrorEnd={noop}

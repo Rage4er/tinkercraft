@@ -62,6 +62,11 @@ export interface UiStore {
   setShowPM: (v: boolean) => void
   showTextModal: boolean
   setShowTextModal: (v: boolean) => void
+  /** SVG-EXTRUDE: окно «SVG → 3D» и выбранный файл (текст .svg — для построения по «Создать») */
+  showSvgModal: boolean
+  setShowSvgModal: (v: boolean) => void
+  svgPending: { name: string; text: string } | null
+  setSvgPending: (v: { name: string; text: string } | null) => void
 
   // Extrude
   extrudeAxis: 'X' | 'Y' | 'Z'
@@ -148,6 +153,10 @@ export const useUiStore = create<UiStore>((set) => ({
   setShowPM: (v) => set({ showPM: v }),
   showTextModal: false,
   setShowTextModal: (v) => set({ showTextModal: v }),
+  showSvgModal: false,
+  setShowSvgModal: (v) => set({ showSvgModal: v }),
+  svgPending: null,
+  setSvgPending: (v) => set({ svgPending: v }),
 
   extrudeAxis: 'Y',
   setExtrudeAxis: (v) => set({ extrudeAxis: v }),

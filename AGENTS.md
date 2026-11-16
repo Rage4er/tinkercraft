@@ -14,7 +14,7 @@
 - **manifold-3d** (WASM) — CSG операции в Web Worker
 - **Zustand 5** — стейт-менеджмент
 - **Vite 6** — сборка
-- **Vitest 4** — тесты (1039 тестов, 87 файлов; `it.fails` открытых багов нет — UX-прогон 7 нашёл 0 новых, цикл закрыт; UX-AUDIT-1…10 исправлены в `fix-all`, 11…20 — в `fix-all-2`, 21…31 — в `fix-all-3`, 32…35 — в `fix-all-4`, 32-followup и 36…40 — в `fix-all-5`, 41, 42 — в `fix-all-6`)
+- **Vitest 4** — тесты (1050 тестов, 88 файлов; `it.fails` открытых багов нет — UX-прогон 7 нашёл 0 новых, цикл закрыт; UX-AUDIT-1…10 исправлены в `fix-all`, 11…20 — в `fix-all-2`, 21…31 — в `fix-all-3`, 32…35 — в `fix-all-4`, 32-followup и 36…40 — в `fix-all-5`, 41, 42 — в `fix-all-6`)
 - **pnpm** — пакетный менеджер
 
 ## Команды
@@ -23,7 +23,7 @@
 cd web-app
 pnpm dev          # dev-сервер (порт 5000)
 pnpm build        # production-сборка
-pnpm test         # запуск тестов (1039 тестов, 87 файлов)
+pnpm test         # запуск тестов (1050 тестов, 88 файлов)
 pnpm typecheck    # tsc --noEmit
 pnpm e2e:smoke    # дымовой тест в браузере (Playwright; нужен запущенный pnpm dev; см. web-app/e2e/helpers.mjs). В CI все e2e — job `e2e` в ci-web.yml (CI-E2E)
 pnpm e2e:tree     # Фаза 9.1: раскрытие CSG в дереве, выбор ребёнка
@@ -54,6 +54,7 @@ pnpm e2e:selection-outline  # SELECTION-OUTLINE: ничего не выделе�
 pnpm e2e:ux-polish  # ux-polish: A — CSG-GROUP-UI (кнопки CSG в тулбаре; «Вычитание» → кайма A оранжевая, B синяя; Esc — каймы A нет); B — CLEANUP-TREE-SNAPSHOT (куб − сфера → X → undo / redo — объекты и дети CSG как были); C — SHADOW-BOUNDS-400 (куб на X = 0 / 600 / 1500 и отдалились — тень есть, центр области теней у куба); D — DIMENSION-UNDO (размер → Delete → Ctrl+Z — вернулся, Ctrl+Y — удалён; кнопки тулбара; история документа не меняется)
 pnpm e2e:ortho-raycast  # ORTHO-RAYCAST: ортография — линейка у краёв вида = сетке под курсором (по режиму размещения), линейка с верха куба у края, гизмо — стрелка X ловится и куб идёт за мышью (+120 px); перспектива — как раньше
 pnpm e2e:modeling-tools  # Пакет B: «Массив» — линейный ×3 шаг 30 (X копий, один шаг истории, Ctrl+Z / Ctrl+Y), круговой ×6 вокруг Z через центр (позиции на окружности, «Вращение Z» 0…300; перезагрузка — то же); «Капсула» / «Труба» / «Пружина» из палитры, поля пружины, «Витков» 5 → 8, труба ∪ пружина
+pnpm e2e:svg-extrude  # SVG-EXTRUDE: «Импорт SVG» → file picker (.svg) → окно «SVG → 3D» (глубина 20, масштаб 0.5) → тело «SVG: profile.svg», undo/redo, ∪ куб → CSG с детьми (SVG baked 🔒)
 pnpm e2e:ux-formats-settings  # Пакет A: «Настройки» (язык ru → en → ru, единицы см — поле «2.00 см», ввод 5 см → 50 мм, перезагрузка, «Сбросить», Esc), «Высокий контраст» (панель и фон сцены чёрные), звуки (click / create / success, выкл. — тишина), «Экспорт» STL / OBJ / 3MF / glTF и «Импорт» OBJ, замок (клик и Ctrl+A не выбирают, Delete — остаётся, снять — выбирается)
 ```
 
@@ -66,7 +67,7 @@ pnpm e2e:ux-formats-settings  # Пакет A: «Настройки» (язык r
 | **8.5** | **Унификация отрисовки и данных** | ✅ Завершена (v1.2.3) |
 | **9** | **Параметрическая история** — 9.1–9.4, 9.6–9.9 ✅; 9.5.0 (эффективная история) ✅; 9.5.1 (fillet) ❌ отменена; 9.5.2 move ✅; 9.5.3 mirror ✅; 9.5.4 extrude ✅; CSG-INDEPENDENT-COPY, IMPORT-MESH-CSG, ALIGN-REVIT ✅ | ✅ Завершена (v1.3.0, `phase-9 → main`) |
 | 10 | Яндекс.Игры — монетизация (ветка `yandex-games`) | 🔄 Отдельная ветка (Y.1–Y.5 ✅; v1.4.0 — `main` v1.3.9 + SDK и экономика, PR #52) |
-| 11 | B-Rep и тяжёлая математика (FILLET-CHAMFER-BREP — OCCT WASM, EDIT-VERTICES, SVG-EXTRUDE — настоящий extrude 2D→3D, THREAD-GENERATOR, STEP) | 🔲 Запланирована |
+| 11 | B-Rep и тяжёлая математика (FILLET-CHAMFER-BREP — OCCT WASM, EDIT-VERTICES, **SVG-EXTRUDE — настоящий extrude 2D→3D** ✅, THREAD-GENERATOR, STEP) | 🔄 В работе (SVG-EXTRUDE ✅) |
 | 12 | Инструменты моделирования (ARRAY-TOOL — массивы, LOCK-OBJECT — блокировка (v1.3.11), NEW-PRIMITIVES — капсула, труба, пружина) | ✅ Завершена (v1.3.12) |
 | 13 | UX, форматы, настройки (APP-SETTINGS, THEME-ENGINE, SFX, FORMATS-OBJ-3MF-GLTF) | ✅ Завершена (v1.3.11) |
 
@@ -191,6 +192,8 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 | `src/io/3dtc-io.ts` | Формат .3dtc (ZIP + JSON) — основной формат проекта (v1.2.0+); `dimensions` — слой размеров отдельным полем рядом с `operations` (DIMENSIONS) |
 | `src/io/autosave.ts` | Автосохранение в IndexedDB (запись с `modified`); `clearScene` чистит запись |
 | `src/io/text-mesh.ts` | Меш 3D-текста (`buildTextMesh`): контуры выдавливаются и свариваются по отдельности → замкнутый меш для CSG; запасной шрифт Droid Sans (кириллица), `missing` — символы не из шрифтов, `repairTJunctions`; `TextMeshError` (UX-AUDIT-3/10/18) |
+| `src/io/svg-extrude.ts` | **SVG-EXTRUDE (2D → 3D):** `SVGLoader` → контуры с дырками → `ExtrudeGeometry` (глубина 1) → матрица (scale, −scale, depth): зеркало по Y (SVG y вниз) + переворот обхода треугольников → сварка/`repairTJunctions` (как текст) → замкнутый меш. `SvgExtrudeError` (svgNoShapes / svgBadSize / svgTooManyTris), `openSvgFilePicker`, `readSvgFile` |
+| `src/store/add-svg.ts` | SVG-EXTRUDE: `addSvgObject` — меш → объект `import_mesh` «SVG: …» через `addRawMesh` (префикс id `svg` — иначе приняли бы за текст) |
 | `src/io/legacy-fillet.ts` | Миграция старых проектов со скруглением: вырезает шаги `fillet`, снимает `filletRadius`, перенумеровывает `edit_step` (вызывается при всех загрузках в сторе) |
 | **Platform (yandex-games ветка)** | |
 | `src/platform/index.ts` | Абстракция платформы (clean / yandex) |
@@ -324,6 +327,7 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 
 - Импортированные меши (STL) не параметризуются (IMPORT-MESH-PARAMETRIC: не требуется); трансформации и CSG работают — CSG допускает замкнутый STL (проверка по manifold в воркере, IMPORT-MESH-CSG), незамкнутый → уведомление `errors.csgNonManifold`; «починка» незамкнутого меша не делается; старые extrude без `group.source` не редактируются как extrude (EXTRUDE-LEGACY: не мигрируем); `extrudeSelected` — движок правки 9.5.4, не UI-инструмент: это «растянуть по оси», а не extrude 2D→3D, кнопку не возвращать (EXTRUDE-3D-SCALE; настоящий extrude — Фаза 11)
 - Скругления (fillet) нет: прежний параметр куба удалён (remove-fillet) до инструмента на B-Rep; старые шаги `fillet` вырезаются при загрузке (`io/legacy-fillet.ts`) — новых не создавать
+- **SVG-EXTRUDE** (2D → 3D): тело — шаг `import_mesh` «SVG: …» (не параметрический: глубину/масштаб задним числом не поменять, как у STL-текста); контур с самопересечениями manifold не построит — воркер сообщит об ошибке (как незамкнутый STL); размещение — рядом с прошлыми объектами (не режим размещения, не «стоит на сетке»); плоскость контура — XY, выдавливание — +Z
 - После v1.3.1 открыто: связанное зеркало (linked mirror) не делали — копия CSG всегда независимая; «починка» незамкнутого STL. CI — один workflow `ci-web.yml` (CI-DEDUP ✅): job `ci` (install + typecheck + test + build) и job `e2e` — все 30 e2e (CI-E2E ✅)
 - Выравнивание режимом «Выровнять» (ALIGN-UI-REVIT) пишется шагом `align` с плоскостью (ALIGN-PLANE-RESOLVE ✅; с поворотом — UX-AUDIT-32; грань гладкой поверхности — цилиндр, сфера — не поворачивает, только касание): правка прошлого шага пересчитывает его; ✎ у самого шага нет (как у обычного align). Плоскость A следует за системой объекта A (TRS), а не за гранью при правке формы A (правка ребёнка CSG A)
 - Дерево живой сессии, начатой до v1.3.2 (boolean-узлы без `originTransform`), для вложенного CSG, сдвинутого до объединения, остаётся под замком `nested_moved` (предохранитель); после перезагрузки/загрузки проекта дерево перестраивается из истории с TRS₀ — правка работает

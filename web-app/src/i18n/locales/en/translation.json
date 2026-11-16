@@ -115,6 +115,7 @@
     "open": "Open",
     "export": "Export",
     "import": "Import",
+    "importSvg": "Import SVG",
     "rename": "Rename",
     "visibility": "Visibility",
     "color": "Color",
@@ -335,6 +336,14 @@
     "add": "Add",
     "cancel": "Cancel"
   },
+  "svgModal": {
+    "objectName": "SVG: {{name}}",
+    "title": "SVG → 3D",
+    "file": "File",
+    "depth": "Depth",
+    "scale": "Scale",
+    "create": "Create"
+  },
   "errors": {
     "noObjectsSelected": "No objects selected",
     "csgNeedTwoObjects": "Select exactly 2 objects for CSG",
@@ -355,6 +364,10 @@
     "componentError": "Component error",
     "createShapeFailed": "Failed to create shape",
     "importMeshFailed": "Failed to import mesh",
+    "svgFailed": "Failed to create body from SVG: {{reason}}",
+    "svgNoShapes": "The SVG file has no contours",
+    "svgBadSize": "Depth and scale must be greater than 0",
+    "svgTooManyTris": "Too many triangles: {{count}} (max {{max}})",
     "pasteFailed": "Paste failed",
     "deleteFailed": "Failed to delete objects",
     "csgFailed": "CSG operation failed",
@@ -452,6 +465,7 @@
     "save": "Saves the project to a .doodle file",
     "exportStl": "Exports the scene to a file: STL, OBJ, 3MF or glTF",
     "importStl": "Imports a 3D model from an STL, OBJ or 3MF file",
+    "importSvg": "Imports a contour from an SVG file and extrudes it into a 3D body",
     "projects": "Opens the project manager",
     "undo": "Undoes the last action",
     "redo": "Redoes the undone action",

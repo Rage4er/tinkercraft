@@ -42,7 +42,7 @@ export interface DocumentStore {
   /** `at` — мировой трансформ фигуры (режим размещения, PLUG-AND-PLAY); без него — рядом с прошлыми */
   addShape: (shapeType: ShapeType, params?: ShapeParams, at?: TransformNR) => Promise<void>
   /** Меш 3D-текста (`text` — исходная строка, UX-AUDIT-31) */
-  addRawMesh: (name: string, vertices: number[], indices: number[], text?: string) => Promise<void>
+  addRawMesh: (name: string, vertices: number[], indices: number[], text?: string, idPrefix?: string) => Promise<void>
   importStl: () => Promise<void>
   deleteSelected: () => Promise<void>
   /** ARRAY-TOOL: массив копий выбранных (линейный / круговой) — один шаг `array`; выделение — исходные и копии */

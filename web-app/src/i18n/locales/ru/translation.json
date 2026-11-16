@@ -115,6 +115,7 @@
     "open": "Открыть",
     "export": "Экспорт",
     "import": "Импорт",
+    "importSvg": "Импорт SVG",
     "rename": "Переименовать",
     "visibility": "Видимость",
     "color": "Цвет",
@@ -336,6 +337,14 @@
     "add": "Добавить",
     "cancel": "Отмена"
   },
+  "svgModal": {
+    "objectName": "SVG: {{name}}",
+    "title": "SVG → 3D",
+    "file": "Файл",
+    "depth": "Глубина",
+    "scale": "Масштаб",
+    "create": "Создать"
+  },
   "errors": {
     "noObjectsSelected": "Объекты не выбраны",
     "csgNeedTwoObjects": "Выберите ровно 2 объекта для CSG",
@@ -356,6 +365,10 @@
     "componentError": "Ошибка компонента",
     "createShapeFailed": "Ошибка создания фигуры",
     "importMeshFailed": "Ошибка импорта меша",
+    "svgFailed": "Не удалось создать тело из SVG: {{reason}}",
+    "svgNoShapes": "В файле SVG нет контуров",
+    "svgBadSize": "Глубина и масштаб должны быть больше 0",
+    "svgTooManyTris": "Слишком много треугольников: {{count}} (макс {{max}})",
     "pasteFailed": "Ошибка вставки",
     "deleteFailed": "Ошибка удаления объектов",
     "csgFailed": "Ошибка CSG-операции",
@@ -453,6 +466,7 @@
     "save": "Сохраняет проект в файл .doodle",
     "exportStl": "Экспортирует сцену в файл: STL, OBJ, 3MF или glTF",
     "importStl": "Импортирует 3D-модель из файла STL, OBJ или 3MF",
+    "importSvg": "Импортирует контур из файла SVG и выдавливает его в 3D-тело",
     "projects": "Открывает менеджер проектов",
     "undo": "Отменяет последнее действие",
     "redo": "Повторяет отменённое действие",

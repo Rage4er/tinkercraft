@@ -87,6 +87,18 @@ export const ImportIcon = (p: any) => (
   </Icon>
 )
 
+// SVG-EXTRUDE: документ-контур, выдавленный вверх из плиты (2D → 3D)
+export const SvgIcon = (p: any) => (
+  <Icon {...p}>
+    <path fill="currentColor" fillOpacity={0.22} d="M14 44v10h36V44Z" />
+    <g {...line}>
+      <path d="M14 44v10h36V44" />
+      <path d="M22 38V20h20v18" />
+      <path d="M28 44V30h8v14" />
+    </g>
+  </Icon>
+)
+
 export const FolderIcon = (p: any) => (
   <Icon {...p}>
     <Shape d="M8 16h16l5 6h27v28H8Z" />

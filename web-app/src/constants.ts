@@ -126,6 +126,7 @@ export const TOOLTIP_DATA: Record<string, TooltipData> = {
   save: { labelKey: 'actions.save', shortcut: 'Ctrl+S', descriptionKey: 'tooltips.save' },
   export_stl: { labelKey: 'actions.export', descriptionKey: 'tooltips.exportStl' },
   import_stl: { labelKey: 'actions.import', descriptionKey: 'tooltips.importStl' },
+  import_svg: { labelKey: 'actions.importSvg', descriptionKey: 'tooltips.importSvg' },
   projects: { labelKey: 'properties.projectManager', descriptionKey: 'tooltips.projects' },
 
   // --- Edit operations ---
