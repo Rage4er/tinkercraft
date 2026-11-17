@@ -1,21 +1,21 @@
 // e2e/svg-extrude.mjs — SVG-EXTRUDE: загрузка .svg → контур 2D → глубина/масштаб → 3D-тело.
-// «Импорт SVG» → file picker (.svg) → окно «SVG → 3D» (глубина, масштаб, «Создать») → тело
+// Палитра «SVG» → file picker (.svg) → окно «SVG → 3D» (глубина, масштаб, «Создать») → тело
 // import_mesh «SVG: profile.svg» на сцене; undo/redo; ∪ куб → один CSG.
 // Запуск: `pnpm dev` в одном терминале, `pnpm e2e:svg-extrude` в другом.
 // Необязательный аргумент — путь для скриншота: `node e2e/svg-extrude.mjs /tmp/svg.png`.
 import { fileURLToPath } from 'node:url'
-import { openApp, toolbarButton, placeShape } from './helpers.mjs'
+import { openApp, placeShape } from './helpers.mjs'
 
 const shot = process.argv[2]
 const fixture = (name) => fileURLToPath(new URL(`./fixtures/${name}`, import.meta.url))
 const { browser, page, errors } = await openApp()
 const fail = (msg) => { throw new Error(msg) }
 try {
-  // ── Загрузка SVG: кнопка «Импорт SVG» → file picker принимает .svg → окно «SVG → 3D» ──
+  // ── Загрузка SVG: палитра «SVG» → file picker принимает .svg → окно «SVG → 3D» ──
   const chooser = page.waitForEvent('filechooser')
-  await toolbarButton(page, 'Импорт SVG').click()
+  await page.locator('.shape-btn', { hasText: 'SVG' }).click()
   const fc = await chooser
-  if ((await fc.element().getAttribute('accept')) !== '.svg') fail('кнопка «Импорт SVG» — не выбор .svg')
+  if ((await fc.element().getAttribute('accept')) !== '.svg') fail('палитра «SVG» — не выбор .svg')
   await fc.setFiles(fixture('profile.svg'))
   const modal = page.locator('[data-testid=svg-modal]')
   await modal.waitFor({ timeout: 10000 })

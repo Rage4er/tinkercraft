@@ -14,7 +14,7 @@ export const APP_VERSION = '1.3.12';
 // Иконки — это строковые ключи, не React-компоненты.
 // UI-слой подставляет реальные иконки из constants.tsx.
 export const ALL_SHAPES_DATA: {
-  type: ShapeType | "text";
+  type: ShapeType | "text" | "svg";
   labelKey: string;
   iconKey: string;
   categoryKey: string;
@@ -31,6 +31,8 @@ export const ALL_SHAPES_DATA: {
     { type: "tube", labelKey: "shapes.tube", iconKey: "tube", categoryKey: "shapesCategory.basic" },
     { type: "spring", labelKey: "shapes.spring", iconKey: "spring", categoryKey: "shapesCategory.basic" },
     { type: "text", labelKey: "shapes.text", iconKey: "text", categoryKey: "shapesCategory.special" },
+    // SVG-EXTRUDE: не режим размещения — загрузка .svg → окно «SVG → 3D»
+    { type: "svg", labelKey: "shapes.svg", iconKey: "svg", categoryKey: "shapesCategory.special" },
   ];
 
 // ---- Snap values ----
@@ -126,7 +128,6 @@ export const TOOLTIP_DATA: Record<string, TooltipData> = {
   save: { labelKey: 'actions.save', shortcut: 'Ctrl+S', descriptionKey: 'tooltips.save' },
   export_stl: { labelKey: 'actions.export', descriptionKey: 'tooltips.exportStl' },
   import_stl: { labelKey: 'actions.import', descriptionKey: 'tooltips.importStl' },
-  import_svg: { labelKey: 'actions.importSvg', descriptionKey: 'tooltips.importSvg' },
   projects: { labelKey: 'properties.projectManager', descriptionKey: 'tooltips.projects' },
 
   // --- Edit operations ---

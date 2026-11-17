@@ -21,6 +21,7 @@ export default function LeftPanel({
   busy,
   onAddShape,
   onShowTextModal,
+  onShowSvgImport,
   objectList,
   selSet,
   activeTab,
@@ -44,6 +45,8 @@ export default function LeftPanel({
   /** PLUG-AND-PLAY: клик по фигуре — режим размещения (фигура — после клика по грани / сетке) */
   onAddShape: (type: PlaceableShape) => void;
   onShowTextModal: () => void;
+  /** SVG-EXTRUDE: клик по «SVG» в палитре — выбор .svg → окно «SVG → 3D» */
+  onShowSvgImport: () => void;
   objectList: SceneObject[];
   selSet: Set<string>;
   activeTab: "objects" | "tree";
@@ -101,15 +104,17 @@ export default function LeftPanel({
             <button
               key={s.type}
               className={s.type === placing ? "shape-btn active" : "shape-btn"}
-              title={t(s.type === "text" ? "leftPanel.addShape" : "leftPanel.placeShape", { label: t(`shapesAcc.${s.type}`) })}
-              aria-pressed={s.type === "text" ? undefined : s.type === placing}
+              title={t(s.type === "svg" ? "leftPanel.svgImport" : s.type === "text" ? "leftPanel.addShape" : "leftPanel.placeShape", { label: t(`shapesAcc.${s.type}`) })}
+              aria-pressed={s.type === "text" || s.type === "svg" ? undefined : s.type === placing}
               // UX-AUDIT-9: не блокируется на время busy — поставленная фигура ждёт очереди (add-shape-queue);
               // PLUG-AND-PLAY: клик — режим размещения, фигура — после клика по грани / сетке или Enter
               disabled={!workerOk}
               onClick={() =>
                 s.type === "text"
                   ? onShowTextModal()
-                  : onAddShape(s.type as PlaceableShape)
+                  : s.type === "svg"
+                    ? onShowSvgImport()
+                    : onAddShape(s.type as PlaceableShape)
               }
             >
               <span className="shape-icon">{s.icon({ size: 32 })}</span>

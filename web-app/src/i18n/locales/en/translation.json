@@ -10,7 +10,8 @@
     "text": "Text",
     "capsule": "Capsule",
     "tube": "Tube",
-    "spring": "Spring"
+    "spring": "Spring",
+    "svg": "SVG"
   },
   "shapesAcc": {
     "cube": "Cube",
@@ -23,7 +24,8 @@
     "text": "Text",
     "capsule": "capsule",
     "tube": "tube",
-    "spring": "spring"
+    "spring": "spring",
+    "svg": "SVG"
   },
   "shapesCategory": {
     "basic": "Basic",
@@ -115,7 +117,6 @@
     "open": "Open",
     "export": "Export",
     "import": "Import",
-    "importSvg": "Import SVG",
     "rename": "Rename",
     "visibility": "Visibility",
     "color": "Color",
@@ -205,7 +206,8 @@
     "filter": "Filter",
     "timelineEmpty": "Empty",
     "addShape": "Add {{label}}",
-    "placeShape": "Place {{label}}: then click an object face or the grid (Enter — next to the others)"
+    "placeShape": "Place {{label}}: then click an object face or the grid (Enter — next to the others)",
+    "svgImport": "Import SVG: 2D contour → 3D body (pick a .svg file, depth, scale)"
   },
   "componentTree": {
     "sceneEmpty": "Scene is empty",
@@ -465,7 +467,6 @@
     "save": "Saves the project to a .doodle file",
     "exportStl": "Exports the scene to a file: STL, OBJ, 3MF or glTF",
     "importStl": "Imports a 3D model from an STL, OBJ or 3MF file",
-    "importSvg": "Imports a contour from an SVG file and extrudes it into a 3D body",
     "projects": "Opens the project manager",
     "undo": "Undoes the last action",
     "redo": "Redoes the undone action",

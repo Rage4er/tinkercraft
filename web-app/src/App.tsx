@@ -344,7 +344,7 @@ export default function App() {
     if (await addTextObject(textInput, { size: textSize, depth: textDepth })) setShowTextModal(false);
   }, [textInput, textSize, textDepth]);
 
-  // SVG-EXTRUDE: кнопка «Импорт SVG» → выбор .svg → окно «SVG → 3D» (глубина, масштаб, «Создать»)
+  // SVG-EXTRUDE: палитра «SVG» → выбор .svg → окно «SVG → 3D» (глубина, масштаб, «Создать»)
   const handleImportSvg = useCallback(async () => {
     if (busy) return;
     const file = await openSvgFilePicker();
@@ -596,7 +596,6 @@ export default function App() {
         onSave={saveProject}
         onExportStl={(f) => void exportMesh(f)}
         onImportStl={importStl}
-        onImportSvg={() => void handleImportSvg()}
         onShowProjects={() => setShowPM(true)}
         onUndo={() => void undoWithDimensions()}
         onRedo={() => void redoWithDimensions()}
@@ -638,6 +637,7 @@ export default function App() {
           busy={busy}
           onAddShape={handleAddShape}
           onShowTextModal={() => setShowTextModal(true)}
+          onShowSvgImport={() => void handleImportSvg()}
           objectList={objectList}
           selSet={selSet}
           activeTab={activeTab}
