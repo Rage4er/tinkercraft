@@ -10,7 +10,8 @@
     "text": "Текст",
     "capsule": "Капсула",
     "tube": "Труба",
-    "spring": "Пружина"
+    "spring": "Пружина",
+    "svg": "SVG"
   },
   "shapesAcc": {
     "cube": "куб",
@@ -23,7 +24,8 @@
     "text": "текст",
     "capsule": "капсулу",
     "tube": "трубу",
-    "spring": "пружину"
+    "spring": "пружину",
+    "svg": "SVG"
   },
   "shapesCategory": {
     "basic": "Основные",
@@ -204,7 +206,8 @@
     "filter": "Фильтр",
     "timelineEmpty": "Пусто",
     "addShape": "Добавить {{label}}",
-    "placeShape": "Разместить {{label}}: затем клик по грани объекта или сетке (Enter — рядом с прошлыми)"
+    "placeShape": "Разместить {{label}}: затем клик по грани объекта или сетке (Enter — рядом с прошлыми)",
+    "svgImport": "Импорт SVG: контур 2D → тело 3D (выбор файла .svg, глубина, масштаб)"
   },
   "componentTree": {
     "sceneEmpty": "Сцена пуста",
@@ -336,6 +339,14 @@
     "add": "Добавить",
     "cancel": "Отмена"
   },
+  "svgModal": {
+    "objectName": "SVG: {{name}}",
+    "title": "SVG → 3D",
+    "file": "Файл",
+    "depth": "Глубина",
+    "scale": "Масштаб",
+    "create": "Создать"
+  },
   "errors": {
     "noObjectsSelected": "Объекты не выбраны",
     "csgNeedTwoObjects": "Выберите ровно 2 объекта для CSG",
@@ -356,6 +367,10 @@
     "componentError": "Ошибка компонента",
     "createShapeFailed": "Ошибка создания фигуры",
     "importMeshFailed": "Ошибка импорта меша",
+    "svgFailed": "Не удалось создать тело из SVG: {{reason}}",
+    "svgNoShapes": "В файле SVG нет контуров",
+    "svgBadSize": "Глубина и масштаб должны быть больше 0",
+    "svgTooManyTris": "Слишком много треугольников: {{count}} (макс {{max}})",
     "pasteFailed": "Ошибка вставки",
     "deleteFailed": "Ошибка удаления объектов",
     "csgFailed": "Ошибка CSG-операции",

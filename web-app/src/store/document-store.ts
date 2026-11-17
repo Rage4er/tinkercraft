@@ -282,10 +282,12 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   },
 
   // ── Добавить произвольный меш (текст, и т.д.) ──
-  addRawMesh: async (name, vertices, indices, text) => {
+  // SVG-EXTRUDE: `idPrefix` — префикс id нового объекта: текст — 'txt' (по умолчанию, legacy-распознавание
+  // 3D-текста по `txt_N` — text-object.ts), SVG — 'svg' (иначе тело приняли бы за текст).
+  addRawMesh: async (name, vertices, indices, text, idPrefix) => {
     if (get().busy) return
     const { objects, operations, historyIndex } = get()
-    const id = nextId('txt')
+    const id = nextId(idPrefix ?? 'txt')
     const color = colorForIndex(Object.keys(objects).length)
     const transform: TransformNR = { x: Object.keys(objects).length * OBJECT_SPACING, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
     set({ busy: true })

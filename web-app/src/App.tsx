@@ -9,6 +9,7 @@ import ConfirmModal from "./components/ConfirmModal";
 import ToastContainer from "./components/ToastContainer";
 import Toolbar from "./components/Toolbar";
 import TextModal from "./components/TextModal";
+import SvgModal from "./components/SvgModal";
 import StatusBar from "./components/StatusBar";
 import LeftPanel from "./components/LeftPanel";
 import PropertiesPanel from "./components/PropertiesPanel";
@@ -36,6 +37,9 @@ import { SNAP_VALUES } from "./constants";
 import { useAutosave } from "./hooks/useAutosave";
 import { useSfx } from "./hooks/useSfx";
 import { addTextObject } from "./store/add-text";
+import { addSvgObject } from "./store/add-svg";
+import { notify } from "./store/notifications";
+import { MAX_SVG_FILE_SIZE, openSvgFilePicker, readSvgFile } from "./io/svg-extrude";
 import { usePlacementModeStore } from "./store/placement-mode";
 import { usePlacementMode } from "./hooks/usePlacementMode";
 import { resolveHotkey, NO_REPEAT, mirrorPlaneOf, csgOpOf, isTextEntry, tabTogglesCamera } from "./hotkeys";
@@ -72,6 +76,8 @@ export default function App() {
     activeTab, setActiveTab,
     cameraMode, setCameraMode,
     showTextModal, setShowTextModal,
+    showSvgModal, setShowSvgModal,
+    svgPending, setSvgPending,
     previewObject, setPreviewObject,
     mirrorPreviewPlane, setMirrorPreviewPlane,
     showDimensionSettings, setShowDimensionSettings,
@@ -94,6 +100,8 @@ export default function App() {
       activeTab: s.activeTab, setActiveTab: s.setActiveTab,
       cameraMode: s.cameraMode, setCameraMode: s.setCameraMode,
       showTextModal: s.showTextModal, setShowTextModal: s.setShowTextModal,
+      showSvgModal: s.showSvgModal, setShowSvgModal: s.setShowSvgModal,
+      svgPending: s.svgPending, setSvgPending: s.setSvgPending,
       previewObject: s.previewObject, setPreviewObject: s.setPreviewObject,
       mirrorPreviewPlane: s.mirrorPreviewPlane, setMirrorPreviewPlane: s.setMirrorPreviewPlane,
       showDimensionSettings: s.showDimensionSettings, setShowDimensionSettings: s.setShowDimensionSettings,
@@ -106,6 +114,9 @@ export default function App() {
   const [textInput, setTextInput] = useState("Text");
   const [textSize, setTextSize] = useState(10);
   const [textDepth, setTextDepth] = useState(5);
+  // SVG-EXTRUDE: параметры окна «SVG → 3D» (файл — svgPending в ui-store)
+  const [svgDepth, setSvgDepth] = useState(10);
+  const [svgScale, setSvgScale] = useState(1);
   // UX-AUDIT-2: «Очистить сцену» — с подтверждением
   const [showClearConfirm, setShowClearConfirm] = useState(false);
 
@@ -234,7 +245,7 @@ export default function App() {
     objects, selectedIds, busy, deleteSelected, selectObjects,
     saveProject, openProject, clearSelection, copySelected, pasteClipboard,
     mirrorSelected,
-    modalOpen: showTextModal || showPM || showClearConfirm || showDimensionSettings || showSettings || showArray,
+    modalOpen: showTextModal || showSvgModal || showPM || showClearConfirm || showDimensionSettings || showSettings || showArray,
   };
   const kbRef = useRef(kbState);
   kbRef.current = kbState;
@@ -333,12 +344,39 @@ export default function App() {
     if (await addTextObject(textInput, { size: textSize, depth: textDepth })) setShowTextModal(false);
   }, [textInput, textSize, textDepth]);
 
+  // SVG-EXTRUDE: палитра «SVG» → выбор .svg → окно «SVG → 3D» (глубина, масштаб, «Создать»)
+  const handleImportSvg = useCallback(async () => {
+    if (busy) return;
+    const file = await openSvgFilePicker();
+    if (!file) return;
+    if (file.size > MAX_SVG_FILE_SIZE) {
+      notify(t("errors.stlTooLarge", { size: Math.round(file.size / 1024 / 1024), max: MAX_SVG_FILE_SIZE / 1024 / 1024 }), "error");
+      return;
+    }
+    try {
+      const text = await readSvgFile(file);
+      setSvgPending({ name: file.name, text });
+      setShowSvgModal(true);
+    } catch (e) {
+      console.error("readSvgFile:", e);
+      notify(t("errors.svgFailed", { reason: e instanceof Error ? e.message : String(e) }), "error");
+    }
+  }, [busy, t]);
+
+  const handleCreateSvg = useCallback(async () => {
+    if (!svgPending) return;
+    if (await addSvgObject(svgPending.text, svgPending.name, { depth: svgDepth, scale: svgScale })) {
+      setShowSvgModal(false);
+      setSvgPending(null);
+    }
+  }, [svgPending, svgDepth, svgScale]);
+
   // PLUG-AND-PLAY: клик по фигуре палитры — режим размещения (превью → клик по грани / сетке,
   // X / Y / Z — плоскость оси, Enter — поставить, Esc / правый клик — отмена)
   const handleAddShape = usePlacementModeStore((s) => s.startPlacement);
-  usePlacementMode(showTextModal || showPM || showClearConfirm || showDimensionSettings || showSettings || showArray);
+  usePlacementMode(showTextModal || showSvgModal || showPM || showClearConfirm || showDimensionSettings || showSettings || showArray);
   // DIMENSIONS: режим «Размер» (Esc), Delete по выделенному размеру, согласованность режимов
-  useDimensionMode(showTextModal || showPM || showClearConfirm || showDimensionSettings || showSettings || showArray);
+  useDimensionMode(showTextModal || showSvgModal || showPM || showClearConfirm || showDimensionSettings || showSettings || showArray);
   const dimensionActive = useDimensionModeStore((s) => s.dimensionMode !== null);
   const dimensionsVisible = useDimensionsStore((s) => s.showDimensions);
   const hasSelectedDimension = useDimensionsStore((s) => s.selectedDimensionId !== null);
@@ -363,7 +401,7 @@ export default function App() {
   // CSG-GROUP-FIX: «Объединение» — сразу; «Вычитание» / «Пересечение» — режим A → B → Enter
   // (Enter / Esc, исчезнувшие объекты A, выход при «Выровнять» — useCsgGroupMode)
   const csgGroupMode = useCsgGroupModeStore((s) => s.csgGroupMode);
-  useCsgGroupMode(showTextModal || showPM || showClearConfirm || showSettings || showArray);
+  useCsgGroupMode(showTextModal || showSvgModal || showPM || showClearConfirm || showSettings || showArray);
   const runCsg = useCallback(
     (op: CsgBooleanOp) => void useCsgGroupModeStore.getState().pressCsgOperation(op),
     [],
@@ -482,6 +520,21 @@ export default function App() {
         />
       )}
 
+      {/* ── SVG Modal (SVG-EXTRUDE: контур 2D → глубина → 3D-тело) ── */}
+      {showSvgModal && svgPending && (
+        <SvgModal
+          fileName={svgPending.name}
+          depth={svgDepth}
+          scale={svgScale}
+          busy={busy}
+          workerOk={workerOk}
+          onDepthChange={setSvgDepth}
+          onScaleChange={setSvgScale}
+          onCreate={handleCreateSvg}
+          onClose={() => { setShowSvgModal(false); setSvgPending(null); }}
+        />
+      )}
+
       {/* ── Подтверждение очистки сцены (UX-AUDIT-2) ── */}
       {showClearConfirm && (
         <ConfirmModal
@@ -584,6 +637,7 @@ export default function App() {
           busy={busy}
           onAddShape={handleAddShape}
           onShowTextModal={() => setShowTextModal(true)}
+          onShowSvgImport={() => void handleImportSvg()}
           objectList={objectList}
           selSet={selSet}
           activeTab={activeTab}

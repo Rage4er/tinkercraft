@@ -12,6 +12,7 @@ import {
   TubeIcon,
   SpringIcon,
   TextIcon,
+  SvgIcon,
 } from "./components/icons";
 import { ALL_SHAPES_DATA, SNAP_VALUES, OP_FILTER_LABELS, DEFAULT_FILTERS, OBJECT_SPACING, PASTE_OFFSET, AUTOSAVE_DELAY_MS, MOVE_DELTA_EPSILON, VERTEX_MERGE_PRECISION, OBJECT_COLORS } from "./constants";
 
@@ -29,11 +30,12 @@ const ICON_MAP: Record<string, React.FC<{ size?: number; className?: string }>> 
   tube: TubeIcon,
   spring: SpringIcon,
   text: TextIcon,
+  svg: SvgIcon,
 };
 
 // ---- Shapes (React version with icon components) ----
 export const ALL_SHAPES: {
-  type: ShapeType | "text";
+  type: ShapeType | "text" | "svg";
   labelKey: string;
   icon: (props: { size?: number; className?: string }) => React.ReactNode;
   categoryKey: string;

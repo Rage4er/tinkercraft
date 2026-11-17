@@ -10,7 +10,8 @@
     "text": "Text",
     "capsule": "Capsule",
     "tube": "Tube",
-    "spring": "Spring"
+    "spring": "Spring",
+    "svg": "SVG"
   },
   "shapesAcc": {
     "cube": "Cube",
@@ -23,7 +24,8 @@
     "text": "Text",
     "capsule": "capsule",
     "tube": "tube",
-    "spring": "spring"
+    "spring": "spring",
+    "svg": "SVG"
   },
   "shapesCategory": {
     "basic": "Basic",
@@ -204,7 +206,8 @@
     "filter": "Filter",
     "timelineEmpty": "Empty",
     "addShape": "Add {{label}}",
-    "placeShape": "Place {{label}}: then click an object face or the grid (Enter — next to the others)"
+    "placeShape": "Place {{label}}: then click an object face or the grid (Enter — next to the others)",
+    "svgImport": "Import SVG: 2D contour → 3D body (pick a .svg file, depth, scale)"
   },
   "componentTree": {
     "sceneEmpty": "Scene is empty",
@@ -335,6 +338,14 @@
     "add": "Add",
     "cancel": "Cancel"
   },
+  "svgModal": {
+    "objectName": "SVG: {{name}}",
+    "title": "SVG → 3D",
+    "file": "File",
+    "depth": "Depth",
+    "scale": "Scale",
+    "create": "Create"
+  },
   "errors": {
     "noObjectsSelected": "No objects selected",
     "csgNeedTwoObjects": "Select exactly 2 objects for CSG",
@@ -355,6 +366,10 @@
     "componentError": "Component error",
     "createShapeFailed": "Failed to create shape",
     "importMeshFailed": "Failed to import mesh",
+    "svgFailed": "Failed to create body from SVG: {{reason}}",
+    "svgNoShapes": "The SVG file has no contours",
+    "svgBadSize": "Depth and scale must be greater than 0",
+    "svgTooManyTris": "Too many triangles: {{count}} (max {{max}})",
     "pasteFailed": "Paste failed",
     "deleteFailed": "Failed to delete objects",
     "csgFailed": "CSG operation failed",

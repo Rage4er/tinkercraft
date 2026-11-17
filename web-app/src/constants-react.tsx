@@ -12,12 +12,13 @@ import {
   TubeIcon,
   SpringIcon,
   TextIcon,
+  SvgIcon,
 } from "./components/icons";
 import { ALL_SHAPES_DATA } from "./constants";
 
 // ---- Shapes (React components) ----
 export const ALL_SHAPES_ICONS: {
-  type: ShapeType | "text";
+  type: ShapeType | "text" | "svg";
   labelKey: string;
   icon: (props: { size?: number; className?: string }) => React.ReactNode;
   categoryKey: string;
@@ -34,6 +35,7 @@ export const ALL_SHAPES_ICONS: {
     tube: TubeIcon,
     spring: SpringIcon,
     text: TextIcon,
+    svg: SvgIcon,
   };
 
   return {
