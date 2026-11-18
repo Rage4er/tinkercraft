@@ -161,7 +161,7 @@ function press(code: string, opts: KeyboardEventInit = {}, target: EventTarget =
 describe('PLUG-AND-PLAY — режим: клик по иконке не создаёт фигуру', () => {
   it('клик по «Кубу» → режим размещения, фигуры нет; двойной клик — тот же режим; другая иконка — смена фигуры', async () => {
     const h = mount(
-      <LeftPanel shapeSearch="" onShapeSearchChange={noop} workerOk busy={false} onAddShape={(t) => pm().startPlacement(t)} onShowTextModal={noop} onShowSvgImport={noop}
+      <LeftPanel shapeSearch="" onShapeSearchChange={noop} workerOk busy={false} onAddShape={(t) => pm().startPlacement(t)} onShowTextModal={noop} onShowSvgImport={noop} onShowThreadModal={noop}
         objectList={[]} selSet={new Set()} activeTab="objects" onTabChange={noop} onSelect={noop} onRename={noop}
         onToggleVis={noop} onDeleteObject={noop} historyIndex={0} operations={[]} tlFilters={{}} onFilterChange={noop} onJumpHistory={noop} />,
     )

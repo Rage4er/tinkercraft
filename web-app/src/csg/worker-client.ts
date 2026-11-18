@@ -201,6 +201,17 @@ export async function workerBuildImportedMesh(
   return result
 }
 
+/** THREAD-GENERATOR: построить резьбу (болт/гайка) по табличному размеру. */
+export async function workerBuildThread(
+  objId: string,
+  params: { series: string; sizeId: string; length: number; kind: string },
+): Promise<MeshResult> {
+  await waitReady()
+  const result = await send<MeshResult>('buildThread', { objId, ...params })
+  devLogWorker('receive', 'buildThread', { objId, tris: result.tris, vertices: result.vertices.length / 3 }, result.ms)
+  return result
+}
+
 /**
  * Rebuild objects in worker cache with current transforms.
  * Must be called before csgBoolean / mirrorObject to ensure worker cache

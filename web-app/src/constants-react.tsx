@@ -13,12 +13,13 @@ import {
   SpringIcon,
   TextIcon,
   SvgIcon,
+  ThreadIcon,
 } from "./components/icons";
 import { ALL_SHAPES_DATA } from "./constants";
 
 // ---- Shapes (React components) ----
 export const ALL_SHAPES_ICONS: {
-  type: ShapeType | "text" | "svg";
+  type: ShapeType | "text" | "svg" | "thread";
   labelKey: string;
   icon: (props: { size?: number; className?: string }) => React.ReactNode;
   categoryKey: string;
@@ -36,6 +37,7 @@ export const ALL_SHAPES_ICONS: {
     spring: SpringIcon,
     text: TextIcon,
     svg: SvgIcon,
+    thread: ThreadIcon,
   };
 
   return {

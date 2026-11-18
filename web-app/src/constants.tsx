@@ -13,6 +13,7 @@ import {
   SpringIcon,
   TextIcon,
   SvgIcon,
+  ThreadIcon,
 } from "./components/icons";
 import { ALL_SHAPES_DATA, SNAP_VALUES, OP_FILTER_LABELS, DEFAULT_FILTERS, OBJECT_SPACING, PASTE_OFFSET, AUTOSAVE_DELAY_MS, MOVE_DELTA_EPSILON, VERTEX_MERGE_PRECISION, OBJECT_COLORS } from "./constants";
 
@@ -31,11 +32,12 @@ const ICON_MAP: Record<string, React.FC<{ size?: number; className?: string }>> 
   spring: SpringIcon,
   text: TextIcon,
   svg: SvgIcon,
+  thread: ThreadIcon,
 };
 
 // ---- Shapes (React version with icon components) ----
 export const ALL_SHAPES: {
-  type: ShapeType | "text" | "svg";
+  type: ShapeType | "text" | "svg" | "thread";
   labelKey: string;
   icon: (props: { size?: number; className?: string }) => React.ReactNode;
   categoryKey: string;

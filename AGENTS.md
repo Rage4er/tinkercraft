@@ -14,7 +14,7 @@
 - **manifold-3d** (WASM) — CSG операции в Web Worker
 - **Zustand 5** — стейт-менеджмент
 - **Vite 6** — сборка
-- **Vitest 4** — тесты (1050 тестов, 88 файлов; `it.fails` открытых багов нет — UX-прогон 7 нашёл 0 новых, цикл закрыт; UX-AUDIT-1…10 исправлены в `fix-all`, 11…20 — в `fix-all-2`, 21…31 — в `fix-all-3`, 32…35 — в `fix-all-4`, 32-followup и 36…40 — в `fix-all-5`, 41, 42 — в `fix-all-6`)
+- **Vitest 4** — тесты (1061 тест, 88 файлов; `it.fails` открытых багов нет — UX-прогон 7 нашёл 0 новых, цикл закрыт; UX-AUDIT-1…10 исправлены в `fix-all`, 11…20 — в `fix-all-2`, 21…31 — в `fix-all-3`, 32…35 — в `fix-all-4`, 32-followup и 36…40 — в `fix-all-5`, 41, 42 — в `fix-all-6`)
 - **pnpm** — пакетный менеджер
 
 ## Команды
@@ -23,7 +23,7 @@
 cd web-app
 pnpm dev          # dev-сервер (порт 5000)
 pnpm build        # production-сборка
-pnpm test         # запуск тестов (1050 тестов, 88 файлов)
+pnpm test         # запуск тестов (1061 тест, 88 файлов)
 pnpm typecheck    # tsc --noEmit
 pnpm e2e:smoke    # дымовой тест в браузере (Playwright; нужен запущенный pnpm dev; см. web-app/e2e/helpers.mjs). В CI все e2e — job `e2e` в ci-web.yml (CI-E2E)
 pnpm e2e:tree     # Фаза 9.1: раскрытие CSG в дереве, выбор ребёнка
@@ -55,6 +55,7 @@ pnpm e2e:ux-polish  # ux-polish: A — CSG-GROUP-UI (кнопки CSG в тул�
 pnpm e2e:ortho-raycast  # ORTHO-RAYCAST: ортография — линейка у краёв вида = сетке под курсором (по режиму размещения), линейка с верха куба у края, гизмо — стрелка X ловится и куб идёт за мышью (+120 px); перспектива — как раньше
 pnpm e2e:modeling-tools  # Пакет B: «Массив» — линейный ×3 шаг 30 (X копий, один шаг истории, Ctrl+Z / Ctrl+Y), круговой ×6 вокруг Z через центр (позиции на окружности, «Вращение Z» 0…300; перезагрузка — то же); «Капсула» / «Труба» / «Пружина» из палитры, поля пружины, «Витков» 5 → 8, труба ∪ пружина
 pnpm e2e:svg-extrude  # SVG-EXTRUDE: палитра «SVG» → file picker (.svg) → окно «SVG → 3D» (глубина 20, масштаб 0.5) → тело «SVG: profile.svg», undo/redo, ∪ куб → CSG с детьми (SVG baked 🔒)
+pnpm e2e:thread-generator  # THREAD-GENERATOR: палитра «Резьба» → окно (серия metric/imperial, размер, длина, болт/гайка) → «Резьба: M6×20», 1/4"-20 UNC×25, «Гайка: M6»; undo/redo; ∪ куб → CSG
 pnpm e2e:ux-formats-settings  # Пакет A: «Настройки» (язык ru → en → ru, единицы см — поле «2.00 см», ввод 5 см → 50 мм, перезагрузка, «Сбросить», Esc), «Высокий контраст» (панель и фон сцены чёрные), звуки (click / create / success, выкл. — тишина), «Экспорт» STL / OBJ / 3MF / glTF и «Импорт» OBJ, замок (клик и Ctrl+A не выбирают, Delete — остаётся, снять — выбирается)
 ```
 
@@ -138,6 +139,9 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 | `src/hooks/useRootConsistency.ts` | Согласованность дерева CSG-корня с мешем (замки в дереве) — Фаза 9.9 |
 | `src/csg/child-params.ts` | Поля параметров примитива для формы правки ребёнка CSG (`getParamFields`, `clampFieldValue`) — Фаза 9.2. Подписи размеров — по оси (AXIS-LABELS): куб `width` — X, `height` — **Y**, `depth` — **Z** (`Manifold.cube([w, h, d])`, вверх — Z); высота цилиндра / конуса / призмы / пирамиды — Z (`properties.sizeX/Y/Z`) |
 | `src/csg/worker-handlers.ts` › `buildCapsule` / `buildTube` / `buildSpring` | **Новые примитивы** (NEW-PRIMITIVES), ось — Z: капсула и труба — `Manifold.revolve` профиля (симметричны, центр масс в 0), пружина — круг проволоки вдоль спирали + плоские торцы (меш → `new Manifold`, обход наружу по знаку объёма, `centerManifoldToCOM`; `springGeometry` — проволока ≤ 0,45 шага и ≤ 0,9 радиуса витка). Новая фигура: тип в `ShapeType`, `buildPrimitive`, `getParamFields` (поля свойств и правки ребёнка), `defaultShapeParams`, `localParamsBox`, палитра `ALL_SHAPES_DATA` + **обе** карты иконок (`constants.tsx` — палитра, `constants-react.tsx`), иконки в `ComponentTree` / `Timeline`, `shapes.*` / `shapesAcc.*` |
+| `src/csg/thread-table.ts` | **THREAD-GENERATOR:** таблицы резьбы (метрическая M3…M24, дюймовая UNC+UNF 1/4"…3/4", диаметр/шаг в мм), `threadProfileDepth` (0,5413·шаг), `nutAcrossFlats` (DIN 934), `sanitizeThreadParams` (размер из таблицы, длина 4…120) |
+| `src/csg/worker-handlers.ts` › `sweepProfileAlongHelix` / `buildThread` / `handleBuildThread` | **THREAD-GENERATOR:** свип трапециевидного профиля вдоль спирали (frame T/N/B, торцы — веером к центроиду, обход по знаку объёма); болт = цилиндр ∪ виток ∩ бокс (ровные торцы), гайка = шестигранник (CrossSection + `Manifold.extrude` + `translate`) − (сверло ∪ полость витка). NB: `Manifold.extrude` со `scaleTop`-числом портит объём — без него. Сообщение воркера `buildThread` (worker.ts, worker-client `workerBuildThread`, мост тестов) |
+| `src/store/add-thread.ts` | **THREAD-GENERATOR:** `addThreadObject` — воркер строит меш → объект `import_mesh` «Резьба: …» / «Гайка: …» через `addRawMesh` (префикс `thr`), не параметрический |
 | `src/store/edit-child.ts` | Пересчёт CSG после смены params ребёнка: калибровка дерева ↔ меш, un-bake в локальную систему корня (`computeEditedChild`, `unbakeToLocal`, `findCreationTransform` — в т.ч. система создания копий: зеркало — отражённая, вставка — `copyTree.origin`) — Фаза 9.3 |
 | `src/store/project-history.ts` | **Эффективная история** (Фаза 9.5.0): `projectHistory` подставляет `edit_step` (патч шага N + `replacements` замороженных шагов) и выбрасывает их; идемпотентна, вызывается на входе `rebuild.ts` и `findCreationTransform`. `computeCascade` — замыкание зависимостей правки |
 | `src/store/csg-result.ts` | Общее ядро CSG `computeCsgResult` (sync → boolean → pivot = transformA → un-bake RS) для `csgBoolean` и каскада 9.5; `computeCsgResultN` — N операндов (N-ARY-CSG: union N, subtract/intersect группа A vs B; 2 операнда — бинарный путь); `syncObjectsForOperation`, `groupOperationFromResult`, `groupReplacementFromResult` |
@@ -328,6 +332,7 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 - Импортированные меши (STL) не параметризуются (IMPORT-MESH-PARAMETRIC: не требуется); трансформации и CSG работают — CSG допускает замкнутый STL (проверка по manifold в воркере, IMPORT-MESH-CSG), незамкнутый → уведомление `errors.csgNonManifold`; «починка» незамкнутого меша не делается; старые extrude без `group.source` не редактируются как extrude (EXTRUDE-LEGACY: не мигрируем); `extrudeSelected` — движок правки 9.5.4, не UI-инструмент: это «растянуть по оси», а не extrude 2D→3D, кнопку не возвращать (EXTRUDE-3D-SCALE; настоящий extrude — Фаза 11)
 - Скругления (fillet) нет: прежний параметр куба удалён (remove-fillet) до инструмента на B-Rep; старые шаги `fillet` вырезаются при загрузке (`io/legacy-fillet.ts`) — новых не создавать
 - **SVG-EXTRUDE** (2D → 3D): тело — шаг `import_mesh` «SVG: …» (не параметрический: глубину/масштаб задним числом не поменять, как у STL-текста); контур с самопересечениями manifold не построит — воркер сообщит об ошибке (как незамкнутый STL); размещение — рядом с прошлыми объектами (не режим размещения, не «стоит на сетке»); плоскость контура — XY, выдавливание — +Z
+- **THREAD-GENERATOR**: тело не параметрическое (шаг `import_mesh` «Резьба: …» / «Гайка: …» — как у SVG); профиль без скруглений гребня/дна (упрощение базового 60°); гайка — сквозное отверстие без фаски/зенковки; смена серии в окне сбрасывает размер на первый серии; создание — рядом с прошлыми объектами (не режим размещения)
 - После v1.3.1 открыто: связанное зеркало (linked mirror) не делали — копия CSG всегда независимая; «починка» незамкнутого STL. CI — один workflow `ci-web.yml` (CI-DEDUP ✅): job `ci` (install + typecheck + test + build) и job `e2e` — все 30 e2e (CI-E2E ✅)
 - Выравнивание режимом «Выровнять» (ALIGN-UI-REVIT) пишется шагом `align` с плоскостью (ALIGN-PLANE-RESOLVE ✅; с поворотом — UX-AUDIT-32; грань гладкой поверхности — цилиндр, сфера — не поворачивает, только касание): правка прошлого шага пересчитывает его; ✎ у самого шага нет (как у обычного align). Плоскость A следует за системой объекта A (TRS), а не за гранью при правке формы A (правка ребёнка CSG A)
 - Дерево живой сессии, начатой до v1.3.2 (boolean-узлы без `originTransform`), для вложенного CSG, сдвинутого до объединения, остаётся под замком `nested_moved` (предохранитель); после перезагрузки/загрузки проекта дерево перестраивается из истории с TRS₀ — правка работает

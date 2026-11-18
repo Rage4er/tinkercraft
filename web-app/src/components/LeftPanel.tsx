@@ -22,6 +22,7 @@ export default function LeftPanel({
   onAddShape,
   onShowTextModal,
   onShowSvgImport,
+  onShowThreadModal,
   objectList,
   selSet,
   activeTab,
@@ -47,6 +48,8 @@ export default function LeftPanel({
   onShowTextModal: () => void;
   /** SVG-EXTRUDE: клик по «SVG» в палитре — выбор .svg → окно «SVG → 3D» */
   onShowSvgImport: () => void;
+  /** THREAD-GENERATOR: клик по «Резьба» в палитре — окно «Резьба» (болт/гайка) */
+  onShowThreadModal: () => void;
   objectList: SceneObject[];
   selSet: Set<string>;
   activeTab: "objects" | "tree";
@@ -104,8 +107,8 @@ export default function LeftPanel({
             <button
               key={s.type}
               className={s.type === placing ? "shape-btn active" : "shape-btn"}
-              title={t(s.type === "svg" ? "leftPanel.svgImport" : s.type === "text" ? "leftPanel.addShape" : "leftPanel.placeShape", { label: t(`shapesAcc.${s.type}`) })}
-              aria-pressed={s.type === "text" || s.type === "svg" ? undefined : s.type === placing}
+              title={t(s.type === "svg" ? "leftPanel.svgImport" : s.type === "thread" ? "leftPanel.threadImport" : s.type === "text" ? "leftPanel.addShape" : "leftPanel.placeShape", { label: t(`shapesAcc.${s.type}`) })}
+              aria-pressed={s.type === "text" || s.type === "svg" || s.type === "thread" ? undefined : s.type === placing}
               // UX-AUDIT-9: не блокируется на время busy — поставленная фигура ждёт очереди (add-shape-queue);
               // PLUG-AND-PLAY: клик — режим размещения, фигура — после клика по грани / сетке или Enter
               disabled={!workerOk}
@@ -114,7 +117,9 @@ export default function LeftPanel({
                   ? onShowTextModal()
                   : s.type === "svg"
                     ? onShowSvgImport()
-                    : onAddShape(s.type as PlaceableShape)
+                    : s.type === "thread"
+                      ? onShowThreadModal()
+                      : onAddShape(s.type as PlaceableShape)
               }
             >
               <span className="shape-icon">{s.icon({ size: 32 })}</span>

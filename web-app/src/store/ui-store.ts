@@ -67,6 +67,9 @@ export interface UiStore {
   setShowSvgModal: (v: boolean) => void
   svgPending: { name: string; text: string } | null
   setSvgPending: (v: { name: string; text: string } | null) => void
+  /** THREAD-GENERATOR: окно «Резьба» (болт/гайка) */
+  showThreadModal: boolean
+  setShowThreadModal: (v: boolean) => void
 
   // Extrude
   extrudeAxis: 'X' | 'Y' | 'Z'
@@ -157,6 +160,8 @@ export const useUiStore = create<UiStore>((set) => ({
   setShowSvgModal: (v) => set({ showSvgModal: v }),
   svgPending: null,
   setSvgPending: (v) => set({ svgPending: v }),
+  showThreadModal: false,
+  setShowThreadModal: (v) => set({ showThreadModal: v }),
 
   extrudeAxis: 'Y',
   setExtrudeAxis: (v) => set({ extrudeAxis: v }),

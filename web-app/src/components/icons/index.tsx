@@ -99,6 +99,18 @@ export const SvgIcon = (p: any) => (
   </Icon>
 )
 
+// THREAD-GENERATOR: стержень с резьбой (винтовая линия вокруг цилиндра)
+export const ThreadIcon = (p: any) => (
+  <Icon {...p}>
+    <path fill="currentColor" fillOpacity={0.22} d="M22 52V20h12v32Z" />
+    <g {...line}>
+      <path d="M22 52V20h12v32" />
+      <path d="M22 20h12M22 52h12" />
+      <path d="M22 27l12-5M22 36l12-5M22 45l12-5M22 54l12-5" />
+    </g>
+  </Icon>
+)
+
 export const FolderIcon = (p: any) => (
   <Icon {...p}>
     <Shape d="M8 16h16l5 6h27v28H8Z" />

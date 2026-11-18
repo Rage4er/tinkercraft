@@ -11,6 +11,7 @@ import { centerMassAtOrigin } from './geometry-utils'
 import type { RebuildTransform } from './rebuildOps'
 import { applyMoveDelta, applyMirrorToTransform, applyAlignToTransform, expandForReplay } from './rebuildOps'
 import type { MirrorOperation } from './types'
+import { threadSizeOf, threadProfileDepth, nutAcrossFlats, sanitizeThreadParams, type ThreadKind, type ThreadSize } from './thread-table'
 import { devLog, devLogCsg } from '../utils/debug'
 
 // --- Type definitions (moved from worker.ts to avoid circular deps) ---
@@ -58,6 +59,15 @@ export interface ManifoldConstructor {
     center: boolean,
   ): ManifoldObject
   revolve(crossSection: CrossSection, segments: number): ManifoldObject
+  /** THREAD-GENERATOR: выдавливание контура вдоль Z (гайка, шестигранник); center=true — центрирование. */
+  extrude(
+    crossSection: CrossSection,
+    height: number,
+    nDivisions?: number,
+    twistDegrees?: number,
+    scaleTop?: Readonly<[number, number]> | number,
+    center?: boolean,
+  ): ManifoldObject
   /** N-ARY-CSG: пакетное объединение (одна операция manifold, а не цепочка add). */
   union(manifolds: readonly ManifoldObject[]): ManifoldObject
 }
@@ -487,6 +497,156 @@ export function buildSpring(params: Record<string, number>): ManifoldObject {
   return centerManifoldToCOM(spring)
 }
 
+// --- THREAD-GENERATOR: резьба (болт / гайка) ---
+// Профиль 60° (ISO/Unified): высота витка h = 0,5413·шаг, гребень P/8, дно P/4
+// (упрощение — без скруглений). Болт: цилиндр ⌀(d − 2h) ∪ виток (свип трапеции
+// вдоль спирали, врезанный на 0,1·шаг в цилиндр). Гайка: шестигранник −
+// (сверло ⌀(d − 2h) ∪ полость витка). Свип — как у пружины (frame T/N/B вдоль
+// спирали), торцы — веером к центроиду кольца; обход чинится по знаку объёма.
+
+/**
+ * Свип многоугольного профиля вдоль спирали. Профиль — в локальной плоскости
+ * кольца: x — радиально (от оси, наружу +), y — вдоль оси Z. Путь — спираль
+ * радиуса `rc` от z0 до z1 за `turns` витков. Торцы плоские (веер к центроиду).
+ */
+export function sweepProfileAlongHelix(
+  rc: number,
+  z0: number,
+  z1: number,
+  turns: number,
+  profile: Array<[number, number]>,
+  segPerTurn: number,
+): ManifoldObject {
+  const { Manifold } = getWasm()
+  const m = profile.length
+  const n = Math.max(4, Math.round(turns * segPerTurn))
+  const L = 2 * Math.PI * turns
+  const dz = (z1 - z0) / L
+  const cx = profile.reduce((s, p) => s + p[0], 0) / m
+  const cy = profile.reduce((s, p) => s + p[1], 0) / m
+  const verts: number[] = []
+  const center = (i: number) => {
+    const t = (L * i) / n
+    return { t, c: [rc * Math.cos(t), rc * Math.sin(t), z0 + dz * t] as [number, number, number] }
+  }
+  for (let i = 0; i <= n; i++) {
+    const { t, c } = center(i)
+    const T = [-rc * Math.sin(t), rc * Math.cos(t), dz]
+    const tl = Math.hypot(T[0], T[1], T[2])
+    T[0] /= tl; T[1] /= tl; T[2] /= tl
+    const N = [-Math.cos(t), -Math.sin(t), 0]
+    const B = [T[1] * N[2] - T[2] * N[1], T[2] * N[0] - T[0] * N[2], T[0] * N[1] - T[1] * N[0]]
+    for (let j = 0; j < m; j++) {
+      const [x, y] = profile[j]
+      verts.push(c[0] + x * N[0] + y * B[0], c[1] + x * N[1] + y * B[1], c[2] + x * N[2] + y * B[2])
+    }
+  }
+  // торцевые кольца — в горизонтальные плоскости z0/z1: без выступа витка
+  // за длину тела (кольцо наклонено на Bz ≈ 1) — ровные торцы, габарит = длине
+  for (let j = 0; j < m; j++) {
+    verts[j * 3 + 2] = z0
+    verts[(n * m + j) * 3 + 2] = z1
+  }
+  // центроиды торцевых колец — для плоских торцевых крышок
+  const centroidAt = (i: number): [number, number, number] => {
+    const { t, c } = center(i)
+    const T = [-rc * Math.sin(t), rc * Math.cos(t), dz]
+    const tl = Math.hypot(T[0], T[1], T[2])
+    T[0] /= tl; T[1] /= tl; T[2] /= tl
+    const N = [-Math.cos(t), -Math.sin(t), 0]
+    const B = [T[1] * N[2] - T[2] * N[1], T[2] * N[0] - T[0] * N[2], T[0] * N[1] - T[1] * N[0]]
+    return [c[0] + cx * N[0] + cy * B[0], c[1] + cx * N[1] + cy * B[1], c[2] + cx * N[2] + cy * B[2]]
+  }
+  const g0 = verts.length / 3
+  verts.push(...centroidAt(0))
+  const g1 = verts.length / 3
+  verts.push(...centroidAt(n))
+  const tris: number[] = []
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < m; j++) {
+      const a = i * m + j, b = i * m + ((j + 1) % m), c = (i + 1) * m + j, d = (i + 1) * m + ((j + 1) % m)
+      tris.push(a, c, b, b, c, d)
+    }
+  }
+  for (let j = 0; j < m; j++) {
+    const a = j, b = (j + 1) % m
+    tris.push(g0, a, b)
+    const c = n * m + j, d = n * m + ((j + 1) % m)
+    tris.push(g1, d, c)
+  }
+  // ориентация наружу: объём (сумма тетраэдров от начала координат) > 0
+  let vol = 0
+  for (let k = 0; k < tris.length; k += 3) {
+    const [p, q, r] = [tris[k], tris[k + 1], tris[k + 2]].map((v) => [verts[v * 3], verts[v * 3 + 1], verts[v * 3 + 2]])
+    vol += p[0] * (q[1] * r[2] - q[2] * r[1]) - p[1] * (q[0] * r[2] - q[2] * r[0]) + p[2] * (q[0] * r[1] - q[1] * r[0])
+  }
+  if (vol < 0) for (let k = 0; k < tris.length; k += 3) { const x = tris[k + 1]; tris[k + 1] = tris[k + 2]; tris[k + 2] = x }
+  return new Manifold({ numProp: 3, vertProperties: new Float32Array(verts), triVerts: new Uint32Array(tris) })
+}
+
+/** Резьба по табличному размеру: болт (стержень, наружная резьба) или гайка (отверстие). */
+export function buildThread(size: ThreadSize, length: number, kind: ThreadKind): ManifoldObject {
+  const { Manifold, CrossSection } = getWasm()
+  const P = size.pitch
+  const h = threadProfileDepth(P)
+  const L = length
+  const segPerTurn = 48
+  const embed = 0.1 * P                    // врезание витка в цилиндр / стенку
+  const c = P / 16                         // полуширина гребня
+  const b = P / 8 + embed                  // полуширина у дна
+  const z0 = -L / 2, z1 = L / 2
+  const turns = L / P
+  if (kind === 'bolt') {
+    const rCore = size.d / 2 - h
+    const core = Manifold.cylinder(L, rCore, rCore, 72, true)
+    // x > 0 — вдоль N (N направлена К ОСИ): гребень на радиусе d/2, дно внутрь на h + врезание
+    const ridge = sweepProfileAlongHelix(
+      size.d / 2, z0, z1, turns,
+      [[0, -c], [0, c], [h + embed, b], [h + embed, -b]],
+      segPerTurn,
+    )
+    const m = core.add(ridge)
+    core.delete()
+    ridge.delete()
+    // виток у торцов выступает на ~b вдоль оси — ровные торцы ∩ бокс |z| ≤ L/2
+    const box = Manifold.cube([size.d * 4, size.d * 4, L], true)
+    const trimmed = m.intersect(box)
+    m.delete()
+    box.delete()
+    return centerManifoldToCOM(trimmed)
+  }
+  // гайка: шестигранник − (сверло ∪ полость витка)
+  const rDrill = size.d / 2 - h
+  const s = nutAcrossFlats(size.d)
+  const Rc = s / Math.sqrt(3)              // описанный радиус (грань под ключ = s)
+  const hex: Array<[number, number]> = []
+  for (let i = 0; i < 6; i++) {
+    const a = (Math.PI / 3) * i
+    hex.push([Rc * Math.cos(a), Rc * Math.sin(a)])
+  }
+  const cs = new CrossSection([hex])
+  // NB: scaleTop ЧИСЛОМ в JS-биндинге extrude уродует объём — без него и без center,
+  // центрирование — translate
+  const hex0 = Manifold.extrude(cs, L)
+  cs.delete()
+  const hexM = hex0.translate(0, 0, -L / 2)
+  hex0.delete()
+  const drill = Manifold.cylinder(L, rDrill, rDrill, 72, true)
+  // полость витка: от сверла НАРУЖУ (x < 0 — против N) до d/2 + врезание в стенку
+  const ridgeVoid = sweepProfileAlongHelix(
+    rDrill, z0, z1, turns,
+    [[0, -b], [0, b], [-h - embed, -c], [-h - embed, c]],
+    segPerTurn,
+  )
+  const hole = drill.add(ridgeVoid)
+  drill.delete()
+  ridgeVoid.delete()
+  const nut = hexM.subtract(hole)
+  hexM.delete()
+  hole.delete()
+  return centerManifoldToCOM(nut)
+}
+
 // --- Transform helpers ---
 
 /** Apply only translation to manifold geometry. Disposes the source object. */
@@ -619,6 +779,17 @@ export interface BuildImportedMeshMessage {
   indices: number[]
 }
 
+/** THREAD-GENERATOR: построение резьбы (болт/гайка) по табличному размеру. */
+export interface BuildThreadMessage {
+  reqId: string
+  type: 'buildThread'
+  objId: string
+  series: string
+  sizeId: string
+  length: number
+  kind: string
+}
+
 export interface CsgBooleanMessage {
   reqId: string
   type: 'csgBoolean'
@@ -748,6 +919,40 @@ export async function handleBuildImportedMesh(msg: BuildImportedMeshMessage): Pr
       },
       buildTransferList(mesh),
     )
+  }
+}
+
+/** Handle buildThread message (THREAD-GENERATOR). Ошибка параметров/построения → error-ответ. */
+export async function handleBuildThread(msg: BuildThreadMessage): Promise<void> {
+  const t0 = performance.now()
+  const p = sanitizeThreadParams(msg)
+  if (!p) {
+    safePostMessage({ reqId: msg.reqId, type: 'error', message: `bad thread params: ${JSON.stringify(msg)}` })
+    return
+  }
+  const size = threadSizeOf(p.series, p.sizeId)!
+  devLogCsg('BUILD_THREAD', { objId: msg.objId, size: size.id, length: p.length, kind: p.kind })
+  try {
+    const m = buildThread(size, p.length, p.kind)
+    setCached(msg.objId, m)
+    const mesh = extractMesh(m)
+    safePostMessage(
+      {
+        reqId: msg.reqId,
+        type: 'mesh',
+        objId: msg.objId,
+        vertices: mesh.vertices,
+        indices: mesh.indices,
+        normals: mesh.normals,
+        tris: mesh.tris,
+        ms: performance.now() - t0,
+      },
+      buildTransferList(mesh),
+    )
+  } catch (e) {
+    console.warn(`[DIAG:handleBuildThread] failed for ${msg.objId}:`, e)
+    setCached(msg.objId, null)
+    safePostMessage({ reqId: msg.reqId, type: 'error', message: String(e) })
   }
 }
 
