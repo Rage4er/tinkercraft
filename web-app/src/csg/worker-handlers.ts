@@ -618,7 +618,7 @@ export function buildThread(size: ThreadSize, length: number, kind: ThreadKind):
   }
   // гайка: шестигранник − (сверло ∪ полость витка ∪ фаски входа)
   const rDrill = size.d / 2 - h
-  const s = nutAcrossFlats(size.d)
+  const s = nutAcrossFlats(size)
   const Rc = s / Math.sqrt(3)              // описанный радиус (грань под ключ = s)
   const hex: Array<[number, number]> = []
   for (let i = 0; i < 6; i++) {

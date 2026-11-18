@@ -15,46 +15,52 @@ export type ThreadKind = 'bolt' | 'nut'
 export interface ThreadSize {
   /** Стабильный ключ: 'M6', '1/4-20-UNC', '1/2-20-UNF' */
   id: string
-  /** Подпись в UI: 'M6 (шаг 1,0)' / '1/4"-20 UNC (⌀6,35)' */
+  /** Подпись в UI: 'M6 × 1' / '1/4"-20 UNC × 1.27' */
   label: string
   /** Номинальный наружный диаметр, мм */
   d: number
   /** Шаг, мм */
   pitch: number
+  /** Размер гайки под ключ (ширина по граням), мм: метрические — DIN EN ISO 4032 / DIN 934-1, дюймовые — ANSI B18.2.2 */
+  flats: number
 }
 
 const mm = (inch: number) => inch * 25.4
 const tpi = (v: number) => 25.4 / v
 const r2 = (v: number) => Math.round(v * 100) / 100
 
+// DIN EN ISO 4032 / DIN 934-1 (ключи, мм): M3=5.5, M4=7, M5=8, M6=10, M8=13,
+// M10=16, M12=18, M16=24, M20=30, M24=36.
 export const METRIC_THREADS: readonly ThreadSize[] = [
-  { id: 'M3', label: 'M3 × 0.5', d: 3, pitch: 0.5 },
-  { id: 'M4', label: 'M4 × 0.7', d: 4, pitch: 0.7 },
-  { id: 'M5', label: 'M5 × 0.8', d: 5, pitch: 0.8 },
-  { id: 'M6', label: 'M6 × 1', d: 6, pitch: 1.0 },
-  { id: 'M8', label: 'M8 × 1.25', d: 8, pitch: 1.25 },
-  { id: 'M10', label: 'M10 × 1.5', d: 10, pitch: 1.5 },
-  { id: 'M12', label: 'M12 × 1.75', d: 12, pitch: 1.75 },
-  { id: 'M16', label: 'M16 × 2', d: 16, pitch: 2.0 },
-  { id: 'M20', label: 'M20 × 2.5', d: 20, pitch: 2.5 },
-  { id: 'M24', label: 'M24 × 3', d: 24, pitch: 3.0 },
+  { id: 'M3', label: 'M3 × 0.5', d: 3, pitch: 0.5, flats: 5.5 },
+  { id: 'M4', label: 'M4 × 0.7', d: 4, pitch: 0.7, flats: 7 },
+  { id: 'M5', label: 'M5 × 0.8', d: 5, pitch: 0.8, flats: 8 },
+  { id: 'M6', label: 'M6 × 1', d: 6, pitch: 1.0, flats: 10 },
+  { id: 'M8', label: 'M8 × 1.25', d: 8, pitch: 1.25, flats: 13 },
+  { id: 'M10', label: 'M10 × 1.5', d: 10, pitch: 1.5, flats: 16 },
+  { id: 'M12', label: 'M12 × 1.75', d: 12, pitch: 1.75, flats: 18 },
+  { id: 'M16', label: 'M16 × 2', d: 16, pitch: 2.0, flats: 24 },
+  { id: 'M20', label: 'M20 × 2.5', d: 20, pitch: 2.5, flats: 30 },
+  { id: 'M24', label: 'M24 × 3', d: 24, pitch: 3.0, flats: 36 },
 ]
 
+// ANSI B18.2.2 (finished hex nuts), ключи в мм: 1/4=7/16", 5/16=1/2", 3/8=9/16",
+// 1/2=3/4", 5/8=15/16", 3/4=1-1/8".
 export const IMPERIAL_THREADS: readonly ThreadSize[] = [
   // UNC — грубый шаг
-  { id: '1/4-20-UNC', label: '1/4"-20 UNC × 1.27', d: r2(mm(1 / 4)), pitch: r2(tpi(20)) },
-  { id: '5/16-18-UNC', label: '5/16"-18 UNC × 1.41', d: r2(mm(5 / 16)), pitch: r2(tpi(18)) },
-  { id: '3/8-16-UNC', label: '3/8"-16 UNC × 1.59', d: r2(mm(3 / 8)), pitch: r2(tpi(16)) },
-  { id: '1/2-13-UNC', label: '1/2"-13 UNC × 1.95', d: r2(mm(1 / 2)), pitch: r2(tpi(13)) },
-  { id: '5/8-11-UNC', label: '5/8"-11 UNC × 2.31', d: r2(mm(5 / 8)), pitch: r2(tpi(11)) },
-  { id: '3/4-10-UNC', label: '3/4"-10 UNC × 2.54', d: r2(mm(3 / 4)), pitch: r2(tpi(10)) },
+  { id: '1/4-20-UNC', label: '1/4"-20 UNC × 1.27', d: r2(mm(1 / 4)), pitch: r2(tpi(20)), flats: r2(mm(7 / 16)) },
+  { id: '5/16-18-UNC', label: '5/16"-18 UNC × 1.41', d: r2(mm(5 / 16)), pitch: r2(tpi(18)), flats: r2(mm(1 / 2)) },
+  { id: '3/8-16-UNC', label: '3/8"-16 UNC × 1.59', d: r2(mm(3 / 8)), pitch: r2(tpi(16)), flats: r2(mm(9 / 16)) },
+  { id: '1/2-13-UNC', label: '1/2"-13 UNC × 1.95', d: r2(mm(1 / 2)), pitch: r2(tpi(13)), flats: r2(mm(3 / 4)) },
+  { id: '5/8-11-UNC', label: '5/8"-11 UNC × 2.31', d: r2(mm(5 / 8)), pitch: r2(tpi(11)), flats: r2(mm(15 / 16)) },
+  { id: '3/4-10-UNC', label: '3/4"-10 UNC × 2.54', d: r2(mm(3 / 4)), pitch: r2(tpi(10)), flats: r2(mm(9 / 8)) },
   // UNF — мелкий шаг
-  { id: '1/4-28-UNF', label: '1/4"-28 UNF × 0.91', d: r2(mm(1 / 4)), pitch: r2(tpi(28)) },
-  { id: '5/16-24-UNF', label: '5/16"-24 UNF × 1.06', d: r2(mm(5 / 16)), pitch: r2(tpi(24)) },
-  { id: '3/8-24-UNF', label: '3/8"-24 UNF × 1.06', d: r2(mm(3 / 8)), pitch: r2(tpi(24)) },
-  { id: '1/2-20-UNF', label: '1/2"-20 UNF × 1.27', d: r2(mm(1 / 2)), pitch: r2(tpi(20)) },
-  { id: '5/8-18-UNF', label: '5/8"-18 UNF × 1.41', d: r2(mm(5 / 8)), pitch: r2(tpi(18)) },
-  { id: '3/4-16-UNF', label: '3/4"-16 UNF × 1.59', d: r2(mm(3 / 4)), pitch: r2(tpi(16)) },
+  { id: '1/4-28-UNF', label: '1/4"-28 UNF × 0.91', d: r2(mm(1 / 4)), pitch: r2(tpi(28)), flats: r2(mm(7 / 16)) },
+  { id: '5/16-24-UNF', label: '5/16"-24 UNF × 1.06', d: r2(mm(5 / 16)), pitch: r2(tpi(24)), flats: r2(mm(1 / 2)) },
+  { id: '3/8-24-UNF', label: '3/8"-24 UNF × 1.06', d: r2(mm(3 / 8)), pitch: r2(tpi(24)), flats: r2(mm(9 / 16)) },
+  { id: '1/2-20-UNF', label: '1/2"-20 UNF × 1.27', d: r2(mm(1 / 2)), pitch: r2(tpi(20)), flats: r2(mm(3 / 4)) },
+  { id: '5/8-18-UNF', label: '5/8"-18 UNF × 1.41', d: r2(mm(5 / 8)), pitch: r2(tpi(18)), flats: r2(mm(15 / 16)) },
+  { id: '3/4-16-UNF', label: '3/4"-16 UNF × 1.59', d: r2(mm(3 / 4)), pitch: r2(tpi(16)), flats: r2(mm(9 / 8)) },
 ]
 
 export function threadSizes(series: ThreadSeries): readonly ThreadSize[] {
@@ -70,14 +76,9 @@ export function threadProfileDepth(pitch: number): number {
   return (Math.sqrt(3) / 2) * pitch
 }
 
-/** Размер гайки по ключу (ширина под ключ, мм): стандартные значения DIN 934 для метрических; для дюймовых — по d. */
-export function nutAcrossFlats(d: number): number {
-  // DIN 934: M3=5.5, M4=7, M5=8, M6=10, M8=13, M10=17 (старый)/16, M12=19, M16=24, M20=30, M24=36
-  const table: Array<[number, number]> = [
-    [3, 5.5], [4, 7], [5, 8], [6, 10], [8, 13], [10, 16], [12, 19], [16, 24], [20, 30], [24, 36],
-  ]
-  for (const [d0, s] of table) if (Math.abs(d - d0) < 0.26) return s
-  return Math.round(d * 1.5 * 2) / 2   // прочие — ≈ 1,5 d, округление до 0,5
+/** Размер гайки под ключ (ширина по граням, мм) — из таблицы размера (DIN EN ISO 4032 / DIN 934-1, ANSI B18.2.2). */
+export function nutAcrossFlats(size: ThreadSize): number {
+  return size.flats
 }
 
 export const THREAD_LENGTH_MIN = 4

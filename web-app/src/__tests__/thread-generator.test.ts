@@ -103,10 +103,11 @@ describe('thread-table: параметры резьбы', () => {
     expect(threadSizeOf('imperial', '1/4-28-UNF')).toBeDefined()
   })
 
-  it('профиль и гайка: высота острого треугольника (√3/2)·P ≈ 0,866·шаг; размер под ключ из таблицы', () => {
+  it('профиль и гайка: высота острого треугольника (√3/2)·P ≈ 0,866·шаг; ключи по стандарту', () => {
     expect(threadProfileDepth(1)).toBeCloseTo(0.866, 3)
-    expect(nutAcrossFlats(6)).toBe(10)
-    expect(nutAcrossFlats(12)).toBe(19)
+    expect(nutAcrossFlats(threadSizeOf('metric', 'M6')!)).toBe(10)
+    expect(nutAcrossFlats(threadSizeOf('metric', 'M12')!)).toBe(18)   // DIN 934-1 / ISO 4032
+    expect(nutAcrossFlats(threadSizeOf('imperial', '1/2-13-UNC')!)).toBeCloseTo(19.05, 2)  // 3/4"
   })
 
   it('sanitizeThreadParams: валидирует размер, длину клампит, чужой id — null', () => {
@@ -164,12 +165,13 @@ describe('THREAD-GENERATOR: геометрия (WASM)', () => {
     const obj = Object.values(st().objects)[0]
     expect(obj.name).toBe(i18n.t('threadModal.nutName', { size: 'M6' }))
     const [sx, sy, sz] = worldSize(obj)
-    const Rc = nutAcrossFlats(6) / Math.sqrt(3)
+    const s = nutAcrossFlats(threadSizeOf('metric', 'M6')!)
+    const Rc = s / Math.sqrt(3)
     expect(sx).toBeCloseTo(2 * Rc, 2)   // вершины вдоль X
-    expect(sy).toBeCloseTo(nutAcrossFlats(6), 2)   // грани под ключ вдоль Y
+    expect(sy).toBeCloseTo(s, 2)   // грани под ключ вдоль Y
     expect(sz).toBeCloseTo(8, 3)
     const v = meshVolume(worldVerts(obj), obj.indices)
-    const hexVol = (Math.sqrt(3) / 2) * Math.pow(nutAcrossFlats(6), 2) * 8 * 0.99
+    const hexVol = (Math.sqrt(3) / 2) * Math.pow(s, 2) * 8 * 0.99
     expect(v).toBeLessThan(hexVol)
     expect(v).toBeGreaterThan(hexVol * 0.5)
   })
