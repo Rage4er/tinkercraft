@@ -633,10 +633,12 @@ export function buildThread(size: ThreadSize, length: number, kind: ThreadKind):
   const hexM = hex0.translate(0, 0, -L / 2)
   hex0.delete()
   const drill = Manifold.cylinder(L, rDrill, rDrill, 72, true)
-  // полость витка: от сверла НАРУЖУ (x < 0 — против N) до d/2 + врезание в стенку
+  // полость витка — ЗЕРКАЛО наружного гребня (профиль метчика): узкое притупление
+  // P/8 у сверла (minor), широкое основание ≈ P/2 у major (+ врезание в стенку).
+  // x < 0 — против N (наружу, в стенку)
   const ridgeVoid = sweepProfileAlongHelix(
     rDrill, z0, z1, turns,
-    [[0, -w], [0, w], [-h - embed, -c], [-h - embed, c]],
+    [[0, -c], [0, c], [-h - embed, w], [-h - embed, -w]],
     segPerTurn,
   )
   // фаски входа по DIN 934: конус 120° (60° к торцу) с обеих сторон отверстия
