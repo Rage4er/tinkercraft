@@ -498,11 +498,12 @@ export function buildSpring(params: Record<string, number>): ManifoldObject {
 }
 
 // --- THREAD-GENERATOR: резьба (болт / гайка) ---
-// Профиль 60° (ISO/Unified): высота витка h = 0,5413·шаг, гребень P/8, дно P/4
-// (упрощение — без скруглений). Болт: цилиндр ⌀(d − 2h) ∪ виток (свип трапеции
-// вдоль спирали, врезанный на 0,1·шаг в цилиндр). Гайка: шестигранник −
-// (сверло ⌀(d − 2h) ∪ полость витка). Свип — как у пружины (frame T/N/B вдоль
-// спирали), торцы — веером к центроиду кольца; обход чинится по знаку объёма.
+// Профиль — острый 60°-треугольник высотой H = (√3/2)·P ≈ 0,866·шаг, притупление
+// гребня P/8; витки плотные (основание ≈ шагу, микрозазор против касания витков).
+// Болт: цилиндр, заходящий на 0,1·P выше основания витка, ∪ виток (свип профиля
+// вдоль спирали), ∩ бокс — ровные торцы. Гайка: шестигранник − (сверло ∪ полость
+// витка ∪ конусные фаски входа по DIN 934). Свип — как у пружины (frame T/N/B
+// вдоль спирали), торцы — веером к центроиду кольца, обход по знаку объёма.
 
 /**
  * Свип многоугольного профиля вдоль спирали. Профиль — в локальной плоскости
@@ -588,34 +589,34 @@ export function sweepProfileAlongHelix(
 export function buildThread(size: ThreadSize, length: number, kind: ThreadKind): ManifoldObject {
   const { Manifold, CrossSection } = getWasm()
   const P = size.pitch
-  const h = threadProfileDepth(P)
+  const h = threadProfileDepth(P)          // высота острого треугольника ≈ 0,866·P
   const L = length
   const segPerTurn = 48
-  const embed = 0.1 * P                    // врезание витка в цилиндр / стенку
-  const c = P / 16                         // полуширина гребня
-  const b = P / 8 + embed                  // полуширина у дна
+  const embed = 0.1 * P                    // заход цилиндра выше основания витка / врезание в стенку
+  const c = P / 16                         // полуширина притупления гребня (P/8)
+  const w = 0.48 * P                       // полуширина у основания (≈ P/2 — плотные витки, микрозазор)
   const z0 = -L / 2, z1 = L / 2
   const turns = L / P
   if (kind === 'bolt') {
-    const rCore = size.d / 2 - h
+    const rCore = size.d / 2 - h + embed
     const core = Manifold.cylinder(L, rCore, rCore, 72, true)
-    // x > 0 — вдоль N (N направлена К ОСИ): гребень на радиусе d/2, дно внутрь на h + врезание
+    // x > 0 — вдоль N (N направлена К ОСИ): гребень на радиусе d/2, дно на глубине h
     const ridge = sweepProfileAlongHelix(
       size.d / 2, z0, z1, turns,
-      [[0, -c], [0, c], [h + embed, b], [h + embed, -b]],
+      [[0, -c], [0, c], [h, w], [h, -w]],
       segPerTurn,
     )
     const m = core.add(ridge)
     core.delete()
     ridge.delete()
-    // виток у торцов выступает на ~b вдоль оси — ровные торцы ∩ бокс |z| ≤ L/2
+    // виток у торцов выступает на ~w вдоль оси — ровные торцы ∩ бокс |z| ≤ L/2
     const box = Manifold.cube([size.d * 4, size.d * 4, L], true)
     const trimmed = m.intersect(box)
     m.delete()
     box.delete()
     return centerManifoldToCOM(trimmed)
   }
-  // гайка: шестигранник − (сверло ∪ полость витка)
+  // гайка: шестигранник − (сверло ∪ полость витка ∪ фаски входа)
   const rDrill = size.d / 2 - h
   const s = nutAcrossFlats(size.d)
   const Rc = s / Math.sqrt(3)              // описанный радиус (грань под ключ = s)
@@ -635,12 +636,19 @@ export function buildThread(size: ThreadSize, length: number, kind: ThreadKind):
   // полость витка: от сверла НАРУЖУ (x < 0 — против N) до d/2 + врезание в стенку
   const ridgeVoid = sweepProfileAlongHelix(
     rDrill, z0, z1, turns,
-    [[0, -b], [0, b], [-h - embed, -c], [-h - embed, c]],
+    [[0, -w], [0, w], [-h - embed, -c], [-h - embed, c]],
     segPerTurn,
   )
-  const hole = drill.add(ridgeVoid)
+  // фаски входа по DIN 934: конус 120° (60° к торцу) с обеих сторон отверстия
+  const chH = 0.35 * P                     // глубина фаски
+  const chR = rDrill + chH / Math.sqrt(3)  // раскрытие конуса 120°
+  const coneTop = Manifold.cylinder(chH, chR, rDrill, 72, true).translate(0, 0, z1 - chH / 2)
+  const coneBot = Manifold.cylinder(chH, rDrill, chR, 72, true).translate(0, 0, z0 + chH / 2)
+  const hole = Manifold.union([drill, ridgeVoid, coneTop, coneBot])
   drill.delete()
   ridgeVoid.delete()
+  coneTop.delete()
+  coneBot.delete()
   const nut = hexM.subtract(hole)
   hexM.delete()
   hole.delete()

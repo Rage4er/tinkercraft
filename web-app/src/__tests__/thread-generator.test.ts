@@ -103,8 +103,8 @@ describe('thread-table: параметры резьбы', () => {
     expect(threadSizeOf('imperial', '1/4-28-UNF')).toBeDefined()
   })
 
-  it('профиль и гайка: глубина 0,5413·шаг; размер под ключ из таблицы', () => {
-    expect(threadProfileDepth(1)).toBeCloseTo(0.5413, 3)
+  it('профиль и гайка: высота острого треугольника (√3/2)·P ≈ 0,866·шаг; размер под ключ из таблицы', () => {
+    expect(threadProfileDepth(1)).toBeCloseTo(0.866, 3)
     expect(nutAcrossFlats(6)).toBe(10)
     expect(nutAcrossFlats(12)).toBe(19)
   })
