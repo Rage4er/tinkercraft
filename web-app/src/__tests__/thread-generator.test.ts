@@ -211,7 +211,7 @@ describe('THREAD-GENERATOR: геометрия (WASM)', () => {
   it.each([
     { sizeId: 'M6', length: 8 },
     { sizeId: 'M16', length: 16 },
-  ])('гайка $sizeId: обе фаски 120° идут от D1 к D без уступа на торце', async ({ sizeId, length }) => {
+  ])('гайка $sizeId: обе фаски 120° прорезаны полнопрофильной резьбой без торцевого среза витка', async ({ sizeId, length }) => {
     const size = threadSizeOf('metric', sizeId)!
     await addThreadObject({ series: 'metric', sizeId, length, kind: 'nut' })
     const obj = Object.values(st().objects)[0]
@@ -241,6 +241,18 @@ describe('THREAD-GENERATOR: геометрия (WASM)', () => {
       expect(Math.abs(Math.max(...opening) - rMajor)).toBeLessThan(0.01)
       const transition = radiiAt(endZ - side * chH)
       expect(transition.filter((r) => Math.abs(r - rMinor) < 0.01).length).toBeGreaterThanOrEqual(6)
+      const innerZ = endZ - side * chH
+      let coneSurface = 0, fullDepthGroove = 0
+      for (let i = 0; i < obj.vertices.length; i += 3) {
+        const fromInner = side * (obj.vertices[i + 2] - innerZ)
+        const r = Math.hypot(obj.vertices[i] - cx, obj.vertices[i + 1] - cy)
+        if (fromInner <= 1e-4 || fromInner >= chH - 1e-4 || r > rMajor + 0.01) continue
+        const coneRadius = rMinor + fromInner * Math.sqrt(3)
+        if (Math.abs(r - coneRadius) < 0.01) coneSurface++
+        if (Math.abs(r - rMajor) < 0.01) fullDepthGroove++
+      }
+      expect(coneSurface).toBeGreaterThan(0)
+      expect(fullDepthGroove).toBeGreaterThan(0)
     }
   })
 
