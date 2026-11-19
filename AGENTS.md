@@ -14,7 +14,7 @@
 - **manifold-3d** (WASM) — CSG операции в Web Worker
 - **Zustand 5** — стейт-менеджмент
 - **Vite 6** — сборка
-- **Vitest 4** — тесты (1064 теста, 89 файлов; `it.fails` открытых багов нет — UX-прогон 7 нашёл 0 новых, цикл закрыт; UX-AUDIT-1…10 исправлены в `fix-all`, 11…20 — в `fix-all-2`, 21…31 — в `fix-all-3`, 32…35 — в `fix-all-4`, 32-followup и 36…40 — в `fix-all-5`, 41, 42 — в `fix-all-6`)
+- **Vitest 4** — тесты (1066 тестов, 89 файлов; `it.fails` открытых багов нет — UX-прогон 7 нашёл 0 новых, цикл закрыт; UX-AUDIT-1…10 исправлены в `fix-all`, 11…20 — в `fix-all-2`, 21…31 — в `fix-all-3`, 32…35 — в `fix-all-4`, 32-followup и 36…40 — в `fix-all-5`, 41, 42 — в `fix-all-6`)
 - **pnpm** — пакетный менеджер
 
 ## Команды
@@ -23,7 +23,7 @@
 cd web-app
 pnpm dev          # dev-сервер (порт 5000)
 pnpm build        # production-сборка
-pnpm test         # запуск тестов (1064 теста, 89 файлов)
+pnpm test         # запуск тестов (1066 тестов, 89 файлов)
 pnpm typecheck    # tsc --noEmit
 pnpm e2e:smoke    # дымовой тест в браузере (Playwright; нужен запущенный pnpm dev; см. web-app/e2e/helpers.mjs). В CI все e2e — job `e2e` в ci-web.yml (CI-E2E)
 pnpm e2e:tree     # Фаза 9.1: раскрытие CSG в дереве, выбор ребёнка
@@ -140,7 +140,7 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 | `src/csg/child-params.ts` | Поля параметров примитива для формы правки ребёнка CSG (`getParamFields`, `clampFieldValue`) — Фаза 9.2. Подписи размеров — по оси (AXIS-LABELS): куб `width` — X, `height` — **Y**, `depth` — **Z** (`Manifold.cube([w, h, d])`, вверх — Z); высота цилиндра / конуса / призмы / пирамиды — Z (`properties.sizeX/Y/Z`) |
 | `src/csg/worker-handlers.ts` › `buildCapsule` / `buildTube` / `buildSpring` | **Новые примитивы** (NEW-PRIMITIVES), ось — Z: капсула и труба — `Manifold.revolve` профиля (симметричны, центр масс в 0), пружина — круг проволоки вдоль спирали + плоские торцы (меш → `new Manifold`, обход наружу по знаку объёма, `centerManifoldToCOM`; `springGeometry` — проволока ≤ 0,45 шага и ≤ 0,9 радиуса витка). Новая фигура: тип в `ShapeType`, `buildPrimitive`, `getParamFields` (поля свойств и правки ребёнка), `defaultShapeParams`, `localParamsBox`, палитра `ALL_SHAPES_DATA` + **обе** карты иконок (`constants.tsx` — палитра, `constants-react.tsx`), иконки в `ComponentTree` / `Timeline`, `shapes.*` / `shapesAcc.*` |
 | `src/csg/thread-table.ts` | **THREAD-GENERATOR:** таблицы резьбы (метрическая M3…M24 ISO 261, дюймовая UNC+UNF 1/4"…3/4", шаг точно 25,4/TPI), базовый профиль ISO 68-1 / Unified: `threadFundamentalHeight` H = (√3/2)·P, `threadProfileDepth` = 5H/8, `threadMinorDiameter` = d − 2·(5H/8), `nutAcrossFlats` (DIN EN ISO 4032 / DIN 934-1, ANSI B18.2.2), `sanitizeThreadParams` (длина 4…120) |
-| `src/csg/worker-handlers.ts` › `sweepProfileAlongHelix` / `buildThread` / `handleBuildThread` | **THREAD-GENERATOR:** радиально-осевой свип профиля 60° вдоль спирали (гребень P/8, впадина P/4, 72 сегмента/виток); болт = цилиндр d1 ∪ виток ∩ бокс, гайка = шестигранник − (сверло D1 ∪ сужающаяся к major полость витка ∪ фаски 120° до D). Технологическое перекрытие — только внутрь тела/сверла, номинальные диаметры не меняет. NB: `Manifold.extrude` со `scaleTop`-числом портит объём — без него. Сообщение `buildThread` (worker.ts, worker-client, мост тестов) |
+| `src/csg/worker-handlers.ts` › `sweepProfileAlongHelix` / `buildThread` / `handleBuildThread` | **THREAD-GENERATOR:** радиально-осевой свип профиля 60° вдоль спирали (гребень P/8, впадина P/4, 72 сегмента/виток); болт = цилиндр d1 ∪ виток ∩ бокс, гайка = шестигранник − (сверло D1 ∪ сужающаяся к major полость витка ∪ обе входные фаски 120°). Фаски — конусы от D1 внутри до D на торцах в общей CSG-полости, переход к резьбе без уступа. Технологическое перекрытие — только внутрь тела/сверла, номинальные диаметры не меняет. NB: `Manifold.extrude` со `scaleTop`-числом портит объём — без него. Сообщение `buildThread` (worker.ts, worker-client, мост тестов) |
 | `src/store/add-thread.ts` | **THREAD-GENERATOR:** `addThreadObject` — воркер строит меш → объект `import_mesh` «Резьба: …» / «Гайка: …» через `addRawMesh` (префикс `thr`), не параметрический |
 | `src/store/edit-child.ts` | Пересчёт CSG после смены params ребёнка: калибровка дерева ↔ меш, un-bake в локальную систему корня (`computeEditedChild`, `unbakeToLocal`, `findCreationTransform` — в т.ч. система создания копий: зеркало — отражённая, вставка — `copyTree.origin`) — Фаза 9.3 |
 | `src/store/project-history.ts` | **Эффективная история** (Фаза 9.5.0): `projectHistory` подставляет `edit_step` (патч шага N + `replacements` замороженных шагов) и выбрасывает их; идемпотентна, вызывается на входе `rebuild.ts` и `findCreationTransform`. `computeCascade` — замыкание зависимостей правки |

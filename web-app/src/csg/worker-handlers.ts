@@ -620,10 +620,11 @@ export function buildThread(size: ThreadSize, length: number, kind: ThreadKind):
     [[embed, -voidAtMinor], [embed, voidAtMinor], [0, voidAtMinor], [-depth, voidAtMajor], [-depth, -voidAtMajor], [0, -voidAtMinor]],
     segPerTurn,
   )
-  // Входная фаска 120° раскрывается от D1 до номинального major D.
+  // Сквозная гайка: обе фаски 120° раскрываются от D1 внутри до D на торце.
+  // Конусы входят в общую полость и вычитаются одной CSG-операцией, без ступеньки на D1.
   const chH = depth / Math.sqrt(3)
-  const coneTop = Manifold.cylinder(chH, rMajor, rMinor, 72, true).translate(0, 0, z1 - chH / 2)
-  const coneBot = Manifold.cylinder(chH, rMinor, rMajor, 72, true).translate(0, 0, z0 + chH / 2)
+  const coneTop = Manifold.cylinder(chH, rMinor, rMajor, 72, true).translate(0, 0, z1 - chH / 2)
+  const coneBot = Manifold.cylinder(chH, rMajor, rMinor, 72, true).translate(0, 0, z0 + chH / 2)
   const hole = Manifold.union([drill, ridgeVoid, coneTop, coneBot])
   drill.delete()
   ridgeVoid.delete()

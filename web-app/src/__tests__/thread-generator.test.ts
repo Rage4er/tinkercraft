@@ -208,6 +208,42 @@ describe('THREAD-GENERATOR: геометрия (WASM)', () => {
     expect(2 * Math.max(...radii)).toBeCloseTo(size.d, 3)
   })
 
+  it.each([
+    { sizeId: 'M6', length: 8 },
+    { sizeId: 'M16', length: 16 },
+  ])('гайка $sizeId: обе фаски 120° идут от D1 к D без уступа на торце', async ({ sizeId, length }) => {
+    const size = threadSizeOf('metric', sizeId)!
+    await addThreadObject({ series: 'metric', sizeId, length, kind: 'nut' })
+    const obj = Object.values(st().objects)[0]
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity, minZ = Infinity, maxZ = -Infinity
+    for (let i = 0; i < obj.vertices.length; i += 3) {
+      minX = Math.min(minX, obj.vertices[i]); maxX = Math.max(maxX, obj.vertices[i])
+      minY = Math.min(minY, obj.vertices[i + 1]); maxY = Math.max(maxY, obj.vertices[i + 1])
+      minZ = Math.min(minZ, obj.vertices[i + 2]); maxZ = Math.max(maxZ, obj.vertices[i + 2])
+    }
+    const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2
+    const rMajor = size.d / 2
+    const rMinor = threadMinorDiameter(size) / 2
+    const chH = threadProfileDepth(size.pitch) / Math.sqrt(3)
+    const radiiAt = (z: number): number[] => {
+      const radii: number[] = []
+      for (let i = 0; i < obj.vertices.length; i += 3) {
+        if (Math.abs(obj.vertices[i + 2] - z) < 1e-4)
+          radii.push(Math.hypot(obj.vertices[i] - cx, obj.vertices[i + 1] - cy))
+      }
+      return radii
+    }
+    for (const side of [-1, 1]) {
+      const endZ = side < 0 ? minZ : maxZ
+      const opening = radiiAt(endZ).filter((r) => r <= rMajor + 0.01)
+      expect(opening.length).toBeGreaterThanOrEqual(72)
+      expect(Math.abs(Math.min(...opening) - rMajor)).toBeLessThan(0.01)
+      expect(Math.abs(Math.max(...opening) - rMajor)).toBeLessThan(0.01)
+      const transition = radiiAt(endZ - side * chH)
+      expect(transition.filter((r) => Math.abs(r - rMinor) < 0.01).length).toBeGreaterThanOrEqual(6)
+    }
+  })
+
   it('болт ∪ куб → CSG без уведомлений (замкнутый меш)', async () => {
     await addThreadObject({ series: 'metric', sizeId: 'M6', length: 20, kind: 'bolt' })
     const thr = Object.keys(st().objects)[0]
