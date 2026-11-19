@@ -50,7 +50,7 @@ try {
   // ── Дюймовая 1/4"-20 UNC, болт, длина 25 ──
   await page.locator('.shape-btn', { hasText: 'Резьба' }).click()
   await modal.waitFor({ timeout: 10000 })
-  await page.locator('[data-testid=thread-series]').selectOption('imperial')
+  await page.locator('[data-testid=thread-series]').selectOption('unc')
   const imperialFirst = await page.locator('[data-testid=thread-size] option').first().innerText()
   if (!/1\/4"-20 UNC/.test(imperialFirst)) fail('первая дюймовая — 1/4"-20 UNC: ' + imperialFirst)
   await page.locator('[data-testid=thread-length]').fill('25')
@@ -64,6 +64,7 @@ try {
   await page.locator('.shape-btn', { hasText: 'Резьба' }).click()
   await modal.waitFor({ timeout: 10000 })
   await page.locator('[data-testid=thread-series]').selectOption('metric')
+  await page.locator('[data-testid=thread-nominal]').selectOption('M6')
   await page.locator('[data-testid=thread-size]').selectOption('M6')
   await page.locator('[data-testid=thread-kind]').selectOption('nut')
   await page.locator('[data-testid=thread-length]').fill('8')

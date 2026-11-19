@@ -204,7 +204,7 @@ export async function workerBuildImportedMesh(
 /** THREAD-GENERATOR: построить резьбу (болт/гайка) по табличному размеру. */
 export async function workerBuildThread(
   objId: string,
-  params: { series: string; sizeId: string; length: number; kind: string },
+  params: { series: string; sizeId: string; length: number; kind: string; hand?: string },
 ): Promise<MeshResult> {
   await waitReady()
   const result = await send<MeshResult>('buildThread', { objId, ...params })

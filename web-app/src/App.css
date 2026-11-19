@@ -1912,6 +1912,33 @@ body {
   gap: 8px;
 }
 
+.thread-modal-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.thread-modal-check input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+}
+
+.thread-modal-hint {
+  margin-top: 10px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.thread-modal-control option {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 @media (max-width: 480px) {
   .thread-modal-row {
     grid-template-columns: 1fr;

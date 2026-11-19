@@ -128,7 +128,7 @@ export async function workerBuildImportedMesh(
 /** THREAD-GENERATOR: резьба (болт/гайка) по табличному размеру. */
 export async function workerBuildThread(
   objId: string,
-  params: { series: string; sizeId: string; length: number; kind: string },
+  params: { series: string; sizeId: string; length: number; kind: string; hand?: string },
 ): Promise<MeshResult> {
   return toMeshResult(await call('buildThread', { objId, ...params }))
 }

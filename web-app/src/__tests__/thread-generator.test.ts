@@ -128,7 +128,7 @@ describe('thread-table: параметры резьбы', () => {
       .toBe(THREAD_LENGTH_MIN)
     expect(sanitizeThreadParams({ series: 'metric', sizeId: 'M6', length: 9999, kind: 'nut' })!.length)
       .toBe(THREAD_LENGTH_MAX)
-    expect(sanitizeThreadParams({ series: 'metric', sizeId: 'M7', length: 20, kind: 'bolt' })).toBeNull()
+    expect(sanitizeThreadParams({ series: 'metric', sizeId: 'M999', length: 20, kind: 'bolt' })).toBeNull()
     expect(sanitizeThreadParams({ series: 'x', sizeId: 'M6', length: 20, kind: 'x' }))
       .toEqual({ series: 'metric', sizeId: 'M6', length: 20, kind: 'bolt' })
   })
@@ -294,12 +294,12 @@ describe('THREAD-GENERATOR: геометрия (WASM)', () => {
   })
 
   it('ошибки: чужой размер → threadBadParams (ru/en), объект не добавлен', async () => {
-    expect(await addThreadObject({ series: 'metric', sizeId: 'M7', length: 20, kind: 'bolt' })).toBe(false)
+    expect(await addThreadObject({ series: 'metric', sizeId: 'M999', length: 20, kind: 'bolt' })).toBe(false)
     expect(Object.keys(st().objects)).toHaveLength(0)
     expect(errors()[0].message).toContain(ru.errors.threadBadParams.slice(0, 20))
     await i18n.changeLanguage('en')
     useNotifications.setState({ notifications: [] })
-    expect(await addThreadObject({ series: 'metric', sizeId: 'M7', length: 20, kind: 'bolt' })).toBe(false)
+    expect(await addThreadObject({ series: 'metric', sizeId: 'M999', length: 20, kind: 'bolt' })).toBe(false)
     expect(errors()[0].message).toContain(en.errors.threadBadParams.slice(0, 20))
   })
 })

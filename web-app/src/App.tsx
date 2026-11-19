@@ -40,7 +40,7 @@ import { useSfx } from "./hooks/useSfx";
 import { addTextObject } from "./store/add-text";
 import { addSvgObject } from "./store/add-svg";
 import { addThreadObject } from "./store/add-thread";
-import { threadSizes, type ThreadKind, type ThreadSeries } from "./csg/thread-table";
+import { threadSizes, type ThreadHand, type ThreadKind, type ThreadSeries } from "./csg/thread-table";
 import { notify } from "./store/notifications";
 import { MAX_SVG_FILE_SIZE, openSvgFilePicker, readSvgFile } from "./io/svg-extrude";
 import { usePlacementModeStore } from "./store/placement-mode";
@@ -127,6 +127,8 @@ export default function App() {
   const [threadSizeId, setThreadSizeId] = useState("M6");
   const [threadLength, setThreadLength] = useState(20);
   const [threadKind, setThreadKind] = useState<ThreadKind>("bolt");
+  const [threadHand, setThreadHand] = useState<ThreadHand>("right");
+  const [threadAllSizes, setThreadAllSizes] = useState(false);
   // UX-AUDIT-2: «Очистить сцену» — с подтверждением
   const [showClearConfirm, setShowClearConfirm] = useState(false);
 
@@ -387,10 +389,10 @@ export default function App() {
     setThreadSizeId(threadSizes(v)[0].id);   // первый размер серии
   }, []);
   const handleCreateThread = useCallback(async () => {
-    if (await addThreadObject({ series: threadSeries, sizeId: threadSizeId, length: threadLength, kind: threadKind })) {
+    if (await addThreadObject({ series: threadSeries, sizeId: threadSizeId, length: threadLength, kind: threadKind, hand: threadHand })) {
       setShowThreadModal(false);
     }
-  }, [threadSeries, threadSizeId, threadLength, threadKind]);
+  }, [threadSeries, threadSizeId, threadLength, threadKind, threadHand]);
 
   // PLUG-AND-PLAY: клик по фигуре палитры — режим размещения (превью → клик по грани / сетке,
   // X / Y / Z — плоскость оси, Enter — поставить, Esc / правый клик — отмена)
@@ -563,12 +565,16 @@ export default function App() {
           sizeId={threadSizeId}
           length={threadLength}
           kind={threadKind}
+          hand={threadHand}
+          allSizes={threadAllSizes}
           busy={busy}
           workerOk={workerOk}
           onSeriesChange={handleChangeThreadSeries}
           onSizeChange={setThreadSizeId}
           onLengthChange={setThreadLength}
           onKindChange={setThreadKind}
+          onHandChange={setThreadHand}
+          onAllSizesChange={setThreadAllSizes}
           onCreate={handleCreateThread}
           onClose={() => setShowThreadModal(false)}
         />

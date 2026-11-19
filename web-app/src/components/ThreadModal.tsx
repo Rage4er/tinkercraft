@@ -1,20 +1,26 @@
 import { useCallback, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { ThreadIcon, PlusIcon } from "./icons";
-import { threadSizes, type ThreadKind, type ThreadSeries } from "../csg/thread-table";
+import {
+  threadNominals, threadPitches, threadSizeOf, threadSizes,
+  type ThreadHand, type ThreadKind, type ThreadSeries,
+} from "../csg/thread-table";
 
-/** THREAD-GENERATOR: окно «Резьба» — серия, размер, длина, болт/гайка, «Создать». */
 export default function ThreadModal({
   series,
   sizeId,
   length,
   kind,
+  hand,
+  allSizes,
   busy,
   workerOk,
   onSeriesChange,
   onSizeChange,
   onLengthChange,
   onKindChange,
+  onHandChange,
+  onAllSizesChange,
   onCreate,
   onClose,
 }: {
@@ -22,18 +28,25 @@ export default function ThreadModal({
   sizeId: string;
   length: number;
   kind: ThreadKind;
+  hand: ThreadHand;
+  allSizes: boolean;
   busy: boolean;
   workerOk: boolean;
   onSeriesChange: (v: ThreadSeries) => void;
   onSizeChange: (v: string) => void;
   onLengthChange: (v: number) => void;
   onKindChange: (v: ThreadKind) => void;
+  onHandChange: (v: ThreadHand) => void;
+  onAllSizesChange: (v: boolean) => void;
   onCreate: () => void;
   onClose: () => void;
 }) {
   const { t } = useTranslation();
   const handleCreate = useCallback(() => void onCreate(), [onCreate]);
-  const sizes = threadSizes(series);
+  const selected = threadSizeOf(series, sizeId) ?? threadSizes(series, allSizes)[0];
+  const nominal = selected.nominal ?? selected.id;
+  const nominals = threadNominals(series, allSizes);
+  const pitches = threadPitches(series, nominal, allSizes);
 
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
@@ -44,6 +57,18 @@ export default function ThreadModal({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+
+  const changeNominal = (value: string): void => {
+    const first = threadPitches(series, value, allSizes)[0];
+    if (first) onSizeChange(first.id);
+  };
+  const changeAllSizes = (checked: boolean): void => {
+    onAllSizesChange(checked);
+    if (!checked && !selected.popular) {
+      const same = threadPitches(series, nominal, false)[0];
+      onSizeChange((same ?? threadSizes(series, false)[0]).id);
+    }
+  };
 
   return (
     <div className="text-modal-backdrop" onClick={onClose}>
@@ -65,26 +90,62 @@ export default function ThreadModal({
               className="thread-modal-control"
               data-testid="thread-series"
               value={series}
-              onChange={(e) => onSeriesChange(e.target.value === "imperial" ? "imperial" : "metric")}
+              onChange={(e) => onSeriesChange(e.target.value as ThreadSeries)}
             >
               <option value="metric">{t("threadModal.metric")}</option>
-              <option value="imperial">{t("threadModal.imperial")}</option>
+              <option value="unc">{t("threadModal.unc")}</option>
+              <option value="unf">{t("threadModal.unf")}</option>
+              <option value="npt">{t("threadModal.npt")}</option>
+              <option value="bsp">{t("threadModal.bsp")}</option>
+              <option value="square">{t("threadModal.square")}</option>
             </select>
           </label>
           <label className="thread-modal-field">
             <span>{t("threadModal.size")}</span>
             <select
               className="thread-modal-control"
-              data-testid="thread-size"
-              value={sizeId}
-              onChange={(e) => onSizeChange(e.target.value)}
+              data-testid="thread-nominal"
+              value={nominal}
+              onChange={(e) => changeNominal(e.target.value)}
             >
-              {sizes.map((s) => (
-                <option key={s.id} value={s.id}>{s.label}</option>
-              ))}
+              {nominals.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
             </select>
           </label>
         </div>
+        <div className="text-modal-row thread-modal-row">
+          <label className="thread-modal-field">
+            <span>{t("threadModal.pitch")}</span>
+            <select
+              className="thread-modal-control"
+              data-testid="thread-size"
+              value={selected.id}
+              onChange={(e) => onSizeChange(e.target.value)}
+            >
+              {pitches.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+            </select>
+          </label>
+          <label className="thread-modal-field">
+            <span>{t("threadModal.hand")}</span>
+            <select
+              className="thread-modal-control"
+              data-testid="thread-hand"
+              value={hand}
+              onChange={(e) => onHandChange(e.target.value === "left" ? "left" : "right")}
+            >
+              <option value="right">{t("threadModal.rightHand")}</option>
+              <option value="left">{t("threadModal.leftHand")}</option>
+            </select>
+          </label>
+        </div>
+        <label className="thread-modal-check">
+          <input
+            type="checkbox"
+            data-testid="thread-all-sizes"
+            checked={allSizes}
+            onChange={(e) => changeAllSizes(e.target.checked)}
+          />
+          <span>{t("threadModal.allSizes")}</span>
+        </label>
         <div className="text-modal-row thread-modal-row">
           <label className="thread-modal-field">
             <span>{t("threadModal.length")}</span>
@@ -120,6 +181,12 @@ export default function ThreadModal({
             </select>
           </label>
         </div>
+        {(selected.extended || series === "npt" || series === "bsp" || series === "square") && (
+          <div className="thread-modal-hint">
+            {selected.extended ? t("threadModal.extendedHint")
+              : series === "square" ? t("threadModal.squareHint") : t("threadModal.pipeHint")}
+          </div>
+        )}
         <div className="text-modal-actions">
           <button
             className="btn primary flex-1"
