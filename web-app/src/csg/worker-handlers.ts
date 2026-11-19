@@ -615,15 +615,18 @@ export function buildThread(size: ThreadSize, length: number, kind: ThreadKind):
   // и сужается до P/4 у major. Это дополнение материала витка, а не его зеркало.
   const voidAtMinor = 7 * P / 16
   const voidAtMajor = P / 8
+  const chH = depth / Math.sqrt(3)
+  // Полнопрофильный виток продолжен на виток за оба торца: его срезы остаются снаружи тела,
+  // а конусы фасок пересекают настоящую спираль без непрорезанного пояса у D1.
   const ridgeVoid = sweepProfileAlongHelix(
-    rMinor, z0, z1, turns,
+    rMinor, z0 - P, z1 + P, turns + 2,
     [[embed, -voidAtMinor], [embed, voidAtMinor], [0, voidAtMinor], [-depth, voidAtMajor], [-depth, -voidAtMajor], [0, -voidAtMinor]],
     segPerTurn,
   )
-  // Входная фаска 120° раскрывается от D1 до номинального major D.
-  const chH = depth / Math.sqrt(3)
-  const coneTop = Manifold.cylinder(chH, rMajor, rMinor, 72, true).translate(0, 0, z1 - chH / 2)
-  const coneBot = Manifold.cylinder(chH, rMinor, rMajor, 72, true).translate(0, 0, z0 + chH / 2)
+  // Сквозная гайка: обе фаски 120° раскрываются от D1 внутри до D на торце.
+  // Конусы входят в общую полость и вычитаются одной CSG-операцией.
+  const coneTop = Manifold.cylinder(chH, rMinor, rMajor, 72, true).translate(0, 0, z1 - chH / 2)
+  const coneBot = Manifold.cylinder(chH, rMajor, rMinor, 72, true).translate(0, 0, z0 + chH / 2)
   const hole = Manifold.union([drill, ridgeVoid, coneTop, coneBot])
   drill.delete()
   ridgeVoid.delete()
