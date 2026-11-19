@@ -11,7 +11,8 @@
     "capsule": "Капсула",
     "tube": "Труба",
     "spring": "Пружина",
-    "svg": "SVG"
+    "svg": "SVG",
+    "thread": "Резьба"
   },
   "shapesAcc": {
     "cube": "куб",
@@ -25,7 +26,8 @@
     "capsule": "капсулу",
     "tube": "трубу",
     "spring": "пружину",
-    "svg": "SVG"
+    "svg": "SVG",
+    "thread": "резьбу"
   },
   "shapesCategory": {
     "basic": "Основные",
@@ -207,7 +209,8 @@
     "timelineEmpty": "Пусто",
     "addShape": "Добавить {{label}}",
     "placeShape": "Разместить {{label}}: затем клик по грани объекта или сетке (Enter — рядом с прошлыми)",
-    "svgImport": "Импорт SVG: контур 2D → тело 3D (выбор файла .svg, глубина, масштаб)"
+    "svgImport": "Импорт SVG: контур 2D → тело 3D (выбор файла .svg, глубина, масштаб)",
+    "threadImport": "Резьба: болт/гайка по стандарту (метрическая M, дюймовая UNC/UNF)"
   },
   "componentTree": {
     "sceneEmpty": "Сцена пуста",
@@ -347,6 +350,20 @@
     "scale": "Масштаб",
     "create": "Создать"
   },
+  "threadModal": {
+    "title": "Резьба",
+    "series": "Серия",
+    "metric": "Метрическая (M)",
+    "imperial": "Дюймовая (UNC/UNF)",
+    "size": "Размер",
+    "length": "Длина",
+    "kind": "Тип",
+    "bolt": "Болт (наружная резьба)",
+    "nut": "Гайка (внутренняя резьба)",
+    "create": "Создать",
+    "boltName": "Резьба: {{size}}×{{length}}",
+    "nutName": "Гайка: {{size}}"
+  },
   "errors": {
     "noObjectsSelected": "Объекты не выбраны",
     "csgNeedTwoObjects": "Выберите ровно 2 объекта для CSG",
@@ -371,6 +388,8 @@
     "svgNoShapes": "В файле SVG нет контуров",
     "svgBadSize": "Глубина и масштаб должны быть больше 0",
     "svgTooManyTris": "Слишком много треугольников: {{count}} (макс {{max}})",
+    "threadBadParams": "Некорректные параметры резьбы (размер из таблицы, длина {{min}}…{{max}} мм)",
+    "threadFailed": "Не удалось создать резьбу: {{reason}}",
     "pasteFailed": "Ошибка вставки",
     "deleteFailed": "Ошибка удаления объектов",
     "csgFailed": "Ошибка CSG-операции",

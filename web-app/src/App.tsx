@@ -10,6 +10,7 @@ import ToastContainer from "./components/ToastContainer";
 import Toolbar from "./components/Toolbar";
 import TextModal from "./components/TextModal";
 import SvgModal from "./components/SvgModal";
+import ThreadModal from "./components/ThreadModal";
 import StatusBar from "./components/StatusBar";
 import LeftPanel from "./components/LeftPanel";
 import PropertiesPanel from "./components/PropertiesPanel";
@@ -38,6 +39,8 @@ import { useAutosave } from "./hooks/useAutosave";
 import { useSfx } from "./hooks/useSfx";
 import { addTextObject } from "./store/add-text";
 import { addSvgObject } from "./store/add-svg";
+import { addThreadObject } from "./store/add-thread";
+import { threadSizes, type ThreadKind, type ThreadSeries } from "./csg/thread-table";
 import { notify } from "./store/notifications";
 import { MAX_SVG_FILE_SIZE, openSvgFilePicker, readSvgFile } from "./io/svg-extrude";
 import { usePlacementModeStore } from "./store/placement-mode";
@@ -78,6 +81,7 @@ export default function App() {
     showTextModal, setShowTextModal,
     showSvgModal, setShowSvgModal,
     svgPending, setSvgPending,
+    showThreadModal, setShowThreadModal,
     previewObject, setPreviewObject,
     mirrorPreviewPlane, setMirrorPreviewPlane,
     showDimensionSettings, setShowDimensionSettings,
@@ -102,6 +106,7 @@ export default function App() {
       showTextModal: s.showTextModal, setShowTextModal: s.setShowTextModal,
       showSvgModal: s.showSvgModal, setShowSvgModal: s.setShowSvgModal,
       svgPending: s.svgPending, setSvgPending: s.setSvgPending,
+      showThreadModal: s.showThreadModal, setShowThreadModal: s.setShowThreadModal,
       previewObject: s.previewObject, setPreviewObject: s.setPreviewObject,
       mirrorPreviewPlane: s.mirrorPreviewPlane, setMirrorPreviewPlane: s.setMirrorPreviewPlane,
       showDimensionSettings: s.showDimensionSettings, setShowDimensionSettings: s.setShowDimensionSettings,
@@ -117,6 +122,11 @@ export default function App() {
   // SVG-EXTRUDE: параметры окна «SVG → 3D» (файл — svgPending в ui-store)
   const [svgDepth, setSvgDepth] = useState(10);
   const [svgScale, setSvgScale] = useState(1);
+  // THREAD-GENERATOR: параметры окна «Резьба»
+  const [threadSeries, setThreadSeries] = useState<ThreadSeries>("metric");
+  const [threadSizeId, setThreadSizeId] = useState("M6");
+  const [threadLength, setThreadLength] = useState(20);
+  const [threadKind, setThreadKind] = useState<ThreadKind>("bolt");
   // UX-AUDIT-2: «Очистить сцену» — с подтверждением
   const [showClearConfirm, setShowClearConfirm] = useState(false);
 
@@ -245,7 +255,7 @@ export default function App() {
     objects, selectedIds, busy, deleteSelected, selectObjects,
     saveProject, openProject, clearSelection, copySelected, pasteClipboard,
     mirrorSelected,
-    modalOpen: showTextModal || showSvgModal || showPM || showClearConfirm || showDimensionSettings || showSettings || showArray,
+    modalOpen: showTextModal || showSvgModal || showThreadModal || showPM || showClearConfirm || showDimensionSettings || showSettings || showArray,
   };
   const kbRef = useRef(kbState);
   kbRef.current = kbState;
@@ -371,12 +381,23 @@ export default function App() {
     }
   }, [svgPending, svgDepth, svgScale]);
 
+  // THREAD-GENERATOR: окно «Резьба» (палитра) → «Создать» → болт/гайка в сцену
+  const handleChangeThreadSeries = useCallback((v: ThreadSeries) => {
+    setThreadSeries(v);
+    setThreadSizeId(threadSizes(v)[0].id);   // первый размер серии
+  }, []);
+  const handleCreateThread = useCallback(async () => {
+    if (await addThreadObject({ series: threadSeries, sizeId: threadSizeId, length: threadLength, kind: threadKind })) {
+      setShowThreadModal(false);
+    }
+  }, [threadSeries, threadSizeId, threadLength, threadKind]);
+
   // PLUG-AND-PLAY: клик по фигуре палитры — режим размещения (превью → клик по грани / сетке,
   // X / Y / Z — плоскость оси, Enter — поставить, Esc / правый клик — отмена)
   const handleAddShape = usePlacementModeStore((s) => s.startPlacement);
-  usePlacementMode(showTextModal || showSvgModal || showPM || showClearConfirm || showDimensionSettings || showSettings || showArray);
+  usePlacementMode(showTextModal || showSvgModal || showThreadModal || showPM || showClearConfirm || showDimensionSettings || showSettings || showArray);
   // DIMENSIONS: режим «Размер» (Esc), Delete по выделенному размеру, согласованность режимов
-  useDimensionMode(showTextModal || showSvgModal || showPM || showClearConfirm || showDimensionSettings || showSettings || showArray);
+  useDimensionMode(showTextModal || showSvgModal || showThreadModal || showPM || showClearConfirm || showDimensionSettings || showSettings || showArray);
   const dimensionActive = useDimensionModeStore((s) => s.dimensionMode !== null);
   const dimensionsVisible = useDimensionsStore((s) => s.showDimensions);
   const hasSelectedDimension = useDimensionsStore((s) => s.selectedDimensionId !== null);
@@ -401,7 +422,7 @@ export default function App() {
   // CSG-GROUP-FIX: «Объединение» — сразу; «Вычитание» / «Пересечение» — режим A → B → Enter
   // (Enter / Esc, исчезнувшие объекты A, выход при «Выровнять» — useCsgGroupMode)
   const csgGroupMode = useCsgGroupModeStore((s) => s.csgGroupMode);
-  useCsgGroupMode(showTextModal || showSvgModal || showPM || showClearConfirm || showSettings || showArray);
+  useCsgGroupMode(showTextModal || showSvgModal || showThreadModal || showPM || showClearConfirm || showSettings || showArray);
   const runCsg = useCallback(
     (op: CsgBooleanOp) => void useCsgGroupModeStore.getState().pressCsgOperation(op),
     [],
@@ -535,6 +556,24 @@ export default function App() {
         />
       )}
 
+      {/* ── Thread Modal (THREAD-GENERATOR: болт/гайка по стандарту) ── */}
+      {showThreadModal && (
+        <ThreadModal
+          series={threadSeries}
+          sizeId={threadSizeId}
+          length={threadLength}
+          kind={threadKind}
+          busy={busy}
+          workerOk={workerOk}
+          onSeriesChange={handleChangeThreadSeries}
+          onSizeChange={setThreadSizeId}
+          onLengthChange={setThreadLength}
+          onKindChange={setThreadKind}
+          onCreate={handleCreateThread}
+          onClose={() => setShowThreadModal(false)}
+        />
+      )}
+
       {/* ── Подтверждение очистки сцены (UX-AUDIT-2) ── */}
       {showClearConfirm && (
         <ConfirmModal
@@ -638,6 +677,7 @@ export default function App() {
           onAddShape={handleAddShape}
           onShowTextModal={() => setShowTextModal(true)}
           onShowSvgImport={() => void handleImportSvg()}
+          onShowThreadModal={() => setShowThreadModal(true)}
           objectList={objectList}
           selSet={selSet}
           activeTab={activeTab}

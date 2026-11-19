@@ -99,6 +99,19 @@ export const SvgIcon = (p: any) => (
   </Icon>
 )
 
+// THREAD-GENERATOR: болт с шестигранной головкой и крупными V-витками
+export const ThreadIcon = (p: any) => (
+  <Icon {...p}>
+    <path fill="currentColor" fillOpacity={0.22} d="M23 22h18v32H23Z" />
+    <path fill="currentColor" fillOpacity={0.22} d="M17 10h30l5 6-5 6H17l-5-6Z" />
+    <g {...line}>
+      <path d="M17 10h30l5 6-5 6H17l-5-6Z" />
+      <path d="M23 22v32h18V22" />
+      <path d="M23 28l9 5 9-5M23 37l9 5 9-5M23 46l9 5 9-5" />
+    </g>
+  </Icon>
+)
+
 export const FolderIcon = (p: any) => (
   <Icon {...p}>
     <Shape d="M8 16h16l5 6h27v28H8Z" />

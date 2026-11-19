@@ -11,7 +11,8 @@
     "capsule": "Capsule",
     "tube": "Tube",
     "spring": "Spring",
-    "svg": "SVG"
+    "svg": "SVG",
+    "thread": "Thread"
   },
   "shapesAcc": {
     "cube": "Cube",
@@ -25,7 +26,8 @@
     "capsule": "capsule",
     "tube": "tube",
     "spring": "spring",
-    "svg": "SVG"
+    "svg": "SVG",
+    "thread": "thread"
   },
   "shapesCategory": {
     "basic": "Basic",
@@ -207,7 +209,8 @@
     "timelineEmpty": "Empty",
     "addShape": "Add {{label}}",
     "placeShape": "Place {{label}}: then click an object face or the grid (Enter — next to the others)",
-    "svgImport": "Import SVG: 2D contour → 3D body (pick a .svg file, depth, scale)"
+    "svgImport": "Import SVG: 2D contour → 3D body (pick a .svg file, depth, scale)",
+    "threadImport": "Thread: bolt/nut by standard (metric M, imperial UNC/UNF)"
   },
   "componentTree": {
     "sceneEmpty": "Scene is empty",
@@ -346,6 +349,20 @@
     "scale": "Scale",
     "create": "Create"
   },
+  "threadModal": {
+    "title": "Thread",
+    "series": "Series",
+    "metric": "Metric (M)",
+    "imperial": "Imperial (UNC/UNF)",
+    "size": "Size",
+    "length": "Length",
+    "kind": "Type",
+    "bolt": "Bolt (external thread)",
+    "nut": "Nut (internal thread)",
+    "create": "Create",
+    "boltName": "Thread: {{size}}×{{length}}",
+    "nutName": "Nut: {{size}}"
+  },
   "errors": {
     "noObjectsSelected": "No objects selected",
     "csgNeedTwoObjects": "Select exactly 2 objects for CSG",
@@ -370,6 +387,8 @@
     "svgNoShapes": "The SVG file has no contours",
     "svgBadSize": "Depth and scale must be greater than 0",
     "svgTooManyTris": "Too many triangles: {{count}} (max {{max}})",
+    "threadBadParams": "Invalid thread parameters (size from the table, length {{min}}…{{max}} mm)",
+    "threadFailed": "Failed to create thread: {{reason}}",
     "pasteFailed": "Paste failed",
     "deleteFailed": "Failed to delete objects",
     "csgFailed": "CSG operation failed",

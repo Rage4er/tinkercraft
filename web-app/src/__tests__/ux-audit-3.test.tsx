@@ -446,7 +446,7 @@ describe('UX-AUDIT-28 — вкладка «Список»: имена с ном�
     await cubeSphere('union')
     const objects = Object.values(st().objects)
     const h = mount(
-      <LeftPanel shapeSearch="" onShapeSearchChange={noop} workerOk busy={false} onAddShape={noop} onShowTextModal={noop} onShowSvgImport={noop}
+      <LeftPanel shapeSearch="" onShapeSearchChange={noop} workerOk busy={false} onAddShape={noop} onShowTextModal={noop} onShowSvgImport={noop} onShowThreadModal={noop}
         objectList={objects} selSet={new Set()} activeTab="objects" onTabChange={noop} onSelect={noop} onRename={noop}
         onToggleVis={noop} onDeleteObject={noop} historyIndex={0} operations={[]} tlFilters={{}} onFilterChange={noop} onJumpHistory={noop} />,
     )

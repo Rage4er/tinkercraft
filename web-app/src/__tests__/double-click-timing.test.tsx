@@ -81,7 +81,7 @@ function mountPalette(onAddShape: (type: PlaceableShape) => void): HTMLButtonEle
   document.body.appendChild(host)
   root = createRoot(host)
   act(() => root!.render(
-    <LeftPanel shapeSearch="" onShapeSearchChange={noop} workerOk busy={false} onAddShape={onAddShape} onShowTextModal={noop} onShowSvgImport={noop}
+    <LeftPanel shapeSearch="" onShapeSearchChange={noop} workerOk busy={false} onAddShape={onAddShape} onShowTextModal={noop} onShowSvgImport={noop} onShowThreadModal={noop}
       objectList={[]} selSet={new Set()} activeTab="objects" onTabChange={noop} onSelect={noop} onRename={noop}
       onToggleVis={noop} onDeleteObject={noop} historyIndex={0} operations={[]} tlFilters={{}} onFilterChange={noop} onJumpHistory={noop} />,
   ))

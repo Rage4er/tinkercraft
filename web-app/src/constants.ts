@@ -14,7 +14,7 @@ export const APP_VERSION = '1.3.13';
 // Иконки — это строковые ключи, не React-компоненты.
 // UI-слой подставляет реальные иконки из constants.tsx.
 export const ALL_SHAPES_DATA: {
-  type: ShapeType | "text" | "svg";
+  type: ShapeType | "text" | "svg" | "thread";
   labelKey: string;
   iconKey: string;
   categoryKey: string;
@@ -33,6 +33,8 @@ export const ALL_SHAPES_DATA: {
     { type: "text", labelKey: "shapes.text", iconKey: "text", categoryKey: "shapesCategory.special" },
     // SVG-EXTRUDE: не режим размещения — загрузка .svg → окно «SVG → 3D»
     { type: "svg", labelKey: "shapes.svg", iconKey: "svg", categoryKey: "shapesCategory.special" },
+    // THREAD-GENERATOR: не режим размещения — окно «Резьба» (болт/гайка)
+    { type: "thread", labelKey: "shapes.thread", iconKey: "thread", categoryKey: "shapesCategory.special" },
   ];
 
 // ---- Snap values ----

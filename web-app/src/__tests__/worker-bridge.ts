@@ -16,6 +16,7 @@ import {
   initWasm,
   handleBuildShape,
   handleBuildImportedMesh,
+  handleBuildThread,
   handleCsgBoolean,
   handleCsgBooleanSync,
   handleCsgBooleanMulti,
@@ -56,6 +57,7 @@ async function dispatch(msg: BridgeMsg): Promise<void> {
   switch (msg.type) {
     case 'buildShape': await handleBuildShape(msg as never); break
     case 'buildImportedMesh': await handleBuildImportedMesh(msg as never); break
+    case 'buildThread': await handleBuildThread(msg as never); break
     case 'csgBoolean': await handleCsgBoolean(msg as never); break
     case 'csgBooleanSync': await handleCsgBooleanSync(msg as never); break
     case 'csgBooleanMulti': await handleCsgBooleanMulti(msg as never); break
@@ -121,6 +123,14 @@ export async function workerBuildImportedMesh(
   objId: string, vertices: Float32Array | number[], indices: Uint32Array | number[],
 ): Promise<MeshResult> {
   return toMeshResult(await call('buildImportedMesh', { objId, vertices, indices }))
+}
+
+/** THREAD-GENERATOR: резьба (болт/гайка) по табличному размеру. */
+export async function workerBuildThread(
+  objId: string,
+  params: { series: string; sizeId: string; length: number; kind: string },
+): Promise<MeshResult> {
+  return toMeshResult(await call('buildThread', { objId, ...params }))
 }
 
 export async function workerSyncObjects(
