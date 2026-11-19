@@ -2,11 +2,11 @@
 // thread-table — THREAD-GENERATOR: параметры стандартных резьб
 // ============================================================
 //
-// Метрическая (ISO, грубый шаг): M3…M24. Дюймовая: UNC и UNF 1/4"…3/4"
-// (диаметр и шаг приведены к мм: 1 дюйм = 25,4 мм, шаг = 25,4 / TPI).
-// Профиль обеих серий — острый 60°-треугольник высотой H = (√3/2)·P ≈ 0,866·шаг
-// с притуплением гребня P/8 (Unified); витки плотные — основание ≈ шагу.
-// Это упрощение (без скруглений гребня/дна).
+// Метрическая (ISO 261, грубый шаг): M3…M24. Дюймовая: UNC и UNF 1/4"…3/4"
+// (диаметр и шаг в мм: 1 дюйм = 25,4 мм, шаг = 25,4 / TPI без округления).
+// Базовый профиль ISO 68-1 / Unified: угол 60°, фундаментальная высота
+// H = (√3/2)·P, рабочая глубина 5H/8, плоский гребень P/8 и впадина P/4.
+// Это базовый профиль без скругления дна и без полей допусков.
 // Ключ размера — `id` (стабилен, в истории/тестах): 'M6', '1/4-20-UNC'…
 
 export type ThreadSeries = 'metric' | 'imperial'
@@ -48,19 +48,19 @@ export const METRIC_THREADS: readonly ThreadSize[] = [
 // 1/2=3/4", 5/8=15/16", 3/4=1-1/8".
 export const IMPERIAL_THREADS: readonly ThreadSize[] = [
   // UNC — грубый шаг
-  { id: '1/4-20-UNC', label: '1/4"-20 UNC × 1.27', d: r2(mm(1 / 4)), pitch: r2(tpi(20)), flats: r2(mm(7 / 16)) },
-  { id: '5/16-18-UNC', label: '5/16"-18 UNC × 1.41', d: r2(mm(5 / 16)), pitch: r2(tpi(18)), flats: r2(mm(1 / 2)) },
-  { id: '3/8-16-UNC', label: '3/8"-16 UNC × 1.59', d: r2(mm(3 / 8)), pitch: r2(tpi(16)), flats: r2(mm(9 / 16)) },
-  { id: '1/2-13-UNC', label: '1/2"-13 UNC × 1.95', d: r2(mm(1 / 2)), pitch: r2(tpi(13)), flats: r2(mm(3 / 4)) },
-  { id: '5/8-11-UNC', label: '5/8"-11 UNC × 2.31', d: r2(mm(5 / 8)), pitch: r2(tpi(11)), flats: r2(mm(15 / 16)) },
-  { id: '3/4-10-UNC', label: '3/4"-10 UNC × 2.54', d: r2(mm(3 / 4)), pitch: r2(tpi(10)), flats: r2(mm(9 / 8)) },
+  { id: '1/4-20-UNC', label: '1/4"-20 UNC × 1.27', d: r2(mm(1 / 4)), pitch: tpi(20), flats: r2(mm(7 / 16)) },
+  { id: '5/16-18-UNC', label: '5/16"-18 UNC × 1.41', d: r2(mm(5 / 16)), pitch: tpi(18), flats: r2(mm(1 / 2)) },
+  { id: '3/8-16-UNC', label: '3/8"-16 UNC × 1.59', d: r2(mm(3 / 8)), pitch: tpi(16), flats: r2(mm(9 / 16)) },
+  { id: '1/2-13-UNC', label: '1/2"-13 UNC × 1.95', d: r2(mm(1 / 2)), pitch: tpi(13), flats: r2(mm(3 / 4)) },
+  { id: '5/8-11-UNC', label: '5/8"-11 UNC × 2.31', d: r2(mm(5 / 8)), pitch: tpi(11), flats: r2(mm(15 / 16)) },
+  { id: '3/4-10-UNC', label: '3/4"-10 UNC × 2.54', d: r2(mm(3 / 4)), pitch: tpi(10), flats: r2(mm(9 / 8)) },
   // UNF — мелкий шаг
-  { id: '1/4-28-UNF', label: '1/4"-28 UNF × 0.91', d: r2(mm(1 / 4)), pitch: r2(tpi(28)), flats: r2(mm(7 / 16)) },
-  { id: '5/16-24-UNF', label: '5/16"-24 UNF × 1.06', d: r2(mm(5 / 16)), pitch: r2(tpi(24)), flats: r2(mm(1 / 2)) },
-  { id: '3/8-24-UNF', label: '3/8"-24 UNF × 1.06', d: r2(mm(3 / 8)), pitch: r2(tpi(24)), flats: r2(mm(9 / 16)) },
-  { id: '1/2-20-UNF', label: '1/2"-20 UNF × 1.27', d: r2(mm(1 / 2)), pitch: r2(tpi(20)), flats: r2(mm(3 / 4)) },
-  { id: '5/8-18-UNF', label: '5/8"-18 UNF × 1.41', d: r2(mm(5 / 8)), pitch: r2(tpi(18)), flats: r2(mm(15 / 16)) },
-  { id: '3/4-16-UNF', label: '3/4"-16 UNF × 1.59', d: r2(mm(3 / 4)), pitch: r2(tpi(16)), flats: r2(mm(9 / 8)) },
+  { id: '1/4-28-UNF', label: '1/4"-28 UNF × 0.91', d: r2(mm(1 / 4)), pitch: tpi(28), flats: r2(mm(7 / 16)) },
+  { id: '5/16-24-UNF', label: '5/16"-24 UNF × 1.06', d: r2(mm(5 / 16)), pitch: tpi(24), flats: r2(mm(1 / 2)) },
+  { id: '3/8-24-UNF', label: '3/8"-24 UNF × 1.06', d: r2(mm(3 / 8)), pitch: tpi(24), flats: r2(mm(9 / 16)) },
+  { id: '1/2-20-UNF', label: '1/2"-20 UNF × 1.27', d: r2(mm(1 / 2)), pitch: tpi(20), flats: r2(mm(3 / 4)) },
+  { id: '5/8-18-UNF', label: '5/8"-18 UNF × 1.41', d: r2(mm(5 / 8)), pitch: tpi(18), flats: r2(mm(15 / 16)) },
+  { id: '3/4-16-UNF', label: '3/4"-16 UNF × 1.59', d: r2(mm(3 / 4)), pitch: tpi(16), flats: r2(mm(9 / 8)) },
 ]
 
 export function threadSizes(series: ThreadSeries): readonly ThreadSize[] {
@@ -71,9 +71,19 @@ export function threadSizeOf(series: ThreadSeries, id: string): ThreadSize | und
   return threadSizes(series).find((s) => s.id === id)
 }
 
-/** Высота острого треугольника профиля: H = (√3/2)·P ≈ 0,866·шаг. */
-export function threadProfileDepth(pitch: number): number {
+/** Фундаментальная высота острого 60° треугольника: H = (√3/2)·P. */
+export function threadFundamentalHeight(pitch: number): number {
   return (Math.sqrt(3) / 2) * pitch
+}
+
+/** Рабочая глубина базового профиля ISO 68-1 / Unified: 5H/8 = 0,541266·P. */
+export function threadProfileDepth(pitch: number): number {
+  return (5 / 8) * threadFundamentalHeight(pitch)
+}
+
+/** Базовый минорный диаметр наружной/внутренней резьбы: d1 = D1 = d − 2·(5H/8). */
+export function threadMinorDiameter(size: ThreadSize): number {
+  return size.d - 2 * threadProfileDepth(size.pitch)
 }
 
 /** Размер гайки под ключ (ширина по граням, мм) — из таблицы размера (DIN EN ISO 4032 / DIN 934-1, ANSI B18.2.2). */

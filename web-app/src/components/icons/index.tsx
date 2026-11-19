@@ -99,14 +99,15 @@ export const SvgIcon = (p: any) => (
   </Icon>
 )
 
-// THREAD-GENERATOR: стержень с резьбой (винтовая линия вокруг цилиндра)
+// THREAD-GENERATOR: болт с шестигранной головкой и крупными V-витками
 export const ThreadIcon = (p: any) => (
   <Icon {...p}>
-    <path fill="currentColor" fillOpacity={0.22} d="M22 52V20h12v32Z" />
+    <path fill="currentColor" fillOpacity={0.22} d="M23 22h18v32H23Z" />
+    <path fill="currentColor" fillOpacity={0.22} d="M17 10h30l5 6-5 6H17l-5-6Z" />
     <g {...line}>
-      <path d="M22 52V20h12v32" />
-      <path d="M22 20h12M22 52h12" />
-      <path d="M22 27l12-5M22 36l12-5M22 45l12-5M22 54l12-5" />
+      <path d="M17 10h30l5 6-5 6H17l-5-6Z" />
+      <path d="M23 22v32h18V22" />
+      <path d="M23 28l9 5 9-5M23 37l9 5 9-5M23 46l9 5 9-5" />
     </g>
   </Icon>
 )

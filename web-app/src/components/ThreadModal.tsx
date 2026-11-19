@@ -35,7 +35,6 @@ export default function ThreadModal({
   const handleCreate = useCallback(() => void onCreate(), [onCreate]);
   const sizes = threadSizes(series);
 
-  // Как в TextModal/SvgModal: Esc закрывает модалку откуда угодно.
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
   useEffect(() => {
@@ -49,21 +48,21 @@ export default function ThreadModal({
   return (
     <div className="text-modal-backdrop" onClick={onClose}>
       <div
-        className="text-modal-box"
+        className="text-modal-box thread-modal-box"
         data-testid="thread-modal"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-labelledby="thread-modal-title"
       >
-        <div className="text-modal-title" id="thread-modal-title">
-          <ThreadIcon size={32} /> {t("threadModal.title")}
+        <div className="text-modal-title thread-modal-title" id="thread-modal-title">
+          <ThreadIcon size={28} /> {t("threadModal.title")}
         </div>
-        <div className="text-modal-row">
-          <label className="text-modal-label">
-            {t("threadModal.series")}
+        <div className="text-modal-row thread-modal-row">
+          <label className="thread-modal-field">
+            <span>{t("threadModal.series")}</span>
             <select
-              className="text-modal-num"
+              className="thread-modal-control"
               data-testid="thread-series"
               value={series}
               onChange={(e) => onSeriesChange(e.target.value === "imperial" ? "imperial" : "metric")}
@@ -72,10 +71,10 @@ export default function ThreadModal({
               <option value="imperial">{t("threadModal.imperial")}</option>
             </select>
           </label>
-          <label className="text-modal-label">
-            {t("threadModal.size")}
+          <label className="thread-modal-field">
+            <span>{t("threadModal.size")}</span>
             <select
-              className="text-modal-num"
+              className="thread-modal-control"
               data-testid="thread-size"
               value={sizeId}
               onChange={(e) => onSizeChange(e.target.value)}
@@ -86,30 +85,32 @@ export default function ThreadModal({
             </select>
           </label>
         </div>
-        <div className="text-modal-row">
-          <label className="text-modal-label">
-            {t("threadModal.length")}
-            <input
-              type="number"
-              value={length}
-              min={4}
-              max={120}
-              className="text-modal-num"
-              data-testid="thread-length"
-              onChange={(e) => {
-                const v = Number(e.target.value);
-                if (!isNaN(v)) onLengthChange(v);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") handleCreate();
-              }}
-            />
-            {t("units.mm")}
+        <div className="text-modal-row thread-modal-row">
+          <label className="thread-modal-field">
+            <span>{t("threadModal.length")}</span>
+            <span className="thread-modal-length">
+              <input
+                type="number"
+                value={length}
+                min={4}
+                max={120}
+                className="thread-modal-control"
+                data-testid="thread-length"
+                onChange={(e) => {
+                  const v = Number(e.target.value);
+                  if (!isNaN(v)) onLengthChange(v);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleCreate();
+                }}
+              />
+              <span>{t("units.mm")}</span>
+            </span>
           </label>
-          <label className="text-modal-label">
-            {t("threadModal.kind")}
+          <label className="thread-modal-field">
+            <span>{t("threadModal.kind")}</span>
             <select
-              className="text-modal-num"
+              className="thread-modal-control"
               data-testid="thread-kind"
               value={kind}
               onChange={(e) => onKindChange(e.target.value === "nut" ? "nut" : "bolt")}
@@ -126,7 +127,7 @@ export default function ThreadModal({
             disabled={busy || !workerOk || !(length > 0)}
             onClick={handleCreate}
           >
-            <PlusIcon size={32} /> {t("threadModal.create")}
+            <PlusIcon size={20} /> {t("threadModal.create")}
           </button>
           <button className="btn" onClick={onClose}>
             {t("actions.cancel")}

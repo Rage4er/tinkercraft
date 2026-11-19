@@ -22,6 +22,17 @@ try {
   if ((await page.locator('[data-testid=thread-size]').inputValue()) !== 'M6') fail('размер по умолчанию — M6')
   if ((await page.locator('[data-testid=thread-length]').inputValue()) !== '20') fail('длина по умолчанию — 20')
   if ((await page.locator('[data-testid=thread-kind]').inputValue()) !== 'bolt') fail('тип по умолчанию — bolt')
+  const modalFit = await modal.evaluate((root) => {
+    const box = root.getBoundingClientRect()
+    const outside = [...root.querySelectorAll('.thread-modal-field, .thread-modal-control, .text-modal-actions button')]
+      .filter((el) => {
+        const r = el.getBoundingClientRect()
+        return r.left < box.left - 1 || r.right > box.right + 1 || r.width === 0
+      })
+      .map((el) => el.getAttribute('data-testid') || el.className)
+    return { overflow: root.scrollWidth > root.clientWidth + 1, outside }
+  })
+  if (modalFit.overflow || modalFit.outside.length > 0) fail('окно «Резьба» не вмещает подписи/поля: ' + JSON.stringify(modalFit))
 
   // ── Метрическая M6 × 20, болт → «Создать» → «Резьба: M6×20» ──
   await page.locator('[data-testid=thread-create]').click()

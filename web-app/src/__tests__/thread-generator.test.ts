@@ -1,11 +1,11 @@
 // ============================================================
 // thread-generator.test.ts — THREAD-GENERATOR: резьба (болт/гайка)
 // ============================================================
-// Таблицы: метрическая M3…M24 (шаг), дюймовая UNC/UNF 1/4"…3/4" (TPI → мм),
-// профиль 60° (высота 0,5413·шаг). Геометрия (WASM): свип трапеции вдоль спирали
-// + булевы — болт: цилиндр ∪ виток; гайка: шестигранник − (сверло ∪ полость витка).
-// Проверки: габариты (болт ≈ d×L, гайка ≈ шестигранник), замкнутость (CSG ∪ куб),
-// объём, undo/redo, ошибки параметров (уведомления ru/en).
+// Таблицы: метрическая M3…M24 (ISO 261), дюймовая UNC/UNF 1/4"…3/4".
+// Базовый профиль ISO 68-1 / Unified: 60°, H = 0,866·P, глубина 5H/8,
+// гребень P/8 и впадина P/4. Геометрия (WASM): радиально-осевой свип вдоль
+// спирали + булевы. Проверки: реальные диаметры и длина, внутренний профиль,
+// замкнутость (CSG ∪ куб), объём, undo/redo, ошибки параметров ru/en.
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 
@@ -30,8 +30,8 @@ vi.mock('../csg/worker-client', async () => {
 })
 
 import {
-  METRIC_THREADS, IMPERIAL_THREADS, threadSizeOf, threadProfileDepth, nutAcrossFlats,
-  sanitizeThreadParams, THREAD_LENGTH_MIN, THREAD_LENGTH_MAX,
+  METRIC_THREADS, IMPERIAL_THREADS, threadSizeOf, threadFundamentalHeight, threadProfileDepth,
+  threadMinorDiameter, nutAcrossFlats, sanitizeThreadParams, THREAD_LENGTH_MIN, THREAD_LENGTH_MAX,
 } from '../csg/thread-table'
 import { addThreadObject } from '../store/add-thread'
 import { useDocumentStore } from '../store/document-store'
@@ -103,11 +103,22 @@ describe('thread-table: параметры резьбы', () => {
     expect(threadSizeOf('imperial', '1/4-28-UNF')).toBeDefined()
   })
 
-  it('профиль и гайка: высота острого треугольника (√3/2)·P ≈ 0,866·шаг; ключи по стандарту', () => {
-    expect(threadProfileDepth(1)).toBeCloseTo(0.866, 3)
+  it('дюймовый шаг хранится точно, без округления до подписи UI', () => {
+    for (const size of IMPERIAL_THREADS) {
+      const tpi = Number(size.id.split('-')[1])
+      expect(size.pitch * tpi).toBeCloseTo(25.4, 12)
+    }
+  })
+
+  it('базовый профиль ISO/Unified: 60°, глубина 5H/8, минорные диаметры и ключи по стандарту', () => {
+    expect(threadFundamentalHeight(1)).toBeCloseTo(0.8660254, 6)
+    expect(threadProfileDepth(1)).toBeCloseTo(0.5412659, 6)
+    expect(threadMinorDiameter(threadSizeOf('metric', 'M6')!)).toBeCloseTo(4.917468, 5)
+    expect(threadMinorDiameter(threadSizeOf('metric', 'M10')!)).toBeCloseTo(8.376202, 5)
+    expect(threadMinorDiameter(threadSizeOf('metric', 'M12')!)).toBeCloseTo(10.105569, 5)
     expect(nutAcrossFlats(threadSizeOf('metric', 'M6')!)).toBe(10)
-    expect(nutAcrossFlats(threadSizeOf('metric', 'M12')!)).toBe(18)   // DIN 934-1 / ISO 4032
-    expect(nutAcrossFlats(threadSizeOf('imperial', '1/2-13-UNC')!)).toBeCloseTo(19.05, 2)  // 3/4"
+    expect(nutAcrossFlats(threadSizeOf('metric', 'M12')!)).toBe(18)
+    expect(nutAcrossFlats(threadSizeOf('imperial', '1/2-13-UNC')!)).toBeCloseTo(19.05, 2)
   })
 
   it('sanitizeThreadParams: валидирует размер, длину клампит, чужой id — null', () => {
@@ -134,12 +145,12 @@ describe('THREAD-GENERATOR: геометрия (WASM)', () => {
     expect(getNode(id)?.type).toBe('baked')
     expect(errors()).toEqual([])
     const [sx, sy, sz] = worldSize(obj)
-    expect(sx).toBeCloseTo(6, 1)          // наружный диаметр резьбы
+    expect(sx).toBeCloseTo(6, 1)
     expect(sy).toBeCloseTo(6, 1)
-    expect(sz).toBeCloseTo(20, 3)         // длина
+    expect(sz).toBeCloseTo(20, 3)
     const v = meshVolume(worldVerts(obj), obj.indices)
-    const core = Math.PI * Math.pow(3 - threadProfileDepth(1), 2) * 20
-    expect(v).toBeGreaterThan(core)       // виток добавил объём
+    const core = Math.PI * Math.pow(threadMinorDiameter(threadSizeOf('metric', 'M6')!) / 2, 2) * 20
+    expect(v).toBeGreaterThan(core)
   })
 
   it('M10 × 30 → габарит ≈ 10×30', async () => {
@@ -167,13 +178,34 @@ describe('THREAD-GENERATOR: геометрия (WASM)', () => {
     const [sx, sy, sz] = worldSize(obj)
     const s = nutAcrossFlats(threadSizeOf('metric', 'M6')!)
     const Rc = s / Math.sqrt(3)
-    expect(sx).toBeCloseTo(2 * Rc, 2)   // вершины вдоль X
-    expect(sy).toBeCloseTo(s, 2)   // грани под ключ вдоль Y
+    expect(sx).toBeCloseTo(2 * Rc, 2)
+    expect(sy).toBeCloseTo(s, 2)
     expect(sz).toBeCloseTo(8, 3)
     const v = meshVolume(worldVerts(obj), obj.indices)
     const hexVol = (Math.sqrt(3) / 2) * Math.pow(s, 2) * 8 * 0.99
     expect(v).toBeLessThan(hexVol)
     expect(v).toBeGreaterThan(hexVol * 0.5)
+  })
+
+  it('гайка M6: внутренняя резьба имеет реальные D1 = 4,917 и D = 6,000 мм', async () => {
+    const size = threadSizeOf('metric', 'M6')!
+    await addThreadObject({ series: 'metric', sizeId: 'M6', length: 8, kind: 'nut' })
+    const obj = Object.values(st().objects)[0]
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
+    for (let i = 0; i < obj.vertices.length; i += 3) {
+      minX = Math.min(minX, obj.vertices[i]); maxX = Math.max(maxX, obj.vertices[i])
+      minY = Math.min(minY, obj.vertices[i + 1]); maxY = Math.max(maxY, obj.vertices[i + 1])
+    }
+    const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2
+    const radii: number[] = []
+    for (let i = 0; i < obj.vertices.length; i += 3) {
+      const r = Math.hypot(obj.vertices[i] - cx, obj.vertices[i + 1] - cy)
+      if (Math.abs(obj.vertices[i + 2]) < 3 && r < size.d / 2 + 0.05) radii.push(r)
+    }
+    expect(radii.length).toBeGreaterThan(100)
+    // Хорды 72-сегментной триангуляции срезают minor-диаметр менее чем на 0,01 мм.
+    expect(Math.abs(2 * Math.min(...radii) - threadMinorDiameter(size))).toBeLessThan(0.01)
+    expect(2 * Math.max(...radii)).toBeCloseTo(size.d, 3)
   })
 
   it('болт ∪ куб → CSG без уведомлений (замкнутый меш)', async () => {
@@ -188,6 +220,19 @@ describe('THREAD-GENERATOR: геометрия (WASM)', () => {
     expect(errors()).toEqual([])
     expect(st().objects[thr]).toBeUndefined()
     expect(st().objects[cube]).toBeUndefined()
+    expect(st().objects[st().selectedIds[0]].shapeType).toBe('csg')
+  })
+
+  it('гайка ∪ куб → CSG без уведомлений (замкнутый внутренний профиль)', async () => {
+    await addThreadObject({ series: 'metric', sizeId: 'M8', length: 10, kind: 'nut' })
+    const nut = Object.keys(st().objects)[0]
+    const t = st().objects[nut].transform
+    await st().addShape('cube', { width: 10, height: 10, depth: 10 })
+    const cube = Object.keys(st().objects).find((k) => k !== nut)!
+    await st().moveObject(cube, { ...st().objects[cube].transform, x: t.x + 30, y: t.y, z: t.z })
+    st().selectObjects([nut, cube], false)
+    await st().csgBoolean('union')
+    expect(errors()).toEqual([])
     expect(st().objects[st().selectedIds[0]].shapeType).toBe('csg')
   })
 

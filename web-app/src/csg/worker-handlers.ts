@@ -498,17 +498,15 @@ export function buildSpring(params: Record<string, number>): ManifoldObject {
 }
 
 // --- THREAD-GENERATOR: резьба (болт / гайка) ---
-// Профиль — острый 60°-треугольник высотой H = (√3/2)·P ≈ 0,866·шаг, притупление
-// гребня P/8; витки плотные (основание ≈ шагу, микрозазор против касания витков).
-// Болт: цилиндр, заходящий на 0,1·P выше основания витка, ∪ виток (свип профиля
-// вдоль спирали), ∩ бокс — ровные торцы. Гайка: шестигранник − (сверло ∪ полость
-// витка ∪ конусные фаски входа по DIN 934). Свип — как у пружины (frame T/N/B
-// вдоль спирали), торцы — веером к центроиду кольца, обход по знаку объёма.
+// Базовый профиль ISO 68-1 / Unified: 60°, H = (√3/2)·P, рабочая глубина 5H/8,
+// гребень P/8, впадина P/4. Профиль строится в радиально-осевой плоскости — его
+// размеры не искажаются углом подъёма спирали. Болт: цилиндр d1 ∪ виток ∩ бокс.
+// Гайка: шестигранник − (сверло D1 ∪ сужающаяся наружу полость витка ∪ фаски).
 
 /**
- * Свип многоугольного профиля вдоль спирали. Профиль — в локальной плоскости
- * кольца: x — радиально (от оси, наружу +), y — вдоль оси Z. Путь — спираль
- * радиуса `rc` от z0 до z1 за `turns` витков. Торцы плоские (веер к центроиду).
+ * Свип многоугольного профиля вдоль спирали. Профиль — в радиально-осевой
+ * плоскости кольца: x — радиально (наружу +), y — строго вдоль оси Z.
+ * Путь — спираль радиуса `rc` от z0 до z1 за `turns` витков.
  */
 export function sweepProfileAlongHelix(
   rc: number,
@@ -532,31 +530,15 @@ export function sweepProfileAlongHelix(
   }
   for (let i = 0; i <= n; i++) {
     const { t, c } = center(i)
-    const T = [-rc * Math.sin(t), rc * Math.cos(t), dz]
-    const tl = Math.hypot(T[0], T[1], T[2])
-    T[0] /= tl; T[1] /= tl; T[2] /= tl
-    const N = [-Math.cos(t), -Math.sin(t), 0]
-    const B = [T[1] * N[2] - T[2] * N[1], T[2] * N[0] - T[0] * N[2], T[0] * N[1] - T[1] * N[0]]
+    const nx = -Math.cos(t), ny = -Math.sin(t)
     for (let j = 0; j < m; j++) {
       const [x, y] = profile[j]
-      verts.push(c[0] + x * N[0] + y * B[0], c[1] + x * N[1] + y * B[1], c[2] + x * N[2] + y * B[2])
+      verts.push(c[0] + x * nx, c[1] + x * ny, c[2] + y)
     }
   }
-  // торцевые кольца — в горизонтальные плоскости z0/z1: без выступа витка
-  // за длину тела (кольцо наклонено на Bz ≈ 1) — ровные торцы, габарит = длине
-  for (let j = 0; j < m; j++) {
-    verts[j * 3 + 2] = z0
-    verts[(n * m + j) * 3 + 2] = z1
-  }
-  // центроиды торцевых колец — для плоских торцевых крышок
   const centroidAt = (i: number): [number, number, number] => {
     const { t, c } = center(i)
-    const T = [-rc * Math.sin(t), rc * Math.cos(t), dz]
-    const tl = Math.hypot(T[0], T[1], T[2])
-    T[0] /= tl; T[1] /= tl; T[2] /= tl
-    const N = [-Math.cos(t), -Math.sin(t), 0]
-    const B = [T[1] * N[2] - T[2] * N[1], T[2] * N[0] - T[0] * N[2], T[0] * N[1] - T[1] * N[0]]
-    return [c[0] + cx * N[0] + cy * B[0], c[1] + cx * N[1] + cy * B[1], c[2] + cx * N[2] + cy * B[2]]
+    return [c[0] - cx * Math.cos(t), c[1] - cx * Math.sin(t), c[2] + cy]
   }
   const g0 = verts.length / 3
   verts.push(...centroidAt(0))
@@ -589,63 +571,59 @@ export function sweepProfileAlongHelix(
 export function buildThread(size: ThreadSize, length: number, kind: ThreadKind): ManifoldObject {
   const { Manifold, CrossSection } = getWasm()
   const P = size.pitch
-  const h = threadProfileDepth(P)          // высота острого треугольника ≈ 0,866·P
+  const depth = threadProfileDepth(P)       // 5H/8 = 0,541266·P
   const L = length
-  const segPerTurn = 48
-  const embed = 0.1 * P                    // заход цилиндра выше основания витка / врезание в стенку
-  const c = P / 16                         // полуширина притупления гребня (P/8)
-  const w = 0.48 * P                       // полуширина у основания (≈ P/2 — плотные витки, микрозазор)
+  const segPerTurn = 72                     // совпадает с цилиндрами: стыки не срезают диаметры
+  const embed = 0.1 * P                     // перекрытие для булева; видимые размеры не меняет
+  const rMajor = size.d / 2
+  const rMinor = rMajor - depth
+  const crest = P / 16                      // гребень P/8
+  const root = 3 * P / 8                    // ширина витка у minor 3P/4 → впадина P/4
   const z0 = -L / 2, z1 = L / 2
   const turns = L / P
   if (kind === 'bolt') {
-    const rCore = size.d / 2 - h + embed
-    const core = Manifold.cylinder(L, rCore, rCore, 72, true)
-    // x > 0 — вдоль N (N направлена К ОСИ): гребень на радиусе d/2, дно на глубине h
+    const core = Manifold.cylinder(L, rMinor, rMinor, 72, true)
+    // Продолжение основания внутрь стержня только обеспечивает перекрытие ∪.
     const ridge = sweepProfileAlongHelix(
-      size.d / 2, z0, z1, turns,
-      [[0, -c], [0, c], [h, w], [h, -w]],
+      rMajor, z0, z1, turns,
+      [[0, -crest], [0, crest], [depth, root], [depth + embed, root], [depth + embed, -root], [depth, -root]],
       segPerTurn,
     )
     const m = core.add(ridge)
     core.delete()
     ridge.delete()
-    // виток у торцов выступает на ~w вдоль оси — ровные торцы ∩ бокс |z| ≤ L/2
     const box = Manifold.cube([size.d * 4, size.d * 4, L], true)
     const trimmed = m.intersect(box)
     m.delete()
     box.delete()
     return centerManifoldToCOM(trimmed)
   }
-  // гайка: шестигранник − (сверло ∪ полость витка ∪ фаски входа)
-  const rDrill = size.d / 2 - h
   const s = nutAcrossFlats(size)
-  const Rc = s / Math.sqrt(3)              // описанный радиус (грань под ключ = s)
+  const Rc = s / Math.sqrt(3)
   const hex: Array<[number, number]> = []
   for (let i = 0; i < 6; i++) {
     const a = (Math.PI / 3) * i
     hex.push([Rc * Math.cos(a), Rc * Math.sin(a)])
   }
   const cs = new CrossSection([hex])
-  // NB: scaleTop ЧИСЛОМ в JS-биндинге extrude уродует объём — без него и без center,
-  // центрирование — translate
   const hex0 = Manifold.extrude(cs, L)
   cs.delete()
   const hexM = hex0.translate(0, 0, -L / 2)
   hex0.delete()
-  const drill = Manifold.cylinder(L, rDrill, rDrill, 72, true)
-  // полость витка — ЗЕРКАЛО наружного гребня (профиль метчика): узкое притупление
-  // P/8 у сверла (minor), широкое основание ≈ P/2 у major (+ врезание в стенку).
-  // x < 0 — против N (наружу, в стенку)
+  const drill = Manifold.cylinder(L, rMinor, rMinor, 72, true)
+  // Пустота внутренней резьбы широкая у minor (7P/8 за вычетом гребня P/8)
+  // и сужается до P/4 у major. Это дополнение материала витка, а не его зеркало.
+  const voidAtMinor = 7 * P / 16
+  const voidAtMajor = P / 8
   const ridgeVoid = sweepProfileAlongHelix(
-    rDrill, z0, z1, turns,
-    [[0, -c], [0, c], [-h - embed, w], [-h - embed, -w]],
+    rMinor, z0, z1, turns,
+    [[embed, -voidAtMinor], [embed, voidAtMinor], [0, voidAtMinor], [-depth, voidAtMajor], [-depth, -voidAtMajor], [0, -voidAtMinor]],
     segPerTurn,
   )
-  // фаски входа по DIN 934: конус 120° (60° к торцу) с обеих сторон отверстия
-  const chH = 0.35 * P                     // глубина фаски
-  const chR = rDrill + chH / Math.sqrt(3)  // раскрытие конуса 120°
-  const coneTop = Manifold.cylinder(chH, chR, rDrill, 72, true).translate(0, 0, z1 - chH / 2)
-  const coneBot = Manifold.cylinder(chH, rDrill, chR, 72, true).translate(0, 0, z0 + chH / 2)
+  // Входная фаска 120° раскрывается от D1 до номинального major D.
+  const chH = depth / Math.sqrt(3)
+  const coneTop = Manifold.cylinder(chH, rMajor, rMinor, 72, true).translate(0, 0, z1 - chH / 2)
+  const coneBot = Manifold.cylinder(chH, rMinor, rMajor, 72, true).translate(0, 0, z0 + chH / 2)
   const hole = Manifold.union([drill, ridgeVoid, coneTop, coneBot])
   drill.delete()
   ridgeVoid.delete()
