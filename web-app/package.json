@@ -1,6 +1,6 @@
 {
   "name": "tinkercraft-web",
-  "version": "1.3.13",
+  "version": "1.3.14",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@12.10.1",
@@ -42,7 +42,8 @@
     "e2e:ux-formats-settings": "node e2e/ux-formats-settings.mjs",
     "e2e:modeling-tools": "node e2e/modeling-tools.mjs",
     "e2e:svg-extrude": "node e2e/svg-extrude.mjs",
-    "e2e:thread-generator": "node e2e/thread-generator.mjs"
+    "e2e:thread-generator": "node e2e/thread-generator.mjs",
+    "e2e:thread-extend": "node e2e/thread-extend.mjs"
   },
   "dependencies": {
     "i18next": "^26.3.6",

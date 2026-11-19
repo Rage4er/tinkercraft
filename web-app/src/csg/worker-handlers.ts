@@ -11,7 +11,7 @@ import { centerMassAtOrigin } from './geometry-utils'
 import type { RebuildTransform } from './rebuildOps'
 import { applyMoveDelta, applyMirrorToTransform, applyAlignToTransform, expandForReplay } from './rebuildOps'
 import type { MirrorOperation } from './types'
-import { threadSizeOf, threadProfileDepth, nutAcrossFlats, sanitizeThreadParams, type ThreadKind, type ThreadSize } from './thread-table'
+import { threadSizeOf, threadDepthOf, nutAcrossFlats, sanitizeThreadParams, type ThreadHand, type ThreadKind, type ThreadSize } from './thread-table'
 import { devLog, devLogCsg } from '../utils/debug'
 
 // --- Type definitions (moved from worker.ts to avoid circular deps) ---
@@ -515,18 +515,21 @@ export function sweepProfileAlongHelix(
   turns: number,
   profile: Array<[number, number]>,
   segPerTurn: number,
+  hand: ThreadHand = 'right',
 ): ManifoldObject {
   const { Manifold } = getWasm()
   const m = profile.length
   const n = Math.max(4, Math.round(turns * segPerTurn))
   const L = 2 * Math.PI * turns
   const dz = (z1 - z0) / L
+  const direction = hand === 'left' ? -1 : 1
   const cx = profile.reduce((s, p) => s + p[0], 0) / m
   const cy = profile.reduce((s, p) => s + p[1], 0) / m
   const verts: number[] = []
   const center = (i: number) => {
-    const t = (L * i) / n
-    return { t, c: [rc * Math.cos(t), rc * Math.sin(t), z0 + dz * t] as [number, number, number] }
+    const u = (L * i) / n
+    const t = direction * u
+    return { t, c: [rc * Math.cos(t), rc * Math.sin(t), z0 + dz * u] as [number, number, number] }
   }
   for (let i = 0; i <= n; i++) {
     const { t, c } = center(i)
@@ -557,7 +560,6 @@ export function sweepProfileAlongHelix(
     const c = n * m + j, d = n * m + ((j + 1) % m)
     tris.push(g1, d, c)
   }
-  // ориентация наружу: объём (сумма тетраэдров от начала координат) > 0
   let vol = 0
   for (let k = 0; k < tris.length; k += 3) {
     const [p, q, r] = [tris[k], tris[k + 1], tris[k + 2]].map((v) => [verts[v * 3], verts[v * 3 + 1], verts[v * 3 + 2]])
@@ -568,27 +570,26 @@ export function sweepProfileAlongHelix(
 }
 
 /** Резьба по табличному размеру: болт (стержень, наружная резьба) или гайка (отверстие). */
-export function buildThread(size: ThreadSize, length: number, kind: ThreadKind): ManifoldObject {
+export function buildThread(size: ThreadSize, length: number, kind: ThreadKind, hand: ThreadHand = 'right'): ManifoldObject {
   const { Manifold, CrossSection } = getWasm()
   const P = size.pitch
-  const depth = threadProfileDepth(P)       // 5H/8 = 0,541266·P
+  const square = size.profile === 'square'
+  const depth = threadDepthOf(size)
   const L = length
-  const segPerTurn = 72                     // совпадает с цилиндрами: стыки не срезают диаметры
-  const embed = 0.1 * P                     // перекрытие для булева; видимые размеры не меняет
+  const segPerTurn = 72
+  const embed = 0.1 * P
   const rMajor = size.d / 2
   const rMinor = rMajor - depth
-  const crest = P / 16                      // гребень P/8
-  const root = 3 * P / 8                    // ширина витка у minor 3P/4 → впадина P/4
+  const crest = P / 16
+  const root = 3 * P / 8
   const z0 = -L / 2, z1 = L / 2
   const turns = L / P
   if (kind === 'bolt') {
     const core = Manifold.cylinder(L, rMinor, rMinor, 72, true)
-    // Продолжение основания внутрь стержня только обеспечивает перекрытие ∪.
-    const ridge = sweepProfileAlongHelix(
-      rMajor, z0, z1, turns,
-      [[0, -crest], [0, crest], [depth, root], [depth + embed, root], [depth + embed, -root], [depth, -root]],
-      segPerTurn,
-    )
+    const profile: Array<[number, number]> = square
+      ? [[0, -P / 4], [0, P / 4], [depth + embed, P / 4], [depth + embed, -P / 4]]
+      : [[0, -crest], [0, crest], [depth, root], [depth + embed, root], [depth + embed, -root], [depth, -root]]
+    const ridge = sweepProfileAlongHelix(rMajor, z0, z1, turns, profile, segPerTurn, hand)
     const m = core.add(ridge)
     core.delete()
     ridge.delete()
@@ -611,20 +612,13 @@ export function buildThread(size: ThreadSize, length: number, kind: ThreadKind):
   const hexM = hex0.translate(0, 0, -L / 2)
   hex0.delete()
   const drill = Manifold.cylinder(L, rMinor, rMinor, 72, true)
-  // Пустота внутренней резьбы широкая у minor (7P/8 за вычетом гребня P/8)
-  // и сужается до P/4 у major. Это дополнение материала витка, а не его зеркало.
   const voidAtMinor = 7 * P / 16
   const voidAtMajor = P / 8
   const chH = depth / Math.sqrt(3)
-  // Полнопрофильный виток продолжен на виток за оба торца: его срезы остаются снаружи тела,
-  // а конусы фасок пересекают настоящую спираль без непрорезанного пояса у D1.
-  const ridgeVoid = sweepProfileAlongHelix(
-    rMinor, z0 - P, z1 + P, turns + 2,
-    [[embed, -voidAtMinor], [embed, voidAtMinor], [0, voidAtMinor], [-depth, voidAtMajor], [-depth, -voidAtMajor], [0, -voidAtMinor]],
-    segPerTurn,
-  )
-  // Сквозная гайка: обе фаски 120° раскрываются от D1 внутри до D на торце.
-  // Конусы входят в общую полость и вычитаются одной CSG-операцией.
+  const voidProfile: Array<[number, number]> = square
+    ? [[embed, -P / 4], [embed, P / 4], [-depth, P / 4], [-depth, -P / 4]]
+    : [[embed, -voidAtMinor], [embed, voidAtMinor], [0, voidAtMinor], [-depth, voidAtMajor], [-depth, -voidAtMajor], [0, -voidAtMinor]]
+  const ridgeVoid = sweepProfileAlongHelix(rMinor, z0 - P, z1 + P, turns + 2, voidProfile, segPerTurn, hand)
   const coneTop = Manifold.cylinder(chH, rMinor, rMajor, 72, true).translate(0, 0, z1 - chH / 2)
   const coneBot = Manifold.cylinder(chH, rMajor, rMinor, 72, true).translate(0, 0, z0 + chH / 2)
   const hole = Manifold.union([drill, ridgeVoid, coneTop, coneBot])
@@ -779,6 +773,7 @@ export interface BuildThreadMessage {
   sizeId: string
   length: number
   kind: string
+  hand?: string
 }
 
 export interface CsgBooleanMessage {
@@ -922,9 +917,9 @@ export async function handleBuildThread(msg: BuildThreadMessage): Promise<void> 
     return
   }
   const size = threadSizeOf(p.series, p.sizeId)!
-  devLogCsg('BUILD_THREAD', { objId: msg.objId, size: size.id, length: p.length, kind: p.kind })
+  devLogCsg('BUILD_THREAD', { objId: msg.objId, size: size.id, length: p.length, kind: p.kind, hand: p.hand ?? 'right' })
   try {
-    const m = buildThread(size, p.length, p.kind)
+    const m = buildThread(size, p.length, p.kind, p.hand ?? 'right')
     setCached(msg.objId, m)
     const mesh = extractMesh(m)
     safePostMessage(
