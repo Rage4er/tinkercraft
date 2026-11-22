@@ -125,10 +125,10 @@ export async function workerBuildImportedMesh(
   return toMeshResult(await call('buildImportedMesh', { objId, vertices, indices }))
 }
 
-/** THREAD-GENERATOR: резьба (болт/гайка) по табличному размеру. */
+/** THREAD-GENERATOR / THREAD-PARAMETRIC: резьба (болт/гайка) по табличному размеру. */
 export async function workerBuildThread(
   objId: string,
-  params: { series: string; sizeId: string; length: number; kind: string; hand?: string },
+  params: { series: string; sizeId: string; length: number; kind: string; hand?: string; starts?: number },
 ): Promise<MeshResult> {
   return toMeshResult(await call('buildThread', { objId, ...params }))
 }

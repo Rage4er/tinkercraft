@@ -13,13 +13,13 @@ import type {
   TinkerCraftOperation, AddShapeOperation, ImportMeshOperation,
   MirrorOperation, AlignOperation, AlignPlane, ResizeDimsOperation,
   MoveOperation, ColorOperation, GroupOperation, RenameOperation, HideShowOperation, LockOperation,
-  DeleteOperation, EditChildParamsOperation,
+  DeleteOperation, EditChildParamsOperation, ThreadOperation,
   SceneObject, ShapeParams, TransformNR, Vec3,
   TreeNode,
 } from '../csg/types'
 import {
   workerBuildShape, workerCsgBooleanWithSync,
-  workerBuildImportedMesh,
+  workerBuildImportedMesh, workerBuildThread,
   workerMirrorObject, workerRebuildScene,
   workerDeleteObjects, workerClearAll, workerSyncObjects, workerSyncMesh,
 } from '../csg/worker-client'
@@ -33,6 +33,7 @@ import { autosaveSession, restoreSession, clearAutosave } from '../io/autosave'
 import { useDimensionsStore } from './dimensions-store'
 import { sanitizeDimensions, type Dimension } from './dimensions'
 import { migrateLegacyFillet, type LegacyFilletMigration } from '../io/legacy-fillet'
+import { normalizeThreadParams, threadSizeDisplay, type ThreadParams } from '../csg/thread-table'
 import i18n from '../i18n'
 
 export { computeAABB, extractAndCenterInPlace, extractAndCenterGetAABB, computeWorldAABB, extractCenteredAt } from './helpers'
@@ -315,6 +316,49 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       cacheSnapshot(newOps.length, newObjects)
       invalidateMirrorCache()
     } catch (e) { set({ busy: false }); console.error('addRawMesh:', e); notify(i18n.t('errors.importMeshFailed'), 'error') }
+  },
+
+  // ── THREAD-PARAMETRIC: параметрическая резьба (операция `thread`, не import_mesh) ──
+  addThread: async (threadParams) => {
+    if (get().busy) return false
+    const params = normalizeThreadParams(threadParams)
+    if (!params) {
+      notify(i18n.t('errors.threadBadParams'), 'error')
+      return false
+    }
+    const { objects, operations, historyIndex } = get()
+    const id = nextId('thr')
+    const color = colorForIndex(Object.keys(objects).length)
+    const transform: TransformNR = { x: Object.keys(objects).length * OBJECT_SPACING, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
+    set({ busy: true })
+    try {
+      const t0 = performance.now()
+      const mesh = await workerBuildThread(id, params)
+      const ms = performance.now() - t0
+      const sizeDisp = threadSizeDisplay(params)
+      const name = params.kind === 'nut'
+        ? i18n.t('threadModal.nutName', { size: sizeDisp })
+        : i18n.t('threadModal.boltName', { size: sizeDisp, length: params.length })
+      // shapeType остаётся import_mesh — для CSG/зеркала/дерева это готовый меш; параметрическость
+      // держится операцией `thread` и полем SceneObject.thread (правка из свойств, rebuild).
+      const obj: SceneObject = makeObject({
+        id, shapeType: 'import_mesh', params: {}, color, transform, visible: true, locked: false,
+        vertices: mesh.vertices, indices: mesh.indices, normals: mesh.normals, name, thread: { ...params },
+      })
+      const op: ThreadOperation = { type: 'thread', id, name, color, transform, params: { ...params } }
+      const newOps = [...operations.slice(0, historyIndex), op]
+      const newObjects = { ...objects, [id]: obj }
+      createBakedNode(id, mesh.vertices, mesh.indices, mesh.normals, transform)
+      set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, selectedIds: [id], modified: true, busy: false, lastCsgMs: ms })
+      cacheSnapshot(newOps.length, newObjects)
+      invalidateMirrorCache()
+      return true
+    } catch (e) {
+      set({ busy: false })
+      console.error('addThread:', e)
+      notify(i18n.t('errors.threadFailed', { reason: e instanceof Error ? e.message : String(e) }), 'error')
+      return false
+    }
   },
 
   // ── Импорт STL ──
@@ -1114,6 +1158,35 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         invalidateMirrorCache()
       } catch (e) { set({ busy: false }); console.error('resizeObject (CSG):', e); notify(i18n.t('errors.resizeCsgFailed'), 'error') }
     }
+  },
+
+  // ── THREAD-PARAMETRIC: правка параметров резьбы из PropertiesPanel ──
+  editThreadParams: async (id, nextInput) => {
+    if (get().busy) return false
+    const { objects, operations, historyIndex } = get()
+    const obj = objects[id]
+    if (!obj?.thread) return false
+    if (obj.locked) { notify(i18n.t('lock.cantMove'), 'warning'); return false }   // LOCK-OBJECT
+    const current = normalizeThreadParams(obj.thread)
+    const next = normalizeThreadParams(nextInput)
+    if (!current || !next) { notify(i18n.t('errors.threadBadParams'), 'error'); return false }
+    if (current.series === next.series && current.sizeId === next.sizeId && current.length === next.length &&
+      current.kind === next.kind && current.hand === next.hand && current.starts === next.starts) return false
+
+    // Операция создания резьбы (последняя по префиксу — у объекта один id)
+    const prefix = operations.slice(0, historyIndex)
+    let stepIndex = -1
+    for (let i = prefix.length - 1; i >= 0; i--) {
+      const op = prefix[i]
+      if (op.type === 'thread' && op.id === id) { stepIndex = i; break }
+    }
+    if (stepIndex < 0) return false
+
+    const sizeDisp = threadSizeDisplay(next)
+    const name = next.kind === 'nut'
+      ? i18n.t('threadModal.nutName', { size: sizeDisp })
+      : i18n.t('threadModal.boltName', { size: sizeDisp, length: next.length })
+    return get().editStepParams(stepIndex, { kind: 'thread', params: next, name })
   },
 
   // ── Правка параметров ребёнка CSG (Фаза 9.3) ──

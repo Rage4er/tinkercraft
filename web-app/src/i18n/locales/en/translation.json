@@ -260,12 +260,14 @@
     "lock": "Lock",
     "unlock": "Unlock",
     "arrayLinear": "Array: linear ×{{count}}, spacing {{step}} ({{axis}})",
-    "arrayCircular": "Array: circular ×{{count}}, {{angle}}° ({{axis}})"
+    "arrayCircular": "Array: circular ×{{count}}, {{angle}}° ({{axis}})",
+    "editThreadDetail": "thread {{size}}, starts {{starts}}, length {{length}} mm"
   },
   "filters": {
     "add_shape": "Add",
     "paste": "Paste",
     "import_mesh": "Import",
+    "thread": "Thread",
     "move": "Move",
     "rotate": "Rotate",
     "scale": "Scale",
@@ -361,6 +363,8 @@
     "square": "Square",
     "size": "Diameter",
     "pitch": "Pitch",
+    "starts": "Starts",
+    "startsHint": "Thread lead: {{lead}} mm",
     "hand": "Direction",
     "rightHand": "Right-hand",
     "leftHand": "Left-hand",
@@ -376,6 +380,12 @@
     "squareHint": "Square profile: P/2 depth and P/2 ridge width",
     "boltName": "Thread: {{size}}×{{length}}",
     "nutName": "Nut: {{size}}"
+  },
+  "threadProperties": {
+    "title": "Thread parameters",
+    "lead": "Lead: {{value}} mm",
+    "starts": "Starts",
+    "apply": "Apply"
   },
   "errors": {
     "noObjectsSelected": "No objects selected",

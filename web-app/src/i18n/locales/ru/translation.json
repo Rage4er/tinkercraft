@@ -260,12 +260,14 @@
     "lock": "Заблокировать",
     "unlock": "Разблокировать",
     "arrayLinear": "Массив: линейный ×{{count}}, шаг {{step}} ({{axis}})",
-    "arrayCircular": "Массив: круговой ×{{count}}, {{angle}}° ({{axis}})"
+    "arrayCircular": "Массив: круговой ×{{count}}, {{angle}}° ({{axis}})",
+    "editThreadDetail": "резьба {{size}}, заходов {{starts}}, длина {{length}} мм"
   },
   "filters": {
     "add_shape": "Добавить",
     "paste": "Вставить",
     "import_mesh": "Импорт",
+    "thread": "Резьба",
     "move": "Переместить",
     "rotate": "Повернуть",
     "scale": "Масштаб",
@@ -362,6 +364,8 @@
     "square": "Квадратная (Square)",
     "size": "Диаметр",
     "pitch": "Шаг",
+    "starts": "Заходов",
+    "startsHint": "Ход резьбы: {{lead}} мм",
     "hand": "Направление",
     "rightHand": "Правая",
     "leftHand": "Левая",
@@ -377,6 +381,12 @@
     "squareHint": "Квадратный профиль: глубина P/2, ширина витка P/2",
     "boltName": "Резьба: {{size}}×{{length}}",
     "nutName": "Гайка: {{size}}"
+  },
+  "threadProperties": {
+    "title": "Параметры резьбы",
+    "lead": "Ход: {{value}} мм",
+    "starts": "Заходов",
+    "apply": "Применить"
   },
   "errors": {
     "noObjectsSelected": "Объекты не выбраны",

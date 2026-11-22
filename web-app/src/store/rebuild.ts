@@ -7,6 +7,7 @@ import type {
   TinkerCraftOperation, SceneObject, ShapeType, ShapeParams,
   TransformNR, Vec3, AlignOperation, MirrorPlane,
 } from '../csg/types'
+import type { ThreadParams } from '../csg/thread-table'
 import { textOfOp } from './text-object'
 import { workerRebuildScene } from '../csg/worker-client'
 import { centerMassAtOrigin, makeObject, composeMirroredList } from './helpers'
@@ -46,6 +47,8 @@ export interface RebuildMeta {
   name?: string
   /** UX-AUDIT-31: 3D-текст — исходная строка */
   text?: string
+  /** THREAD-PARAMETRIC: параметрическая резьба (объект остаётся import_mesh по пути CSG) */
+  thread?: ThreadParams
   // CSG result mesh data — stored for rebuildFromHistory reconstruction
   resultVertices?: Float32Array | number[]
   resultIndices?: Uint32Array | number[]
@@ -87,6 +90,15 @@ export function buildRebuildMeta(rawOps: TinkerCraftOperation[]): {
       // UX-AUDIT-31: 3D-текст — строка у объекта (как у живого)
       const text = textOfOp(op)
       meta[op.id] = { color: op.color, shapeType: 'import_mesh', params: {}, transform: t, visible: true, name: op.name, ...(text !== undefined ? { text } : {}) }
+      transforms[op.id] = t
+
+    } else if (op.type === 'thread') {
+      // THREAD-PARAMETRIC: меш строит воркер из params; здесь — метаданные объекта.
+      const t: TransformNR = { ...op.transform }
+      meta[op.id] = {
+        color: op.color, shapeType: 'import_mesh', params: {}, transform: t,
+        visible: true, name: op.name, thread: { ...op.params },
+      }
       transforms[op.id] = t
 
     } else if (op.type === 'fillet') {
@@ -352,6 +364,7 @@ export async function rebuildFromHistory(
       id: m.objId,
       name: info?.name,
       ...(info?.text !== undefined ? { text: info.text } : {}),
+      ...(info?.thread !== undefined ? { thread: { ...info.thread } } : {}),
       shapeType: info?.shapeType ?? 'cube',
       params: info?.params ?? {},
       color: info?.color ?? '#89b4fa',
@@ -417,6 +430,22 @@ export function rebuildBuildTree(
         setNode(op.id, { ...existing, localTransform: { ...pivot } })
       } else if (vertices && indices) {
         createBakedNode(op.id, vertices, indices, null, pivot)
+      }
+
+    } else if (op.type === 'thread') {
+      // THREAD-PARAMETRIC: для дерева это baked-меш, но операция истории параметрическая —
+      // rebuildFromHistory построит его заново, а дерево нужно только как операнд CSG.
+      const obj = objects?.[op.id]
+      transforms[op.id] = { ...op.transform }
+      if (obj && obj.vertices.length > 0 && obj.indices.length > 0) {
+        const existing = getNode(op.id)
+        if (existing?.type === 'baked') {
+          setNode(op.id, { ...existing, localTransform: { ...op.transform } })
+        } else {
+          createBakedNode(op.id, obj.vertices, obj.indices, obj.normals ?? null, { ...op.transform })
+        }
+      } else if (!getNode(op.id)) {
+        createBakedNode(op.id, new Float32Array(), new Uint32Array(), null, { ...op.transform })
       }
 
     } else if (op.type === 'move') {

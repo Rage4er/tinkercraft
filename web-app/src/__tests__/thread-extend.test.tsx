@@ -18,6 +18,7 @@ function Harness(): React.JSX.Element {
       length={20}
       kind="bolt"
       hand="right"
+      starts={1}
       allSizes={allSizes}
       busy={false}
       workerOk
@@ -26,6 +27,7 @@ function Harness(): React.JSX.Element {
       onLengthChange={() => undefined}
       onKindChange={() => undefined}
       onHandChange={() => undefined}
+      onStartsChange={() => undefined}
       onAllSizesChange={setAllSizes}
       onCreate={() => undefined}
       onClose={() => undefined}

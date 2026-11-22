@@ -6,9 +6,11 @@ import { useSettingsStore } from "../store/settings";
 import { unitLabelKey } from "../store/units";
 import { useCsgGroupModeStore, type CsgOpButtonStates } from "../store/csg-group-mode";
 import type { ShapeParams, SceneObject } from "../csg/types";
+import type { ThreadParams } from "../csg/thread-table";
 import { EyeIcon, EyeOffIcon, FolderIcon, SaveIcon, LockIcon, UnlockIcon } from "./icons";
 import { isTextObject } from '../store/text-object'
 import { getParamFields, clampFieldValue } from '../csg/child-params'
+import ThreadProperties from "./ThreadProperties";
 
 
 /** NEW-PRIMITIVES: фигуры, у которых поля размеров — из getParamFields */
@@ -28,6 +30,7 @@ export default function PropertiesPanel({
   onScaleAxis,
   onResizeDim,
   onResizeObject,
+  onThreadChange,
   onCsg,
   onSetColor,
   onToggleVisible,
@@ -56,6 +59,8 @@ export default function PropertiesPanel({
   onScaleAxis: (axis: "scaleX" | "scaleY" | "scaleZ", val: number) => void;
   onResizeDim: (dim: "width" | "height" | "depth", val: number) => void;
   onResizeObject: (id: string, params: ShapeParams) => void;
+  /** THREAD-PARAMETRIC: изменение полного набора параметров резьбы */
+  onThreadChange?: (id: string, params: ThreadParams) => void;
   onCsg: (op: "union" | "subtract" | "intersect") => void;
   onSetColor: (id: string, color: string, skipHistory?: boolean) => void;
   onToggleVisible: (id: string) => void;
@@ -184,7 +189,8 @@ export default function PropertiesPanel({
       <div className="props-row">
         <span className="props-label">{t("properties.type")}</span>
         <span className="props-value">
-          {firstSelected.shapeType === 'csg' ? t("csg.result") :
+          {firstSelected.thread ? t("threadModal.title") :
+            firstSelected.shapeType === 'csg' ? t("csg.result") :
             isTextObject(firstSelected) ? t("shapes.text") :             /* UX-AUDIT-31 */
             firstSelected.shapeType === 'import_mesh' ? t("actions.import") :
               t(`shapes.${firstSelected.shapeType}`)}
@@ -239,6 +245,14 @@ export default function PropertiesPanel({
           {(firstSelected.indices.length / 3).toLocaleString()}
         </span>
       </div>
+
+      {firstSelected.thread && (
+        <ThreadProperties
+          params={firstSelected.thread}
+          disabled={busy || locked}
+          onChange={(next) => onThreadChange?.(firstSelected.id, next)}
+        />
+      )}
 
       <div className="props-section-title">{t("properties.position", { unit: unitLabel })}</div>
       <NumInput

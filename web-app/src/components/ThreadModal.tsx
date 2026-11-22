@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { ThreadIcon, PlusIcon } from "./icons";
 import {
-  threadNominals, threadPitches, threadSizeOf, threadSizes,
+  threadNominals, threadPitches, threadSizeOf, threadSizes, THREAD_STARTS,
   type ThreadHand, type ThreadKind, type ThreadSeries,
 } from "../csg/thread-table";
 
@@ -12,6 +12,7 @@ export default function ThreadModal({
   length,
   kind,
   hand,
+  starts,
   allSizes,
   busy,
   workerOk,
@@ -20,6 +21,7 @@ export default function ThreadModal({
   onLengthChange,
   onKindChange,
   onHandChange,
+  onStartsChange,
   onAllSizesChange,
   onCreate,
   onClose,
@@ -29,6 +31,7 @@ export default function ThreadModal({
   length: number;
   kind: ThreadKind;
   hand: ThreadHand;
+  starts: number;
   allSizes: boolean;
   busy: boolean;
   workerOk: boolean;
@@ -37,6 +40,7 @@ export default function ThreadModal({
   onLengthChange: (v: number) => void;
   onKindChange: (v: ThreadKind) => void;
   onHandChange: (v: ThreadHand) => void;
+  onStartsChange: (v: number) => void;
   onAllSizesChange: (v: boolean) => void;
   onCreate: () => void;
   onClose: () => void;
@@ -136,6 +140,22 @@ export default function ThreadModal({
               <option value="left">{t("threadModal.leftHand")}</option>
             </select>
           </label>
+        </div>
+        <div className="text-modal-row thread-modal-row">
+          <label className="thread-modal-field">
+            <span>{t("threadModal.starts")}</span>
+            <select
+              className="thread-modal-control"
+              data-testid="thread-starts"
+              value={starts}
+              onChange={(e) => onStartsChange(Number(e.target.value))}
+            >
+              {THREAD_STARTS.map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
+          </label>
+          <div className="thread-modal-field thread-modal-starts-hint">
+            {t("threadModal.startsHint", { lead: Math.round(selected.pitch * starts * 100) / 100 })}
+          </div>
         </div>
         <label className="thread-modal-check">
           <input

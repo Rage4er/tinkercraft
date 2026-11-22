@@ -11,11 +11,12 @@ import type {
   ArrayCopyOperation,
   GroupOperation,
   ImportMeshOperation,
+  ThreadOperation,
   SceneObject,
   TinkerCraftOperation,
   TransformNR,
 } from '../csg/types'
-import { workerBuildShape, workerBuildImportedMesh } from '../csg/worker-client'
+import { workerBuildShape, workerBuildImportedMesh, workerBuildThread } from '../csg/worker-client'
 import {
   createPrimitiveNode,
   createBakedNode,
@@ -35,7 +36,11 @@ import { findCreationTransform } from './edit-child'
 export function clipOf(obj: SceneObject | undefined, history: TinkerCraftOperation[]): ClipEntry | null {
   if (!obj) return null
   const entry: ClipEntry = { shapeType: obj.shapeType, params: obj.params, color: obj.color, transform: obj.transform, mirrored: obj.mirrored }
-  if (obj.shapeType === 'import_mesh') {
+  if (obj.thread) {
+    // THREAD-PARAMETRIC: копия резьбы остаётся параметрической (операция `thread`, не baked import_mesh)
+    entry.thread = { ...obj.thread }
+    entry.name = obj.name
+  } else if (obj.shapeType === 'import_mesh') {
     // PERF-R8-1: Храним TypedArray вместо number[] для экономии памяти (8×)
     entry.importVertices = new Float32Array(obj.vertices)
     entry.importIndices = new Uint32Array(obj.indices)
@@ -71,6 +76,18 @@ export async function instantiateClip(
   id: string,
   transform: TransformNR,
 ): Promise<{ obj: SceneObject; op: ArrayCopyOperation }> {
+  if (clip.thread) {
+    const result = await workerBuildThread(id, clip.thread)
+    const name = clip.name ?? 'pasted'
+    const obj: SceneObject = makeObject({
+      id, shapeType: 'import_mesh', params: {}, color: clip.color, transform,
+      visible: true, locked: false, vertices: result.vertices, indices: result.indices,
+      normals: result.normals, name, thread: { ...clip.thread },
+    })
+    const op: ThreadOperation = { type: 'thread', id, name, color: clip.color, transform, params: { ...clip.thread }, pasted: true }
+    createBakedNode(id, result.vertices, result.indices, result.normals ?? null, transform)
+    return { obj, op }
+  }
   if (clip.shapeType === 'import_mesh' && clip.importVertices && clip.importIndices) {
     const result = await workerBuildImportedMesh(id, clip.importVertices, clip.importIndices)
     // UX-AUDIT-31: копия текста — текст (строка и имя у объекта и шага)

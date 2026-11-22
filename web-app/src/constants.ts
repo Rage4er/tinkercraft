@@ -8,7 +8,7 @@
 import type { ShapeType } from "./csg/types";
 
 // ---- App version ----
-export const APP_VERSION = '1.3.14';
+export const APP_VERSION = '1.3.15';
 
 // ---- Shapes (data only, NO JSX) ----
 // Иконки — это строковые ключи, не React-компоненты.
@@ -56,6 +56,7 @@ export const OP_FILTER_LABELS: Record<string, string> = {
   add_shape: "filters.add_shape",
   paste: "filters.paste",
   import_mesh: "filters.import_mesh",
+  thread: "filters.thread",
   move: "filters.move",
   rotate: "filters.rotate",
   scale: "filters.scale",

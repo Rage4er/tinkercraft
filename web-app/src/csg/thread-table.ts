@@ -11,6 +11,19 @@ export type ThreadKind = 'bolt' | 'nut'
 export type ThreadHand = 'right' | 'left'
 export type ThreadProfile = 'tri60' | 'square'
 
+/** Число заходов многозаходной резьбы. */
+export const THREAD_STARTS = [1, 2, 3, 4, 6] as const
+
+/** Полные параметры резьбы — операция `thread` и правка её шага (THREAD-PARAMETRIC). */
+export interface ThreadParams {
+  series: ThreadSeries
+  sizeId: string
+  length: number
+  kind: ThreadKind
+  hand: ThreadHand
+  starts: number
+}
+
 export interface ThreadSize {
   id: string
   label: string
@@ -273,7 +286,8 @@ export function sanitizeThreadParams(input: {
   length: number
   kind: string
   hand?: string
-}): { series: ThreadSeries; sizeId: string; length: number; kind: ThreadKind; hand?: ThreadHand } | null {
+  starts?: number
+}): { series: ThreadSeries; sizeId: string; length: number; kind: ThreadKind; hand?: ThreadHand; starts?: number } | null {
   const allowed: readonly ThreadSeries[] = ['metric', 'imperial', 'unc', 'unf', 'npt', 'bsp', 'square']
   const series: ThreadSeries = allowed.includes(input.series as ThreadSeries) ? input.series as ThreadSeries : 'metric'
   const kind: ThreadKind = input.kind === 'nut' ? 'nut' : 'bolt'
@@ -282,5 +296,23 @@ export function sanitizeThreadParams(input: {
   if (!size || !Number.isFinite(length)) return null
   const len = Math.min(THREAD_LENGTH_MAX, Math.max(THREAD_LENGTH_MIN, Math.round(length * 10) / 10))
   const hand: ThreadHand | undefined = input.hand === undefined ? undefined : input.hand === 'left' ? 'left' : 'right'
-  return { series, sizeId: size.id, length: len, kind, ...(hand ? { hand } : {}) }
+  const starts = input.starts === undefined ? undefined : Number(input.starts)
+  if (starts !== undefined && !(THREAD_STARTS as readonly number[]).includes(starts)) return null
+  return { series, sizeId: size.id, length: len, kind, ...(hand ? { hand } : {}), ...(starts !== undefined ? { starts } : {}) }
+}
+
+/** Полное нормализованное представление параметров резьбы (операция `thread`). */
+export function normalizeThreadParams(input: unknown): ThreadParams | null {
+  const p = sanitizeThreadParams(input as {
+    series: string; sizeId: string; length: number; kind: string; hand?: string; starts?: number
+  })
+  if (!p) return null
+  return { ...p, hand: p.hand ?? 'right', starts: p.starts ?? 1 }
+}
+
+/** Строка размера для имени объекта/операции: суффикс LH у левой резьбы. */
+export function threadSizeDisplay(params: Pick<ThreadParams, 'series' | 'sizeId' | 'hand'>): string {
+  const size = threadSizeOf(params.series, params.sizeId)
+  const base = (size?.id ?? params.sizeId).replace(/-UNC$/, ' UNC').replace(/-UNF$/, ' UNF')
+  return params.hand === 'left' ? `${base} LH` : base
 }

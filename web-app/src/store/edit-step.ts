@@ -34,14 +34,16 @@ import { rebuildFromHistory, rebuildBuildTree, buildRebuildMeta } from './rebuil
 import { computeCsgResultN, bakeResultRS, groupReplacementFromResult } from './csg-result'
 import { computeEditedChild, type EditChildFailure } from './edit-child'
 import { solveAlignDeltas, solvePlaneAlignMove, extrudeSlab, worldVerticesAABB, nextId } from './helpers'
+import { normalizeThreadParams } from '../csg/thread-table'
 import { getNode } from '../csg/history-tree'
 
 /**
  * Виды патчей, которые поддерживает движок: move (9.5.2), mirror (9.5.3; шаг mirror ничего
  * не хранит готовым — копии и `mirrored[]` (composeMirroredList) воспроизводятся из
- * исходного списка оригинала, поэтому правка ЗАМЕНЯЕТ вклад шага, а не наслаивается).
+ * исходного списка оригинала, поэтому правка ЗАМЕНЯЕТ вклад шага, а не наслаивается),
+ * extrude (9.5.4) и thread (THREAD-PARAMETRIC: полные параметры резьбы).
  */
-const SUPPORTED_KINDS: ReadonlySet<StepPatch['kind']> = new Set(['move', 'mirror', 'extrude'])
+const SUPPORTED_KINDS: ReadonlySet<StepPatch['kind']> = new Set(['move', 'mirror', 'extrude', 'thread'])
 /** Глубина extrude: не нулевая (плита нулевой толщины — не объём) и в разумных пределах. */
 const EXTRUDE_MIN = 0.01
 const EXTRUDE_MAX = 10000
@@ -49,11 +51,12 @@ const PLANES: ReadonlySet<string> = new Set(['XY', 'XZ', 'YZ'])
 
 /**
  * Правится ли шаг как прошлый шаг (edit_step с каскадом) — ✎ в Timeline и панель «Шаг N».
- * Единственный источник: SUPPORTED_KINDS (move, mirror, extrude); extrude — только группа с source.
+ * THREAD-PARAMETRIC: резьбу правят из PropertiesPanel (без ✎ в истории — там тот же patch,
+ * но длинная форма параметров резьбы дублировала бы панель свойств).
  */
 export function isStepEditable(op: TinkerCraftOperation): boolean {
   const kind = patchKindFor(op)
-  return kind !== null && SUPPORTED_KINDS.has(kind)
+  return kind !== null && SUPPORTED_KINDS.has(kind) && op.type !== 'thread'
 }
 
 /** Допуск сравнения значений патча («не изменилось»). */
@@ -83,6 +86,7 @@ function patchValid(p: StepPatch): boolean {
   if (p.kind === 'move') return !!p.delta && finiteVec(p.delta) && finiteVec(p.rotDelta) && finiteVec(p.scaleDelta)
   if (p.kind === 'mirror') return PLANES.has(p.plane)
   if (p.kind === 'extrude') return Number.isFinite(p.depth) && Math.abs(p.depth) >= EXTRUDE_MIN && Math.abs(p.depth) <= EXTRUDE_MAX
+  if (p.kind === 'thread') return normalizeThreadParams(p.params) !== null
   return false
 }
 
@@ -98,6 +102,12 @@ function samePatch(op: TinkerCraftOperation, p: StepPatch): boolean {
   }
   if (p.kind === 'mirror' && op.type === 'mirror') return op.plane === p.plane
   if (p.kind === 'extrude' && op.type === 'group' && op.source) return Math.abs(op.source.depth - p.depth) < SAME_EPS
+  if (p.kind === 'thread' && op.type === 'thread') {
+    const a = normalizeThreadParams(op.params)
+    const b = normalizeThreadParams(p.params)
+    return !!a && !!b && a.series === b.series && a.sizeId === b.sizeId && a.length === b.length &&
+      a.kind === b.kind && a.hand === b.hand && a.starts === b.starts
+  }
   return false
 }
 
@@ -112,6 +122,7 @@ function beforeOf(op: TinkerCraftOperation): StepPatch | undefined {
   }
   if (op.type === 'mirror') return { kind: 'mirror', plane: op.plane }
   if (op.type === 'group' && op.source?.kind === 'extrude') return { kind: 'extrude', depth: op.source.depth }
+  if (op.type === 'thread') return { kind: 'thread', params: { ...op.params } }
   return undefined
 }
 
