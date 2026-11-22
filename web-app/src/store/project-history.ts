@@ -35,10 +35,11 @@ export const MAX_CASCADE_STEPS = 50
 /**
  * Вид патча, применимый к шагу; `null` — шаг не редактируется как шаг.
  * extrude — только группа с `source.kind === 'extrude'` (9.5.4; старые extrude без
- * source — нет, EXTRUDE-LEGACY).
+ * source — нет, EXTRUDE-LEGACY); thread — параметрическая резьба (THREAD-PARAMETRIC).
  */
 export function patchKindFor(op: TinkerCraftOperation): StepPatchKind | null {
   if (op.type === 'move' || op.type === 'mirror') return op.type
+  if (op.type === 'thread') return 'thread'
   if (op.type === 'group' && op.source?.kind === 'extrude') return 'extrude'
   return null
 }
@@ -46,12 +47,13 @@ export function patchKindFor(op: TinkerCraftOperation): StepPatchKind | null {
 /**
  * Отпечаток шага (тип + id цели) — защита от рассинхрона индекса (R7).
  * move → ids; mirror → ids НОВЫХ объектов (через запятую); extrude-группа → id плиты
- * (уникален для каждого extrude). `null` — шаг не редактируется как шаг.
+ * (уникален для каждого extrude); thread → id резьбы. `null` — шаг не редактируется как шаг.
  */
 export function stepFingerprint(op: TinkerCraftOperation): EditStepOperation['stepFingerprint'] | null {
   switch (op.type) {
     case 'move': return { type: op.type, targetId: op.ids.join(',') }
     case 'mirror': return { type: op.type, targetId: op.ids.join(',') }
+    case 'thread': return { type: op.type, targetId: op.id }
     case 'group': return op.source?.kind === 'extrude' ? { type: op.type, targetId: op.source.slabId } : null
     default: return null
   }
@@ -78,6 +80,11 @@ export function applyStepPatch(op: TinkerCraftOperation, patch: StepPatch): Tink
   if (patch.kind === 'extrude' && op.type === 'group' && op.source?.kind === 'extrude') {
     // Эффективная глубина; плита и меш группы — замены каскада (add_shape + group)
     return { ...op, source: { ...op.source, depth: patch.depth } }
+  }
+  if (patch.kind === 'thread' && op.type === 'thread') {
+    // Параметрическая резьба: меш НЕ замораживается — rebuild строит его из новых params.
+    // Имя обновляем вместе с параметрами, чтобы дерево/список показывали новый размер.
+    return { ...op, params: { ...patch.params }, ...(patch.name ? { name: patch.name } : {}) }
   }
   return null
 }
@@ -331,6 +338,7 @@ function seedIds(op: TinkerCraftOperation): string[] {
   switch (op.type) {
     case 'move': return [...op.ids]
     case 'mirror': return [...op.ids]
+    case 'thread': return [op.id]
     default: return []
   }
 }

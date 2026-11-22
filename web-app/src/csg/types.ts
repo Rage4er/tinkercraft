@@ -2,6 +2,8 @@
 // .3dtc format types — ZIP + JSON, vertices in origin (COM), transform = pivot
 // ============================================================
 
+import type { ThreadParams } from './thread-table'
+
 export interface TinkerCraftFile {
   version: string
   operations: TinkerCraftOperation[]
@@ -11,6 +13,7 @@ export interface TinkerCraftFile {
 export type TinkerCraftOperation =
   | AddShapeOperation
   | ImportMeshOperation
+  | ThreadOperation
   | MoveOperation
   | ResizeOperation
   | ResizeDimsOperation
@@ -51,6 +54,21 @@ export interface ImportMeshOperation {
   pasted?: boolean
   /** UX-AUDIT-31: 3D-текст — исходная строка (история «Добавить текст: …»); STL — нет */
   text?: string
+}
+
+/**
+ * THREAD-PARAMETRIC: параметрическая резьба. В отличие от import_mesh, меш НЕ хранится
+ * в операции — rebuild строит его заново из `params` (таблица стандартов + многозаходность).
+ */
+export interface ThreadOperation {
+  type: 'thread'
+  id: string
+  name: string
+  color: string
+  transform: TransformNR
+  params: ThreadParams
+  /** UX-AUDIT-13: объект вставлен из буфера (Ctrl+V) / скопирован массивом */
+  pasted?: boolean
 }
 
 export interface MoveOperation {
@@ -237,6 +255,7 @@ export type StepPatch =
   | { kind: 'move'; delta: Vec3; rotDelta?: Vec3; scaleDelta?: Vec3 }
   | { kind: 'mirror'; plane: MirrorPlane }
   | { kind: 'extrude'; depth: number }
+  | { kind: 'thread'; params: ThreadParams; name?: string }
 
 /** Тип шага, к которому применим патч данного вида. */
 export type StepPatchKind = StepPatch['kind']
@@ -298,8 +317,8 @@ export interface HideShowOperation { type: 'visibility'; ids: string[]; visible:
 /** LOCK-OBJECT: блокировка объекта (нельзя выбрать во вьюпорте, двигать, менять размеры, удалить, взять в CSG) */
 export interface LockOperation { type: 'lock'; ids: string[]; locked: boolean }
 
-/** ARRAY-TOOL: шаг копии массива — тот же, что у вставки (Ctrl+V): примитив, импорт / текст или CSG */
-export type ArrayCopyOperation = AddShapeOperation | ImportMeshOperation | GroupOperation
+/** ARRAY-TOOL: шаг копии массива — тот же, что у вставки (Ctrl+V): примитив, импорт / текст, резьба или CSG */
+export type ArrayCopyOperation = AddShapeOperation | ImportMeshOperation | ThreadOperation | GroupOperation
 
 /** ARRAY-TOOL: параметры массива (линейный — шаг; круговой — угол и центр) */
 export interface ArrayParams {
@@ -379,6 +398,8 @@ export interface SceneObject {
   name?: string
   /** UX-AUDIT-31: 3D-текст (import_mesh) — исходная строка; «Тип: Текст», иконка текста */
   text?: string
+  /** THREAD-PARAMETRIC: объект — параметрическая резьба (операция `thread`), меш пересобирается из params */
+  thread?: ThreadParams
   shapeType: ShapeType
   params: ShapeParams
   color: string

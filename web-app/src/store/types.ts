@@ -6,6 +6,7 @@ import type {
   TinkerCraftOperation, SceneObject, ShapeType, ShapeParams,
   TransformNR, CsgBooleanOp, StepPatch, Vec3,
 } from '../csg/types'
+import type { ThreadParams } from '../csg/thread-table'
 import type { ClipEntry } from './helpers'
 import type { CsgGroups } from './csg-operands'
 
@@ -43,6 +44,8 @@ export interface DocumentStore {
   addShape: (shapeType: ShapeType, params?: ShapeParams, at?: TransformNR) => Promise<void>
   /** Меш 3D-текста (`text` — исходная строка, UX-AUDIT-31) */
   addRawMesh: (name: string, vertices: Float32Array | number[], indices: Uint32Array | number[], text?: string, idPrefix?: string) => Promise<void>
+  /** THREAD-PARAMETRIC: параметрическая резьба — операция `thread`, меш строится из params */
+  addThread: (params: ThreadParams) => Promise<boolean>
   importStl: () => Promise<void>
   deleteSelected: () => Promise<void>
   /** ARRAY-TOOL: массив копий выбранных (линейный / круговой) — один шаг `array`; выделение — исходные и копии */
@@ -57,6 +60,8 @@ export interface DocumentStore {
   csgBoolean: (op: CsgBooleanOp, groups?: CsgGroups) => Promise<void>
   moveObject: (id: string, transform: TransformNR) => Promise<void>
   resizeObject: (id: string, params: ShapeParams) => Promise<void>
+  /** THREAD-PARAMETRIC: правка параметров резьбы из свойств → `edit_step { kind: 'thread' }` и каскад CSG */
+  editThreadParams: (id: string, params: ThreadParams) => Promise<boolean>
   /** Фаза 9.3: правка params ребёнка CSG (примитива в Build Tree) → пересчёт меша корня. */
   editChildParams: (rootId: string, nodeId: string, params: ShapeParams) => Promise<void>
   /** Фаза 9.5.2: правка прошлого шага (сырой индекс) с каскадом CSG/align; true — правка записана */

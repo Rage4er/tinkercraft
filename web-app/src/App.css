@@ -1934,6 +1934,13 @@ body {
   line-height: 1.4;
 }
 
+.thread-modal-starts-hint {
+  justify-content: flex-end;
+  padding-bottom: 9px;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
 .thread-modal-control option {
   overflow: hidden;
   text-overflow: ellipsis;

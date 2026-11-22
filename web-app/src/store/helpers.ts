@@ -662,6 +662,8 @@ export interface ClipEntry {
   /** UX-AUDIT-31: копия 3D-текста — исходная строка и имя («Текст: …») */
   text?: string
   name?: string
+  /** THREAD-PARAMETRIC: копия параметрической резьбы сохраняет параметры */
+  thread?: import('../csg/thread-table').ThreadParams
   // For CSG results (pasted as baked mesh):
   csgVertices?: Float32Array
   csgIndices?: Uint32Array

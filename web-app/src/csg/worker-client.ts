@@ -201,10 +201,10 @@ export async function workerBuildImportedMesh(
   return result
 }
 
-/** THREAD-GENERATOR: построить резьбу (болт/гайка) по табличному размеру. */
+/** THREAD-GENERATOR / THREAD-PARAMETRIC: построить резьбу (болт/гайка) по табличному размеру. */
 export async function workerBuildThread(
   objId: string,
-  params: { series: string; sizeId: string; length: number; kind: string; hand?: string },
+  params: { series: string; sizeId: string; length: number; kind: string; hand?: string; starts?: number },
 ): Promise<MeshResult> {
   await waitReady()
   const result = await send<MeshResult>('buildThread', { objId, ...params })

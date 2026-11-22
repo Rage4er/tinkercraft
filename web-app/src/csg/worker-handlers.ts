@@ -11,7 +11,7 @@ import { centerMassAtOrigin } from './geometry-utils'
 import type { RebuildTransform } from './rebuildOps'
 import { applyMoveDelta, applyMirrorToTransform, applyAlignToTransform, expandForReplay } from './rebuildOps'
 import type { MirrorOperation } from './types'
-import { threadSizeOf, threadDepthOf, nutAcrossFlats, sanitizeThreadParams, type ThreadHand, type ThreadKind, type ThreadSize } from './thread-table'
+import { threadSizeOf, threadDepthOf, nutAcrossFlats, normalizeThreadParams, type ThreadHand, type ThreadKind, type ThreadSize } from './thread-table'
 import { devLog, devLogCsg } from '../utils/debug'
 
 // --- Type definitions (moved from worker.ts to avoid circular deps) ---
@@ -506,7 +506,8 @@ export function buildSpring(params: Record<string, number>): ManifoldObject {
 /**
  * Свип многоугольного профиля вдоль спирали. Профиль — в радиально-осевой
  * плоскости кольца: x — радиально (наружу +), y — строго вдоль оси Z.
- * Путь — спираль радиуса `rc` от z0 до z1 за `turns` витков.
+ * Путь — спираль радиуса `rc` от z0 до z1 за `turns` витков; `phase` — угловой
+ * сдвиг захода многозаходной резьбы.
  */
 export function sweepProfileAlongHelix(
   rc: number,
@@ -516,6 +517,7 @@ export function sweepProfileAlongHelix(
   profile: Array<[number, number]>,
   segPerTurn: number,
   hand: ThreadHand = 'right',
+  phase = 0,
 ): ManifoldObject {
   const { Manifold } = getWasm()
   const m = profile.length
@@ -528,7 +530,7 @@ export function sweepProfileAlongHelix(
   const verts: number[] = []
   const center = (i: number) => {
     const u = (L * i) / n
-    const t = direction * u
+    const t = phase + direction * u
     return { t, c: [rc * Math.cos(t), rc * Math.sin(t), z0 + dz * u] as [number, number, number] }
   }
   for (let i = 0; i <= n; i++) {
@@ -569,9 +571,32 @@ export function sweepProfileAlongHelix(
   return new Manifold({ numProp: 3, vertProperties: new Float32Array(verts), triVerts: new Uint32Array(tris) })
 }
 
-/** Резьба по табличному размеру: болт (стержень, наружная резьба) или гайка (отверстие). */
-export function buildThread(size: ThreadSize, length: number, kind: ThreadKind, hand: ThreadHand = 'right'): ManifoldObject {
+/** `starts` спиралей со сдвигом 360°/starts. Вызывающий освобождает элементы массива. */
+function sweepThreadStarts(
+  rc: number,
+  z0: number,
+  z1: number,
+  leadTurns: number,
+  profile: Array<[number, number]>,
+  segPerTurn: number,
+  hand: ThreadHand,
+  starts: number,
+): ManifoldObject[] {
+  const out: ManifoldObject[] = []
+  for (let k = 0; k < starts; k++) {
+    out.push(sweepProfileAlongHelix(rc, z0, z1, leadTurns, profile, segPerTurn, hand, (2 * Math.PI * k) / starts))
+  }
+  return out
+}
+
+/**
+ * Резьба по табличному размеру: болт (стержень, наружная резьба) или гайка (отверстие).
+ * THREAD-PARAMETRIC: `starts` заходов; ход одной спирали = P·starts, соседние заходы
+ * сдвинуты на 360°/starts, поэтому суммарный профиль остаётся с осевым шагом P.
+ */
+export function buildThread(size: ThreadSize, length: number, kind: ThreadKind, hand: ThreadHand = 'right', starts = 1): ManifoldObject {
   const { Manifold, CrossSection } = getWasm()
+  const startsN = Math.max(1, Math.floor(starts))
   const P = size.pitch
   const square = size.profile === 'square'
   const depth = threadDepthOf(size)
@@ -583,16 +608,17 @@ export function buildThread(size: ThreadSize, length: number, kind: ThreadKind, 
   const crest = P / 16
   const root = 3 * P / 8
   const z0 = -L / 2, z1 = L / 2
-  const turns = L / P
+  const lead = P * startsN
+  const turns = L / lead
   if (kind === 'bolt') {
     const core = Manifold.cylinder(L, rMinor, rMinor, 72, true)
     const profile: Array<[number, number]> = square
       ? [[0, -P / 4], [0, P / 4], [depth + embed, P / 4], [depth + embed, -P / 4]]
       : [[0, -crest], [0, crest], [depth, root], [depth + embed, root], [depth + embed, -root], [depth, -root]]
-    const ridge = sweepProfileAlongHelix(rMajor, z0, z1, turns, profile, segPerTurn, hand)
-    const m = core.add(ridge)
+    const ridges = sweepThreadStarts(rMajor, z0, z1, turns, profile, segPerTurn, hand, startsN)
+    const m = Manifold.union([core, ...ridges])
     core.delete()
-    ridge.delete()
+    for (const r of ridges) r.delete()
     const box = Manifold.cube([size.d * 4, size.d * 4, L], true)
     const trimmed = m.intersect(box)
     m.delete()
@@ -618,18 +644,28 @@ export function buildThread(size: ThreadSize, length: number, kind: ThreadKind, 
   const voidProfile: Array<[number, number]> = square
     ? [[embed, -P / 4], [embed, P / 4], [-depth, P / 4], [-depth, -P / 4]]
     : [[embed, -voidAtMinor], [embed, voidAtMinor], [0, voidAtMinor], [-depth, voidAtMajor], [-depth, -voidAtMajor], [0, -voidAtMinor]]
-  const ridgeVoid = sweepProfileAlongHelix(rMinor, z0 - P, z1 + P, turns + 2, voidProfile, segPerTurn, hand)
+  // Полость продлена на P по оси; число витков каждой спирали — по ходу P·starts.
+  const ridgeVoids = sweepThreadStarts(rMinor, z0 - P, z1 + P, (L + 2 * P) / lead, voidProfile, segPerTurn, hand, startsN)
   const coneTop = Manifold.cylinder(chH, rMinor, rMajor, 72, true).translate(0, 0, z1 - chH / 2)
   const coneBot = Manifold.cylinder(chH, rMajor, rMinor, 72, true).translate(0, 0, z0 + chH / 2)
-  const hole = Manifold.union([drill, ridgeVoid, coneTop, coneBot])
+  const hole = Manifold.union([drill, ...ridgeVoids, coneTop, coneBot])
   drill.delete()
-  ridgeVoid.delete()
+  for (const v of ridgeVoids) v.delete()
   coneTop.delete()
   coneBot.delete()
   const nut = hexM.subtract(hole)
   hexM.delete()
   hole.delete()
   return centerManifoldToCOM(nut)
+}
+
+/** THREAD-PARAMETRIC: единая чистая точка построения резьбы по полным параметрам. */
+export function generateThread(input: unknown): ManifoldObject {
+  const p = normalizeThreadParams(input)
+  if (!p) throw new Error('bad thread params')
+  const size = threadSizeOf(p.series, p.sizeId)
+  if (!size) throw new Error(`unknown thread size: ${p.sizeId}`)
+  return buildThread(size, p.length, p.kind, p.hand, p.starts)
 }
 
 // --- Transform helpers ---
@@ -764,7 +800,7 @@ export interface BuildImportedMeshMessage {
   indices: number[]
 }
 
-/** THREAD-GENERATOR: построение резьбы (болт/гайка) по табличному размеру. */
+/** THREAD-GENERATOR / THREAD-PARAMETRIC: построение резьбы (болт/гайка) по табличному размеру. */
 export interface BuildThreadMessage {
   reqId: string
   type: 'buildThread'
@@ -774,6 +810,7 @@ export interface BuildThreadMessage {
   length: number
   kind: string
   hand?: string
+  starts?: number
 }
 
 export interface CsgBooleanMessage {
@@ -908,18 +945,17 @@ export async function handleBuildImportedMesh(msg: BuildImportedMeshMessage): Pr
   }
 }
 
-/** Handle buildThread message (THREAD-GENERATOR). Ошибка параметров/построения → error-ответ. */
+/** Handle buildThread message (THREAD-GENERATOR / THREAD-PARAMETRIC). Ошибка параметров/построения → error-ответ. */
 export async function handleBuildThread(msg: BuildThreadMessage): Promise<void> {
   const t0 = performance.now()
-  const p = sanitizeThreadParams(msg)
+  const p = normalizeThreadParams(msg)
   if (!p) {
     safePostMessage({ reqId: msg.reqId, type: 'error', message: `bad thread params: ${JSON.stringify(msg)}` })
     return
   }
-  const size = threadSizeOf(p.series, p.sizeId)!
-  devLogCsg('BUILD_THREAD', { objId: msg.objId, size: size.id, length: p.length, kind: p.kind, hand: p.hand ?? 'right' })
+  devLogCsg('BUILD_THREAD', { objId: msg.objId, size: p.sizeId, length: p.length, kind: p.kind, hand: p.hand, starts: p.starts })
   try {
-    const m = buildThread(size, p.length, p.kind, p.hand ?? 'right')
+    const m = generateThread(p)
     setCached(msg.objId, m)
     const mesh = extractMesh(m)
     safePostMessage(
@@ -1216,6 +1252,22 @@ export async function handleRebuildScene(msg: RebuildSceneMessage): Promise<void
         setCached(op.id as string, m)
         shapeInfos.set(op.id as string, { shapeType: st, params: par })
         currentTransforms.set(op.id as string, { ...t })
+      } else if (op.type === 'thread') {
+        // THREAD-PARAMETRIC: резьба восстанавливается из params (не baked). shapeInfos НЕ
+        // заполняем — дальнейшие move/mirror/align работают с готовым manifold-кэшем,
+        // как у import_mesh/CSG.
+        const raw = op.transform as { x: number; y: number; z: number; rotX: number; rotY: number; rotZ: number; scaleX?: number; scaleY?: number; scaleZ?: number } | undefined
+        const t: RebuildTransform = raw
+          ? { x: raw.x, y: raw.y, z: raw.z, rotX: raw.rotX, rotY: raw.rotY, rotZ: raw.rotZ, scaleX: raw.scaleX ?? 1, scaleY: raw.scaleY ?? 1, scaleZ: raw.scaleZ ?? 1 }
+          : { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
+        currentTransforms.set(op.id as string, { ...t })
+        try {
+          const m = applyTransform(generateThread(op.params), { x: t.x, y: t.y, z: t.z })
+          setCached(op.id as string, m)
+        } catch (e) {
+          console.warn(`[rebuild] Thread build failed for ${op.id}:`, e)
+          setCached(op.id as string, null)
+        }
       } else if (op.type === 'import_mesh') {
         const raw = op.transform as { x: number; y: number; z: number; rotX: number; rotY: number; rotZ: number; scaleX?: number; scaleY?: number; scaleZ?: number } | undefined
         const t: RebuildTransform = raw

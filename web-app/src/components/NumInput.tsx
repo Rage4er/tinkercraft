@@ -24,10 +24,13 @@ export default function NumInput({
   max,
   step,
   integer,
+  testId,
   onChange,
 }: {
   /** id поля (связь с <label>); по умолчанию `num-input-<label>` — задавайте, если метки повторяются */
   id?: string;
+  /** data-testid для e2e (поле внутри своей панели) */
+  testId?: string;
   label: string;
   value: number;
   disabled?: boolean;
@@ -63,6 +66,7 @@ export default function NumInput({
       <div className="flex-row" style={{ gap: 3 }}>
         <input
           id={inputId}
+          data-testid={testId}
           className="props-input"
           type="number"
           step={integer ? 1 : isLength && lengthUnit !== "mm" ? 10 ** -decimals * 10 : step ?? 1}

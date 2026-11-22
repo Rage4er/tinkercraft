@@ -128,6 +128,7 @@ export default function App() {
   const [threadLength, setThreadLength] = useState(20);
   const [threadKind, setThreadKind] = useState<ThreadKind>("bolt");
   const [threadHand, setThreadHand] = useState<ThreadHand>("right");
+  const [threadStarts, setThreadStarts] = useState(1);
   const [threadAllSizes, setThreadAllSizes] = useState(false);
   // UX-AUDIT-2: «Очистить сцену» — с подтверждением
   const [showClearConfirm, setShowClearConfirm] = useState(false);
@@ -160,6 +161,7 @@ export default function App() {
       saveProject: s.saveProject,
       moveObject: s.moveObject,
       resizeObject: s.resizeObject,
+      editThreadParams: s.editThreadParams,
       extrudeSelected: s.extrudeSelected,
       renameObject: s.renameObject,
       setColor: s.setColor,
@@ -198,6 +200,7 @@ export default function App() {
     saveProject,
     moveObject,
     resizeObject,
+    editThreadParams,
     extrudeSelected,
     renameObject,
     setColor,
@@ -389,10 +392,10 @@ export default function App() {
     setThreadSizeId(threadSizes(v)[0].id);   // первый размер серии
   }, []);
   const handleCreateThread = useCallback(async () => {
-    if (await addThreadObject({ series: threadSeries, sizeId: threadSizeId, length: threadLength, kind: threadKind, hand: threadHand })) {
+    if (await addThreadObject({ series: threadSeries, sizeId: threadSizeId, length: threadLength, kind: threadKind, hand: threadHand, starts: threadStarts })) {
       setShowThreadModal(false);
     }
-  }, [threadSeries, threadSizeId, threadLength, threadKind, threadHand]);
+  }, [threadSeries, threadSizeId, threadLength, threadKind, threadHand, threadStarts]);
 
   // PLUG-AND-PLAY: клик по фигуре палитры — режим размещения (превью → клик по грани / сетке,
   // X / Y / Z — плоскость оси, Enter — поставить, Esc / правый клик — отмена)
@@ -566,6 +569,7 @@ export default function App() {
           length={threadLength}
           kind={threadKind}
           hand={threadHand}
+          starts={threadStarts}
           allSizes={threadAllSizes}
           busy={busy}
           workerOk={workerOk}
@@ -574,6 +578,7 @@ export default function App() {
           onLengthChange={setThreadLength}
           onKindChange={setThreadKind}
           onHandChange={setThreadHand}
+          onStartsChange={setThreadStarts}
           onAllSizesChange={setThreadAllSizes}
           onCreate={handleCreateThread}
           onClose={() => setShowThreadModal(false)}
@@ -798,6 +803,7 @@ export default function App() {
             onScaleAxis={handleScaleAxis}
             onResizeDim={handleResizeDim}
             onResizeObject={resizeObject}
+            onThreadChange={(id, params) => { void editThreadParams(id, params); }}
             onCsg={runCsg}
             onSetColor={setColor}
             onToggleVisible={toggleVisible}

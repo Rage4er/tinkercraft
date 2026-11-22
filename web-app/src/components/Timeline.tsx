@@ -4,6 +4,7 @@ import type { TinkerCraftOperation, StepPatch, Vec3 } from "../csg/types";
 import { effectivePatches, applyStepPatch } from "../store/project-history";
 import { textOfOp } from "../store/text-object";
 import { isStepEditable } from "../store/edit-step";
+import { threadSizeDisplay } from "../csg/thread-table";
 import { fmtVec, fmtNum } from "./StepPanel";
 import { scrollListToItem } from "./list-scroll";
 import {
@@ -40,6 +41,7 @@ import {
   ArrayIcon,
   ColorIcon,
   TextIcon,
+  ThreadIcon,
 } from "./icons";
 
 // ---- Icon map for align operations ----
@@ -96,6 +98,8 @@ export function opIcon(op: TinkerCraftOperation): React.ReactNode {
     case "import_mesh":
       // UX-AUDIT-31: добавление 3D-текста — иконка текста (а не импорта)
       return op.pasted ? <PasteIcon size={32} /> : textOfOp(op) !== undefined ? <TextIcon size={32} /> : <ImportIcon size={32} />;
+    case "thread":
+      return op.pasted ? <PasteIcon size={32} /> : <ThreadIcon size={32} />;
     case "move": {
       const k = (op as { kind?: string }).kind;
       return k === "scale" ? <ScaleIcon size={32} /> : k === "rotate" ? <RotateIcon size={32} /> : <MoveIcon size={32} />;
@@ -120,7 +124,9 @@ export function opIcon(op: TinkerCraftOperation): React.ReactNode {
     case "edit_child_params":
       return <ScaleIcon size={32} />;
     case "edit_step":
-      return op.patch.kind === "mirror" ? <MirrorYZIcon size={32} /> : op.patch.kind === "extrude" ? <ScaleIcon size={32} /> : <MoveIcon size={32} />;
+      return op.patch.kind === "mirror" ? <MirrorYZIcon size={32} />
+        : op.patch.kind === "extrude" ? <ScaleIcon size={32} />
+          : op.patch.kind === "thread" ? <ThreadIcon size={32} /> : <MoveIcon size={32} />;
     case "delete":
       return <DeleteIcon size={32} />;
     case "visibility":
@@ -146,7 +152,7 @@ export function opIcon(op: TinkerCraftOperation): React.ReactNode {
  * «Импорт». Ключи — `OP_FILTER_LABELS`.
  */
 export function filterKeyOf(op: TinkerCraftOperation): string {
-  if ((op.type === "add_shape" || op.type === "import_mesh") && op.pasted) return "paste";
+  if ((op.type === "add_shape" || op.type === "import_mesh" || op.type === "thread") && op.pasted) return "paste";
   if (op.type === "import_mesh" && textOfOp(op) !== undefined) return "add_shape";     // «Добавить текст» (UX-AUDIT-31)
   if (op.type === "group" && op.source?.kind !== "extrude" && isPastedGroup(op)) return "paste";
   if (op.type === "move") {
@@ -169,6 +175,13 @@ export function opLabel(op: TinkerCraftOperation, t: (key: string, opts?: Record
       if (op.pasted) return t('timeline.paste', { what: text !== undefined ? t('shapesAcc.text') : t('timeline.pastedImport') });
       if (text !== undefined) return t('timeline.addText', { text });
       return t('timeline.importMesh', { name: (op as { name?: string }).name ?? "STL" });
+    }
+    case "thread": {
+      const size = threadSizeDisplay(op.params);
+      const label = op.params.kind === 'nut'
+        ? t('threadModal.nutName', { size })
+        : t('threadModal.boltName', { size, length: op.params.length });
+      return op.pasted ? t('timeline.paste', { what: label }) : label;
     }
     case "move": {
       const k = (op as { kind?: string }).kind;
@@ -253,6 +266,11 @@ function patchDetail(p: StepPatch, before: StepPatch | undefined, t: (key: strin
   if (p.kind === "extrude") {
     const from = before?.kind === "extrude" ? `${fmtNum(before.depth)} → ` : "";
     return `${t("stepPanel.extrude").toLowerCase()} (${t("stepPanel.depth").toLowerCase()} ${from}${fmtNum(p.depth)})`;
+  }
+  if (p.kind === "thread") {
+    return t("timeline.editThreadDetail", {
+      size: threadSizeDisplay(p.params), starts: p.params.starts, length: p.params.length,
+    });
   }
   const from = before?.kind === "mirror" ? `${before.plane} → ` : "";
   return `${t("stepPanel.mirror").toLowerCase()} ${from}${p.plane}`;
