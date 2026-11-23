@@ -45,6 +45,17 @@ export function patchKindFor(op: TinkerCraftOperation): StepPatchKind | null {
 }
 
 /**
+ * Применим ли патч к шагу. У mirror два вида правки: плоскость (`mirror`) и параметры
+ * отражённой резьбы (`thread_mirror`, если шаг зеркалил резьбу).
+ */
+export function patchAppliesTo(op: TinkerCraftOperation, patch: StepPatch): boolean {
+  if (patch.kind === 'thread_mirror') {
+    return op.type === 'mirror' && !!op.threadParams?.[patch.id]
+  }
+  return patchKindFor(op) === patch.kind
+}
+
+/**
  * Отпечаток шага (тип + id цели) — защита от рассинхрона индекса (R7).
  * move → ids; mirror → ids НОВЫХ объектов (через запятую); extrude-группа → id плиты
  * (уникален для каждого extrude); thread → id резьбы. `null` — шаг не редактируется как шаг.
@@ -85,6 +96,14 @@ export function applyStepPatch(op: TinkerCraftOperation, patch: StepPatch): Tink
     // Параметрическая резьба: меш НЕ замораживается — rebuild строит его из новых params.
     // Имя обновляем вместе с параметрами, чтобы дерево/список показывали новый размер.
     return { ...op, params: { ...patch.params }, ...(patch.name ? { name: patch.name } : {}) }
+  }
+  if (patch.kind === 'thread_mirror' && op.type === 'mirror' && op.threadParams?.[patch.id]) {
+    // Отражённая резьба — независимая копия: свои params в шаге mirror (не baked).
+    return {
+      ...op,
+      threadParams: { ...op.threadParams, [patch.id]: { ...patch.params } },
+      ...(patch.name ? { threadNames: { ...op.threadNames, [patch.id]: patch.name } } : {}),
+    }
   }
   return null
 }
@@ -167,7 +186,7 @@ function validateEdit(ops: TinkerCraftOperation[], at: number, e: EditStepOperat
   if (!fp || !e.stepFingerprint || fp.type !== e.stepFingerprint.type || fp.targetId !== e.stepFingerprint.targetId) {
     return 'fingerprint'
   }
-  if (!e.patch || patchKindFor(target) !== e.patch.kind) return 'kind'
+  if (!e.patch || !patchAppliesTo(target, e.patch)) return 'kind'
   for (const r of e.replacements ?? []) {
     // Замена — ниже по течению от шага N и выше самой правки. Исключения (9.5.4):
     // плита extrude (`add_shape`) стоит ДО своей группы; правка extrude пересчитывает
@@ -215,7 +234,7 @@ export function projectHistoryDetailed(
   }
   if (hypothetical) {
     const target = ops[hypothetical.stepIndex]
-    if (target && target.type !== 'edit_step' && patchKindFor(target) === hypothetical.patch.kind) {
+    if (target && target.type !== 'edit_step' && patchAppliesTo(target, hypothetical.patch)) {
       patches.set(hypothetical.stepIndex, hypothetical.patch)
     } else {
       ignored.push({ index: -1, reason: target ? 'kind' : 'bad_index' })

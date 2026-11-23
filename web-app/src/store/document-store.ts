@@ -1173,12 +1173,14 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     if (current.series === next.series && current.sizeId === next.sizeId && current.length === next.length &&
       current.kind === next.kind && current.hand === next.hand && current.starts === next.starts) return false
 
-    // Операция создания резьбы (последняя по префиксу — у объекта один id)
+    // Шаг, создавший резьбу: `thread` или `mirror` с параметрами отражённой копии.
     const prefix = operations.slice(0, historyIndex)
     let stepIndex = -1
+    let mirrored = false
     for (let i = prefix.length - 1; i >= 0; i--) {
       const op = prefix[i]
       if (op.type === 'thread' && op.id === id) { stepIndex = i; break }
+      if (op.type === 'mirror' && op.threadParams?.[id]) { stepIndex = i; mirrored = true; break }
     }
     if (stepIndex < 0) return false
 
@@ -1186,7 +1188,9 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     const name = next.kind === 'nut'
       ? i18n.t('threadModal.nutName', { size: sizeDisp })
       : i18n.t('threadModal.boltName', { size: sizeDisp, length: next.length })
-    return get().editStepParams(stepIndex, { kind: 'thread', params: next, name })
+    return mirrored
+      ? get().editStepParams(stepIndex, { kind: 'thread_mirror', id, params: next, name })
+      : get().editStepParams(stepIndex, { kind: 'thread', params: next, name })
   },
 
   // ── Правка параметров ребёнка CSG (Фаза 9.3) ──

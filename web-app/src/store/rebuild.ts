@@ -7,7 +7,7 @@ import type {
   TinkerCraftOperation, SceneObject, ShapeType, ShapeParams,
   TransformNR, Vec3, AlignOperation, MirrorPlane,
 } from '../csg/types'
-import type { ThreadParams } from '../csg/thread-table'
+import { threadSizeDisplay, type ThreadParams } from '../csg/thread-table'
 import { textOfOp } from './text-object'
 import { workerRebuildScene } from '../csg/worker-client'
 import { centerMassAtOrigin, makeObject, composeMirroredList } from './helpers'
@@ -136,7 +136,20 @@ export function buildRebuildMeta(rawOps: TinkerCraftOperation[]): {
           const mirroredOut = isPrim
             ? composeMirroredList(om.mirrored, op.plane)
             : om.mirrored
-          meta[newId] = { ...om, transform: nt, mirrored: mirroredOut }
+          // THREAD-MIRROR-PARAMETRIC: копия резьбы независима — params шага mirror
+          // (или инверсия хиральности для старых записей); имя — с суффиксом LH.
+          const thread = op.threadParams?.[newId]
+            ?? (om.thread ? { ...om.thread, hand: om.thread.hand === 'left' ? 'right' as const : 'left' as const } : undefined)
+          const size = thread ? threadSizeDisplay(thread) : ''
+          const threadName = thread
+            ? op.threadNames?.[newId] ?? (thread.kind === 'nut'
+              ? i18n.t('threadModal.nutName', { size })
+              : i18n.t('threadModal.boltName', { size, length: thread.length }))
+            : om.name
+          meta[newId] = {
+            ...om, transform: nt, mirrored: mirroredOut, name: threadName,
+            ...(thread ? { thread } : {}),
+          }
           // FIX (MIRROR-CSG-REPLAY, 9.5.3): копия CSG — CSG с ОТРАЖЁННЫМ локальным мешем
           // оригинала (как живое mirrorSelected: mirrorVerticesInPlace + winding), а не
           // мировой кэш воркера (его вершины в мире → двойная трансляция и RS у копии).
@@ -504,6 +517,14 @@ export function rebuildBuildTree(
         if (t) {
           const nt = applyMirrorToTransform(t as unknown as RebuildTransform, op.plane) as TransformNR
           transforms[newId] = nt
+
+          // THREAD-MIRROR-PARAMETRIC: у отражённой резьбы в дереве — baked-узел из её
+          // собственного (уже отражённого) меша; операция истории остаётся параметрической.
+          const threadCopy = objects?.[newId]
+          if (threadCopy?.thread) {
+            createBakedNode(newId, threadCopy.vertices, threadCopy.indices, threadCopy.normals ?? null, nt)
+            continue
+          }
 
           // CSG-INDEPENDENT-COPY: зеркало CSG — независимая параметрическая копия дерева
           // источника В ЭТОТ момент истории (узлы `${newId}:${id}` перезаписываются —

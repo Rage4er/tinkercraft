@@ -28,7 +28,7 @@ import type {
 } from '../csg/types'
 import {
   projectHistory, effectiveToRawIndex, effectiveOpAt, computeCascade, cascadeSteps, applyReplacement,
-  stepFingerprint, patchKindFor, MAX_CASCADE_STEPS,
+  stepFingerprint, patchKindFor, patchAppliesTo, MAX_CASCADE_STEPS,
 } from './project-history'
 import { rebuildFromHistory, rebuildBuildTree, buildRebuildMeta } from './rebuild'
 import { computeCsgResultN, bakeResultRS, groupReplacementFromResult } from './csg-result'
@@ -41,9 +41,10 @@ import { getNode } from '../csg/history-tree'
  * Виды патчей, которые поддерживает движок: move (9.5.2), mirror (9.5.3; шаг mirror ничего
  * не хранит готовым — копии и `mirrored[]` (composeMirroredList) воспроизводятся из
  * исходного списка оригинала, поэтому правка ЗАМЕНЯЕТ вклад шага, а не наслаивается),
- * extrude (9.5.4) и thread (THREAD-PARAMETRIC: полные параметры резьбы).
+ * extrude (9.5.4), thread (THREAD-PARAMETRIC: полные параметры резьбы) и thread_mirror
+ * (THREAD-MIRROR-PARAMETRIC: параметры отражённой копии в шаге mirror).
  */
-const SUPPORTED_KINDS: ReadonlySet<StepPatch['kind']> = new Set(['move', 'mirror', 'extrude', 'thread'])
+const SUPPORTED_KINDS: ReadonlySet<StepPatch['kind']> = new Set(['move', 'mirror', 'extrude', 'thread', 'thread_mirror'])
 /** Глубина extrude: не нулевая (плита нулевой толщины — не объём) и в разумных пределах. */
 const EXTRUDE_MIN = 0.01
 const EXTRUDE_MAX = 10000
@@ -51,12 +52,12 @@ const PLANES: ReadonlySet<string> = new Set(['XY', 'XZ', 'YZ'])
 
 /**
  * Правится ли шаг как прошлый шаг (edit_step с каскадом) — ✎ в Timeline и панель «Шаг N».
- * THREAD-PARAMETRIC: резьбу правят из PropertiesPanel (без ✎ в истории — там тот же patch,
- * но длинная форма параметров резьбы дублировала бы панель свойств).
+ * THREAD-POLISH: шаг `thread` тоже правится — форма панели шага использует тот же набор полей,
+ * что и PropertiesPanel; результат — `edit_step { kind: 'thread' }`.
  */
 export function isStepEditable(op: TinkerCraftOperation): boolean {
   const kind = patchKindFor(op)
-  return kind !== null && SUPPORTED_KINDS.has(kind) && op.type !== 'thread'
+  return kind !== null && SUPPORTED_KINDS.has(kind)
 }
 
 /** Допуск сравнения значений патча («не изменилось»). */
@@ -86,8 +87,15 @@ function patchValid(p: StepPatch): boolean {
   if (p.kind === 'move') return !!p.delta && finiteVec(p.delta) && finiteVec(p.rotDelta) && finiteVec(p.scaleDelta)
   if (p.kind === 'mirror') return PLANES.has(p.plane)
   if (p.kind === 'extrude') return Number.isFinite(p.depth) && Math.abs(p.depth) >= EXTRUDE_MIN && Math.abs(p.depth) <= EXTRUDE_MAX
-  if (p.kind === 'thread') return normalizeThreadParams(p.params) !== null
+  if (p.kind === 'thread' || p.kind === 'thread_mirror') return normalizeThreadParams(p.params) !== null
   return false
+}
+
+const sameThreadParams = (a: unknown, b: unknown): boolean => {
+  const x = normalizeThreadParams(a)
+  const y = normalizeThreadParams(b)
+  return !!x && !!y && x.series === y.series && x.sizeId === y.sizeId && x.length === y.length &&
+    x.kind === y.kind && x.hand === y.hand && x.starts === y.starts
 }
 
 const ZERO: Vec3 = { x: 0, y: 0, z: 0 }
@@ -103,10 +111,11 @@ function samePatch(op: TinkerCraftOperation, p: StepPatch): boolean {
   if (p.kind === 'mirror' && op.type === 'mirror') return op.plane === p.plane
   if (p.kind === 'extrude' && op.type === 'group' && op.source) return Math.abs(op.source.depth - p.depth) < SAME_EPS
   if (p.kind === 'thread' && op.type === 'thread') {
-    const a = normalizeThreadParams(op.params)
-    const b = normalizeThreadParams(p.params)
-    return !!a && !!b && a.series === b.series && a.sizeId === b.sizeId && a.length === b.length &&
-      a.kind === b.kind && a.hand === b.hand && a.starts === b.starts
+    return sameThreadParams(op.params, p.params)
+  }
+  if (p.kind === 'thread_mirror' && op.type === 'mirror') {
+    const stored = op.threadParams?.[p.id]
+    return stored !== undefined && sameThreadParams(stored, p.params)
   }
   return false
 }
@@ -175,7 +184,7 @@ export async function computeStepEdit(args: {
   const { operations, historyIndex, stepIndex, patch } = args
   const raw = operations.slice(0, historyIndex)
   const target = raw[stepIndex]
-  if (!target || target.type === 'edit_step' || patchKindFor(target) !== patch.kind) return { ok: false, reason: 'not_found' }
+  if (!target || target.type === 'edit_step' || !patchAppliesTo(target, patch)) return { ok: false, reason: 'not_found' }
   if (!SUPPORTED_KINDS.has(patch.kind)) return { ok: false, reason: 'unsupported' }
   if (!patchValid(patch)) return { ok: false, reason: 'invalid' }
   const current = effectiveOpAt(raw, stepIndex)
@@ -283,8 +292,11 @@ export async function computeStepEdit(args: {
     cur[j] = applyReplacement(cur[j], r) ?? cur[j]
   }
 
+  const before = patch.kind === 'thread_mirror' && current.type === 'mirror' && current.threadParams?.[patch.id]
+    ? { kind: 'thread_mirror' as const, id: patch.id, params: { ...current.threadParams[patch.id] }, ...(current.threadNames?.[patch.id] ? { name: current.threadNames[patch.id] } : {}) }
+    : beforeOf(current)
   const op: EditStepOperation = {
-    type: 'edit_step', stepIndex, stepFingerprint: fp, patch, before: beforeOf(current), replacements,
+    type: 'edit_step', stepIndex, stepFingerprint: fp, patch, before, replacements,
   }
   return { ok: true, op, recomputed: replacements.length }
 }

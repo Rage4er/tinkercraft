@@ -77,7 +77,7 @@ jobs:
           - group: ux-audit-5, 3, 1, double-click, dimensions, modeling-tools
             specs: ux-audit-5 ux-audit-3 ux-audit double-click-timing dimensions modeling-tools
           - group: align, ux-audit-2, 4, n-ary, group-fix, plug-and-play, ux-viewport
-            specs: align-obb align-ui-revit ux-audit-2 ux-audit-4 n-ary-csg csg-group-fix plug-and-play ux-viewport svg-extrude thread-generator thread-extend thread-parametric
+            specs: align-obb align-ui-revit ux-audit-2 ux-audit-4 n-ary-csg csg-group-fix plug-and-play ux-viewport svg-extrude thread-generator thread-extend thread-parametric thread-polish
     steps:
       - name: Checkout
         uses: actions/checkout@v4

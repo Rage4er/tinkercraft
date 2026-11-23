@@ -257,6 +257,7 @@
     "editMirrorStep": "Edit this mirror's plane (CSG below is recomputed)",
     "extrude": "Extrude {{axis}} by {{depth}}",
     "editExtrudeStep": "Edit this extrusion's depth (CSG below is recomputed)",
+    "editThreadStep": "Edit this thread's parameters (CSG below is recomputed)",
     "lock": "Lock",
     "unlock": "Unlock",
     "arrayLinear": "Array: linear ×{{count}}, spacing {{step}} ({{axis}})",
@@ -575,7 +576,9 @@
     "hintMirror": "The plane is applied immediately; CSG further down the history is recomputed",
     "extrude": "Extrude",
     "depth": "Depth",
-    "axis": "Axis"
+    "axis": "Axis",
+    "hintThread": "Thread parameters are applied immediately; the mesh and CSG below are recomputed",
+    "threadOriginal": "{{size}}, starts {{starts}}, length {{length}} mm"
   },
   "alignMode": {
     "button": "Align",
