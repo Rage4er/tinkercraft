@@ -12,7 +12,7 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { openApp, placeShape, toolbarButton } from './helpers.mjs'
+import { openApp, placeShape, toolbarButton, toggleTheme } from './helpers.mjs'
 
 const shotDir = process.env.E2E_SHOTS ?? null
 if (shotDir) fs.mkdirSync(shotDir, { recursive: true })
@@ -104,8 +104,8 @@ try {
   void sceneBg
   const pix = await page.evaluate(async (b64) => { const i = new Image(); i.src = 'data:image/png;base64,' + b64; await i.decode(); const c = document.createElement('canvas'); c.width = i.width; c.height = i.height; const g = c.getContext('2d'); g.drawImage(i, 0, 0); return [...g.getImageData(1, 1, 1, 1).data].slice(0, 3) }, vpShot.toString('base64'))
   if (pix.some((v) => v > 30)) fail('B: фон сцены не чёрный: ' + pix)
-  await toolbarButton(page, 'Сменить тему').click(); await page.waitForTimeout(200)
-  if ((await page.evaluate(() => document.documentElement.getAttribute('data-theme-id'))) !== 'light') fail('B: кнопка темы из высокого контраста — не светлая')
+  await toggleTheme(page); await page.waitForTimeout(200)
+  if ((await page.evaluate(() => document.documentElement.getAttribute('data-theme-id'))) !== 'light') fail('B: из высокого контраста — не светлая тема')
   await openSettings(); await page.locator('[data-testid=settings-theme]').selectOption('dark'); await closeSettings()
   ok.push(`B: «Высокий контраст» — панель rgb(0, 0, 0), текст ${hc.text}, фон сцены (${pix}); кнопка темы → светлая`)
 

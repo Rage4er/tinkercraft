@@ -15,7 +15,7 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { openApp, panelButton, toolbarButton, assertPerf, waitToastsSettled, csgAB, csgModeStart, csgModeConfirm, placeShape } from './helpers.mjs'
+import { openApp, panelButton, toolbarButton, assertPerf, waitToastsSettled, csgAB, csgModeStart, csgModeConfirm, placeShape, toggleTheme } from './helpers.mjs'
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ux-audit-2-'))
 const ok = []
@@ -191,7 +191,7 @@ try {
     if ((await s.rows.count()) !== 35) fail('L: после redo объектов ' + (await s.rows.count()))
     for (let i = 0; i < 8; i++) {
       await page.locator('button.tab-btn', { hasText: 'Список' }).click(); await page.locator('button.tab-btn', { hasText: 'Дерево' }).click()
-      await toolbarButton(page, 'Сменить тему').click(); await page.evaluate(() => document.activeElement?.blur())
+      await toggleTheme(page); await page.evaluate(() => document.activeElement?.blur())
       for (const key of ['KeyG', 'KeyR', 'KeyS', 'Escape', 'KeyL', 'KeyL', 'Tab', 'Tab', 'Control+a', 'Escape']) await page.keyboard.press(key)
     }
     await page.waitForTimeout(400)
@@ -289,7 +289,7 @@ try {
       return res
     }
     const dark = await sample()
-    await toolbarButton(page, 'Сменить тему').click(); await page.waitForTimeout(300)
+    await toggleTheme(page); await page.waitForTimeout(300)
     const light = await sample()
     for (const key of ['panel', 'toolbar', 'toast', 'confirm', 'text', 'pm']) {
       if (!dark[key] || !light[key]) fail(`N: нет элемента «${key}»`)

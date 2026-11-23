@@ -8,7 +8,7 @@
 import type { ShapeType } from "./csg/types";
 
 // ---- App version ----
-export const APP_VERSION = '1.3.17';
+export const APP_VERSION = '1.3.18';
 
 // ---- Shapes (data only, NO JSX) ----
 // Иконки — это строковые ключи, не React-компоненты.
@@ -173,8 +173,8 @@ export const TOOLTIP_DATA: Record<string, TooltipData> = {
   csg_subtract: { labelKey: 'csg.subtract', shortcut: 'X', descriptionKey: 'tooltips.csgSubtract' },
   csg_intersect: { labelKey: 'csg.intersect', shortcut: 'I', descriptionKey: 'tooltips.csgIntersect' },
 
-  // --- Theme ---
-  theme_toggle: { labelKey: 'theme.toggle', descriptionKey: 'tooltips.themeToggle' },
+  // --- Settings ---
+  settings_button: { labelKey: 'settings.title', descriptionKey: 'tooltips.settings' },
 
   // --- Clear ---
   clear_scene: { labelKey: 'actions.clearScene', descriptionKey: 'tooltips.clearScene' },

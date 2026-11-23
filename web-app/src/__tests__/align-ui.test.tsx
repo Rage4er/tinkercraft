@@ -120,12 +120,12 @@ function renderToolbar(): HTMLButtonElement[] {
       objectCount={2} selectedCount={2} canUndo canRedo hasCopied busy={false} workerOk
       cameraMode="perspective" gizmoMode="none" rulerActive={false} dimensionActive={false} dimensionsVisible
       onDimensionMode={noop} onDimensionSettings={noop} onToggleDimensions={noop}
-      canMirror canAlign alignActive={false} canCsg theme="dark"
+      canMirror canAlign alignActive={false} canCsg
       onOpen={noop} onSave={noop} onExportStl={noop} onImportStl={noop} onShowProjects={noop}
       onUndo={noop} onRedo={noop} onCopy={noop} onPaste={noop} onDelete={noop}
       onFitView={noop} onResetView={noop} onToggleCamera={noop} onGizmo={noop} onToggleRuler={noop}
       onMirror={noop} onPreviewMirror={noop} onPreviewMirrorEnd={noop}
-      onAlignMode={() => am().startAlignMode()} onCsg={noop} onToggleTheme={noop} onClearScene={noop}
+      onAlignMode={() => am().startAlignMode()} onCsg={noop} onSettings={noop} onClearScene={noop}
     />,
   )
   return Array.from(h.querySelectorAll<HTMLButtonElement>('[role="toolbar"] button'))

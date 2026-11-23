@@ -1,6 +1,6 @@
 {
   "name": "tinkercraft-web",
-  "version": "1.3.17",
+  "version": "1.3.18",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@12.10.1",
@@ -46,7 +46,8 @@
     "e2e:thread-extend": "node e2e/thread-extend.mjs",
     "e2e:thread-parametric": "node e2e/thread-parametric.mjs",
     "e2e:thread-polish": "node e2e/thread-polish.mjs",
-    "e2e:thread-in-csg": "node e2e/thread-in-csg.mjs"
+    "e2e:thread-in-csg": "node e2e/thread-in-csg.mjs",
+    "e2e:settings-button": "node e2e/settings-button.mjs"
   },
   "dependencies": {
     "i18next": "^26.3.6",

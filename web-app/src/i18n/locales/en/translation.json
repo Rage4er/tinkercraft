@@ -532,6 +532,7 @@
     "csgSubtract": "Subtract: select what to subtract from (A), press, then select what to subtract (B) and Enter — A − B as one CSG (subtract)",
     "csgIntersect": "Intersect: select the first group (A), press, then select the second (B) and Enter — the common part of A and B as one CSG (intersect)",
     "themeToggle": "Switches between dark and light theme",
+    "settings": "Settings: language, theme, sounds and length units",
     "clearScene": "Removes all objects from the scene",
     "alignTool": "Align mode: pick a plane (a face of object A or X / Y / Z), then click face B — it moves into plane A. With “Multiple” checked you can align several objects in a row. Esc or right click exits.",
     "dimension": "Dimension lines: menu — “Place dimension” (D — directly), “Dimension settings”, “Show / hide dimensions”. A dimension follows its objects — moving, rotating and scaling update the number",

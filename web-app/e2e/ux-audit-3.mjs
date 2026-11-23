@@ -25,7 +25,7 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { openApp, panelButton, toolbarButton, findAlignFace, assertPerf, waitToastsSettled, csgAB, placeShape } from './helpers.mjs'
+import { openApp, panelButton, toolbarButton, findAlignFace, assertPerf, waitToastsSettled, csgAB, placeShape, toggleTheme } from './helpers.mjs'
 
 const shotDir = process.argv[2]
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ux-audit-3-'))
@@ -326,7 +326,7 @@ try {
     if ((await s.rows.count()) !== 52) fail('L: после redo объектов ' + (await s.rows.count()))
     for (let i = 0; i < 8; i++) {
       await page.locator('button.tab-btn', { hasText: 'Список' }).click(); await page.locator('button.tab-btn', { hasText: 'Дерево' }).click()
-      await toolbarButton(page, 'Сменить тему').click(); await s.blur()
+      await toggleTheme(page); await s.blur()
       for (const key of ['KeyG', 'KeyR', 'KeyS', 'Escape', 'KeyL', 'KeyL', 'Tab', 'Tab', 'Control+a', 'Escape']) await page.keyboard.press(key)
     }
     await page.waitForTimeout(400)
@@ -415,7 +415,7 @@ try {
       await page.locator('.toast').first().waitFor({ timeout: 5000 })
       const c = await page.evaluate(() => { const t = document.querySelector('.toast'), m = document.querySelector('.toast-msg'); return [getComputedStyle(m).color, getComputedStyle(t).backgroundColor] })
       if (contrast(c[0], c[1]) < 3) fail(`N (${theme}): контраст предупреждения ${contrast(c[0], c[1]).toFixed(2)}`)
-      if (theme === 'тёмная') { await toolbarButton(page, 'Сменить тему').click(); await page.waitForTimeout(300) }
+      if (theme === 'тёмная') { await toggleTheme(page); await page.waitForTimeout(300) }
     }
     ok.push('N: предупреждение (тост) читается в тёмной и светлой темах (контраст ≥ 3)')
     if (s.errors.length) fail('Q/R/S/N: ошибки консоли ' + s.errors.join(' | '))
