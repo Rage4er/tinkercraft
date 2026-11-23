@@ -42,6 +42,8 @@ import {
   ColorIcon,
   TextIcon,
   ThreadIcon,
+  FilletIcon,
+  ChamferIcon,
 } from "./icons";
 
 // ---- Icon map for align operations ----
@@ -100,6 +102,8 @@ export function opIcon(op: TinkerCraftOperation): React.ReactNode {
       return op.pasted ? <PasteIcon size={32} /> : textOfOp(op) !== undefined ? <TextIcon size={32} /> : <ImportIcon size={32} />;
     case "thread":
       return op.pasted ? <PasteIcon size={32} /> : <ThreadIcon size={32} />;
+    case "fillet_brep":
+      return op.kind === "chamfer" ? <ChamferIcon size={32} /> : <FilletIcon size={32} />;
     case "move": {
       const k = (op as { kind?: string }).kind;
       return k === "scale" ? <ScaleIcon size={32} /> : k === "rotate" ? <RotateIcon size={32} /> : <MoveIcon size={32} />;
@@ -176,6 +180,8 @@ export function opLabel(op: TinkerCraftOperation, t: (key: string, opts?: Record
       if (text !== undefined) return t('timeline.addText', { text });
       return t('timeline.importMesh', { name: (op as { name?: string }).name ?? "STL" });
     }
+    case "fillet_brep":
+      return op.name;
     case "thread": {
       const size = threadSizeDisplay(op.params);
       const label = op.params.kind === 'nut'
@@ -271,6 +277,10 @@ function patchDetail(p: StepPatch, before: StepPatch | undefined, t: (key: strin
     return t("timeline.editThreadDetail", {
       size: threadSizeDisplay(p.params), starts: p.params.starts, length: p.params.length,
     });
+  }
+  if (p.kind === "fillet_brep") {
+    const from = before?.kind === "fillet_brep" ? `${fmtNum(before.size)} → ` : "";
+    return `${t("brep.size").toLowerCase()} ${from}${fmtNum(p.size)}`;
   }
   const from = before?.kind === "mirror" ? `${before.plane} → ` : "";
   return `${t("stepPanel.mirror").toLowerCase()} ${from}${p.plane}`;

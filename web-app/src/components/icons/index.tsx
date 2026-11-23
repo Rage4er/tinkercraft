@@ -605,3 +605,20 @@ export const SpringIcon = (p: any) => (
     <path {...line} d="M18 12 46 19 18 26 46 33 18 40 46 47 18 52" />
   </Icon>
 )
+
+/* ===== FILLET-CHAMFER-BREP: скругление и фаска ребра ===== */
+export const FilletIcon = (p: any) => (
+  <Icon {...p}>
+    <path d="M14 50V34a20 20 0 0 1 20-20h16" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
+    <path d="M14 34h8a12 12 0 0 1 12-12h8" fill="none" stroke="currentColor" strokeWidth="1.5" opacity="0.5" />
+    <circle cx="44" cy="20" r="2.5" fill="currentColor" />
+  </Icon>
+)
+
+export const ChamferIcon = (p: any) => (
+  <Icon {...p}>
+    <path d="M14 50V30l16-16h16" fill="none" stroke="currentColor" strokeWidth="4" strokeLinejoin="round" />
+    <path d="M14 30h16V14" fill="none" stroke="currentColor" strokeWidth="1.5" opacity="0.5" />
+    <circle cx="30" cy="30" r="2.5" fill="currentColor" />
+  </Icon>
+)

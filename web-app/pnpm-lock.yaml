@@ -166,6 +166,9 @@ importers:
 
   .:
     dependencies:
+      '@bitbybit-dev/occt':
+        specifier: 1.7.0
+        version: 1.7.0
       i18next:
         specifier: ^26.3.6
         version: 26.3.6(typescript@5.9.3)
@@ -331,6 +334,12 @@ packages:
   '@babel/types@7.29.7':
     resolution: {integrity: sha512-4zBIxpPzowiZpusoFkyGVwakdRJUyuH5PxQ/PrqghfdFWWasvnCdPfQXHrenDai+gyLARulZjZowCOj6fjT4pA==}
     engines: {node: '>=6.9.0'}
+
+  '@bitbybit-dev/base@1.7.0':
+    resolution: {integrity: sha512-ZIORzEdVd52RidcckMpFsuo2zTBINjUJ90mwAz+uhooYolx1uck4z8PcSpRFQaVHWv1NKn3Pisj7qVNSmiD40A==}
+
+  '@bitbybit-dev/occt@1.7.0':
+    resolution: {integrity: sha512-8Qcer7CLwAnlBqJO3Mlfqd4CHizkMPvwf85eZfnK1uuZivVLvlOFaJJrPQebrOB8uCxz3CO1QTLj4tVxqhRt3g==}
 
   '@bramus/specificity@2.4.2':
     resolution: {integrity: sha512-ctxtJ/eA+t+6q2++vj5j7FYX3nRu311q1wfYH3xjlLOsczhlhxAg2FWNUXhpGvAw3BWo1xBcvOV6/YLc2r5FJw==}
@@ -1860,6 +1869,12 @@ snapshots:
     dependencies:
       '@babel/helper-string-parser': 7.29.7
       '@babel/helper-validator-identifier': 7.29.7
+
+  '@bitbybit-dev/base@1.7.0': {}
+
+  '@bitbybit-dev/occt@1.7.0':
+    dependencies:
+      '@bitbybit-dev/base': 1.7.0
 
   '@bramus/specificity@2.4.2':
     dependencies:

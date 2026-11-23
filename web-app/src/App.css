@@ -2087,6 +2087,13 @@ body {
   flex: 1;
 }
 
+/* FILLET-CHAMFER-BREP: иконка пункта меню «Скругление / Фаска» */
+.tb-menu-icon {
+  display: inline-flex;
+  align-items: center;
+  color: var(--text);
+}
+
 .tb-menu-kbd {
   font-size: 10px;
   color: var(--text-muted);
@@ -2144,4 +2151,11 @@ body {
   border-color: var(--accent);
   color: var(--accent);
   background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+/* FILLET-CHAMFER-BREP: на 1366 (и уже) тулбар с 30 кнопками — в одну строку:
+   чуть плотнее группы (зазор 1 px, отступы 2 px). Ширину кнопок не трогаем. */
+@media (max-width: 1400px) {
+  .toolbar-group { padding-left: 2px; padding-right: 2px; }
+  .toolbar-group-row { gap: 1px; }
 }

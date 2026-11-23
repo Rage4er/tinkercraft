@@ -18,6 +18,7 @@ export type TinkerCraftOperation =
   | ResizeOperation
   | ResizeDimsOperation
   | FilletOperation
+  | FilletBrepOperation
   | MirrorOperation
   | AlignOperation
   | GroupOperation
@@ -97,6 +98,28 @@ export interface FilletOperation {
   type: 'fillet'
   id: string
   radius: number
+}
+
+/**
+ * FILLET-CHAMFER-BREP: скругление/фаска ребра на B-Rep (OCCT). Результат —
+ * триангулированный меш (в локальной системе объекта) + параметры операции.
+ * Правка размера — `edit_step { kind: 'fillet_brep' }` (пересчёт OCCT + новый mesh).
+ * Только примитивы: не смешивается с CSG (manifold).
+ */
+export interface FilletBrepOperation {
+  type: 'fillet_brep'
+  id: string
+  name: string
+  color: string
+  transform: TransformNR
+  kind: 'fillet' | 'chamfer'
+  size: number
+  edgeIndexes: number[]
+  /** Исходный примитив (локальные параметры) — для пересчёта при правке */
+  base: { shapeType: ShapeType; params: ShapeParams }
+  resultVertices: Float32Array | number[]
+  resultIndices: Uint32Array | number[]
+  resultNormals?: Float32Array | number[] | null
 }
 
 export interface MirrorOperation {
@@ -267,6 +290,14 @@ export type StepPatch =
   | { kind: 'extrude'; depth: number }
   | { kind: 'thread'; params: ThreadParams; name?: string }
   | { kind: 'thread_mirror'; id: string; params: ThreadParams; name?: string }
+  | {
+      kind: 'fillet_brep'
+      size: number
+      /** Пересчитанный меш (пишет store; форма шага шлёт только размер) */
+      resultVertices?: Float32Array | number[]
+      resultIndices?: Uint32Array | number[]
+      resultNormals?: Float32Array | number[] | null
+    }
 
 /** Тип шага, к которому применим патч данного вида. */
 export type StepPatchKind = StepPatch['kind']

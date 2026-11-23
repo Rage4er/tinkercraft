@@ -102,6 +102,17 @@ export function buildRebuildMeta(rawOps: TinkerCraftOperation[]): {
       }
       transforms[op.id] = t
 
+    } else if (op.type === 'fillet_brep') {
+      // FILLET-CHAMFER-BREP: результат OCCT — готовый меш в локальной системе объекта.
+      const t: TransformNR = { ...op.transform }
+      meta[op.id] = {
+        color: op.color, shapeType: 'import_mesh', params: {}, transform: t,
+        visible: true, name: op.name,
+        resultVertices: op.resultVertices, resultIndices: op.resultIndices,
+        ...(op.resultNormals !== undefined && op.resultNormals !== null ? { resultNormals: op.resultNormals as Float32Array | number[] } : {}),
+      }
+      transforms[op.id] = t
+
     } else if (op.type === 'fillet') {
       // Скругление удалено из приложения (remove-fillet): шаг старых файлов не воспроизводится,
       // куб остаётся острым. В норме загрузка уже вырезала его (io/legacy-fillet.ts).
@@ -286,6 +297,24 @@ export async function rebuildFromHistory(
   // Раньше «живая» конвенция была: сырые вершины + transform на pivot.
   const returnedIds = new Set(result.results.map(m => m.objId))
   for (const op of ops.flatMap(expandForReplay)) {   // ARRAY-TOOL: импорт и среди копий массива
+    // FILLET-CHAMFER-BREP: меш OCCT с дублями вершин может не пройти в manifold —
+    // восстанавливаем сохранённый результат операции (вершины уже в локальной системе).
+    if (op.type === 'fillet_brep') {
+      if (returnedIds.has(op.id) || !meta[op.id]) continue
+      const verts = op.resultVertices as Float32Array | number[] | undefined
+      const idxs = op.resultIndices as Uint32Array | number[] | undefined
+      if (!verts || !idxs || verts.length < 9 || idxs.length < 3) continue
+      result.results.push({
+        objId: op.id,
+        vertices: new Float32Array(verts),
+        indices: new Uint32Array(idxs),
+        normals: op.resultNormals ? new Float32Array(op.resultNormals) : null,
+        tris: idxs.length / 3,
+        ms: 0,
+        centerOffset: { x: 0, y: 0, z: 0 },
+      })
+      continue
+    }
     if (op.type !== 'import_mesh') continue
     if (returnedIds.has(op.id) || !meta[op.id]) continue
     const verts = op.vertices

@@ -21,7 +21,7 @@ import { buildRebuildMeta } from '../store/rebuild'
 import { displayName } from './ComponentTree'
 import ThreadProperties from './ThreadProperties'
 import { threadSizeDisplay } from '../csg/thread-table'
-import type { MoveOperation, MirrorPlane, StepPatch, ThreadOperation, Vec3 } from '../csg/types'
+import type { FilletBrepOperation, MoveOperation, MirrorPlane, StepPatch, ThreadOperation, Vec3 } from '../csg/types'
 
 type Group = 'delta' | 'rotDelta' | 'scaleDelta'
 type Axis = 'x' | 'y' | 'z'
@@ -100,8 +100,8 @@ export default function StepPanel() {
     const prefix = operations.slice(0, historyIndex)
     const raw = prefix[stepIndex]
     const eff = effectiveOpAt(prefix, stepIndex)
-    if (!raw || !isStepEditable(raw) || (raw.type !== 'move' && raw.type !== 'mirror' && raw.type !== 'group' && raw.type !== 'thread')) return null
-    if (!eff || eff.type !== raw.type || (eff.type !== 'move' && eff.type !== 'mirror' && eff.type !== 'group' && eff.type !== 'thread')) return null
+    if (!raw || !isStepEditable(raw) || (raw.type !== 'move' && raw.type !== 'mirror' && raw.type !== 'group' && raw.type !== 'thread' && raw.type !== 'fillet_brep')) return null
+    if (!eff || eff.type !== raw.type || (eff.type !== 'move' && eff.type !== 'mirror' && eff.type !== 'group' && eff.type !== 'thread' && eff.type !== 'fillet_brep')) return null
     // имена объектов на момент шага — по эффективной истории до него
     // (mirror — объекты, которые зеркалятся: копии появляются этим шагом)
     const meta = buildRebuildMeta(prefix.slice(0, stepIndex)).meta
@@ -109,14 +109,16 @@ export default function StepPanel() {
     // mirror — что зеркалится; extrude — что выдавливается (база); thread — сама резьба
     const ids = raw.type === 'mirror' ? raw.originalIds
       : raw.type === 'group' ? [raw.source!.baseId]
-        : raw.type === 'thread' ? [raw.id] : raw.ids
+        : raw.type === 'thread' || raw.type === 'fillet_brep' ? [raw.id] : raw.ids
     return {
       names: ids.map((id) => (meta[id] ? displayName({ id, shapeType: meta[id].shapeType, name: meta[id].name, text: meta[id].text }, t) : id)).join(', '),
       original: raw.type === 'move' ? moveOriginal(raw, t)
         : raw.type === 'mirror' ? raw.plane
           : raw.type === 'thread'
             ? t('stepPanel.threadOriginal', { size: threadSizeDisplay(raw.params), starts: raw.params.starts, length: raw.params.length })
-            : `${fmtNum(raw.source!.depth)} (${raw.source!.axis})`,
+            : raw.type === 'fillet_brep'
+              ? t('brep.original', { size: fmtNum(raw.size), edges: raw.edgeIndexes.length })
+              : `${fmtNum(raw.source!.depth)} (${raw.source!.axis})`,
       eff,
       editedBy: edit ? edit.editIndex + 1 : null,
     }
@@ -138,7 +140,8 @@ export default function StepPanel() {
           step: stepIndex + 1,
           name: t(eff.type === 'mirror' ? 'stepPanel.mirror'
             : eff.type === 'group' ? 'stepPanel.extrude'
-              : eff.type === 'thread' ? 'threadModal.title' : moveTitleKey(eff)),
+              : eff.type === 'thread' ? 'threadModal.title'
+              : eff.type === 'fillet_brep' ? (eff.kind === 'chamfer' ? 'brep.chamfer' : 'brep.fillet') : moveTitleKey(eff)),
         })}
       </div>
       <div className="props-row">
@@ -160,11 +163,14 @@ export default function StepPanel() {
           ? <MirrorForm plane={eff.plane} busy={busy} onPatch={edit} />
           : eff.type === 'thread'
             ? <ThreadForm op={eff} busy={busy} onPatch={edit} />
-            : eff.source && <ExtrudeForm stepIndex={stepIndex} axis={eff.source.axis} depth={eff.source.depth} busy={busy} onPatch={edit} />}
+            : eff.type === 'fillet_brep'
+              ? <BrepFilletForm op={eff} busy={busy} onPatch={edit} />
+              : eff.source && <ExtrudeForm stepIndex={stepIndex} axis={eff.source.axis} depth={eff.source.depth} busy={busy} onPatch={edit} />}
       <div className="text-sm text-muted-xs" data-testid="step-status" style={{ padding: '4px 12px' }}>
         {busy ? t('stepPanel.recomputing')
           : t(eff.type === 'mirror' ? 'stepPanel.hintMirror'
-            : eff.type === 'thread' ? 'stepPanel.hintThread' : 'stepPanel.hint')}
+            : eff.type === 'thread' ? 'stepPanel.hintThread'
+              : eff.type === 'fillet_brep' ? 'brep.stepHint' : 'stepPanel.hint')}
       </div>
     </div>
   )
@@ -262,6 +268,30 @@ function ExtrudeForm({ stepIndex, axis, depth, busy, onPatch }: {
         value={depth}
         disabled={busy}
         onChange={(v) => onPatch(extrudePatchWith(depth, v))}
+      />
+    </div>
+  )
+}
+
+/** FILLET-CHAMFER-BREP: размер шага fillet_brep — пересчёт OCCT в store. */
+export function brepSizePatchWith(size: number, value: number): StepPatch | null {
+  if (Number(size.toFixed(1)) === value || value <= 0) return null
+  return { kind: 'fillet_brep', size: value }
+}
+
+function BrepFilletForm({ op, busy, onPatch }: {
+  op: FilletBrepOperation; busy: boolean; onPatch: (p: StepPatch | null) => void
+}) {
+  const { t } = useTranslation()
+  return (
+    <div className="csg-group" data-testid="step-fillet-brep">
+      <div className="csg-group-title">{t(op.kind === 'chamfer' ? 'brep.chamfer' : 'brep.fillet')}</div>
+      <NumInput
+        label={t(op.kind === 'chamfer' ? 'brep.sizeChamfer' : 'brep.size')}
+        step={0.1}
+        value={op.size}
+        disabled={busy}
+        onChange={(v) => onPatch(brepSizePatchWith(op.size, v))}
       />
     </div>
   )

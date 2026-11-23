@@ -7,6 +7,21 @@
 
 ---
 
+## [1.3.19] — 2026-11-23
+
+### Added
+- **FILLET-CHAMFER-BREP:** скругление и фаска ребра на B-Rep (OpenCascade WASM, `@bitbybit-dev/occt` 1.7.0) — отдельное ядро от manifold. `brep-kernel.ts` строит примитив (куб, цилиндр, конус, сфера), `fillets.filletEdges` / `fillets.chamferEdges` по индексам рёбер, `shapeToMesh` (Y-up → Z-up) в indexed-меш; OCCT живёт в Web Worker (`brep.worker.ts` / `brep-client.ts`), WASM — ассет Vite, инициализация ленивая.
+- **Выбор рёбер:** в тулбаре «Скругление / фаска» (меню из двух пунктов, чтобы тулбар остался в одну строку на 1366) — рёбра B-Rep подсвечиваются (`LineSegments`, оранжевое выбранное), raycast по линиям даёт `edgeIndex`; панель режима (радиус / размер, «Применить», «Отмена»), Esc / правый клик — выход.
+- **История:** шаг `fillet_brep` (результат OCCT в локальной системе объекта), undo/redo, `.3dtc`; правка размера — ✎ шага в Timeline → StepPanel → `edit_step { kind: 'fillet_brep' }` (пересчёт OCCT, каскад rebuild). Объект после операции — `import_mesh` с именем «Скругление: …» / «Фаска: …».
+- Тесты `fillet-brep.test.ts` (7, OCCT: рёбра, fillet, chamfer, история, правка, `.3dtc`) и `fillet-brep.test.tsx` (5, jsdom: raycast ребра, панель, патч шага); e2e `pnpm e2e:fillet-brep`.
+
+### Known Limitations
+- **B-Rep ≠ manifold:** скруглённое тело не смешивается с CSG (manifold) — только примитивы; для CSG доступен прежний путь. Меш OCCT с дублями вершин может не пройти в `Manifold` — при перезагрузке используется сохранённый результат операции.
+- WebGL-линии толщиной 1 px (ограничение `LineBasicMaterial`); захват ребра — порог 2,5 мм.
+- Сфера/конус: рёбра — швы и кромки; инструмент работает, но на гладких поверхностях выбор ограничен рёбрами B-Rep.
+
+---
+
 ## [1.3.18] — 2026-11-23
 
 ### Added

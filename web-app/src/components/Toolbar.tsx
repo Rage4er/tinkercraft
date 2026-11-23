@@ -7,6 +7,7 @@ import IconButton from "./IconButton";
 import ToolbarRowSplit from "./ToolbarRowSplit";
 import DimensionMenuButton from "./DimensionMenuButton";
 import ExportMenuButton from "./ExportMenuButton";
+import BrepMenuButton from "./BrepMenuButton";
 import type { ExportFormat } from "../io/mesh-formats";
 import { TOOLTIP_DATA, type TooltipData } from "../constants";
 import {
@@ -53,6 +54,9 @@ export default function Toolbar({
   canAlign,
   canArray = false,
   onArray,
+  canBrep = false,
+  brepActive = null,
+  onBrep,
   alignActive,
   canCsg,
   csgOpStates,
@@ -101,6 +105,11 @@ export default function Toolbar({
   /** ARRAY-TOOL: «Массив» доступен (есть выбранный) */
   canArray?: boolean;
   onArray?: () => void;
+  /** FILLET-CHAMFER-BREP: выбран один поддерживаемый примитив */
+  canBrep?: boolean;
+  /** Активный режим B-Rep (кнопка нажата) */
+  brepActive?: "fillet" | "chamfer" | null;
+  onBrep?: (kind: "fillet" | "chamfer") => void;
   /** Режим выравнивания активен (ALIGN-UI-REVIT) */
   alignActive: boolean;
   canCsg: boolean;
@@ -147,6 +156,7 @@ export default function Toolbar({
     { id: "ruler", buttonCount: 2 },
     { id: "mirror", buttonCount: 3 },
     { id: "align", buttonCount: 2 },
+    { id: "brep", buttonCount: 1 },
     { id: "csg", buttonCount: 3 },
     { id: "settings", buttonCount: 1 },
     { id: "clear", buttonCount: 1 },
@@ -273,6 +283,15 @@ export default function Toolbar({
             disabled={!canArray}
             tooltip={TOOLTIP_DATA.array_tool}
           />,
+        ]}
+      />
+      <div className="toolbar-separator" />
+
+      {/* Group 7.5: FILLET-CHAMFER-BREP — скругление / фаска ребра */}
+      <ToolbarRowSplit
+        rows={getRows("brep")}
+        buttons={[
+          <BrepMenuButton key="brep" brepActive={brepActive} canBrep={canBrep} onBrep={(kind) => onBrep?.(kind)} />,
         ]}
       />
       <div className="toolbar-separator" />

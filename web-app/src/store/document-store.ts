@@ -13,7 +13,7 @@ import type {
   TinkerCraftOperation, AddShapeOperation, ImportMeshOperation,
   MirrorOperation, AlignOperation, AlignPlane, ResizeDimsOperation,
   MoveOperation, ColorOperation, GroupOperation, RenameOperation, HideShowOperation, LockOperation,
-  DeleteOperation, EditChildParamsOperation, ThreadOperation,
+  DeleteOperation, EditChildParamsOperation, ThreadOperation, FilletBrepOperation,
   SceneObject, ShapeParams, TransformNR, Vec3,
   TreeNode,
 } from '../csg/types'
@@ -34,6 +34,8 @@ import { useDimensionsStore } from './dimensions-store'
 import { sanitizeDimensions, type Dimension } from './dimensions'
 import { migrateLegacyFillet, type LegacyFilletMigration } from '../io/legacy-fillet'
 import { normalizeThreadParams, threadSizeDisplay, type ThreadParams } from '../csg/thread-table'
+import { brepWorkerFillet } from '../brep/brep-client'
+import { meshAabb, type BrepBase, type BrepKind, type BrepMesh } from '../brep/brep-kernel'
 import i18n from '../i18n'
 
 export { computeAABB, extractAndCenterInPlace, extractAndCenterGetAABB, computeWorldAABB, extractCenteredAt } from './helpers'
@@ -1291,7 +1293,87 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   },
 
   // ── Правка прошлого шага с каскадом (Фаза 9.5.2: move, 9.5.3: mirror) ──
+  // ── FILLET-CHAMFER-BREP: скругление/фаска ребра (OCCT), шаг `fillet_brep` ──
+  applyBrepFillet: async ({ targetId, kind, size, edgeIndexes, base, transform, mesh, name }) => {
+    if (get().busy) return false
+    const { objects, operations, historyIndex } = get()
+    const obj = objects[targetId]
+    if (!obj) return false
+    if (obj.locked) { notify(i18n.t('lock.cantMove'), 'warning'); return false }
+    const aabb = meshAabb(mesh.vertices)
+    const originalBboxSize = {
+      x: Math.max(1e-6, aabb.max.x - aabb.min.x),
+      y: Math.max(1e-6, aabb.max.y - aabb.min.y),
+      z: Math.max(1e-6, aabb.max.z - aabb.min.z),
+    }
+    const op: FilletBrepOperation = {
+      type: 'fillet_brep', id: targetId, name, color: obj.color,
+      transform: { ...transform }, kind, size, edgeIndexes: [...edgeIndexes],
+      base: { shapeType: base.shapeType, params: { ...base.params } },
+      resultVertices: mesh.vertices, resultIndices: mesh.indices, resultNormals: mesh.normals,
+    }
+    const newObj = makeObject({
+      ...obj, shapeType: 'import_mesh', params: {}, name,
+      text: undefined, thread: undefined,
+      vertices: mesh.vertices, indices: mesh.indices, normals: mesh.normals,
+      aabb, originalBboxSize,
+    })
+    const newOps = [...operations.slice(0, historyIndex), op]
+    const newObjects = { ...objects, [targetId]: newObj }
+    await workerSyncMesh(targetId, newObj.vertices, newObj.indices, newObj.transform)
+      .catch(e => console.warn('[applyBrepFillet] workerSyncMesh failed:', e))
+    set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, selectedIds: [targetId], modified: true })
+    cacheSnapshot(newOps.length, newObjects)
+    invalidateMirrorCache()
+    devLog('applyBrepFillet', { targetId, kind, size, edgeIndexes })
+    return true
+  },
+
+  /** FILLET-CHAMFER-BREP: правка размера прошлого шага — пересчёт OCCT + edit_step. */
+  editBrepFilletStep: async (stepIndex, size) => {
+    if (get().busy) return false
+    const { operations, historyIndex, selectedIds } = get()
+    const prefix = operations.slice(0, historyIndex)
+    const op = prefix[stepIndex]
+    if (!op || op.type !== 'fillet_brep') return false
+    if (!Number.isFinite(size) || size <= 0) { notify(i18n.t('brep.sizePositive'), 'warning'); return false }
+    if (Math.abs(op.size - size) < 1e-9) return false
+    set({ busy: true })
+    const t0 = performance.now()
+    try {
+      const mesh: BrepMesh = await brepWorkerFillet(op.base, op.kind, size, op.edgeIndexes)
+      const editOp = {
+        type: 'edit_step' as const,
+        stepIndex,
+        stepFingerprint: { type: 'fillet_brep' as const, targetId: op.id },
+        patch: {
+          kind: 'fillet_brep' as const, size,
+          resultVertices: mesh.vertices, resultIndices: mesh.indices, resultNormals: mesh.normals,
+        },
+        before: { kind: 'fillet_brep' as const, size: op.size },
+        replacements: [],
+      }
+      const newOps = [...prefix, editOp]
+      const newObjects = await rebuildFromHistory(newOps)
+      rebuildBuildTree(newOps, newObjects)
+      const alive = selectedIds.filter((id) => newObjects[id])
+      set({
+        operations: newOps, historyIndex: newOps.length, objects: newObjects,
+        selectedIds: alive.length === selectedIds.length ? selectedIds : alive,
+        modified: true, busy: false, lastCsgMs: performance.now() - t0,
+      })
+      cacheSnapshot(newOps.length, newObjects)
+      invalidateMirrorCache()
+      return true
+    } catch (e) {
+      set({ busy: false })
+      notify(i18n.t('brep.error', { message: e instanceof Error ? e.message : String(e) }), 'error')
+      return false
+    }
+  },
+
   editStepParams: async (stepIndex, patch) => {
+    if (patch.kind === 'fillet_brep') return get().editBrepFilletStep(stepIndex, patch.size)
     if (get().busy) return false
     const { objects, operations, historyIndex, selectedIds } = get()
     set({ busy: true })

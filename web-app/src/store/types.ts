@@ -68,6 +68,19 @@ export interface DocumentStore {
   editThreadChildParams: (rootId: string, nodeId: string, params: ThreadParams) => Promise<void>
   /** Фаза 9.5.2: правка прошлого шага (сырой индекс) с каскадом CSG/align; true — правка записана */
   editStepParams: (stepIndex: number, patch: StepPatch) => Promise<boolean>
+  /** FILLET-CHAMFER-BREP: заменить меш примитива результатом OCCT, шаг `fillet_brep` */
+  applyBrepFillet: (args: {
+    targetId: string
+    kind: import('../brep/brep-kernel').BrepKind
+    size: number
+    edgeIndexes: number[]
+    base: import('../brep/brep-kernel').BrepBase
+    transform: TransformNR
+    mesh: import('../brep/brep-kernel').BrepMesh
+    name: string
+  }) => Promise<boolean>
+  /** FILLET-CHAMFER-BREP: правка размера шага `fillet_brep` — пересчёт OCCT + edit_step */
+  editBrepFilletStep: (stepIndex: number, size: number) => Promise<boolean>
   extrudeSelected: (axis: 'X' | 'Y' | 'Z', depth: number) => Promise<void>
   renameObject: (id: string, name: string) => void
   setColor: (id: string, color: string, skipHistory?: boolean) => void

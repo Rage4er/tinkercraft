@@ -538,7 +538,10 @@
     "dimension": "Dimension lines: menu — “Place dimension” (D — directly), “Dimension settings”, “Show / hide dimensions”. A dimension follows its objects — moving, rotating and scaling update the number",
     "dimensionSettings": "Type (standard, offset, projection), color, font and text height of dimensions",
     "dimensionsToggle": "Show or hide all dimensions (layer)",
-    "arrayTool": "Copies of the selection: linear array (along an axis with spacing) or circular (around an axis through a center) — one history step"
+    "arrayTool": "Copies of the selection: linear array (along an axis with spacing) or circular (around an axis through a center) — one history step",
+    "filletBrep": "Edge fillet (B-Rep, OCCT): pick a primitive edge, set the radius and press Apply",
+    "chamferBrep": "Edge chamfer (B-Rep, OCCT): pick a primitive edge, set the size and press Apply",
+    "brepMenu": "Edge fillet or chamfer (B-Rep, OCCT): select a primitive, then an edge"
   },
   "childProps": {
     "title": "CSG component",
@@ -661,5 +664,29 @@
     "cancel": "Cancel",
     "tooMany": "Too many copies: at most {{max}} new objects at once",
     "failed": "Could not create the array"
+  },
+  "brep": {
+    "fillet": "Fillet",
+    "chamfer": "Chamfer",
+    "filletName": "Fillet: {{name}}",
+    "chamferName": "Chamfer: {{name}}",
+    "selectObject": "Select a primitive (box, cylinder, cone or sphere)",
+    "unsupported": "B-Rep works on primitives only: not CSG, imports or threads",
+    "selectEdge": "Pick an edge in the viewport",
+    "sizeRange": "Size must be greater than 0 and at most {{max}} mm",
+    "sizePositive": "Size must be greater than 0",
+    "error": "B-Rep (OCCT): {{message}}",
+    "edge": "Edge",
+    "size": "Radius",
+    "sizeChamfer": "Size",
+    "apply": "Apply",
+    "cancel": "Cancel",
+    "loading": "Loading B-Rep edges…",
+    "hint": "Click an edge to select it, then set the size and press Apply. Esc exits",
+    "edges": "Edges: {{count}}",
+    "selected": "Selected: {{index}}",
+    "original": "{{size}} mm, edges: {{edges}}",
+    "stepHint": "Size commits on Enter / blur; the fillet is recomputed in OCCT",
+    "menu": "Fillet / Chamfer"
   }
 }
