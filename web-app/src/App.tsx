@@ -226,6 +226,11 @@ export default function App() {
   const lengthUnit = useSettingsStore((s) => s.units);
   const brepActive = useBrepModeStore((s) => s.active);
   const brepTarget = useBrepModeStore((s) => s.targetId);
+  // FILLET-CHAMFER-BREP: объект удалён / заменён — режим и каркас рёбер убираем
+  useEffect(() => {
+    if (!brepActive || !brepTarget) return
+    if (!objects[brepTarget]) useBrepModeStore.getState().cancel()
+  }, [brepActive, brepTarget, objects]);
   useEffect(() => {
     // THEME-ENGINE: CSS-переменные темы (src/themes/*.json) на <html>, база — в ui-store
     const def = themeById(themeId);

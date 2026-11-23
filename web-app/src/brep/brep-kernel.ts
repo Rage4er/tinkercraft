@@ -113,12 +113,25 @@ function createBaseShape(service: any, base: BrepBase): any {
   if (base.shapeType === 'sphere') {
     return service.shapes.solid.createSphere({ radius: num(p.radius, 12), center: [0, 0, 0] })
   }
+  if (base.shapeType === 'prism') {
+    // Призма: многоугольник в плоскости XZ (Y-up OCCT) → extrude по Y; после adjustYtoZ — Z-up.
+    const sides = Math.max(3, Math.min(64, Math.round(num(p.sides, 6))))
+    const r = num(p.radius, 12)
+    const h = num(p.height, 20)
+    const points: number[][] = []
+    for (let i = 0; i < sides; i++) {
+      const a = (i / sides) * Math.PI * 2
+      points.push([r * Math.cos(a), -h / 2, r * Math.sin(a)])
+    }
+    const face = service.shapes.face.createPolygonFace({ points })
+    return service.operations.extrude({ shape: face, direction: [0, h, 0] })
+  }
   throw new BrepError('unsupported', `B-Rep: unsupported primitive "${base.shapeType}"`)
 }
 
 /** Поддерживается ли примитив B-Rep инструментом (только примитивы, не CSG/импорт/резьба). */
 export function isBrepShape(shapeType: ShapeType): boolean {
-  return shapeType === 'cube' || shapeType === 'cylinder' || shapeType === 'cone' || shapeType === 'sphere'
+  return shapeType === 'cube' || shapeType === 'cylinder' || shapeType === 'cone' || shapeType === 'sphere' || shapeType === 'prism'
 }
 
 /** Предел радиуса/размера: не больше половины меньшей стороны рамки. */

@@ -75,7 +75,7 @@ describe('Панель режима B-Rep', () => {
       active: 'fillet', targetId: 'obj_1', base: { shapeType: 'cube', params: { width: 20 } },
       transform: { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 },
       edges: [edge(0, [-5, 0, 0, 5, 0, 0]), edge(1, [0, -5, 0, 0, 5, 0])],
-      selectedEdge: 0, hoverEdge: null, size: 2, loading: false,
+      selectedEdges: [0], hoverEdge: null, size: 2, loading: false,
     })
     host = document.body.appendChild(document.createElement('div'))
     root = createRoot(host)
@@ -90,7 +90,7 @@ describe('Панель режима B-Rep', () => {
       active: 'chamfer', targetId: 'obj_1', base: { shapeType: 'cube', params: { width: 20 } },
       transform: { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 },
       edges: [edge(0, [-5, 0, 0, 5, 0, 0])],
-      selectedEdge: null, hoverEdge: null, size: 2, loading: false,
+      selectedEdges: [], hoverEdge: null, size: 2, loading: false,
     })
     host = document.body.appendChild(document.createElement('div'))
     root = createRoot(host)

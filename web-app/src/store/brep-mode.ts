@@ -20,12 +20,13 @@ interface BrepModeState {
   base: BrepBase | null
   transform: TransformNR | null
   edges: BrepEdgeLine[]
-  selectedEdge: number | null
+  /** Выбранные рёбра (клик по ребру — добавить/убрать, несколько за операцию) */
+  selectedEdges: number[]
   hoverEdge: number | null
   size: number
   loading: boolean
   start: (kind: BrepKind, targetId?: string) => Promise<boolean>
-  pick: (index: number | null) => void
+  toggleEdge: (index: number) => void
   hover: (index: number | null) => void
   setSize: (size: number) => void
   cancel: () => void
@@ -40,7 +41,7 @@ export const useBrepModeStore = create<BrepModeState>((set, get) => ({
   base: null,
   transform: null,
   edges: [],
-  selectedEdge: null,
+  selectedEdges: [],
   hoverEdge: null,
   size: 2,
   loading: false,
@@ -70,7 +71,7 @@ export const useBrepModeStore = create<BrepModeState>((set, get) => ({
     const size = Math.min(2, Number((max * 0.4).toFixed(2)))
     set({
       active: kind, targetId: id, base, transform: { ...obj.transform },
-      edges: [], selectedEdge: null, hoverEdge: null, size, loading: true,
+      edges: [], selectedEdges: [], hoverEdge: null, size, loading: true,
     })
     try {
       const edges = await brepWorkerEdges(base)
@@ -84,19 +85,23 @@ export const useBrepModeStore = create<BrepModeState>((set, get) => ({
     }
   },
 
-  pick: (index) => set({ selectedEdge: index }),
+  toggleEdge: (index) => set((st) => ({
+    selectedEdges: st.selectedEdges.includes(index)
+      ? st.selectedEdges.filter((i) => i !== index)
+      : [...st.selectedEdges, index].sort((a, b) => a - b),
+  })),
   hover: (index) => set({ hoverEdge: index }),
   setSize: (size) => set({ size }),
 
   cancel: () => set({
     active: null, targetId: null, base: null, transform: null,
-    edges: [], selectedEdge: null, hoverEdge: null, loading: false,
+    edges: [], selectedEdges: [], hoverEdge: null, loading: false,
   }),
 
   apply: async () => {
-    const { active, targetId, base, size, selectedEdge, transform } = get()
+    const { active, targetId, base, size, selectedEdges, transform } = get()
     if (!active || !targetId || !base || !transform) return false
-    if (selectedEdge === null) {
+    if (selectedEdges.length === 0) {
       notify(i18n.t('brep.selectEdge'), 'warning')
       return false
     }
@@ -110,9 +115,9 @@ export const useBrepModeStore = create<BrepModeState>((set, get) => ({
       return false
     }
     try {
-      const mesh: BrepMesh = await brepWorkerFillet(base, active, size, [selectedEdge])
+      const mesh: BrepMesh = await brepWorkerFillet(base, active, size, selectedEdges)
       const ok = await doc.applyBrepFillet({
-        targetId, kind: active, size, edgeIndexes: [selectedEdge], base, transform, mesh,
+        targetId, kind: active, size, edgeIndexes: selectedEdges, base, transform, mesh,
         name: i18n.t(active === 'fillet' ? 'brep.filletName' : 'brep.chamferName', { name: obj.name ?? i18n.t(`shapes.${obj.shapeType}`) }),
       })
       if (ok) get().cancel()

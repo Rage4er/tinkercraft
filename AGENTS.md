@@ -14,7 +14,7 @@
 - **manifold-3d** (WASM) — CSG операции в Web Worker
 - **Zustand 5** — стейт-менеджмент
 - **Vite 6** — сборка
-- **Vitest 4** — тесты (1109 тестов, 99 файлов; `it.fails` открытых багов нет — UX-прогон 7 нашёл 0 новых, цикл закрыт; UX-AUDIT-1…10 исправлены в `fix-all`, 11…20 — в `fix-all-2`, 21…31 — в `fix-all-3`, 32…35 — в `fix-all-4`, 32-followup и 36…40 — в `fix-all-5`, 41, 42 — в `fix-all-6`)
+- **Vitest 4** — тесты (1110 тестов, 99 файлов; `it.fails` открытых багов нет — UX-прогон 7 нашёл 0 новых, цикл закрыт; UX-AUDIT-1…10 исправлены в `fix-all`, 11…20 — в `fix-all-2`, 21…31 — в `fix-all-3`, 32…35 — в `fix-all-4`, 32-followup и 36…40 — в `fix-all-5`, 41, 42 — в `fix-all-6`)
 - **pnpm** — пакетный менеджер
 
 ## Команды
@@ -23,7 +23,7 @@
 cd web-app
 pnpm dev          # dev-сервер (порт 5000)
 pnpm build        # production-сборка
-pnpm test         # запуск тестов (1109 тестов, 99 файлов)
+pnpm test         # запуск тестов (1110 тестов, 99 файлов)
 pnpm typecheck    # tsc --noEmit
 pnpm e2e:smoke    # дымовой тест в браузере (Playwright; нужен запущенный pnpm dev; см. web-app/e2e/helpers.mjs). В CI все e2e — job `e2e` в ci-web.yml (CI-E2E)
 pnpm e2e:tree     # Фаза 9.1: раскрытие CSG в дереве, выбор ребёнка
@@ -61,7 +61,7 @@ pnpm e2e:thread-parametric  # THREAD-PARAMETRIC: M10 3→4 захода, дли�
 pnpm e2e:thread-polish  # THREAD-POLISH: ✎ шага thread → 3→4 захода и длина 20→30; зеркало YZ → «M10 LH×30»; правка копии 4→6, undo/redo
 pnpm e2e:thread-in-csg  # THREAD-IN-CSG: thread внутри CSG — дерево без 🔒, правка 2→4 захода, ✎ шага 20→30, undo/redo
 pnpm e2e:settings-button  # UI-SETTINGS-BUTTON: «Настройки» в тулбаре (нет «Темы»), язык с флагами RU/EN + сохранение, 3 темы
-pnpm e2e:fillet-brep  # FILLET-CHAMFER-BREP: ребро B-Rep → скругление/фаска (OCCT), undo/redo, ✎ шага, правка размера
+pnpm e2e:fillet-brep  # FILLET-CHAMFER-BREP: несколько рёбер + призма → скругление/фаска (OCCT), undo/redo, ✎ шага, каркас снимается
 pnpm e2e:ux-formats-settings  # Пакет A: «Настройки» (язык ru → en → ru, единицы см — поле «2.00 см», ввод 5 см → 50 мм, перезагрузка, «Сбросить», Esc), «Высокий контраст» (панель и фон сцены чёрные), звуки (click / create / success, выкл. — тишина), «Экспорт» STL / OBJ / 3MF / glTF и «Импорт» OBJ, замок (клик и Ctrl+A не выбирают, Delete — остаётся, снять — выбирается)
 ```
 
@@ -91,7 +91,7 @@ pnpm e2e:ux-formats-settings  # Пакет A: «Настройки» (язык r
 | `<задача>` | Короткие ветки задач от `main` → PR в `main` (merge-коммит после зелёного CI), ветка удаляется. Push в `main` → деплой GitHub Pages. До v1.3.1 задачи Фазы 9 шли через `phase-9` (PR #1–#17) |
 | `yandex-games` | Версия для Яндекс.Игр (экономика, реклама, токены); отдельно, Фазу 9 ещё не содержит |
 
-Цепочка: `main` (v1.3.19) → ветки задач → PR в `main`. `yandex-games` — отдельно.
+Цепочка: `main` (v1.3.20) → ветки задач → PR в `main`. `yandex-games` — отдельно.
 
 **`main` — production.** Любой push в `main` (merge PR) сразу выкладывает GitHub Pages (`deploy.yml`). Поэтому: в `main` — только через PR после зелёного CI, ничего «в процессе»; версия в `web-app/package.json` и `APP_VERSION` (`src/constants.ts`) должна соответствовать коду — значимый merge (фича, фикс) сопровождается patch-релизом: версия + CHANGELOG `[x.y.z]` + тег `vX.Y.Z` после зелёного деплоя.
 
@@ -170,10 +170,10 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 | `src/csg/rebuildOps.ts` | `applyMoveDelta`, `applyMirrorToTransform`, `applyAlignToTransform`; `expandForReplay` — шаг `align` с плоскостью (режим «Выровнять») воспроизводится как move каждой цели (мета, дерево, воркер — ALIGN-PLANE-RESOLVE) |
 | `src/csg/worker.ts` | WASM worker — manifold-3d операции, типобезопасные интерфейсы |
 | `src/csg/worker-client.ts` | Promise-обёртка над воркером |
-| `src/brep/brep-kernel.ts` | **FILLET-CHAMFER-BREP:** OCCT (B-Rep) — примитив → `fillets.filletEdges` / `chamferEdges` по `edgeIndexes` → `shapeToMesh` (Z-up) в indexed-меш; `brepEdges`, `meshAabb`, `isBrepShape`, `maxBrepSize`, `BrepError` |
+| `src/brep/brep-kernel.ts` | **FILLET-CHAMFER-BREP:** OCCT (B-Rep) — примитив → `fillets.filletEdges` / `chamferEdges` по `edgeIndexes` → `shapeToMesh` (Z-up) в indexed-меш; `brepEdges`, `meshAabb`, `isBrepShape`, `maxBrepSize`, `BrepError`; примитивы — куб, цилиндр, конус, сфера, призма |
 | `src/brep/brep.worker.ts` / `src/brep/brep-client.ts` | OCCT в Web Worker: `edges` / `result`; ленивый воркер, промисы по id; WASM — ассет Vite (`?url`) |
 | `src/brep/edge-pick.ts` | Выбор ребра лучом по `LineSegments` (`pickBrepEdgeIndex`, порог 2,5 мм) |
-| `src/store/brep-mode.ts` | Режим «Скругление» / «Фаска»: старт на выбранном примитиве, рёбра, выбранное/под курсором, размер, применить → `fillet_brep` |
+| `src/store/brep-mode.ts` | Режим «Скругление» / «Фаска»: старт на выбранном примитиве, рёбра, набор выбранных (клик — добавить/убрать) под курсором, размер, применить → `fillet_brep` |
 | `src/components/BrepPanel.tsx` / `src/components/BrepMenuButton.tsx` / `src/hooks/useBrepModeKeys.ts` | Панель режима (ребро, радиус/размер, «Применить»); меню «Скругление / фаска» в тулбаре (одна кнопка — 1366 в одну строку); Esc / правый клик — выход |
 | `src/csg/worker-handlers.ts` | Индивидуальные handlers для каждой операции; `combineOperands` — одно ядро N-арного boolean (union N — пакетный `Manifold.union`; subtract/intersect — union(A) op union(B); 2 операнда — прежний бинарный путь) для `csgBooleanMulti`, дерева (`rebuildTreeNode`) и истории (`rebuildScene`) — N-ARY-CSG |
 | `src/csg/worker-matrix.ts` | Чистая матричная математика (SRT, RS, transform); `relativeTransformMatrix` — поправка вложенного CSG `Mat(TRS_cur)·Mat(TRS₀)⁻¹` (NESTED-MOVED-EDIT) |

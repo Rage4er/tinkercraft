@@ -13,7 +13,7 @@ export default function BrepPanel() {
   const { t } = useTranslation()
   const active = useBrepModeStore((s) => s.active)
   const edges = useBrepModeStore((s) => s.edges)
-  const selectedEdge = useBrepModeStore((s) => s.selectedEdge)
+  const selectedEdges = useBrepModeStore((s) => s.selectedEdges)
   const hoverEdge = useBrepModeStore((s) => s.hoverEdge)
   const size = useBrepModeStore((s) => s.size)
   const loading = useBrepModeStore((s) => s.loading)
@@ -21,7 +21,7 @@ export default function BrepPanel() {
   const cancel = useBrepModeStore((s) => s.cancel)
   const apply = useBrepModeStore((s) => s.apply)
   if (!active) return null
-  const shownEdge = selectedEdge ?? hoverEdge
+  const shownEdge = selectedEdges.length > 0 ? selectedEdges : hoverEdge !== null ? [hoverEdge] : []
   return (
     <div data-testid="brep-panel" data-brep-kind={active}>
       <div className="props-section-title">{t(active === 'fillet' ? 'brep.fillet' : 'brep.chamfer')}</div>
@@ -32,8 +32,8 @@ export default function BrepPanel() {
         <span className="props-label">{t('brep.edge')}</span>
         <span className="props-value" data-testid="brep-edge">
           {loading ? t('brep.loading')
-            : shownEdge === null ? t('brep.edges', { count: edges.length })
-              : t('brep.selected', { index: shownEdge + 1 })}
+            : shownEdge.length === 0 ? t('brep.edges', { count: edges.length })
+              : t('brep.selectedMany', { count: shownEdge.length, list: shownEdge.map((i) => i + 1).join(', ') })}
         </span>
       </div>
       <NumInput
@@ -44,7 +44,7 @@ export default function BrepPanel() {
         onChange={setSize}
       />
       <div className="props-row" style={{ gap: 6, padding: '8px 12px' }}>
-        <button className="btn primary" data-testid="brep-apply" disabled={loading || selectedEdge === null} onClick={() => void apply()}>
+        <button className="btn primary" data-testid="brep-apply" disabled={loading || selectedEdges.length === 0} onClick={() => void apply()}>
           {t('brep.apply')}
         </button>
         <button className="btn" data-testid="brep-cancel" onClick={cancel}>{t('brep.cancel')}</button>
