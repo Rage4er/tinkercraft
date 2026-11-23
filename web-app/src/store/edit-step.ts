@@ -277,7 +277,8 @@ export async function computeStepEdit(args: {
       const pOld = getNode(e.nodeId)?.params
       rebuildBuildTree(H, before)
       const res = await computeEditedChild({
-        rootId: e.rootId, nodeId: e.nodeId, patch: userPatch(e.params, pOld),
+        rootId: e.rootId, nodeId: e.nodeId,
+        ...(e.threadParams ? { threadParams: e.threadParams } : { patch: userPatch(e.params, pOld) }),
         objects: before, operations: H, historyIndex: H.length,
       })
       if (!res.ok) return fail(res.reason === 'empty' ? 'empty' : 'child_failed', res.reason)

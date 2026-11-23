@@ -245,10 +245,12 @@ export interface EditChildParamsOperation {
   type: 'edit_child_params'
   /** id CSG-объекта сцены (корень дерева) */
   rootId: string
-  /** id узла-примитива в Build Tree */
+  /** id узла-примитива / thread в Build Tree */
   nodeId: string
-  /** Полные новые params ребёнка */
+  /** Полные новые params ребёнка (для thread — `{}`) */
   params: ShapeParams
+  /** THREAD-IN-CSG: полные новые параметры параметрического узла резьбы */
+  threadParams?: ThreadParams
   resultVertices: Float32Array | number[]
   resultIndices: Uint32Array | number[]
   resultNormals?: Float32Array | number[]
@@ -444,7 +446,7 @@ export type CsgBooleanOp = 'union' | 'subtract' | 'intersect'
 // ---- BuildTree types (parameterized build tree) ----
 
 /** Type of a build tree node */
-export type TreeNodeType = 'primitive' | 'boolean' | 'baked'
+export type TreeNodeType = 'primitive' | 'boolean' | 'baked' | 'thread'
 
 /**
  * Относительный transform узла относительно родителя (Фаза 8).
@@ -505,6 +507,8 @@ export interface TreeNode {
   shapeType?: ShapeType
   /** Primitive parameters (width, height, depth, radius, ...) */
   params?: ShapeParams
+  /** THREAD-IN-CSG: полные параметры параметрического узла `thread` (не baked). */
+  threadParams?: ThreadParams
 
   // ── Transform model (Фаза 8) ──
   /**

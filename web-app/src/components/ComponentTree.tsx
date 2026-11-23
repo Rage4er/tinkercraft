@@ -10,7 +10,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { SceneObject, ShapeType } from '../csg/types'
-import { getTreeView, formatParams, reasonFromRootFailure, viewGroupSplit, type TreeViewNode, type NotEditableReason } from '../csg/tree-view'
+import { getTreeView, formatParams, formatThreadParams, reasonFromRootFailure, viewGroupSplit, type TreeViewNode, type NotEditableReason } from '../csg/tree-view'
 import { useRootConsistency } from '../hooks/useRootConsistency'
 import { useUiStore } from '../store/ui-store'
 import {
@@ -31,6 +31,7 @@ import {
   SubtractIcon,
   IntersectIcon,
   TextIcon,
+  ThreadIcon,
 } from './icons'
 import { isTextObject, textsByObjectId, textOfNode, defaultTextName } from '../store/text-object'
 import { useDocumentStore } from '../store/document-store'
@@ -63,7 +64,8 @@ export function displayName(obj: Pick<SceneObject, 'id' | 'shapeType' | 'name' |
 }
 
 /** Иконка фигуры / CSG-операции (общая для строк объектов и детей); `text` — 3D-текст (UX-AUDIT-31). */
-function Glyph({ shapeType, operation, text }: { shapeType?: ShapeType | 'csg'; operation?: 'union' | 'subtract' | 'intersect'; text?: boolean }) {
+function Glyph({ shapeType, operation, text, thread }: { shapeType?: ShapeType | 'csg'; operation?: 'union' | 'subtract' | 'intersect'; text?: boolean; thread?: boolean }) {
+  if (thread) return <ThreadIcon size={32} />
   if (text) return <TextIcon size={32} />
   if (operation === 'subtract') return <SubtractIcon size={32} />
   if (operation === 'intersect') return <IntersectIcon size={32} />
@@ -162,6 +164,10 @@ export default function ComponentTree({ objects, selectedIds, onSelect, onRename
     if (node.type === 'boolean') {
       return `${t('componentTree.nestedCsg')} · ${t(`csg.${node.operation ?? 'union'}`)}`
     }
+    if (node.type === 'thread') {
+      const summary = formatThreadParams(node.threadParams)
+      return summary ? `${t('threadModal.title')} · ${summary}` : t('threadModal.title')
+    }
     const shape = node.shapeType ? t(`shapes.${node.shapeType}`) : t('componentTree.import')
     if (node.type === 'baked') {
       // UX-AUDIT-34: текст внутри CSG — «Текст: Дом», а не «Импорт»
@@ -227,7 +233,7 @@ export default function ComponentTree({ objects, selectedIds, onSelect, onRename
             ) : (
               <span className="ct-chevron-spacer" />
             )}
-            <span className="ct-icon"><Glyph shapeType={child.shapeType} operation={child.operation} text={child.type === 'baked' && !child.shapeType && textOfNode(child.id, texts) !== undefined} /></span>
+            <span className="ct-icon"><Glyph shapeType={child.shapeType} operation={child.operation} thread={child.type === 'thread'} text={child.type === 'baked' && !child.shapeType && textOfNode(child.id, texts) !== undefined} /></span>
             <span className="ct-name">{childLabel(child)}</span>
             {locked && (
               <span className="ct-lock" data-testid="ct-lock" data-reason={reason} title={lockTitle} aria-label={lockTitle}>🔒</span>

@@ -21,11 +21,13 @@ import type {
 import {
   getWasm,
   buildPrimitive,
+  generateThread,
   sanitizeParams,
   extractMesh,
   type ManifoldObject,
   isWasmReady,
 } from './worker-handlers'
+import { threadSizeOf, type ThreadParams } from './thread-table'
 import { buildTransformMatrix, subtractTransform, composeTransforms } from './worker-matrix'
 
 /** Identity transform — used when a node has no explicit transform. */
@@ -102,6 +104,20 @@ export function createPrimitiveNode(
   }
   treeStore.setNode(id, node)
   devLog('TREE', { action: 'createPrimitive', id, shapeType, params, transform })
+  return node
+}
+
+/** THREAD-IN-CSG: параметрический узел резьбы (не baked) — лист Build Tree. */
+export function createThreadNode(id: string, threadParams: ThreadParams, transform: TransformNR): TreeNode {
+  const node: TreeNode = {
+    id,
+    type: 'thread',
+    threadParams: { ...threadParams },
+    relativeToParent: null,
+    localTransform: { ...transform },
+  }
+  treeStore.setNode(id, node)
+  devLog('TREE', { action: 'createThread', id, threadParams, transform })
   return node
 }
 
@@ -233,6 +249,8 @@ export function createImportedNode(
  *   `mirrored` (params остаются редактируемыми, зеркало воспроизводит воркер).
  */
 export function registerObjectInTree(id: string, obj: SceneObject): TreeNode {
+  // THREAD-IN-CSG: резьба — параметрический лист, не baked.
+  if (obj.thread) return createThreadNode(id, obj.thread, obj.transform)
   const isPrimitive = obj.shapeType !== 'csg' && obj.shapeType !== 'import_mesh'
   if (isPrimitive && obj.shapeType && obj.params) {
     return createPrimitiveNode(id, obj.shapeType, obj.params, obj.transform, obj.mirrored)
@@ -271,6 +289,15 @@ export function computeNodeBBox(nodeId: string): BoundingBox {
     bbox = {
       min: { x: t.x - hw, y: t.y - hh, z: t.z - hd },
       max: { x: t.x + hw, y: t.y + hh, z: t.z + hd },
+    }
+  } else if (node.type === 'thread' && node.threadParams && node.localTransform) {
+    const t = node.localTransform
+    const size = threadSizeOf(node.threadParams.series, node.threadParams.sizeId)
+    const d = (size?.d ?? 10) * Math.max(Math.abs(t.scaleX), Math.abs(t.scaleY))
+    const len = node.threadParams.length * Math.abs(t.scaleZ)
+    bbox = {
+      min: { x: t.x - d / 2, y: t.y - d / 2, z: t.z - len / 2 },
+      max: { x: t.x + d / 2, y: t.y + d / 2, z: t.z + len / 2 },
     }
   } else if (node.type === 'baked') {
     if (node.vertices) {
@@ -392,6 +419,14 @@ function computeNodeHash(node: TreeNode): string {
     const mStr = node.mirrored && node.mirrored.length > 0 ? `|m:${node.mirrored.join('')}` : ''
     return `p:${node.shapeType ?? '?'}|${pStr}|${tStr}${mStr}`
   }
+  if (node.type === 'thread' && node.threadParams && node.localTransform) {
+    const t = node.localTransform
+    const p = node.threadParams
+    const tStr = `${t.x},${t.y},${t.z},${t.rotX},${t.rotY},${t.rotZ},${t.scaleX},${t.scaleY},${t.scaleZ}`
+    const pStr = `${p.series}|${p.sizeId}|${p.length}|${p.kind}|${p.hand}|${p.starts}`
+    const mStr = node.mirrored && node.mirrored.length > 0 ? `|m:${node.mirrored.join('')}` : ''
+    return `th:${pStr}|${tStr}${mStr}`
+  }
   if (node.type === 'baked' && node.vertices && node.indices && node.localTransform) {
     const t = node.localTransform
     return `b:${node.vertices.length},${node.indices.length}|${t.x},${t.y},${t.z},${t.rotX},${t.rotY},${t.rotZ},${t.scaleX},${t.scaleY},${t.scaleZ}`
@@ -488,6 +523,8 @@ export async function rebuildNode(nodeId: string, parentWorld: TransformNR = IDE
     // Local rebuild with WASM
     if (node.type === 'primitive') {
       result = rebuildPrimitive(node, worldTransform)
+    } else if (node.type === 'thread') {
+      result = rebuildThreadNode(node, worldTransform)
     } else if (node.type === 'baked') {
       result = transformBakedMesh(node, worldTransform)
     } else if (node.type === 'boolean' && node.children) {
@@ -539,9 +576,10 @@ export async function rebuildBooleanWorld(rootId: string): Promise<ExtractedMesh
  */
 interface WorkerNode {
   id: string
-  type: 'primitive' | 'boolean' | 'baked'
+  type: 'primitive' | 'boolean' | 'baked' | 'thread'
   shapeType?: string
   params?: Record<string, number>
+  threadParams?: ThreadParams
   localTransform?: TransformNR
   originTransform?: TransformNR
   vertices?: number[]
@@ -578,6 +616,7 @@ function collectSubtreeForWorker(rootId: string): WorkerNode[] {
 
     if (node.shapeType !== undefined) workerNode.shapeType = node.shapeType
     if (node.params !== undefined) workerNode.params = node.params as Record<string, number>
+    if (node.threadParams !== undefined) workerNode.threadParams = node.threadParams
     if (node.localTransform !== undefined) workerNode.localTransform = node.localTransform
     if (node.originTransform !== undefined) workerNode.originTransform = node.originTransform
     if (node.vertices !== undefined) workerNode.vertices = Array.from(node.vertices)
@@ -638,6 +677,7 @@ async function applyCSGMeshes(node: TreeNode, parentWorld: TransformNR): Promise
       type: n.type,
       shapeType: n.shapeType,
       params: n.params as Record<string, number> | undefined,
+      threadParams: n.threadParams,
       localTransform: n.localTransform,
       originTransform: n.originTransform,
       vertices: n.vertices ? Array.from(n.vertices) : undefined,
@@ -732,6 +772,32 @@ function rebuildPrimitive(node: TreeNode, worldTransform: TransformNR): Extracte
     return mesh
   } catch (e) {
     // Ensure WASM memory is freed even if transform fails
+    m.delete()
+    throw e
+  }
+}
+
+/** THREAD-IN-CSG: параметрический узел резьбы → меш (generateThread) + полный TRS. */
+function rebuildThreadNode(node: TreeNode, worldTransform: TransformNR): ExtractedMesh {
+  if (!node.threadParams) throw new Error(`Thread node ${node.id} missing threadParams`)
+  let m = generateThread(node.threadParams)
+  try {
+    for (const plane of node.mirrored ?? []) {
+      const reflected = m.mirror(MIRROR_NORMALS_LOCAL[plane])
+      m.delete()
+      m = reflected
+    }
+    const matrix = buildTransformMatrix(
+      { x: worldTransform.x, y: worldTransform.y, z: worldTransform.z },
+      { rotX: worldTransform.rotX, rotY: worldTransform.rotY, rotZ: worldTransform.rotZ },
+      { scaleX: worldTransform.scaleX, scaleY: worldTransform.scaleY, scaleZ: worldTransform.scaleZ },
+    )
+    const transformed = m.transform(matrix)
+    m.delete()
+    const mesh = extractMesh(transformed)
+    transformed.delete()
+    return mesh
+  } catch (e) {
     m.delete()
     throw e
   }
@@ -1065,6 +1131,13 @@ function mirrorNodeRecursive(
     relativeToParent: newRelative,
     localTransform: newLocal,
     ...(newOrigin ? { originTransform: newOrigin } : {}),
+    // THREAD-IN-CSG: отражение резьбы меняет хиральность — правая ↔ левая.
+    ...(node.type === 'thread' && node.threadParams
+      ? { threadParams: { ...node.threadParams, hand: node.threadParams.hand === 'left' ? 'right' : 'left' } }
+      : {}),
+    cachedMesh: undefined,
+    cachedBBox: undefined,
+    cacheHash: undefined,
   })
 
   devLog('mirrorNodeRecursive', {
@@ -1528,6 +1601,7 @@ function copyNodeData(n: TreeNode): TreeNode {
   }
   if (n.shapeType !== undefined) c.shapeType = n.shapeType
   if (n.params) c.params = { ...n.params }
+  if (n.threadParams) c.threadParams = { ...n.threadParams }
   if (n.localTransform) c.localTransform = { ...n.localTransform }
   if (n.originTransform) c.originTransform = { ...n.originTransform }
   if (n.vertices) c.vertices = new Float32Array(n.vertices)

@@ -993,9 +993,11 @@ export interface RebuildTreeNodeMessage {
   nodeId: string
   nodes: Array<{
     id: string
-    type: 'primitive' | 'boolean' | 'baked'
+    type: 'primitive' | 'boolean' | 'baked' | 'thread'
     shapeType?: string
     params?: Record<string, number>
+    /** THREAD-IN-CSG: параметрический узел резьбы */
+    threadParams?: import('./thread-table').ThreadParams
     localTransform?: { x: number; y: number; z: number; rotX: number; rotY: number; rotZ: number; scaleX: number; scaleY: number; scaleZ: number }
     /** NESTED-MOVED-EDIT: TRS₀ boolean-узла — система, в которой лежат его листья */
     originTransform?: { x: number; y: number; z: number; rotX: number; rotY: number; rotZ: number; scaleX: number; scaleY: number; scaleZ: number }
@@ -1068,6 +1070,25 @@ export async function handleRebuildTreeNode(msg: RebuildTreeNodeMessage): Promis
       )
       const transformed = m.transform(matrix)
       m.delete()
+      m = transformed
+
+    } else if (nd.type === 'thread') {
+      // THREAD-IN-CSG: параметрический лист — меш из generateThread + TRS узла.
+      if (!nd.threadParams) return null
+      let prim = generateThread(nd.threadParams)
+      for (const plane of nd.mirrored ?? []) {
+        const reflected = prim.mirror(MIRROR_NORMALS[plane])
+        prim.delete()
+        prim = reflected
+      }
+      const t = nd.localTransform || { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
+      const matrix = buildTransformMatrix(
+        { x: t.x, y: t.y, z: t.z },
+        { rotX: t.rotX, rotY: t.rotY, rotZ: t.rotZ },
+        { scaleX: t.scaleX, scaleY: t.scaleY, scaleZ: t.scaleZ },
+      )
+      const transformed = prim.transform(matrix)
+      prim.delete()
       m = transformed
 
     } else if (nd.type === 'baked') {
