@@ -44,7 +44,7 @@ import { getNode } from '../csg/history-tree'
  * extrude (9.5.4), thread (THREAD-PARAMETRIC: полные параметры резьбы) и thread_mirror
  * (THREAD-MIRROR-PARAMETRIC: параметры отражённой копии в шаге mirror).
  */
-const SUPPORTED_KINDS: ReadonlySet<StepPatch['kind']> = new Set(['move', 'mirror', 'extrude', 'thread', 'thread_mirror'])
+const SUPPORTED_KINDS: ReadonlySet<StepPatch['kind']> = new Set(['move', 'mirror', 'extrude', 'thread', 'thread_mirror', 'fillet_brep'])
 /** Глубина extrude: не нулевая (плита нулевой толщины — не объём) и в разумных пределах. */
 const EXTRUDE_MIN = 0.01
 const EXTRUDE_MAX = 10000
@@ -88,6 +88,7 @@ function patchValid(p: StepPatch): boolean {
   if (p.kind === 'mirror') return PLANES.has(p.plane)
   if (p.kind === 'extrude') return Number.isFinite(p.depth) && Math.abs(p.depth) >= EXTRUDE_MIN && Math.abs(p.depth) <= EXTRUDE_MAX
   if (p.kind === 'thread' || p.kind === 'thread_mirror') return normalizeThreadParams(p.params) !== null
+  if (p.kind === 'fillet_brep') return Number.isFinite(p.size) && p.size > 0 && p.size <= EXTRUDE_MAX
   return false
 }
 
@@ -117,6 +118,7 @@ function samePatch(op: TinkerCraftOperation, p: StepPatch): boolean {
     const stored = op.threadParams?.[p.id]
     return stored !== undefined && sameThreadParams(stored, p.params)
   }
+  if (p.kind === 'fillet_brep' && op.type === 'fillet_brep') return Math.abs(op.size - p.size) < SAME_EPS
   return false
 }
 
@@ -132,6 +134,7 @@ function beforeOf(op: TinkerCraftOperation): StepPatch | undefined {
   if (op.type === 'mirror') return { kind: 'mirror', plane: op.plane }
   if (op.type === 'group' && op.source?.kind === 'extrude') return { kind: 'extrude', depth: op.source.depth }
   if (op.type === 'thread') return { kind: 'thread', params: { ...op.params } }
+  if (op.type === 'fillet_brep') return { kind: 'fillet_brep', size: op.size }
   return undefined
 }
 

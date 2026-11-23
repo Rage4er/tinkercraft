@@ -71,6 +71,9 @@ export default defineConfig({
     // за дефолтные 5s на медленном CI-runner (GitHub Actions). FIX CI.
     testTimeout: 15_000,
     hookTimeout: 15_000,
+    // OCCT: пакет собран с directory-imports (ESM только через бандлер) — Vitest
+    // должен обработать его Vite-пайплайном, а не отдавать Node.
+    server: { deps: { inline: ['@bitbybit-dev/occt', '@bitbybit-dev/base'] } },
   },
   plugins: [
     stripReactRefresh,

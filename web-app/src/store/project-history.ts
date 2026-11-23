@@ -40,6 +40,7 @@ export const MAX_CASCADE_STEPS = 50
 export function patchKindFor(op: TinkerCraftOperation): StepPatchKind | null {
   if (op.type === 'move' || op.type === 'mirror') return op.type
   if (op.type === 'thread') return 'thread'
+  if (op.type === 'fillet_brep') return 'fillet_brep'
   if (op.type === 'group' && op.source?.kind === 'extrude') return 'extrude'
   return null
 }
@@ -65,6 +66,7 @@ export function stepFingerprint(op: TinkerCraftOperation): EditStepOperation['st
     case 'move': return { type: op.type, targetId: op.ids.join(',') }
     case 'mirror': return { type: op.type, targetId: op.ids.join(',') }
     case 'thread': return { type: op.type, targetId: op.id }
+    case 'fillet_brep': return { type: op.type, targetId: op.id }
     case 'group': return op.source?.kind === 'extrude' ? { type: op.type, targetId: op.source.slabId } : null
     default: return null
   }
@@ -96,6 +98,16 @@ export function applyStepPatch(op: TinkerCraftOperation, patch: StepPatch): Tink
     // Параметрическая резьба: меш НЕ замораживается — rebuild строит его из новых params.
     // Имя обновляем вместе с параметрами, чтобы дерево/список показывали новый размер.
     return { ...op, params: { ...patch.params }, ...(patch.name ? { name: patch.name } : {}) }
+  }
+  if (patch.kind === 'fillet_brep' && op.type === 'fillet_brep') {
+    // B-Rep: новый размер и (если store прислал) пересчитанный меш — операция остаётся в истории
+    return {
+      ...op,
+      size: patch.size,
+      ...(patch.resultVertices ? { resultVertices: patch.resultVertices } : {}),
+      ...(patch.resultIndices ? { resultIndices: patch.resultIndices } : {}),
+      ...(patch.resultNormals !== undefined ? { resultNormals: patch.resultNormals } : {}),
+    }
   }
   if (patch.kind === 'thread_mirror' && op.type === 'mirror' && op.threadParams?.[patch.id]) {
     // Отражённая резьба — независимая копия: свои params в шаге mirror (не baked).

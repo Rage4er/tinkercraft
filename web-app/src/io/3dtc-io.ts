@@ -72,7 +72,7 @@ function sanitizeObjectKeys(obj: unknown): unknown {
 }
 
 const VALID_OP_TYPES = new Set([
-  'add_shape', 'import_mesh', 'thread', 'move', 'resize_dims', 'fillet',
+  'add_shape', 'import_mesh', 'thread', 'move', 'resize_dims', 'fillet', 'fillet_brep',
   'mirror', 'align', 'group', 'edit_child_params', 'edit_step', 'delete', 'visibility', 'lock', 'color', 'rename', 'array',
 ])
 

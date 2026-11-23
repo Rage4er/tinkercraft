@@ -57,8 +57,8 @@ describe('Toolbar aria-label (ALIGN-REVIT)', () => {
   for (const lang of ['ru', 'en'] as const) {
     it(`${lang}: у всех кнопок тулбара непустой и уникальный aria-label`, async () => {
       const buttons = await renderToolbar(lang)
-      // file 5 + edit 2+3 + view 3 + gizmo 4 (с «выход») + ruler 1 + «Размер» 1 (DIMENSIONS, меню) + mirror 3 + align 1 (ALIGN-UI-REVIT) + «Массив» 1 (ARRAY-TOOL) + csg 3 + settings 1 + clear 1
-      expect(buttons.length).toBe(29)
+      // file 5 + edit 2+3 + view 3 + gizmo 4 (с «выход») + ruler 1 + «Размер» 1 (DIMENSIONS, меню) + mirror 3 + align 1 (ALIGN-UI-REVIT) + «Массив» 1 (ARRAY-TOOL) + brep 1 (FILLET-CHAMFER-BREP, меню) + csg 3 + settings 1 + clear 1
+      expect(buttons.length).toBe(30)
       const names = buttons.map((b) => b.getAttribute('aria-label') ?? '')
       const empty = buttons.filter((b) => !(b.getAttribute('aria-label') ?? '').trim()).map((b) => b.outerHTML.slice(0, 80))
       expect(empty).toEqual([])

@@ -16,12 +16,16 @@ import LeftPanel from "./components/LeftPanel";
 import PropertiesPanel from "./components/PropertiesPanel";
 import ChildPropertiesPanel from "./components/ChildPropertiesPanel";
 import StepPanel from "./components/StepPanel";
+import BrepPanel from "./components/BrepPanel";
 import AlignPanel from "./components/AlignPanel";
 import DimensionPanel from "./components/DimensionPanel";
 import DimensionSettingsModal from "./components/DimensionSettingsModal";
 import SettingsModal from "./components/SettingsModal";
 import ArrayModal from "./components/ArrayModal";
 import { useSettingsStore } from "./store/settings";
+import { useBrepModeStore } from "./store/brep-mode";
+import { isBrepShape } from "./brep/brep-kernel";
+import { useBrepModeKeys } from "./hooks/useBrepModeKeys";
 import { lengthLabel } from "./store/units";
 import { themeById, applyTheme } from "./themes";
 import { useDimensionModeStore } from "./store/dimension-mode";
@@ -220,6 +224,8 @@ export default function App() {
   // APP-SETTINGS: тема — из настроек (localStorage); ui-store.theme — её база (dark / light) для сцены и стилей
   const themeId = useSettingsStore((s) => s.theme);
   const lengthUnit = useSettingsStore((s) => s.units);
+  const brepActive = useBrepModeStore((s) => s.active);
+  const brepTarget = useBrepModeStore((s) => s.targetId);
   useEffect(() => {
     // THEME-ENGINE: CSS-переменные темы (src/themes/*.json) на <html>, база — в ui-store
     const def = themeById(themeId);
@@ -426,6 +432,7 @@ export default function App() {
   // CSG-GROUP-FIX: «Объединение» — сразу; «Вычитание» / «Пересечение» — режим A → B → Enter
   // (Enter / Esc, исчезнувшие объекты A, выход при «Выровнять» — useCsgGroupMode)
   const csgGroupMode = useCsgGroupModeStore((s) => s.csgGroupMode);
+  useBrepModeKeys(showTextModal || showSvgModal || showThreadModal || showPM || showClearConfirm || showSettings || showArray);
   useCsgGroupMode(showTextModal || showSvgModal || showThreadModal || showPM || showClearConfirm || showSettings || showArray);
   const runCsg = useCallback(
     (op: CsgBooleanOp) => void useCsgGroupModeStore.getState().pressCsgOperation(op),
@@ -458,6 +465,10 @@ export default function App() {
   const canCsg = !busy && (selectedIds.length > 0 || csgGroupMode !== null);
   const canMirror = selectedIds.length > 0 && !busy;
   // ARRAY-TOOL: «Массив» — нужен выбранный объект
+  const canBrep = selectedIds.length === 1 && !busy && (() => {
+    const o = objects[selectedIds[0]]
+    return !!o && !o.locked && isBrepShape(o.shapeType)
+  })();
   const canArray = selectedIds.length > 0 && !busy;
   // ALIGN-UI-REVIT: «Выровнять» — режим (плоскость → грань B), нужен хотя бы один объект
   const canAlign = objectList.length > 0 && !busy;
@@ -637,6 +648,9 @@ export default function App() {
         canAlign={canAlign}
         canArray={canArray}
         onArray={() => setShowArray(true)}
+        canBrep={canBrep || (brepActive !== null && brepTarget !== null)}
+        brepActive={brepActive}
+        onBrep={(kind) => void useBrepModeStore.getState().start(kind)}
         alignActive={alignActive}
         canCsg={canCsg}
         csgOpStates={csgOpStates}
@@ -783,7 +797,7 @@ export default function App() {
         <div className="panel-right">
           <div className="props-header">{t("properties.header")}</div>
 
-          {alignActive ? <AlignPanel /> : hasSelectedDimension ? <DimensionPanel /> : hasSelectedStep ? <StepPanel /> : hasSelectedChild ? <ChildPropertiesPanel /> : <PropertiesPanel
+          {brepActive ? <BrepPanel /> : alignActive ? <AlignPanel /> : hasSelectedDimension ? <DimensionPanel /> : hasSelectedStep ? <StepPanel /> : hasSelectedChild ? <ChildPropertiesPanel /> : <PropertiesPanel
             firstSelected={firstSelected}
             busy={busy}
             selectedIds={selectedIds}

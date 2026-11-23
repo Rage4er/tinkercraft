@@ -1326,6 +1326,30 @@ export async function handleRebuildScene(msg: RebuildSceneMessage): Promise<void
         } else if (vertCount > 0 || idxCount > 0) {
           console.warn(`[rebuild] Baked mesh skipped for ${op.id}: verts=${vertCount}, idxs=${idxCount}`)
         }
+      } else if (op.type === 'fillet_brep') {
+        // FILLET-CHAMFER-BREP: готовый B-Rep меш (OCCT) — как baked import: translation
+        // запекается в cache, rotation/scale живут в pivot (как у import_mesh).
+        const raw = op.transform as { x: number; y: number; z: number; rotX: number; rotY: number; rotZ: number; scaleX?: number; scaleY?: number; scaleZ?: number } | undefined
+        const t: RebuildTransform = raw
+          ? { x: raw.x, y: raw.y, z: raw.z, rotX: raw.rotX, rotY: raw.rotY, rotZ: raw.rotZ, scaleX: raw.scaleX ?? 1, scaleY: raw.scaleY ?? 1, scaleZ: raw.scaleZ ?? 1 }
+          : { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
+        currentTransforms.set(op.id as string, t)
+        const verts = op.resultVertices as Float32Array | number[] | undefined
+        const idxs = op.resultIndices as Uint32Array | number[] | undefined
+        if (verts && idxs && verts.length >= 9 && idxs.length >= 3) {
+          try {
+            const m = new wasm.Manifold({
+              numProp: 3,
+              vertProperties: new Float32Array(verts as ArrayLike<number>),
+              triVerts: new Uint32Array(idxs as ArrayLike<number>),
+            })
+            const tm = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, t.x, t.y, t.z, 1]
+            setCached(op.id as string, m.transform(tm))
+          } catch (e) {
+            console.warn(`[rebuild] B-Rep mesh non-manifold for ${op.id}:`, e)
+            setCached(op.id as string, null)
+          }
+        }
       } else if (op.type === 'fillet') {
         // Скругление удалено из приложения (remove-fillet): операция старых файлов
         // не воспроизводится — куб остаётся острым. В норме загрузка уже вырезала её.

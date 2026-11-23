@@ -18,10 +18,13 @@ import {
   useDimensionModePreview,
   type GizmoMode,
   setGridColor,
+  applyTransformToPivot,
 } from "./viewport-hooks";
 import { devLogEvent, devLogPointer, devLogTransform } from "../utils/debug";
 import { fmtPoint, fmtPoint2 } from "../utils/debug-format";
 import { useAlignModeStore } from "../store/align-mode";
+import { useBrepModeStore } from "../store/brep-mode";
+import { pickBrepEdgeIndex } from "../brep/edge-pick";
 import { pickFace, planarFaceTriangles } from "./align-picking";
 import { usePlacementModeStore } from "../store/placement-mode";
 import type { PlacementAim } from "../store/placement";
@@ -45,6 +48,10 @@ const DRAG_THRESHOLD_PX = 4;
 const ALIGN_HOVER_THROTTLE_MS = 50;
 /** PLUG-AND-PLAY: превью размещения — не чаще раза за столько мс (последнее положение — догоняется) */
 const PLACEMENT_AIM_THROTTLE_MS = 50;
+/** FILLET-CHAMFER-BREP: throttle наведения на ребро */
+const BREP_HOVER_THROTTLE_MS = 50;
+/** Цвета режима выбора ребра: обычное, под курсором, выбранное */
+const BREP_COLORS = { base: 0x4a90d9, hover: 0xffa94d, selected: 0xff6b35 };
 
 /** Полупрозрачная подсветка (поверх меша, вне raycast) из мировых треугольников. */
 function makeAlignHighlight(positions: Float32Array, color: number, opacity: number): THREE.Mesh {
@@ -193,6 +200,63 @@ export default function Viewport3D({
   // ---- Хук 2: Синхронизация mesh ----
   useMeshSync(objects, sceneReady, sceneRef, meshMapRef, selectedIds);
 
+  // ---- FILLET-CHAMFER-BREP: рёбра выбранного примитива (B-Rep, OCCT) ----
+  const brepActive = useBrepModeStore((s) => s.active);
+  const brepEdges = useBrepModeStore((s) => s.edges);
+  const brepTransform = useBrepModeStore((s) => s.transform);
+  const brepSelected = useBrepModeStore((s) => s.selectedEdge);
+  const brepHover = useBrepModeStore((s) => s.hoverEdge);
+  const brepRootRef = useRef<THREE.LineSegments[] | null>(null);
+  const brepActiveRef = useRef(brepActive);
+  useEffect(() => { brepActiveRef.current = brepActive; }, [brepActive]);
+  const brepHoverAtRef = useRef(0);
+
+  useEffect(() => {
+    const scene = sceneRef.current;
+    if (!scene) return;
+    if (brepRootRef.current) {
+      for (const line of brepRootRef.current) {
+        scene.remove(line);
+        line.geometry.dispose();
+        (line.material as THREE.Material).dispose();
+      }
+      brepRootRef.current = null;
+    }
+    if (!brepActive || !brepTransform || brepEdges.length === 0) return;
+    const group = new THREE.Group();
+    const lines: THREE.LineSegments[] = [];
+    for (const edge of brepEdges) {
+      const p = edge.points;
+      if (p.length < 6) continue;
+      const positions: number[] = [];
+      for (let i = 0; i + 5 < p.length; i += 3) {
+        positions.push(p[i], p[i + 1], p[i + 2], p[i + 3], p[i + 4], p[i + 5]);
+      }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+      const color = edge.index === brepSelected ? BREP_COLORS.selected
+        : edge.index === brepHover ? BREP_COLORS.hover : BREP_COLORS.base;
+      const mat = new THREE.LineBasicMaterial({ color, depthTest: false, transparent: true, opacity: edge.index === brepSelected ? 1 : 0.95 });
+      const line = new THREE.LineSegments(g, mat);
+      line.renderOrder = 1000;
+      line.userData.brepEdgeIndex = edge.index;
+      group.add(line);
+      lines.push(line);
+    }
+    applyTransformToPivot(group, brepTransform);
+    scene.add(group);
+    brepRootRef.current = lines;
+    return () => {
+      for (const line of lines) {
+        scene.remove(line);
+        line.geometry.dispose();
+        (line.material as THREE.Material).dispose();
+      }
+      brepRootRef.current = null;
+    };
+  }, [sceneReady, brepActive, brepEdges, brepTransform, brepSelected, brepHover, sceneRef]);
+
+
   // ---- Хук 3: Логика линейки (ruler) ----
   const {
     shapeTypeMapRef,
@@ -235,6 +299,15 @@ export default function Viewport3D({
     },
     [activeCameraRef, cameraRef, containerRef],
   );
+
+
+  /** Ребро B-Rep под курсором (raycast по линиям; null — мимо). */
+  const pickBrepEdge = useCallback((clientX: number, clientY: number): number | null => {
+    const raycaster = rayAt(clientX, clientY);
+    const lines = brepRootRef.current;
+    if (!raycaster || !lines || lines.length === 0) return null;
+    return pickBrepEdgeIndex(raycaster, lines);
+  }, [rayAt]);
 
   /** Грань под курсором (мировые нормаль и точка) или null. */
   const pickAt = useCallback(
@@ -538,6 +611,21 @@ export default function Viewport3D({
 
   const handlePointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
+      // FILLET-CHAMFER-BREP: ЛКМ — выбрать ребро (или мимо — ничего), ПКМ — выход
+      if (brepActiveRef.current) {
+        if (e.button === 2) {
+          useBrepModeStore.getState().cancel();
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
+        if (e.button === 0) {
+          const idx = pickBrepEdge(e.clientX, e.clientY);
+          if (idx !== null) useBrepModeStore.getState().pick(idx);
+          e.stopPropagation();
+          return;
+        }
+      }
       // VIEWPORT-NAV: двойной клик СКМ — «Вписать в экран» (как F), в любом режиме
       if (e.button === 1) {
         e.preventDefault();                                   // без автопрокрутки браузера
@@ -566,11 +654,20 @@ export default function Viewport3D({
       pointerDownPos.current = { x: e.clientX, y: e.clientY };
       isDraggingRef.current = false;
     },
-    [rulerMode, handleRulerPointerDown, activeCameraRef, cameraRef, containerRef, fitViewRef],
+    [rulerMode, handleRulerPointerDown, activeCameraRef, cameraRef, containerRef, fitViewRef, pickBrepEdge],
   );
 
   const handlePointerMove = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
+      // FILLET-CHAMFER-BREP: наведение — подсветка ребра под курсором
+      if (brepActiveRef.current && e.buttons === 0) {
+        const now = performance.now();
+        if (now - brepHoverAtRef.current >= BREP_HOVER_THROTTLE_MS) {
+          brepHoverAtRef.current = now;
+          useBrepModeStore.getState().hover(pickBrepEdge(e.clientX, e.clientY));
+        }
+        return;
+      }
       // Ruler mode: handled by useRulerMode
       if (rulerMode) {
         handleRulerPointerMove(e, activeCameraRef.current ?? cameraRef.current, containerRef.current);
@@ -602,7 +699,7 @@ export default function Viewport3D({
         else drawSelRect(pointerDownPos.current.x, pointerDownPos.current.y, e.clientX, e.clientY);
       }
     },
-    [rulerMode, handleRulerPointerMove, activeCameraRef, cameraRef, containerRef, pickAt, schedulePlacementAim, scheduleDimHover, drawSelRect, hideSelRect, transformCtRef],
+    [rulerMode, handleRulerPointerMove, activeCameraRef, cameraRef, containerRef, pickAt, schedulePlacementAim, scheduleDimHover, drawSelRect, hideSelRect, transformCtRef, pickBrepEdge],
   );
 
   // PLUG-AND-PLAY: курсор ушёл из вьюпорта — превью скрыто (Enter — рядом с прошлыми)
@@ -776,8 +873,12 @@ export default function Viewport3D({
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerLeave={handlePointerLeave}
-      onContextMenu={(e) => { if (alignActiveRef.current || isPlacing() || isDimensioning()) e.preventDefault(); }}
-      style={alignActive || placementActive || dimMode ? { cursor: "crosshair" } : undefined}
+      onContextMenu={(e) => { if (alignActiveRef.current || brepActive || isPlacing() || isDimensioning()) e.preventDefault(); }}
+      style={alignActive || placementActive || dimMode || brepActive ? { cursor: "crosshair" } : undefined}
+      data-brep-mode={brepActive ?? undefined}
+      data-brep-edges={brepActive ? brepEdges.length : undefined}
+      data-brep-selected={brepSelected ?? undefined}
+      data-brep-hover={brepHover ?? undefined}
       data-camera={cameraMode}
       data-dimension-mode={dimMode ? (dimMode.first ? "b" : "a") : undefined}
       data-dimension-hover={dimMode?.hover ? `${dimMode.hover.objectId}|${dimMode.hover.snap ?? ""}|${[dimMode.hover.point.x, dimMode.hover.point.y, dimMode.hover.point.z].map((v) => v.toFixed(4)).join(",")}` : undefined}

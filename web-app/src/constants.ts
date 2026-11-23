@@ -8,7 +8,7 @@
 import type { ShapeType } from "./csg/types";
 
 // ---- App version ----
-export const APP_VERSION = '1.3.18';
+export const APP_VERSION = '1.3.19';
 
 // ---- Shapes (data only, NO JSX) ----
 // Иконки — это строковые ключи, не React-компоненты.
@@ -172,6 +172,9 @@ export const TOOLTIP_DATA: Record<string, TooltipData> = {
   csg_union: { labelKey: 'csg.union', shortcut: 'U', descriptionKey: 'tooltips.csgUnion' },
   csg_subtract: { labelKey: 'csg.subtract', shortcut: 'X', descriptionKey: 'tooltips.csgSubtract' },
   csg_intersect: { labelKey: 'csg.intersect', shortcut: 'I', descriptionKey: 'tooltips.csgIntersect' },
+
+  // --- FILLET-CHAMFER-BREP ---
+  brep_menu: { labelKey: 'brep.menu', descriptionKey: 'tooltips.brepMenu' },
 
   // --- Settings ---
   settings_button: { labelKey: 'settings.title', descriptionKey: 'tooltips.settings' },
