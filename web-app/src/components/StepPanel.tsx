@@ -19,7 +19,9 @@ import { effectiveOpAt, effectivePatches } from '../store/project-history'
 import { isStepEditable } from '../store/edit-step'
 import { buildRebuildMeta } from '../store/rebuild'
 import { displayName } from './ComponentTree'
-import type { MoveOperation, MirrorPlane, StepPatch, Vec3 } from '../csg/types'
+import ThreadProperties from './ThreadProperties'
+import { threadSizeDisplay } from '../csg/thread-table'
+import type { MoveOperation, MirrorPlane, StepPatch, ThreadOperation, Vec3 } from '../csg/types'
 
 type Group = 'delta' | 'rotDelta' | 'scaleDelta'
 type Axis = 'x' | 'y' | 'z'
@@ -98,19 +100,23 @@ export default function StepPanel() {
     const prefix = operations.slice(0, historyIndex)
     const raw = prefix[stepIndex]
     const eff = effectiveOpAt(prefix, stepIndex)
-    if (!raw || !isStepEditable(raw) || (raw.type !== 'move' && raw.type !== 'mirror' && raw.type !== 'group')) return null
-    if (!eff || eff.type !== raw.type || (eff.type !== 'move' && eff.type !== 'mirror' && eff.type !== 'group')) return null
+    if (!raw || !isStepEditable(raw) || (raw.type !== 'move' && raw.type !== 'mirror' && raw.type !== 'group' && raw.type !== 'thread')) return null
+    if (!eff || eff.type !== raw.type || (eff.type !== 'move' && eff.type !== 'mirror' && eff.type !== 'group' && eff.type !== 'thread')) return null
     // имена объектов на момент шага — по эффективной истории до него
     // (mirror — объекты, которые зеркалятся: копии появляются этим шагом)
     const meta = buildRebuildMeta(prefix.slice(0, stepIndex)).meta
     const edit = effectivePatches(prefix).get(stepIndex)
-    // mirror — что зеркалится; extrude — что выдавливается (база)
-    const ids = raw.type === 'mirror' ? raw.originalIds : raw.type === 'group' ? [raw.source!.baseId] : raw.ids
+    // mirror — что зеркалится; extrude — что выдавливается (база); thread — сама резьба
+    const ids = raw.type === 'mirror' ? raw.originalIds
+      : raw.type === 'group' ? [raw.source!.baseId]
+        : raw.type === 'thread' ? [raw.id] : raw.ids
     return {
       names: ids.map((id) => (meta[id] ? displayName({ id, shapeType: meta[id].shapeType, name: meta[id].name, text: meta[id].text }, t) : id)).join(', '),
       original: raw.type === 'move' ? moveOriginal(raw, t)
         : raw.type === 'mirror' ? raw.plane
-          : `${fmtNum(raw.source!.depth)} (${raw.source!.axis})`,
+          : raw.type === 'thread'
+            ? t('stepPanel.threadOriginal', { size: threadSizeDisplay(raw.params), starts: raw.params.starts, length: raw.params.length })
+            : `${fmtNum(raw.source!.depth)} (${raw.source!.axis})`,
       eff,
       editedBy: edit ? edit.editIndex + 1 : null,
     }
@@ -128,7 +134,12 @@ export default function StepPanel() {
         </button>
       </div>
       <div className="props-section-title">
-        {t('stepPanel.title', { step: stepIndex + 1, name: t(eff.type === 'mirror' ? 'stepPanel.mirror' : eff.type === 'group' ? 'stepPanel.extrude' : moveTitleKey(eff)) })}
+        {t('stepPanel.title', {
+          step: stepIndex + 1,
+          name: t(eff.type === 'mirror' ? 'stepPanel.mirror'
+            : eff.type === 'group' ? 'stepPanel.extrude'
+              : eff.type === 'thread' ? 'threadModal.title' : moveTitleKey(eff)),
+        })}
       </div>
       <div className="props-row">
         <span className="props-label">{t('stepPanel.target')}</span>
@@ -147,9 +158,13 @@ export default function StepPanel() {
         ? <MoveForm stepIndex={stepIndex} op={eff} busy={busy} onPatch={edit} />
         : eff.type === 'mirror'
           ? <MirrorForm plane={eff.plane} busy={busy} onPatch={edit} />
-          : eff.source && <ExtrudeForm stepIndex={stepIndex} axis={eff.source.axis} depth={eff.source.depth} busy={busy} onPatch={edit} />}
+          : eff.type === 'thread'
+            ? <ThreadForm op={eff} busy={busy} onPatch={edit} />
+            : eff.source && <ExtrudeForm stepIndex={stepIndex} axis={eff.source.axis} depth={eff.source.depth} busy={busy} onPatch={edit} />}
       <div className="text-sm text-muted-xs" data-testid="step-status" style={{ padding: '4px 12px' }}>
-        {busy ? t('stepPanel.recomputing') : t(eff.type === 'mirror' ? 'stepPanel.hintMirror' : 'stepPanel.hint')}
+        {busy ? t('stepPanel.recomputing')
+          : t(eff.type === 'mirror' ? 'stepPanel.hintMirror'
+            : eff.type === 'thread' ? 'stepPanel.hintThread' : 'stepPanel.hint')}
       </div>
     </div>
   )
@@ -247,6 +262,28 @@ function ExtrudeForm({ stepIndex, axis, depth, busy, onPatch }: {
         value={depth}
         disabled={busy}
         onChange={(v) => onPatch(extrudePatchWith(depth, v))}
+      />
+    </div>
+  )
+}
+
+/** THREAD-POLISH: параметры шага thread — тот же набор полей, что в PropertiesPanel. */
+function ThreadForm({ op, busy, onPatch }: {
+  op: ThreadOperation; busy: boolean; onPatch: (p: StepPatch | null) => void
+}) {
+  const { t } = useTranslation()
+  return (
+    <div data-testid="step-thread">
+      <ThreadProperties
+        params={op.params}
+        disabled={busy}
+        onChange={(params) => {
+          const size = threadSizeDisplay(params)
+          const name = params.kind === 'nut'
+            ? t('threadModal.nutName', { size })
+            : t('threadModal.boltName', { size, length: params.length })
+          onPatch({ kind: 'thread', params, name })
+        }}
       />
     </div>
   )

@@ -344,7 +344,11 @@ export default function Timeline({
             {onEdit && (op.type === "add_shape" || op.type === "edit_child_params" || stepEdit) && (
               <button
                 className="tl-edit"
-                title={stepEdit ? t(op.type === "mirror" ? "timeline.editMirrorStep" : op.type === "group" ? "timeline.editExtrudeStep" : "timeline.editMoveStep") : t("timeline.editStep")}
+                title={stepEdit
+                  ? t(op.type === "mirror" ? "timeline.editMirrorStep"
+                    : op.type === "group" ? "timeline.editExtrudeStep"
+                      : op.type === "thread" ? "timeline.editThreadStep" : "timeline.editMoveStep")
+                  : t("timeline.editStep")}
                 disabled={busy}
                 onClick={(e) => { e.stopPropagation(); onEdit(op, i); }}
               >

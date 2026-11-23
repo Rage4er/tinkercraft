@@ -51,12 +51,12 @@ const PLANES: ReadonlySet<string> = new Set(['XY', 'XZ', 'YZ'])
 
 /**
  * Правится ли шаг как прошлый шаг (edit_step с каскадом) — ✎ в Timeline и панель «Шаг N».
- * THREAD-PARAMETRIC: резьбу правят из PropertiesPanel (без ✎ в истории — там тот же patch,
- * но длинная форма параметров резьбы дублировала бы панель свойств).
+ * THREAD-POLISH: шаг `thread` тоже правится — форма панели шага использует тот же набор полей,
+ * что и PropertiesPanel; результат — `edit_step { kind: 'thread' }`.
  */
 export function isStepEditable(op: TinkerCraftOperation): boolean {
   const kind = patchKindFor(op)
-  return kind !== null && SUPPORTED_KINDS.has(kind) && op.type !== 'thread'
+  return kind !== null && SUPPORTED_KINDS.has(kind)
 }
 
 /** Допуск сравнения значений патча («не изменилось»). */
