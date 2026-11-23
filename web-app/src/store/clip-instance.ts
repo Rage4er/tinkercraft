@@ -20,6 +20,7 @@ import { workerBuildShape, workerBuildImportedMesh, workerBuildThread } from '..
 import {
   createPrimitiveNode,
   createBakedNode,
+  createThreadNode,
   getNode,
   registerObjectInTree,
   snapshotSubtree,
@@ -85,7 +86,7 @@ export async function instantiateClip(
       normals: result.normals, name, thread: { ...clip.thread },
     })
     const op: ThreadOperation = { type: 'thread', id, name, color: clip.color, transform, params: { ...clip.thread }, pasted: true }
-    createBakedNode(id, result.vertices, result.indices, result.normals ?? null, transform)
+    createThreadNode(id, clip.thread, transform)
     return { obj, op }
   }
   if (clip.shapeType === 'import_mesh' && clip.importVertices && clip.importIndices) {

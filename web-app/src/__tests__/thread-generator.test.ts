@@ -135,14 +135,16 @@ describe('thread-table: параметры резьбы', () => {
 })
 
 describe('THREAD-GENERATOR: геометрия (WASM)', () => {
-  it('M6 × 20 → болт import_mesh «Резьба: M6×20», габарит ≈ 6×20, дерево baked', async () => {
+  it('M6 × 20 → болт import_mesh «Резьба: M6×20», габарит ≈ 6×20, узел дерева thread', async () => {
     expect(await addThreadObject({ series: 'metric', sizeId: 'M6', length: 20, kind: 'bolt' })).toBe(true)
     const id = Object.keys(st().objects)[0]
     expect(id.startsWith('thr_')).toBe(true)
     const obj = st().objects[id]
     expect(obj.shapeType).toBe('import_mesh')
     expect(obj.name).toBe(i18n.t('threadModal.boltName', { size: 'M6', length: 20 }))
-    expect(getNode(id)?.type).toBe('baked')
+    const node = getNode(id)
+    expect(node?.type).toBe('thread')
+    expect(node?.threadParams).toMatchObject({ series: 'metric', sizeId: 'M6', length: 20, kind: 'bolt' })
     expect(errors()).toEqual([])
     const [sx, sy, sz] = worldSize(obj)
     expect(sx).toBeCloseTo(6, 1)

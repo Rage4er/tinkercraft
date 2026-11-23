@@ -329,9 +329,11 @@ export async function workerRebuildNode(
   nodeId: string,
   nodes: Array<{
     id: string
-    type: 'primitive' | 'boolean' | 'baked'
+    type: 'primitive' | 'boolean' | 'baked' | 'thread'
     shapeType?: string
     params?: Record<string, number>
+    /** THREAD-IN-CSG: полные параметры параметрического узла резьбы */
+    threadParams?: import('./thread-table').ThreadParams
     localTransform?: { x: number; y: number; z: number; rotX: number; rotY: number; rotZ: number; scaleX: number; scaleY: number; scaleZ: number }
     /** NESTED-MOVED-EDIT: TRS₀ boolean-узла (система листьев) */
     originTransform?: { x: number; y: number; z: number; rotX: number; rotY: number; rotZ: number; scaleX: number; scaleY: number; scaleZ: number }

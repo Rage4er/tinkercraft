@@ -195,9 +195,10 @@ export async function workerRebuildNode(
   nodeId: string,
   nodes: Array<{
     id: string
-    type: 'primitive' | 'boolean' | 'baked'
+    type: 'primitive' | 'boolean' | 'baked' | 'thread'
     shapeType?: string
     params?: Record<string, number>
+    threadParams?: import('../csg/thread-table').ThreadParams
     localTransform?: TransformNR
     vertices?: number[]
     indices?: number[]

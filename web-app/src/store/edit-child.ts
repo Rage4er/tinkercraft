@@ -25,6 +25,7 @@ import {
 } from '../csg/history-tree'
 import { computeInverseRSMatrix, transposeRSMatrix } from '../csg/worker-matrix'
 import { sanitizeParams } from '../csg/worker-handlers'
+import { normalizeThreadParams, type ThreadParams } from '../csg/thread-table'
 import { computeAABB } from './helpers'
 import { isChildEditable } from '../csg/tree-view'
 import { projectHistory } from './project-history'
@@ -47,7 +48,7 @@ export interface EditedMesh {
 }
 
 export type EditChildResult =
-  | { ok: true; mesh: EditedMesh; params: ShapeParams }
+  | { ok: true; mesh: EditedMesh; params: ShapeParams; threadParams?: ThreadParams }
   | { ok: false; reason: EditChildFailure }
 
 /** Допуск сравнения «дерево ↔ меш» (доля габарита / объёма). */
@@ -288,12 +289,14 @@ function mergeParams(base: ShapeParams, patch: ShapeParams): ShapeParams {
 export async function computeEditedChild(args: {
   rootId: string
   nodeId: string
-  patch: ShapeParams
+  patch?: ShapeParams
+  /** THREAD-IN-CSG: полные новые параметры узла thread */
+  threadParams?: ThreadParams
   objects: Record<string, SceneObject>
   operations: TinkerCraftOperation[]
   historyIndex: number
 }): Promise<EditChildResult> {
-  const { rootId, nodeId, patch, objects, operations, historyIndex } = args
+  const { rootId, nodeId, patch, threadParams, objects, operations, historyIndex } = args
 
   const root = objects[rootId]
   const rootNode = getNode(rootId)
@@ -301,7 +304,8 @@ export async function computeEditedChild(args: {
   if (!root || root.shapeType !== 'csg' || !rootNode || rootNode.type !== 'boolean' || !node) {
     return { ok: false, reason: 'not_found' }
   }
-  if (!isChildEditable(nodeId).editable || !node.params) {
+  const isThread = node.type === 'thread'
+  if (!isChildEditable(nodeId).editable || (isThread ? !node.threadParams : !node.params)) {
     return { ok: false, reason: 'not_editable' }
   }
 
@@ -309,7 +313,9 @@ export async function computeEditedChild(args: {
   if (!tr0) return { ok: false, reason: 'no_origin' }
 
   const oldNode = node
-  const newParams = mergeParams(node.params, sanitizeParams(patch as Record<string, unknown>))
+  const newParams = isThread ? {} : mergeParams(node.params ?? {}, sanitizeParams((patch ?? {}) as Record<string, unknown>))
+  const newThread = isThread ? normalizeThreadParams(threadParams ?? node.threadParams) : undefined
+  if (isThread && !newThread) return { ok: false, reason: 'not_editable' }
 
   try {
     // 1. Калибровка: дерево со СТАРЫМИ params обязано воспроизвести текущий меш.
@@ -318,7 +324,9 @@ export async function computeEditedChild(args: {
     }
 
     // 2. Новая копия узла (снимки дерева хранят ссылки — params неизменяемы).
-    setNode(nodeId, { ...node, params: newParams, cachedMesh: undefined, cacheHash: undefined, cachedBBox: undefined })
+    setNode(nodeId, isThread
+      ? { ...node, threadParams: newThread!, cachedMesh: undefined, cacheHash: undefined, cachedBBox: undefined }
+      : { ...node, params: newParams, cachedMesh: undefined, cacheHash: undefined, cachedBBox: undefined })
     invalidateCache(nodeId)
     const newWorld = await rebuildBooleanWorld(rootId)
     if (newWorld.vertices.length < 9 || newWorld.indices.length < 3) {
@@ -338,6 +346,7 @@ export async function computeEditedChild(args: {
     return {
       ok: true,
       params: newParams,
+      ...(newThread ? { threadParams: newThread } : {}),
       mesh: { vertices, indices: new Uint32Array(newWorld.indices), normals, aabb, originalBboxSize },
     }
   } catch (e) {

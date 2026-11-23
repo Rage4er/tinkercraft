@@ -23,6 +23,7 @@ import {
   createPrimitiveNode,
   createBooleanNode,
   createBakedNode,
+  createThreadNode,
   getNode,
   setNode,
   registerObjectInTree,
@@ -446,19 +447,14 @@ export function rebuildBuildTree(
       }
 
     } else if (op.type === 'thread') {
-      // THREAD-PARAMETRIC: для дерева это baked-меш, но операция истории параметрическая —
-      // rebuildFromHistory построит его заново, а дерево нужно только как операнд CSG.
-      const obj = objects?.[op.id]
+      // THREAD-IN-CSG: параметрический лист Build Tree (не baked). Перемотка возвращает
+      // params/transform шага — правка параметров ребёнка CSG идёт через generateThread.
+      const existing = getNode(op.id)
       transforms[op.id] = { ...op.transform }
-      if (obj && obj.vertices.length > 0 && obj.indices.length > 0) {
-        const existing = getNode(op.id)
-        if (existing?.type === 'baked') {
-          setNode(op.id, { ...existing, localTransform: { ...op.transform } })
-        } else {
-          createBakedNode(op.id, obj.vertices, obj.indices, obj.normals ?? null, { ...op.transform })
-        }
-      } else if (!getNode(op.id)) {
-        createBakedNode(op.id, new Float32Array(), new Uint32Array(), null, { ...op.transform })
+      if (existing?.type === 'thread') {
+        setNode(op.id, { ...existing, threadParams: { ...op.params }, localTransform: { ...op.transform } })
+      } else {
+        createThreadNode(op.id, op.params, { ...op.transform })
       }
 
     } else if (op.type === 'move') {
@@ -506,6 +502,8 @@ export function rebuildBuildTree(
       const n = getNode(op.nodeId)
       if (n && n.type === 'primitive') {
         setNode(op.nodeId, { ...n, params: { ...op.params } })
+      } else if (n && n.type === 'thread' && op.threadParams) {
+        setNode(op.nodeId, { ...n, threadParams: { ...op.threadParams } })
       }
 
     } else if (op.type === 'mirror') {
@@ -518,11 +516,11 @@ export function rebuildBuildTree(
           const nt = applyMirrorToTransform(t as unknown as RebuildTransform, op.plane) as TransformNR
           transforms[newId] = nt
 
-          // THREAD-MIRROR-PARAMETRIC: у отражённой резьбы в дереве — baked-узел из её
-          // собственного (уже отражённого) меша; операция истории остаётся параметрической.
+          // THREAD-MIRROR-PARAMETRIC / THREAD-IN-CSG: отражённая резьба — параметрический
+          // узел со своими params (hand инвертирован), а не baked-меш.
           const threadCopy = objects?.[newId]
           if (threadCopy?.thread) {
-            createBakedNode(newId, threadCopy.vertices, threadCopy.indices, threadCopy.normals ?? null, nt)
+            createThreadNode(newId, threadCopy.thread, nt)
             continue
           }
 

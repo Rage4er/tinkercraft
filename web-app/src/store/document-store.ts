@@ -53,6 +53,7 @@ import {
   createPrimitiveNode,
   createBooleanNode,
   createBakedNode,
+  createThreadNode,
   syncNodeTransform,
   applyNodeTransform,
   getNode,
@@ -348,7 +349,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const op: ThreadOperation = { type: 'thread', id, name, color, transform, params: { ...params } }
       const newOps = [...operations.slice(0, historyIndex), op]
       const newObjects = { ...objects, [id]: obj }
-      createBakedNode(id, mesh.vertices, mesh.indices, mesh.normals, transform)
+      createThreadNode(id, params, transform)
       set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, selectedIds: [id], modified: true, busy: false, lastCsgMs: ms })
       cacheSnapshot(newOps.length, newObjects)
       invalidateMirrorCache()
@@ -1238,6 +1239,55 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       invalidateMirrorCache()
       devLog('editChildParams', { rootId, nodeId, params })
     } catch (e) { set({ busy: false }); console.error('editChildParams:', e); notify(i18n.t('errors.editChild.failed'), 'error') }
+  },
+
+  // ── THREAD-IN-CSG: правка параметрического узла резьбы в дереве CSG ──
+  editThreadChildParams: async (rootId, nodeId, threadInput) => {
+    if (get().busy) return
+    const { objects, operations, historyIndex } = get()
+    const root = objects[rootId]
+    if (!root) return
+    if (root.locked) { notify(i18n.t('lock.cantMove'), 'warning'); return }   // LOCK-OBJECT
+    const node = getNode(nodeId)
+    if (node?.type !== 'thread') return
+    const current = normalizeThreadParams(node.threadParams)
+    const next = normalizeThreadParams(threadInput)
+    if (!current || !next) { notify(i18n.t('errors.threadBadParams'), 'error'); return }
+    if (current.series === next.series && current.sizeId === next.sizeId && current.length === next.length &&
+      current.kind === next.kind && current.hand === next.hand && current.starts === next.starts) return
+    set({ busy: true })
+    try {
+      const t0 = performance.now()
+      const res = await computeEditedChild({ rootId, nodeId, threadParams: next, objects, operations, historyIndex })
+      if (!res.ok) {
+        set({ busy: false })
+        notify(i18n.t(`errors.editChild.${editFailureKey(res.reason)}`), res.reason === 'failed' ? 'error' : 'warning')
+        return
+      }
+      const { mesh, threadParams } = res
+      const newObj = makeObject({
+        ...root,
+        vertices: mesh.vertices,
+        indices: mesh.indices,
+        normals: mesh.normals,
+        aabb: mesh.aabb,
+        originalBboxSize: mesh.originalBboxSize,
+      })
+      const op: EditChildParamsOperation = {
+        type: 'edit_child_params', rootId, nodeId, params: {}, threadParams,
+        resultVertices: mesh.vertices, resultIndices: mesh.indices,
+        resultNormals: mesh.normals ?? undefined,
+        originalBboxSize: mesh.originalBboxSize,
+      }
+      const newOps = [...operations.slice(0, historyIndex), op]
+      const newObjects = { ...objects, [rootId]: newObj }
+      await workerSyncMesh(rootId, newObj.vertices, newObj.indices, newObj.transform)
+        .catch(e => console.warn('[editThreadChildParams] workerSyncMesh failed:', e))
+      set({ operations: newOps, historyIndex: newOps.length, objects: newObjects, modified: true, busy: false, lastCsgMs: performance.now() - t0 })
+      cacheSnapshot(newOps.length, newObjects)
+      invalidateMirrorCache()
+      devLog('editThreadChildParams', { rootId, nodeId, threadParams })
+    } catch (e) { set({ busy: false }); console.error('editThreadChildParams:', e); notify(i18n.t('errors.editChild.failed'), 'error') }
   },
 
   // ── Правка прошлого шага с каскадом (Фаза 9.5.2: move, 9.5.3: mirror) ──

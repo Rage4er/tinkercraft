@@ -64,6 +64,8 @@ export interface DocumentStore {
   editThreadParams: (id: string, params: ThreadParams) => Promise<boolean>
   /** Фаза 9.3: правка params ребёнка CSG (примитива в Build Tree) → пересчёт меша корня. */
   editChildParams: (rootId: string, nodeId: string, params: ShapeParams) => Promise<void>
+  /** THREAD-IN-CSG: правка параметрического узла резьбы в Build Tree → пересчёт CSG. */
+  editThreadChildParams: (rootId: string, nodeId: string, params: ThreadParams) => Promise<void>
   /** Фаза 9.5.2: правка прошлого шага (сырой индекс) с каскадом CSG/align; true — правка записана */
   editStepParams: (stepIndex: number, patch: StepPatch) => Promise<boolean>
   extrudeSelected: (axis: 'X' | 'Y' | 'Z', depth: number) => Promise<void>

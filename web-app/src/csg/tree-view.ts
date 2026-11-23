@@ -4,6 +4,7 @@
 // getTreeView() строит снимок поддерева (plain-объекты), который компонент
 // пересчитывает при смене `objects` (дерево мутируется ДО set() в сторе).
 import type { ShapeParams, ShapeType, TreeNode } from './types'
+import { threadSizeDisplay, type ThreadParams } from './thread-table'
 import { getNode } from './history-tree'
 import { getParamFields } from './child-params'
 
@@ -34,6 +35,9 @@ export function nodeEditability(node: TreeNode): { editable: boolean; reason: No
   if (node.type === 'primitive' && node.params !== undefined && node.shapeType !== undefined) {
     return { editable: true, reason: null }
   }
+  if (node.type === 'thread' && node.threadParams !== undefined) {
+    return { editable: true, reason: null }
+  }
   if (node.type === 'boolean') return { editable: false, reason: 'boolean' }
   // CSG-INDEPENDENT-COPY: «mirror» — только примитив, запечённый старым зеркалом CSG
   // (у него остались params); отражённый настоящий baked-меш остаётся «baked».
@@ -55,6 +59,8 @@ export interface TreeViewNode {
   type: TreeNode['type']
   shapeType?: ShapeType
   params?: ShapeParams
+  /** THREAD-IN-CSG: параметры параметрического узла резьбы */
+  threadParams?: ThreadParams
   operation?: TreeNode['operation']
   /**
    * N-ARY-CSG: subtract/intersect с группами — число детей группы A (`children[0..groupA)`),
@@ -98,6 +104,7 @@ function buildView(id: string, depth: number, seen: Set<string>): TreeViewNode |
     shapeType: node.shapeType,
     // копия: UI не должен мутировать params дерева (снимки хранят ссылки)
     params: node.params ? { ...node.params } : undefined,
+    threadParams: node.threadParams ? { ...node.threadParams } : undefined,
     operation: node.operation,
     ...(node.groupA !== undefined ? { groupA: node.groupA } : {}),
     mirrored,
@@ -204,4 +211,10 @@ export function formatParams(params: ShapeParams | undefined, shapeType?: ShapeT
     if (typeof v === 'number') parts.push(`${label}${Math.round(v * 100) / 100}`)
   }
   return parts.join(' ')
+}
+
+/** THREAD-IN-CSG: сводка параметрического узла резьбы для строки дерева. */
+export function formatThreadParams(params: ThreadParams | undefined): string {
+  if (!params) return ''
+  return `${threadSizeDisplay(params)} · ${params.starts}× · ${Math.round(params.length * 100) / 100}`
 }

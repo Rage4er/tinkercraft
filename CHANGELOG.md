@@ -7,6 +7,17 @@
 
 ---
 
+## [1.3.17] — 2026-11-23
+
+### Fixed
+- **THREAD-IN-CSG:** резьба внутри CSG — полноценный параметрический узел Build Tree (`TreeNode.type = 'thread'`, `threadParams`), а не baked-меш. `rebuildBuildTree`, `rebuildNode` (WASM и worker), `copySubtree`, вычисление рамки и кэш-хэш поддерживают thread; в дереве компонентов он отображается иконкой резьбы, сводкой параметров, без 🔒.
+- **`edit_child_params` для thread:** правка из дерева/`ChildPropertiesPanel` передаёт полные `ThreadParams`, дерево калибруется, `generateThread` пересобирает узел, CSG-результат обновляется; undo/redo и `.3dtc` сохраняют параметрический узел. ✎ шага thread в Timeline пересобирает CSG ниже по истории (каскад `edit_step`).
+
+### Added
+- Тесты `thread-in-csg.test.ts` (4, WASM: tree node, edit_child_params, undo/redo, `.3dtc`) и `thread-in-csg.test.tsx` (2, jsdom: ✎ шага, дерево/ChildPropertiesPanel); e2e `pnpm e2e:thread-in-csg`.
+
+---
+
 ## [1.3.16] — 2026-11-23
 
 ### Added

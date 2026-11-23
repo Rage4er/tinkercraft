@@ -15,7 +15,9 @@ import { useUiStore } from '../store/ui-store'
 import { getTreeView, findViewNode, reasonFromRootFailure, type TreeViewNode, type NotEditableReason } from '../csg/tree-view'
 import { getParamFields, clampFieldValue, type ParamField } from '../csg/child-params'
 import { checkChildEditable, editFailureKey, type EditChildFailure } from '../store/edit-child'
+import ThreadProperties from './ThreadProperties'
 import type { ShapeParams } from '../csg/types'
+import type { ThreadParams } from '../csg/thread-table'
 
 export default function ChildPropertiesPanel() {
   const { t } = useTranslation()
@@ -25,6 +27,7 @@ export default function ChildPropertiesPanel() {
   const objects = useDocumentStore((s) => s.objects)
   const busy = useDocumentStore((s) => s.busy)
   const editChildParams = useDocumentStore((s) => s.editChildParams)
+  const editThreadChildParams = useDocumentStore((s) => s.editThreadChildParams)
 
   // Дерево не реактивно — снимок пересчитывается при смене objects (правка меняет объект корня).
   const node: TreeViewNode | null = useMemo(() => {
@@ -80,7 +83,8 @@ export default function ChildPropertiesPanel() {
         <span className="props-value">
           {node.type === 'boolean'
             ? `${t('componentTree.nestedCsg')} · ${t(`csg.${node.operation ?? 'union'}`)}`
-            : node.shapeType ? t(`shapes.${node.shapeType}`) : t('componentTree.import')}
+            : node.type === 'thread' ? t('threadModal.title')
+              : node.shapeType ? t(`shapes.${node.shapeType}`) : t('componentTree.import')}
         </span>
       </div>
       <div className="text-sm text-muted-xs" style={{ padding: '2px 12px 6px' }}>
@@ -109,7 +113,18 @@ export default function ChildPropertiesPanel() {
         <div className="text-sm text-muted-xs" data-testid="child-busy" style={{ padding: '6px 12px' }}>{t('childProps.recomputing')}</div>
       )}
 
-      {fields.length > 0 && (
+      {node.type === 'thread' && node.threadParams && reason === null && !otherFailure && (
+        <div data-testid="child-thread-form">
+          <ThreadProperties
+            params={node.threadParams}
+            disabled={busy || check !== null}
+            onChange={(params: ThreadParams) => void editThreadChildParams(selectedChild.rootId, selectedChild.nodeId, params)}
+          />
+          <div className="text-sm text-muted-xs" style={{ padding: '4px 12px' }}>{t('childProps.apply')}</div>
+        </div>
+      )}
+
+      {node.type !== 'thread' && fields.length > 0 && (
         <div className="csg-group" data-testid="child-form">
           <div className="csg-group-title">{t('properties.dimensions', { unit: t(unitLabelKey(lengthUnit)) })}</div>
           {fields.map((f) => (
