@@ -204,9 +204,11 @@ export default function Viewport3D({
   const brepActive = useBrepModeStore((s) => s.active);
   const brepEdges = useBrepModeStore((s) => s.edges);
   const brepTransform = useBrepModeStore((s) => s.transform);
-  const brepSelected = useBrepModeStore((s) => s.selectedEdge);
+  const brepSelected = useBrepModeStore((s) => s.selectedEdges);
   const brepHover = useBrepModeStore((s) => s.hoverEdge);
   const brepRootRef = useRef<THREE.LineSegments[] | null>(null);
+  const brepGroupRef = useRef<THREE.Group | null>(null);
+  const [brepLineCount, setBrepLineCount] = useState(0);
   const brepActiveRef = useRef(brepActive);
   useEffect(() => { brepActiveRef.current = brepActive; }, [brepActive]);
   const brepHoverAtRef = useRef(0);
@@ -214,14 +216,21 @@ export default function Viewport3D({
   useEffect(() => {
     const scene = sceneRef.current;
     if (!scene) return;
-    if (brepRootRef.current) {
-      for (const line of brepRootRef.current) {
-        scene.remove(line);
-        line.geometry.dispose();
-        (line.material as THREE.Material).dispose();
-      }
+    // Снять предыдущий каркас: удаляем ГРУППУ из сцены (а не линии — они её дети).
+    const dropGroup = () => {
+      const group = brepGroupRef.current;
+      if (!group) return;
+      scene.remove(group);
+      group.traverse((o) => {
+        const line = o as THREE.LineSegments;
+        if (line.geometry) line.geometry.dispose();
+        if (line.material) (line.material as THREE.Material).dispose();
+      });
+      brepGroupRef.current = null;
       brepRootRef.current = null;
-    }
+      setBrepLineCount(0);
+    };
+    dropGroup();
     if (!brepActive || !brepTransform || brepEdges.length === 0) return;
     const group = new THREE.Group();
     const lines: THREE.LineSegments[] = [];
@@ -234,9 +243,10 @@ export default function Viewport3D({
       }
       const g = new THREE.BufferGeometry();
       g.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
-      const color = edge.index === brepSelected ? BREP_COLORS.selected
+      const isSelected = brepSelected.includes(edge.index);
+      const color = isSelected ? BREP_COLORS.selected
         : edge.index === brepHover ? BREP_COLORS.hover : BREP_COLORS.base;
-      const mat = new THREE.LineBasicMaterial({ color, depthTest: false, transparent: true, opacity: edge.index === brepSelected ? 1 : 0.95 });
+      const mat = new THREE.LineBasicMaterial({ color, depthTest: false, transparent: true, opacity: isSelected ? 1 : 0.95 });
       const line = new THREE.LineSegments(g, mat);
       line.renderOrder = 1000;
       line.userData.brepEdgeIndex = edge.index;
@@ -245,15 +255,10 @@ export default function Viewport3D({
     }
     applyTransformToPivot(group, brepTransform);
     scene.add(group);
+    brepGroupRef.current = group;
     brepRootRef.current = lines;
-    return () => {
-      for (const line of lines) {
-        scene.remove(line);
-        line.geometry.dispose();
-        (line.material as THREE.Material).dispose();
-      }
-      brepRootRef.current = null;
-    };
+    setBrepLineCount(lines.length);
+    return () => { dropGroup(); };
   }, [sceneReady, brepActive, brepEdges, brepTransform, brepSelected, brepHover, sceneRef]);
 
 
@@ -621,7 +626,7 @@ export default function Viewport3D({
         }
         if (e.button === 0) {
           const idx = pickBrepEdge(e.clientX, e.clientY);
-          if (idx !== null) useBrepModeStore.getState().pick(idx);
+          if (idx !== null) useBrepModeStore.getState().toggleEdge(idx);
           e.stopPropagation();
           return;
         }
@@ -877,7 +882,8 @@ export default function Viewport3D({
       style={alignActive || placementActive || dimMode || brepActive ? { cursor: "crosshair" } : undefined}
       data-brep-mode={brepActive ?? undefined}
       data-brep-edges={brepActive ? brepEdges.length : undefined}
-      data-brep-selected={brepSelected ?? undefined}
+      data-brep-selected={brepSelected.length ? brepSelected.join(",") : undefined}
+      data-brep-lines={brepLineCount}
       data-brep-hover={brepHover ?? undefined}
       data-camera={cameraMode}
       data-dimension-mode={dimMode ? (dimMode.first ? "b" : "a") : undefined}

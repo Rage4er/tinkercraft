@@ -104,6 +104,16 @@ describe('OCCT B-Rep: рёбра и меш', () => {
     expect(mesh.vertices.length).not.toBe(plain.vertices.length)
   })
 
+  it('призма (6 сторон) — 18 рёбер, fillet по двум рёбрам сразу', async () => {
+    const base: BrepBase = { shapeType: 'prism', params: { radius: 12, height: 20, sides: 6 } }
+    const edges = await brepEdges(base)
+    expect(edges.length).toBe(18)
+    const mesh = await brepFillet(base, 'fillet', 2, [0, 1])
+    expect(mesh.indices.length).toBeGreaterThan(0)
+    const a = meshAabb(mesh.vertices)
+    expect(a.max.z - a.min.z).toBeCloseTo(20, 2)
+  })
+
   it('chamfer d=2 одного ребра — меш отличается от fillet (фасок меньше рёбер)', async () => {
     const fil = await brepFillet(BASE, 'fillet', 2, [0])
     const cha = await brepFillet(BASE, 'chamfer', 2, [0])
@@ -121,9 +131,9 @@ describe('История: шаг fillet_brep, undo/redo, edit_step, .3dtc', () =
     await st().addShape('cube', { width: 20, height: 20, depth: 20 })
     const id = Object.keys(st().objects)[0]
     const obj = st().objects[id]
-    const mesh = await brepFillet({ shapeType: 'cube', params: { ...obj.params } }, 'fillet', 2, [0])
+    const mesh = await brepFillet({ shapeType: 'cube', params: { ...obj.params } }, 'fillet', 2, [0, 2])
     const ok = await st().applyBrepFillet({
-      targetId: id, kind: 'fillet', size: 2, edgeIndexes: [0],
+      targetId: id, kind: 'fillet', size: 2, edgeIndexes: [0, 2],
       base: { shapeType: 'cube', params: { ...obj.params } },
       transform: { ...obj.transform }, mesh, name: 'Скругление: Куб',
     })
@@ -134,6 +144,8 @@ describe('История: шаг fillet_brep, undo/redo, edit_step, .3dtc', () =
   it('шаг fillet_brep и объект import_mesh; undo/redo', async () => {
     const { id } = await cubeWithFillet()
     expect(st().operations.map((o) => o.type)).toEqual(['add_shape', 'fillet_brep'])
+    const step = st().operations[1]
+    expect(step.type === 'fillet_brep' ? step.edgeIndexes : []).toEqual([0, 2])
     expect(st().objects[id].shapeType).toBe('import_mesh')
     expect(st().objects[id].vertices.length).toBeGreaterThan(0)
     await st().undo()

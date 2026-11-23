@@ -670,8 +670,8 @@
     "chamfer": "Chamfer",
     "filletName": "Fillet: {{name}}",
     "chamferName": "Chamfer: {{name}}",
-    "selectObject": "Select a primitive (box, cylinder, cone or sphere)",
-    "unsupported": "B-Rep works on primitives only: not CSG, imports or threads",
+    "selectObject": "Select a primitive (box, cylinder, cone, sphere or prism)",
+    "unsupported": "B-Rep works on primitives only (box, cylinder, cone, sphere, prism): not CSG, imports or threads",
     "selectEdge": "Pick an edge in the viewport",
     "sizeRange": "Size must be greater than 0 and at most {{max}} mm",
     "sizePositive": "Size must be greater than 0",
@@ -687,6 +687,7 @@
     "selected": "Selected: {{index}}",
     "original": "{{size}} mm, edges: {{edges}}",
     "stepHint": "Size commits on Enter / blur; the fillet is recomputed in OCCT",
-    "menu": "Fillet / Chamfer"
+    "menu": "Fillet / Chamfer",
+    "selectedMany": "Selected edges: {{count}} ({{list}})"
   }
 }
