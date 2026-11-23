@@ -26,6 +26,7 @@
 // ============================================================
 
 import type { TransformNR, SceneObject, ShapeType, ShapeParams } from '../csg/types'
+import { threadSizeDisplay, type ThreadParams } from '../csg/thread-table'
 import { nextId, composeMirroredList } from './helpers'
 import { notify } from './notifications'
 import i18n from '../i18n'
@@ -236,6 +237,17 @@ export async function mirrorObject(
         plane,
     )
 
+    // THREAD-MIRROR-PARAMETRIC: отражение меняет хиральность — правая резьба становится левой.
+    const thread: ThreadParams | undefined = obj.thread
+        ? { ...obj.thread, hand: obj.thread.hand === 'left' ? 'right' : 'left' }
+        : undefined
+    const threadSize = thread ? threadSizeDisplay(thread) : ''
+    const name = thread
+        ? thread.kind === 'nut'
+            ? i18n.t('threadModal.nutName', { size: threadSize })
+            : i18n.t('threadModal.boltName', { size: threadSize, length: thread.length })
+        : obj.name
+
     const newObj: SceneObject = {
         id: newId,
         // FIX (MIRROR-CSG-KEEPTYPE): CSG-результат → остаётся CSG-результатом,
@@ -265,7 +277,8 @@ export async function mirrorObject(
         color: obj.color,
         visible: obj.visible ?? true,
         locked: obj.locked ?? false,
-        name: obj.name,
+        name,
+        ...(thread ? { thread } : {}),
         // UX-AUDIT-33: копия 3D-текста — тоже текст (как в rebuild: метаданные источника целиком,
         // в т.ч. `text`). Раньше `text` терялся: живая копия — «Импорт», после перезагрузки — «Текст».
         ...(isTextObject(obj) ? { text: obj.text ?? textFromName(obj.name) } : {}),
@@ -404,7 +417,15 @@ export async function mirrorSelected(
     plane: 'XY' | 'XZ' | 'YZ',
     ids: string[],
     objects: Record<string, SceneObject>,
-): Promise<{ newObjects: Record<string, SceneObject>; newIds: string[]; operation: { type: 'mirror'; originalIds: string[]; ids: string[]; plane: 'XY' | 'XZ' | 'YZ' } } | null> {
+): Promise<{
+    newObjects: Record<string, SceneObject>
+    newIds: string[]
+    operation: {
+        type: 'mirror'; originalIds: string[]; ids: string[]; plane: 'XY' | 'XZ' | 'YZ'
+        threadParams?: Record<string, ThreadParams>
+        threadNames?: Record<string, string>
+    }
+} | null> {
     devLog('mirrorSelected', { plane, ids })
     if (ids.length === 0) {
         devLog('mirrorSelected', 'no ids, returning null')
@@ -470,10 +491,24 @@ export async function mirrorSelected(
         // Инвалидируем кэш после использования
         invalidateMirrorCache()
 
+        // THREAD-MIRROR-PARAMETRIC: параметры отражённых резьб — в шаг mirror, чтобы копия
+        // воспроизводилась из своих params и не зависела от последующей правки оригинала.
+        const threadParams: Record<string, ThreadParams> = {}
+        const threadNames: Record<string, string> = {}
+        for (const id of newIds) {
+            const thread = newObjects[id]?.thread
+            if (!thread) continue
+            threadParams[id] = { ...thread }
+            if (newObjects[id].name) threadNames[id] = newObjects[id].name!
+        }
+
         return {
             newObjects,
             newIds,
-            operation: { type: 'mirror', originalIds, ids: newIds, plane },
+            operation: {
+                type: 'mirror', originalIds, ids: newIds, plane,
+                ...(Object.keys(threadParams).length > 0 ? { threadParams, threadNames } : {}),
+            },
         }
     } catch (e) {
         console.error('[Mirror] mirrorSelected error:', e)

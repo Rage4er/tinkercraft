@@ -126,7 +126,7 @@ export function opIcon(op: TinkerCraftOperation): React.ReactNode {
     case "edit_step":
       return op.patch.kind === "mirror" ? <MirrorYZIcon size={32} />
         : op.patch.kind === "extrude" ? <ScaleIcon size={32} />
-          : op.patch.kind === "thread" ? <ThreadIcon size={32} /> : <MoveIcon size={32} />;
+          : op.patch.kind === "thread" || op.patch.kind === "thread_mirror" ? <ThreadIcon size={32} /> : <MoveIcon size={32} />;
     case "delete":
       return <DeleteIcon size={32} />;
     case "visibility":
@@ -267,7 +267,7 @@ function patchDetail(p: StepPatch, before: StepPatch | undefined, t: (key: strin
     const from = before?.kind === "extrude" ? `${fmtNum(before.depth)} → ` : "";
     return `${t("stepPanel.extrude").toLowerCase()} (${t("stepPanel.depth").toLowerCase()} ${from}${fmtNum(p.depth)})`;
   }
-  if (p.kind === "thread") {
+  if (p.kind === "thread" || p.kind === "thread_mirror") {
     return t("timeline.editThreadDetail", {
       size: threadSizeDisplay(p.params), starts: p.params.starts, length: p.params.length,
     });

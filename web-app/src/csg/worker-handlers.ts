@@ -1350,6 +1350,17 @@ export async function handleRebuildScene(msg: RebuildSceneMessage): Promise<void
         for (let i = 0; i < origIds.length && i < mirrorOp.ids.length; i++) {
           const origId = origIds[i]
           const newId = mirrorOp.ids[i]
+          // THREAD-MIRROR-PARAMETRIC: отражённая резьба строится из СОБСТВЕННЫХ params
+          // (hand уже инвертирован) — правка оригинала ниже по истории копию не меняет.
+          const threadParams = mirrorOp.threadParams?.[newId]
+          const threadSrc = currentTransforms.get(origId)
+          if (threadParams && threadSrc) {
+            const nt = applyMirrorToTransform(threadSrc, op.plane as 'XY' | 'XZ' | 'YZ')
+            const m = applyTransform(generateThread(threadParams), { x: nt.x, y: nt.y, z: nt.z })
+            setCached(newId, m)
+            currentTransforms.set(newId, nt)
+            continue
+          }
           const cm = cache.get(newId)
           if (cm) {
             setCached(newId, cm.transform(flip))

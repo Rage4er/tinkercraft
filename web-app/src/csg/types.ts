@@ -104,6 +104,14 @@ export interface MirrorOperation {
   originalIds: string[]   // ID объектов ДО зеркалирования
   ids: string[]           // ID нового объекта(ов) после зеркалирования
   plane: 'XY' | 'XZ' | 'YZ'
+  /**
+   * THREAD-MIRROR-PARAMETRIC: параметры отражённых резьб (id копии → params).
+   * Копия независима от оригинала: rebuild строит её из этих params (hand инвертирован),
+   * правка копии — `edit_step { kind: 'thread_mirror' }`.
+   */
+  threadParams?: Record<string, ThreadParams>
+  /** Имена отражённых резьб (id копии → отображаемое имя, с суффиксом LH) */
+  threadNames?: Record<string, string>
 }
 
 /** Плоскость зеркала. FIX (8.5.12): выделен в тип — SceneObject.mirrored теперь список. */
@@ -256,6 +264,7 @@ export type StepPatch =
   | { kind: 'mirror'; plane: MirrorPlane }
   | { kind: 'extrude'; depth: number }
   | { kind: 'thread'; params: ThreadParams; name?: string }
+  | { kind: 'thread_mirror'; id: string; params: ThreadParams; name?: string }
 
 /** Тип шага, к которому применим патч данного вида. */
 export type StepPatchKind = StepPatch['kind']
