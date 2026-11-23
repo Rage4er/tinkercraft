@@ -15,6 +15,9 @@ export const SETTINGS_STORAGE_KEY = 'tinkercraft-settings'
 export const LANGUAGES = ['ru', 'en'] as const
 export type Language = (typeof LANGUAGES)[number]
 
+/** UI-SETTINGS-BUTTON: флаги языков для выпадающего списка «Язык» */
+export const LANGUAGE_FLAGS: Record<Language, string> = { ru: '🇷🇺', en: '🇬🇧' }
+
 export interface SoundSettings { enabled: boolean; volume: number }
 export interface SettingsData {
   /** id темы (`themes.ts`) */

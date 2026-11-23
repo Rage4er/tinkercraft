@@ -29,7 +29,7 @@ import {
   RulerIcon,
   TCLogoIcon,
   PerspectiveIcon,
-  ThemeIcon,
+  GearIcon,
   AlignToolIcon,
   ArrayIcon,
 } from "./icons";
@@ -56,7 +56,6 @@ export default function Toolbar({
   alignActive,
   canCsg,
   csgOpStates,
-  theme,
   onOpen,
   onSave,
   onExportStl,
@@ -80,7 +79,7 @@ export default function Toolbar({
   onPreviewMirrorEnd,
   onAlignMode,
   onCsg,
-  onToggleTheme,
+  onSettings,
   onClearScene,
 }: {
   objectCount: number;
@@ -107,7 +106,6 @@ export default function Toolbar({
   canCsg: boolean;
   /** CSG-GROUP-FIX: доступность / нажатость каждой операции (режим A → B → Enter) */
   csgOpStates?: CsgOpButtonStates;
-  theme: "dark" | "light";
   onOpen: () => void;
   onSave: () => void;
   /** FORMATS-OBJ-3MF-GLTF: экспорт в формат (меню «Экспорт») */
@@ -134,7 +132,8 @@ export default function Toolbar({
   /** Кнопка «Выровнять»: вход в режим / выход из него */
   onAlignMode: () => void;
   onCsg: (op: "union" | "subtract" | "intersect") => void;
-  onToggleTheme: () => void;
+  /** UI-SETTINGS-BUTTON: окно «Настройки» (язык, тема, звуки, единицы) */
+  onSettings: () => void;
   onClearScene: () => void;
 }) {
   const { t } = useTranslation();
@@ -149,7 +148,7 @@ export default function Toolbar({
     { id: "mirror", buttonCount: 3 },
     { id: "align", buttonCount: 2 },
     { id: "csg", buttonCount: 3 },
-    { id: "theme", buttonCount: 1 },
+    { id: "settings", buttonCount: 1 },
     { id: "clear", buttonCount: 1 },
   ]
 
@@ -282,16 +281,16 @@ export default function Toolbar({
       <CsgButtons disabled={!canCsg} onCsg={onCsg} opStates={csgOpStates} maxRows={getRows("csg")} />
       <div className="toolbar-separator" />
 
-      {/* Group 9: Theme */}
+      {/* Group 9: Settings — тема, язык, звуки, единицы в окне (UI-SETTINGS-BUTTON) */}
       <ToolbarRowSplit
-        rows={getRows("theme")}
+        rows={getRows("settings")}
         buttons={[
           <IconButton
-            key="theme"
-            icon={<ThemeIcon size={32} />}
-            label={theme === "dark" ? t("theme.light") : t("theme.dark")}
-            onClick={onToggleTheme}
-            tooltip={TOOLTIP_DATA.theme_toggle}
+            key="settings"
+            icon={<GearIcon size={32} />}
+            label={t("settings.title")}
+            onClick={onSettings}
+            tooltip={TOOLTIP_DATA.settings_button}
           />,
         ]}
       />

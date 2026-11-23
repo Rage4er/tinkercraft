@@ -54,6 +54,27 @@ export async function waitToastsSettled(page, timeout = 10000) {
 /** Кнопка тулбара по aria-label (точное совпадение), напр. 'Зеркало YZ', 'Импорт', 'X мин'. */
 export const toolbarButton = (page, name) =>
   page.getByRole('toolbar').getByRole('button', { name, exact: true })
+
+/**
+ * UI-SETTINGS-BUTTON: тема живёт в окне «Настройки» (кнопка «Настройки» в тулбаре и
+ * шестерёнка в статус-баре), а не в тулбаре. Открывает окно, выбирает тему по id
+ * (`dark` / `light` / `high-contrast`) и закрывает; окно меняет тему сразу.
+ */
+export async function setTheme(page, id) {
+  const modal = page.locator('[data-testid=settings-modal]')
+  await page.locator('[data-testid=settings-button]').click()
+  await modal.waitFor({ timeout: 5000 })
+  await page.locator('[data-testid=settings-theme]').selectOption(id)
+  await page.waitForFunction((t) => document.documentElement.getAttribute('data-theme-id') === t, id, { timeout: 5000 })
+  await page.locator('[data-testid=settings-close]').click()
+  await modal.waitFor({ state: 'detached', timeout: 5000 })
+}
+
+/** Переключить светлую / тёмную тему (как прежняя кнопка «Сменить тему» в тулбаре). */
+export async function toggleTheme(page) {
+  const base = await page.evaluate(() => document.documentElement.getAttribute('data-theme'))
+  await setTheme(page, base === 'dark' ? 'light' : 'dark')
+}
 /** Кнопка правой панели свойств по aria-label, напр. 'Объединение' (RegExp — для ru/en). */
 export const panelButton = (page, name) =>
   page.locator('.panel-right').getByRole('button', { name, exact: true })

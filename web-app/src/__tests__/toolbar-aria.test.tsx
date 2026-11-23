@@ -40,13 +40,13 @@ async function renderToolbar(lang: 'ru' | 'en'): Promise<HTMLButtonElement[]> {
       <Toolbar
         objectCount={2} selectedCount={2} canUndo canRedo hasCopied busy={false} workerOk
         cameraMode="perspective" gizmoMode="translate" rulerActive={false} dimensionActive={false} dimensionsVisible
-        canMirror canAlign canCsg theme="dark"
+        canMirror canAlign canCsg
         onOpen={noop} onSave={noop} onExportStl={noop} onImportStl={noop} onShowProjects={noop}
         onUndo={noop} onRedo={noop} onCopy={noop} onPaste={noop} onDelete={noop}
         onFitView={noop} onResetView={noop} onToggleCamera={noop} onGizmo={noop} onToggleRuler={noop}
         onDimensionMode={noop} onDimensionSettings={noop} onToggleDimensions={noop}
         onMirror={noop} onPreviewMirror={noop} onPreviewMirrorEnd={noop}
-        alignActive={false} onAlignMode={noop} onCsg={noop} onToggleTheme={noop} onClearScene={noop}
+        alignActive={false} onAlignMode={noop} onCsg={noop} onSettings={noop} onClearScene={noop}
       />,
     )
   })
@@ -57,7 +57,7 @@ describe('Toolbar aria-label (ALIGN-REVIT)', () => {
   for (const lang of ['ru', 'en'] as const) {
     it(`${lang}: у всех кнопок тулбара непустой и уникальный aria-label`, async () => {
       const buttons = await renderToolbar(lang)
-      // file 5 + edit 2+3 + view 3 + gizmo 4 (с «выход») + ruler 1 + «Размер» 1 (DIMENSIONS, меню) + mirror 3 + align 1 (ALIGN-UI-REVIT) + «Массив» 1 (ARRAY-TOOL) + csg 3 + theme 1 + clear 1
+      // file 5 + edit 2+3 + view 3 + gizmo 4 (с «выход») + ruler 1 + «Размер» 1 (DIMENSIONS, меню) + mirror 3 + align 1 (ALIGN-UI-REVIT) + «Массив» 1 (ARRAY-TOOL) + csg 3 + settings 1 + clear 1
       expect(buttons.length).toBe(29)
       const names = buttons.map((b) => b.getAttribute('aria-label') ?? '')
       const empty = buttons.filter((b) => !(b.getAttribute('aria-label') ?? '').trim()).map((b) => b.outerHTML.slice(0, 80))

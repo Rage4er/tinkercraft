@@ -219,7 +219,6 @@ export default function App() {
 
   // APP-SETTINGS: тема — из настроек (localStorage); ui-store.theme — её база (dark / light) для сцены и стилей
   const themeId = useSettingsStore((s) => s.theme);
-  const setThemeId = useSettingsStore((s) => s.setTheme);
   const lengthUnit = useSettingsStore((s) => s.units);
   useEffect(() => {
     // THEME-ENGINE: CSS-переменные темы (src/themes/*.json) на <html>, база — в ui-store
@@ -641,7 +640,6 @@ export default function App() {
         alignActive={alignActive}
         canCsg={canCsg}
         csgOpStates={csgOpStates}
-        theme={theme}
         onOpen={openProject}
         onSave={saveProject}
         onExportStl={(f) => void exportMesh(f)}
@@ -669,7 +667,7 @@ export default function App() {
         onPreviewMirrorEnd={handlePreviewMirrorEnd}
         onAlignMode={() => (alignActive ? exitAlignMode() : startAlignMode())}
         onCsg={runCsg}
-        onToggleTheme={() => setThemeId(theme === "dark" ? "light" : "dark")}
+        onSettings={() => setShowSettings(true)}
         onClearScene={() => {
           if (objectList.length > 0 || operations.length > 0) setShowClearConfirm(true);
         }}

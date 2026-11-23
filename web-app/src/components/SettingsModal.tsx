@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useSettingsStore, currentLanguage, setLanguage, LANGUAGES, type Language } from "../store/settings";
+import { useSettingsStore, currentLanguage, setLanguage, LANGUAGES, LANGUAGE_FLAGS, type Language } from "../store/settings";
 import { LENGTH_UNITS, unitLabelKey, type LengthUnit } from "../store/units";
 import { THEMES, themeName } from "../themes";
 
@@ -51,7 +51,7 @@ export default function SettingsModal({ onClose }: { onClose: () => void }) {
             value={lang}
             onChange={(e) => { const l = e.target.value as Language; setLang(l); setLanguage(l); }}
           >
-            {LANGUAGES.map((l) => <option key={l} value={l}>{t(`settings.lang.${l}`)}</option>)}
+            {LANGUAGES.map((l) => <option key={l} value={l}>{`${LANGUAGE_FLAGS[l]} ${t(`settings.lang.${l}`)}`}</option>)}
           </select>
         </label>
 

@@ -11,7 +11,7 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { openApp, panelButton, toolbarButton, csgAB, csgModeStart, csgModeConfirm, placeShape } from './helpers.mjs'
+import { openApp, panelButton, toolbarButton, csgAB, csgModeStart, csgModeConfirm, placeShape, toggleTheme } from './helpers.mjs'
 
 const shotDir = process.argv[2]
 const VERSION = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version
@@ -135,9 +135,9 @@ try {
   if (!(await status()).includes(`v${VERSION}`)) fail(`в статус-баре нет v${VERSION}`)
   const bg = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor)
   const bg0 = await bg()
-  await toolbarButton(page, 'Сменить тему').click(); await page.waitForTimeout(200)
+  await toggleTheme(page); await page.waitForTimeout(200)
   if ((await bg()) === bg0) fail('тема не сменилась')
-  await toolbarButton(page, 'Сменить тему').click(); await page.waitForTimeout(200)
+  await toggleTheme(page); await page.waitForTimeout(200)
   await page.locator('.tl-filter-toggle').click()
   const addFilter = page.locator('.tl-filter-row', { hasText: 'Добавить' }).locator('input')
   await addFilter.uncheck(); await page.waitForTimeout(200)

@@ -15,7 +15,7 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { openApp, placeShape, toolbarButton, assertPerf } from './helpers.mjs'
+import { openApp, placeShape, toolbarButton, assertPerf, toggleTheme } from './helpers.mjs'
 
 const shotDir = process.argv[2]
 const { browser, page, errors } = await openApp()
@@ -163,13 +163,13 @@ try {
 
   // ── C: светлая тема, орто, гизмо ──
   stage = 'C'
-  await toolbarButton(page, 'Сменить тему').click(); await blur()
+  await toggleTheme(page); await blur()
   await pickInTree(cube); await waitOutline(1, 'C: светлая тема')
   await page.waitForTimeout(300)
   const light = await outlinePixels()
   await shot('outline-c-light.png')
   if (inBox(light.list, boxCube) < 150) fail(`C: светлая тема — кайма у куба ${inBox(light.list, boxCube)} px`)
-  await toolbarButton(page, 'Сменить тему').click(); await blur()
+  await toggleTheme(page); await blur()
   await page.keyboard.press('Tab'); await page.waitForTimeout(600)            // орто
   const ortho = await outlinePixels()
   await shot('outline-c-ortho.png')
