@@ -8,7 +8,7 @@
 import type { ShapeType } from "./csg/types";
 
 // ---- App version ----
-export const APP_VERSION = '1.3.22';
+export const APP_VERSION = '1.3.23';
 
 // ---- Shapes (data only, NO JSX) ----
 // Иконки — это строковые ключи, не React-компоненты.
@@ -124,6 +124,12 @@ export interface TooltipData {
   shortcut?: string
   descriptionKey?: string
 }
+
+// FILLET-HIDE (v1.3.23): OCCT-скругление/фаска (B-Rep) скрыты из UI — инструмент сырой
+// (один размер на операцию, ошибки OCCT на сложных углах, не работает с CSG).
+// Код оставлен целиком (@bitbybit-dev/occt, fillet_brep, brepChain, BrepPanel):
+// вернуть после CSG-BREP-MESH-BRIDGE или как альтернативу CSG-FILLET.
+export const FILLET_OCCT_UI = false
 
 export const TOOLTIP_DATA: Record<string, TooltipData> = {
   // --- File operations ---

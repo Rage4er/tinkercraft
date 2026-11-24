@@ -63,7 +63,8 @@ pnpm e2e:thread-in-csg  # THREAD-IN-CSG: thread внутри CSG — дерев�
 pnpm e2e:settings-button  # UI-SETTINGS-BUTTON: «Настройки» в тулбаре (нет «Темы»), язык с флагами RU/EN + сохранение, 3 темы
 pnpm e2e:fillet-brep  # FILLET-CHAMFER-BREP: несколько рёбер + призма → скругление/фаска (OCCT), undo/redo, ✎ шага, каркас снимается
 pnpm e2e:fillet-chain  # FILLET-CHAIN-BREP: цепочка из 2 рёбер на одном объекте (B-Rep), правка радиуса — пересборка цепочки, undo/redo
-pnpm e2e:fillet-parametric-ui  # FILLET-PARAMETRIC-UI: шаги B-Rep в панели свойств, правка размера из панели, undo/redo
+pnpm e2e:fillet-parametric-ui  # FILLET-PARAMETRIC-UI: шаги B-Rep в панели свойств, правка размера из панели, undo/redo (SKIP при FILLET-HIDE)
+pnpm e2e:fillet-hide  # FILLET-HIDE: меню OCCT-скругления скрыто, секции B-Rep нет, старые объекты не ломаются
 pnpm e2e:ux-formats-settings  # Пакет A: «Настройки» (язык ru → en → ru, единицы см — поле «2.00 см», ввод 5 см → 50 мм, перезагрузка, «Сбросить», Esc), «Высокий контраст» (панель и фон сцены чёрные), звуки (click / create / success, выкл. — тишина), «Экспорт» STL / OBJ / 3MF / glTF и «Импорт» OBJ, замок (клик и Ctrl+A не выбирают, Delete — остаётся, снять — выбирается)
 ```
 
@@ -93,7 +94,7 @@ pnpm e2e:ux-formats-settings  # Пакет A: «Настройки» (язык r
 | `<задача>` | Короткие ветки задач от `main` → PR в `main` (merge-коммит после зелёного CI), ветка удаляется. Push в `main` → деплой GitHub Pages. До v1.3.1 задачи Фазы 9 шли через `phase-9` (PR #1–#17) |
 | `yandex-games` | Версия для Яндекс.Игр (экономика, реклама, токены); отдельно, Фазу 9 ещё не содержит |
 
-Цепочка: `main` (v1.3.22) → ветки задач → PR в `main`. `yandex-games` — отдельно.
+Цепочка: `main` (v1.3.23) → ветки задач → PR в `main`. `yandex-games` — отдельно.
 
 **`main` — production.** Любой push в `main` (merge PR) сразу выкладывает GitHub Pages (`deploy.yml`). Поэтому: в `main` — только через PR после зелёного CI, ничего «в процессе»; версия в `web-app/package.json` и `APP_VERSION` (`src/constants.ts`) должна соответствовать коду — значимый merge (фича, фикс) сопровождается patch-релизом: версия + CHANGELOG `[x.y.z]` + тег `vX.Y.Z` после зелёного деплоя.
 
@@ -347,7 +348,7 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 - Скругления (fillet) нет: прежний параметр куба удалён (remove-fillet) до инструмента на B-Rep; старые шаги `fillet` вырезаются при загрузке (`io/legacy-fillet.ts`) — новых не создавать
 - **SVG-EXTRUDE** (2D → 3D): тело — шаг `import_mesh` «SVG: …» (не параметрический: глубину/масштаб задним числом не поменять, как у STL-текста); контур с самопересечениями manifold не построит — воркер сообщит об ошибке (как незамкнутый STL); размещение — рядом с прошлыми объектами (не режим размещения, не «стоит на сетке»); плоскость контура — XY, выдавливание — +Z
 - **THREAD-GENERATOR / THREAD-EXTEND / THREAD-PARAMETRIC / THREAD-POLISH / THREAD-IN-CSG**: создаётся операцией `thread` (не baked), объект сцены — `import_mesh` + `SceneObject.thread`; параметры правятся в PropertiesPanel и по ✎ шага `thread` в Timeline (`edit_step`), каскад пересчитывает CSG. В дереве CSG thread — тип узла `thread` с `threadParams` (не baked), правится через ChildPropertiesPanel (`edit_child_params`). Многозаходность (`starts` 1/2/3/4/6) — n спиралей со сдвигом 360°/n, ход P·n. Зеркало резьбы — параметрическая независимая копия (шаг mirror хранит `threadParams`; hand инвертирован, имя LH; правка копии — `thread_mirror`), копирование/вставка/массив также сохраняют параметры. Базовый профиль ISO 68-1 / Unified (60°, глубина 5H/8, гребень P/8, впадина P/4) без скругления дна, классов допусков и отдельного зазора для 3D-печати; NPT/BSP — табличные OD/TPI, но прямой профиль 60° (без конусности NPT и профиля BSP 55°); M310…M600 — расширение базового профиля, не ISO 261; гайки вне DIN/ANSI — геометрический размер под ключ; смена серии сбрасывает размер на первый серии; создание — рядом с прошлыми объектами (не режим размещения)
-- После v1.3.1 открыто: связанное зеркало (linked mirror) не делали — копия CSG всегда независимая; «починка» незамкнутого STL. CI — один workflow `ci-web.yml` (CI-DEDUP ✅): job `ci` (install + typecheck + test + build) и job `e2e` — все 40 e2e (CI-E2E ✅)
+- После v1.3.1 открыто: связанное зеркало (linked mirror) не делали — копия CSG всегда независимая; «починка» незамкнутого STL. CI — один workflow `ci-web.yml` (CI-DEDUP ✅): job `ci` (install + typecheck + test + build) и job `e2e` — все 41 e2e (CI-E2E ✅; три fillet-* — SKIP, пока UI OCCT скрыт)
 - Выравнивание режимом «Выровнять» (ALIGN-UI-REVIT) пишется шагом `align` с плоскостью (ALIGN-PLANE-RESOLVE ✅; с поворотом — UX-AUDIT-32; грань гладкой поверхности — цилиндр, сфера — не поворачивает, только касание): правка прошлого шага пересчитывает его; ✎ у самого шага нет (как у обычного align). Плоскость A следует за системой объекта A (TRS), а не за гранью при правке формы A (правка ребёнка CSG A)
 - Дерево живой сессии, начатой до v1.3.2 (boolean-узлы без `originTransform`), для вложенного CSG, сдвинутого до объединения, остаётся под замком `nested_moved` (предохранитель); после перезагрузки/загрузки проекта дерево перестраивается из истории с TRS₀ — правка работает
 - Блокировка (LOCK-OBJECT) — шаг истории `lock`; заблокированный не выбирается во вьюпорте, не двигается, не удаляется, не идёт в CSG (`document-store` — `notify`), выбрать можно из списка / дерева. Новые действия, меняющие объект, должны проверять `obj.locked`

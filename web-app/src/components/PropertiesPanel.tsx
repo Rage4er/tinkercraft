@@ -12,6 +12,7 @@ import { isTextObject } from '../store/text-object'
 import { getParamFields, clampFieldValue } from '../csg/child-params'
 import ThreadProperties from "./ThreadProperties";
 import { useDocumentStore } from "../store/document-store";
+import { FILLET_OCCT_UI } from "../constants";
 
 
 /** NEW-PRIMITIVES: фигуры, у которых поля размеров — из getParamFields */
@@ -262,7 +263,7 @@ export default function PropertiesPanel({
         </span>
       </div>
 
-      {chainSteps.length > 0 && (
+      {FILLET_OCCT_UI && chainSteps.length > 0 && (
         <div className="csg-group" data-testid="brep-chain-panel">
           <div className="csg-group-title">{t("brep.chainTitle")}</div>
           {chainSteps.map((step, k) => (
