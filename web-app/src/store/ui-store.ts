@@ -117,6 +117,9 @@ export interface UiStore {
   toggleTreeExpanded: (id: string) => void
   selectedChild: { rootId: string; nodeId: string } | null
   setSelectedChild: (v: { rootId: string; nodeId: string } | null) => void
+  /** CSG-CHILD-VIEW: маленькое окно ребёнка CSG (закрывается ×; выбор ребёнка открывает снова) */
+  childViewOpen: boolean
+  setChildViewOpen: (v: boolean) => void
   /** Фаза 9.5.2: выбранный в Timeline прошлый шаг (сырой индекс) — панель «Шаг N» */
   selectedStep: number | null
   setSelectedStep: (v: number | null) => void
@@ -204,6 +207,8 @@ export const useUiStore = create<UiStore>((set) => ({
     set((s) => ({ expandedTreeIds: { ...s.expandedTreeIds, [id]: !s.expandedTreeIds[id] } })),
   selectedChild: null,
   setSelectedChild: (v) => set({ selectedChild: v }),
+  childViewOpen: true,
+  setChildViewOpen: (v) => set({ childViewOpen: v }),
   selectedStep: null,
   setSelectedStep: (v) => set({ selectedStep: v }),
   cameraMode: 'perspective',

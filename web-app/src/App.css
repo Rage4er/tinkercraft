@@ -2187,3 +2187,82 @@ body {
   background: var(--hover-bg);
   color: var(--text-primary);
 }
+
+/* ---- CSG-CHILD-VIEW: маленькое окно выбранного ребёнка CSG ---- */
+.child-view {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  width: min(42%, 420px);
+  height: min(46%, 340px);
+  min-width: 240px;
+  min-height: 180px;
+  z-index: 15;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+}
+
+.child-view-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px 4px 10px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.child-view-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.child-view-summary {
+  color: var(--text-muted);
+}
+
+.child-view-close {
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-color);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.child-view-close:hover {
+  background: var(--hover-bg);
+  color: var(--text-primary);
+}
+
+.child-view-canvas-host {
+  flex: 1;
+  position: relative;
+  min-height: 0;
+}
+
+.child-view-canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.child-view-state {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: var(--text-muted);
+}
