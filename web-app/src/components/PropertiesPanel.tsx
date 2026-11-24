@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import NumInput from "./NumInput";
 import CsgButtons from "./CsgButtons";
@@ -11,6 +11,7 @@ import { EyeIcon, EyeOffIcon, FolderIcon, SaveIcon, LockIcon, UnlockIcon } from 
 import { isTextObject } from '../store/text-object'
 import { getParamFields, clampFieldValue } from '../csg/child-params'
 import ThreadProperties from "./ThreadProperties";
+import { useDocumentStore } from "../store/document-store";
 
 
 /** NEW-PRIMITIVES: фигуры, у которых поля размеров — из getParamFields */
@@ -70,6 +71,20 @@ export default function PropertiesPanel({
   onSaveToProject: (name: string) => void;
 }) {
   const { t } = useTranslation();
+  // FILLET-PARAMETRIC-UI: шаги B-Rep цепочки выбранного объекта — по сырым индексам истории
+  const operations = useDocumentStore((s) => s.operations);
+  const historyIndex = useDocumentStore((s) => s.historyIndex);
+  const editStepParams = useDocumentStore((s) => s.editStepParams);
+  const chainSteps = useMemo(() => {
+    if (!firstSelected?.brepChain) return [];
+    const prefix = operations.slice(0, historyIndex);
+    const raw: number[] = [];
+    for (let i = 0; i < prefix.length; i++) {
+      const op = prefix[i];
+      if (op.type === "fillet_brep" && op.id === firstSelected.id) raw.push(i);
+    }
+    return firstSelected.brepChain.steps.map((step, k) => ({ ...step, stepIndex: raw[k] })).filter((s) => s.stepIndex !== undefined);
+  }, [firstSelected, operations, historyIndex]);
   // CSG-GROUP-FIX: в режиме A → B → Enter кнопки CSG видны и при одном выбранном (группа B)
   const csgModeActive = useCsgGroupModeStore((s) => s.csgGroupMode !== null);
   // FIX: Draft color state — preview in real-time (no history), commit once
@@ -189,7 +204,8 @@ export default function PropertiesPanel({
       <div className="props-row">
         <span className="props-label">{t("properties.type")}</span>
         <span className="props-value">
-          {firstSelected.thread ? t("threadModal.title") :
+          {firstSelected.brepChain ? t("brep.menu") :
+            firstSelected.thread ? t("threadModal.title") :
             firstSelected.shapeType === 'csg' ? t("csg.result") :
             isTextObject(firstSelected) ? t("shapes.text") :             /* UX-AUDIT-31 */
             firstSelected.shapeType === 'import_mesh' ? t("actions.import") :
@@ -245,6 +261,31 @@ export default function PropertiesPanel({
           {(firstSelected.indices.length / 3).toLocaleString()}
         </span>
       </div>
+
+      {chainSteps.length > 0 && (
+        <div className="csg-group" data-testid="brep-chain-panel">
+          <div className="csg-group-title">{t("brep.chainTitle")}</div>
+          {chainSteps.map((step, k) => (
+            <div key={`${step.stepIndex}:${k}`} data-testid={`brep-chain-step-${k}`}>
+              <div className="props-row">
+                <span className="props-label">
+                  {t(step.kind === "chamfer" ? "brep.chamfer" : "brep.fillet")} · {t("brep.edge")} {step.edgeIndexes.map((i) => i + 1).join(", ")}
+                </span>
+              </div>
+              <NumInput
+                label={t(step.kind === "chamfer" ? "brep.sizeChamfer" : "brep.size")}
+                step={0.1}
+                value={step.size}
+                disabled={busy || locked}
+                onChange={(v) => {
+                  if (Number(v.toFixed(1)) === Number(step.size.toFixed(1)) || v <= 0) return;
+                  void editStepParams(step.stepIndex!, { kind: "fillet_brep", size: v });
+                }}
+              />
+            </div>
+          ))}
+        </div>
+      )}
 
       {firstSelected.thread && (
         <ThreadProperties

@@ -14,7 +14,7 @@
 - **manifold-3d** (WASM) — CSG операции в Web Worker
 - **Zustand 5** — стейт-менеджмент
 - **Vite 6** — сборка
-- **Vitest 4** — тесты (1115 тестов, 100 файлов; `it.fails` открытых багов нет — UX-прогон 7 нашёл 0 новых, цикл закрыт; UX-AUDIT-1…10 исправлены в `fix-all`, 11…20 — в `fix-all-2`, 21…31 — в `fix-all-3`, 32…35 — в `fix-all-4`, 32-followup и 36…40 — в `fix-all-5`, 41, 42 — в `fix-all-6`)
+- **Vitest 4** — тесты (1117 тестов, 101 файл; `it.fails` открытых багов нет — UX-прогон 7 нашёл 0 новых, цикл закрыт; UX-AUDIT-1…10 исправлены в `fix-all`, 11…20 — в `fix-all-2`, 21…31 — в `fix-all-3`, 32…35 — в `fix-all-4`, 32-followup и 36…40 — в `fix-all-5`, 41, 42 — в `fix-all-6`)
 - **pnpm** — пакетный менеджер
 
 ## Команды
@@ -23,7 +23,7 @@
 cd web-app
 pnpm dev          # dev-сервер (порт 5000)
 pnpm build        # production-сборка
-pnpm test         # запуск тестов (1115 тестов, 100 файлов)
+pnpm test         # запуск тестов (1117 тестов, 101 файл)
 pnpm typecheck    # tsc --noEmit
 pnpm e2e:smoke    # дымовой тест в браузере (Playwright; нужен запущенный pnpm dev; см. web-app/e2e/helpers.mjs). В CI все e2e — job `e2e` в ci-web.yml (CI-E2E)
 pnpm e2e:tree     # Фаза 9.1: раскрытие CSG в дереве, выбор ребёнка
@@ -63,6 +63,7 @@ pnpm e2e:thread-in-csg  # THREAD-IN-CSG: thread внутри CSG — дерев�
 pnpm e2e:settings-button  # UI-SETTINGS-BUTTON: «Настройки» в тулбаре (нет «Темы»), язык с флагами RU/EN + сохранение, 3 темы
 pnpm e2e:fillet-brep  # FILLET-CHAMFER-BREP: несколько рёбер + призма → скругление/фаска (OCCT), undo/redo, ✎ шага, каркас снимается
 pnpm e2e:fillet-chain  # FILLET-CHAIN-BREP: цепочка из 2 рёбер на одном объекте (B-Rep), правка радиуса — пересборка цепочки, undo/redo
+pnpm e2e:fillet-parametric-ui  # FILLET-PARAMETRIC-UI: шаги B-Rep в панели свойств, правка размера из панели, undo/redo
 pnpm e2e:ux-formats-settings  # Пакет A: «Настройки» (язык ru → en → ru, единицы см — поле «2.00 см», ввод 5 см → 50 мм, перезагрузка, «Сбросить», Esc), «Высокий контраст» (панель и фон сцены чёрные), звуки (click / create / success, выкл. — тишина), «Экспорт» STL / OBJ / 3MF / glTF и «Импорт» OBJ, замок (клик и Ctrl+A не выбирают, Delete — остаётся, снять — выбирается)
 ```
 
@@ -92,7 +93,7 @@ pnpm e2e:ux-formats-settings  # Пакет A: «Настройки» (язык r
 | `<задача>` | Короткие ветки задач от `main` → PR в `main` (merge-коммит после зелёного CI), ветка удаляется. Push в `main` → деплой GitHub Pages. До v1.3.1 задачи Фазы 9 шли через `phase-9` (PR #1–#17) |
 | `yandex-games` | Версия для Яндекс.Игр (экономика, реклама, токены); отдельно, Фазу 9 ещё не содержит |
 
-Цепочка: `main` (v1.3.21) → ветки задач → PR в `main`. `yandex-games` — отдельно.
+Цепочка: `main` (v1.3.22) → ветки задач → PR в `main`. `yandex-games` — отдельно.
 
 **`main` — production.** Любой push в `main` (merge PR) сразу выкладывает GitHub Pages (`deploy.yml`). Поэтому: в `main` — только через PR после зелёного CI, ничего «в процессе»; версия в `web-app/package.json` и `APP_VERSION` (`src/constants.ts`) должна соответствовать коду — значимый merge (фича, фикс) сопровождается patch-релизом: версия + CHANGELOG `[x.y.z]` + тег `vX.Y.Z` после зелёного деплоя.
 
@@ -194,7 +195,7 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 | `src/components/snap-utils.ts` | Привязка (snap) к геометрии: vertex, edge, face, circle; кандидаты — треугольники рядом с точкой попадания (сетка треугольников геометрии в локальных координатах, кэш на геометрию — UX-AUDIT-35: 100k — ~6 мс на запрос); рёбра — и у геометрии без индекса (по позициям, UX-AUDIT-22) |
 | `src/components/Toolbar.tsx` | Тулбар (файл, undo, view, gizmo, линейка и «Размер» (меню), «Скругление / фаска» (меню, FILLET-CHAMFER-BREP), CSG, «Настройки» — тема, язык, звуки, единицы в окне; UI-SETTINGS-BUTTON); раскладка — `hooks/useToolbarLayout.ts` (ширина кнопки + реальный зазор `.toolbar-group-row`; на 1366 — одна строка с названием); у каждой кнопки `aria-label` = подпись тултипа (`IconButton`), e2e ищут кнопки по нему (`toolbarButton`/`panelButton` в `e2e/helpers.mjs`), не по индексу |
 | `src/components/LeftPanel.tsx` | Палитра фигур + список объектов + история; клик по фигуре — режим размещения (`onAddShape` = `startPlacement`), размещаемая фигура — нажатая иконка; «Текст» — окно ввода |
-| `src/components/PropertiesPanel.tsx` | Панель свойств (трансформ, resize, CSG; extrude в UI нет — EXTRUDE-3D-SCALE); у параметрической резьбы — `ThreadProperties` (серия/диаметр/шаг/заходы/направление/длина/тип) |
+| `src/components/PropertiesPanel.tsx` | Панель свойств (трансформ, resize, CSG; extrude в UI нет — EXTRUDE-3D-SCALE); FILLET-PARAMETRIC-UI — секция шагов `brepChain` (тип, рёбра, размер → `edit_step`); у параметрической резьбы — `ThreadProperties` (серия/диаметр/шаг/заходы/направление/длина/тип) |
 | `src/components/TextModal.tsx` | Модалка 3D текста |
 | `src/components/StatusBar.tsx` | Статус-бар |
 | `src/components/NumInput.tsx` | Numeric input с draft-редактированием; единица по умолчанию — «мм»/«mm» по языку; `integer` — целое поле (UX-AUDIT-7/8) |
@@ -346,7 +347,7 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 - Скругления (fillet) нет: прежний параметр куба удалён (remove-fillet) до инструмента на B-Rep; старые шаги `fillet` вырезаются при загрузке (`io/legacy-fillet.ts`) — новых не создавать
 - **SVG-EXTRUDE** (2D → 3D): тело — шаг `import_mesh` «SVG: …» (не параметрический: глубину/масштаб задним числом не поменять, как у STL-текста); контур с самопересечениями manifold не построит — воркер сообщит об ошибке (как незамкнутый STL); размещение — рядом с прошлыми объектами (не режим размещения, не «стоит на сетке»); плоскость контура — XY, выдавливание — +Z
 - **THREAD-GENERATOR / THREAD-EXTEND / THREAD-PARAMETRIC / THREAD-POLISH / THREAD-IN-CSG**: создаётся операцией `thread` (не baked), объект сцены — `import_mesh` + `SceneObject.thread`; параметры правятся в PropertiesPanel и по ✎ шага `thread` в Timeline (`edit_step`), каскад пересчитывает CSG. В дереве CSG thread — тип узла `thread` с `threadParams` (не baked), правится через ChildPropertiesPanel (`edit_child_params`). Многозаходность (`starts` 1/2/3/4/6) — n спиралей со сдвигом 360°/n, ход P·n. Зеркало резьбы — параметрическая независимая копия (шаг mirror хранит `threadParams`; hand инвертирован, имя LH; правка копии — `thread_mirror`), копирование/вставка/массив также сохраняют параметры. Базовый профиль ISO 68-1 / Unified (60°, глубина 5H/8, гребень P/8, впадина P/4) без скругления дна, классов допусков и отдельного зазора для 3D-печати; NPT/BSP — табличные OD/TPI, но прямой профиль 60° (без конусности NPT и профиля BSP 55°); M310…M600 — расширение базового профиля, не ISO 261; гайки вне DIN/ANSI — геометрический размер под ключ; смена серии сбрасывает размер на первый серии; создание — рядом с прошлыми объектами (не режим размещения)
-- После v1.3.1 открыто: связанное зеркало (linked mirror) не делали — копия CSG всегда независимая; «починка» незамкнутого STL. CI — один workflow `ci-web.yml` (CI-DEDUP ✅): job `ci` (install + typecheck + test + build) и job `e2e` — все 39 e2e (CI-E2E ✅)
+- После v1.3.1 открыто: связанное зеркало (linked mirror) не делали — копия CSG всегда независимая; «починка» незамкнутого STL. CI — один workflow `ci-web.yml` (CI-DEDUP ✅): job `ci` (install + typecheck + test + build) и job `e2e` — все 40 e2e (CI-E2E ✅)
 - Выравнивание режимом «Выровнять» (ALIGN-UI-REVIT) пишется шагом `align` с плоскостью (ALIGN-PLANE-RESOLVE ✅; с поворотом — UX-AUDIT-32; грань гладкой поверхности — цилиндр, сфера — не поворачивает, только касание): правка прошлого шага пересчитывает его; ✎ у самого шага нет (как у обычного align). Плоскость A следует за системой объекта A (TRS), а не за гранью при правке формы A (правка ребёнка CSG A)
 - Дерево живой сессии, начатой до v1.3.2 (boolean-узлы без `originTransform`), для вложенного CSG, сдвинутого до объединения, остаётся под замком `nested_moved` (предохранитель); после перезагрузки/загрузки проекта дерево перестраивается из истории с TRS₀ — правка работает
 - Блокировка (LOCK-OBJECT) — шаг истории `lock`; заблокированный не выбирается во вьюпорте, не двигается, не удаляется, не идёт в CSG (`document-store` — `notify`), выбрать можно из списка / дерева. Новые действия, меняющие объект, должны проверять `obj.locked`
