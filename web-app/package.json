@@ -1,6 +1,6 @@
 {
   "name": "tinkercraft-web",
-  "version": "1.3.23",
+  "version": "1.3.24",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@12.10.1",
@@ -51,7 +51,8 @@
     "e2e:fillet-brep": "node e2e/fillet-brep.mjs",
     "e2e:fillet-chain": "node e2e/fillet-chain.mjs",
     "e2e:fillet-parametric-ui": "node e2e/fillet-parametric-ui.mjs",
-    "e2e:fillet-hide": "node e2e/fillet-hide.mjs"
+    "e2e:fillet-hide": "node e2e/fillet-hide.mjs",
+    "e2e:view-modes": "node e2e/view-modes.mjs"
   },
   "dependencies": {
     "@bitbybit-dev/occt": "1.7.0",

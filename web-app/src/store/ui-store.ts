@@ -10,6 +10,24 @@ import type { SceneObject } from '../csg/types'
 import { DEFAULT_FILTERS } from '../constants'
 import { DEFAULT_DIMENSION_DEFAULTS, clampDimensionOffset, clampDimensionSize, type DimensionDefaults } from './dimensions'
 
+export type ViewMode = 'realistic' | 'wireframe' | 'hidden-line'
+export const VIEW_MODES: readonly ViewMode[] = ['realistic', 'wireframe', 'hidden-line']
+export const VIEW_MODE_STORAGE_KEY = 'tinkercraft-view-mode'
+
+/** VIEW-MODES: выбранный режим отображения переживает перезагрузку (localStorage). */
+function isViewMode(v: unknown): v is ViewMode {
+  return typeof v === 'string' && (VIEW_MODES as readonly string[]).includes(v)
+}
+function loadViewMode(): ViewMode {
+  try {
+    const v = localStorage.getItem(VIEW_MODE_STORAGE_KEY)
+    return isViewMode(v) ? v : 'realistic'
+  } catch { return 'realistic' }
+}
+function saveViewMode(mode: ViewMode): void {
+  try { localStorage.setItem(VIEW_MODE_STORAGE_KEY, mode) } catch { /* без localStorage — на сессию */ }
+}
+
 export interface UiStore {
   // Performance
   fps: number
@@ -30,6 +48,10 @@ export interface UiStore {
   // Theme
   theme: 'dark' | 'light'
   setTheme: (t: 'dark' | 'light') => void
+
+  // VIEW-MODES: реалистичный / каркас / скрытые линии
+  viewMode: ViewMode
+  setViewMode: (mode: ViewMode) => void
 
   // Timeline filters
   tlFilters: Record<string, boolean>
@@ -127,6 +149,13 @@ export const useUiStore = create<UiStore>((set) => ({
 
   theme: 'dark',
   setTheme: (t) => set({ theme: t }),
+
+  viewMode: loadViewMode(),
+  setViewMode: (mode) => {
+    if (!isViewMode(mode)) return
+    saveViewMode(mode)
+    set({ viewMode: mode })
+  },
 
   tlFilters: DEFAULT_FILTERS,
   setTlFilter: (key, checked) =>
