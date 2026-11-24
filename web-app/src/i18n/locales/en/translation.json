@@ -688,6 +688,7 @@
     "original": "{{size}} mm, edges: {{edges}}",
     "stepHint": "Size commits on Enter / blur; the fillet is recomputed in OCCT",
     "menu": "Fillet / Chamfer",
-    "selectedMany": "Selected edges: {{count}} ({{list}})"
+    "selectedMany": "Selected edges: {{count}} ({{list}})",
+    "chainTitle": "Fillets and chamfers (B-Rep)"
   }
 }

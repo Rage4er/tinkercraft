@@ -689,6 +689,7 @@
     "original": "{{size}} мм, рёбер: {{edges}}",
     "stepHint": "Размер коммитится по Enter / уходу из поля; скругление пересчитывается в OCCT",
     "menu": "Скругление / фаска",
-    "selectedMany": "Выбрано рёбер: {{count}} ({{list}})"
+    "selectedMany": "Выбрано рёбер: {{count}} ({{list}})",
+    "chainTitle": "Скругления и фаски (B-Rep)"
   }
 }
