@@ -690,5 +690,11 @@
     "menu": "Fillet / Chamfer",
     "selectedMany": "Selected edges: {{count}} ({{list}})",
     "chainTitle": "Fillets and chamfers (B-Rep)"
+  },
+  "viewMode": {
+    "menu": "Display mode",
+    "realistic": "Realistic",
+    "wireframe": "Wireframe",
+    "hiddenLine": "Hidden line"
   }
 }

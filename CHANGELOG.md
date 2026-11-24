@@ -7,6 +7,18 @@
 
 ---
 
+## [1.3.24] — 2026-11-25
+
+### Added
+- **VIEW-MODES:** меню режимов отображения рядом с ViewCube — «Реалистичный» (заливка, тени), «Каркас» (только рёбра, без заливки и теней, задние рёбра видны), «Скрытые линии» (непрозрачная заливка цветом фона + рёбра с depthTest — задние скрыты). Выбор применяется сразу и сохраняется в localStorage (`tinkercraft-view-mode`).
+- Вьюпорт: `data-view-mode`, `data-view-edges`, `data-view-shadows`, `data-view-depth-test` (e2e); режимы используют существующие рёбра объектов (EdgesGeometry) — в каркасе материал граней скрыт, в скрытых линиях залит цветом фона (emissive, без влияния света).
+- Тесты `view-modes.test.tsx` (5: state/localStorage, меню и 3 режима настроек) и e2e `pnpm e2e:view-modes`.
+
+### Changed
+- `DEVELOPMENT_PLAN.md`: VIEW-MODES ✅.
+
+---
+
 ## [1.3.23] — 2026-11-24
 
 ### Changed

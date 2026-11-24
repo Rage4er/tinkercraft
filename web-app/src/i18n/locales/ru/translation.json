@@ -691,5 +691,11 @@
     "menu": "Скругление / фаска",
     "selectedMany": "Выбрано рёбер: {{count}} ({{list}})",
     "chainTitle": "Скругления и фаски (B-Rep)"
+  },
+  "viewMode": {
+    "menu": "Режим отображения",
+    "realistic": "Реалистичный",
+    "wireframe": "Каркас",
+    "hiddenLine": "Скрытые линии"
   }
 }

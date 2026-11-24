@@ -7,6 +7,9 @@ import {
 import * as THREE from "three";
 import type { SceneObject, TransformNR } from "../csg/types";
 import ViewCube from "./ViewCube";
+import ViewModeMenu from "./ViewModeMenu";
+import { viewModeRender } from "./view-mode";
+import { useUiStore } from "../store/ui-store";
 import { useTranslation } from "react-i18next";
 import {
   useThreeInit,
@@ -261,6 +264,52 @@ export default function Viewport3D({
     return () => { dropGroup(); };
   }, [sceneReady, brepActive, brepEdges, brepTransform, brepSelected, brepHover, sceneRef]);
 
+
+  // ---- VIEW-MODES: реалистичный / каркас / скрытые линии ----
+  const viewMode = useUiStore((s) => s.viewMode);
+  const [viewEdgeCount, setViewEdgeCount] = useState(0);
+  const [viewShadowCount, setViewShadowCount] = useState(0);
+  useEffect(() => {
+    const scene = sceneRef.current;
+    if (!scene) return;
+    const cfg = viewModeRender(viewMode);
+    const bg = scene.background instanceof THREE.Color ? `#${scene.background.getHexString()}` : "#000000";
+    let edges = 0;
+    let shadows = 0;
+    for (const [id, entry] of meshMapRef.current) {
+      const mat = entry.mesh.material as THREE.MeshStandardMaterial;
+      if (!mat) continue;
+      const obj = objects.find((o) => o.id === id);
+      mat.visible = cfg.materialVisible;
+      mat.transparent = cfg.transparent;
+      mat.opacity = cfg.opacity;
+      mat.wireframe = false;
+      if (cfg.useBackgroundColor) {
+        // hidden-line: грани ровно цветом фона (не зависят от света) — emissive вместо diffuse
+        mat.color.set(0x000000);
+        mat.emissive.set(bg);
+        mat.emissiveIntensity = 1;
+      } else {
+        if (obj) mat.color.set(obj.color);
+        mat.emissive.setHex(selectedIds.has(id) ? 0x444466 : 0x000000);
+        mat.emissiveIntensity = selectedIds.has(id) ? 0.5 : 0;
+      }
+      entry.mesh.castShadow = cfg.shadows;
+      entry.mesh.receiveShadow = cfg.shadows;
+      if (cfg.shadows) shadows++;
+      for (const child of entry.mesh.children) {
+        const lines = child as THREE.LineSegments;
+        if (!lines.userData?.isShapeEdges) continue;
+        const lm = lines.material as THREE.LineBasicMaterial;
+        lm.depthTest = cfg.edgeDepthTest;
+        lm.depthWrite = cfg.edgeDepthTest;
+        lines.renderOrder = cfg.edges ? 2 : 0;
+        if (cfg.edges) edges++;
+      }
+    }
+    setViewEdgeCount(edges);
+    setViewShadowCount(shadows);
+  }, [viewMode, objects, selectedIds, sceneReady, sceneRef, meshMapRef, themeId]);
 
   // ---- Хук 3: Логика линейки (ruler) ----
   const {
@@ -884,6 +933,10 @@ export default function Viewport3D({
       data-brep-edges={brepActive ? brepEdges.length : undefined}
       data-brep-selected={brepSelected.length ? brepSelected.join(",") : undefined}
       data-brep-lines={brepLineCount}
+      data-view-mode={viewMode}
+      data-view-edges={viewEdgeCount}
+      data-view-shadows={viewShadowCount}
+      data-view-depth-test={viewMode === "hidden-line" ? 1 : 0}
       data-brep-hover={brepHover ?? undefined}
       data-camera={cameraMode}
       data-dimension-mode={dimMode ? (dimMode.first ? "b" : "a") : undefined}
@@ -909,6 +962,7 @@ export default function Viewport3D({
       )}
       <div ref={selRectRef} className="sel-rect" data-testid="selection-rect" hidden />
       <ViewCube mainCamera={cubeCamera} mainControls={cubeCtrl} />
+      <ViewModeMenu />
     </div>
   );
 }

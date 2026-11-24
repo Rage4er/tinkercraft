@@ -622,3 +622,25 @@ export const ChamferIcon = (p: any) => (
     <circle cx="30" cy="30" r="2.5" fill="currentColor" />
   </Icon>
 )
+
+/* ===== VIEW-MODES: реалистичный / каркас / скрытые линии ===== */
+export const ViewRealisticIcon = (p: any) => (
+  <Icon {...p}>
+    <path d="M16 26 32 17l16 9v18l-16 9-16-9Z" {...face(0.35)} />
+    <path d="M16 26l16 9 16-9M32 35v18" fill="none" stroke="currentColor" strokeWidth="2" opacity="0.6" />
+  </Icon>
+)
+
+export const ViewWireframeIcon = (p: any) => (
+  <Icon {...p}>
+    <path d="M16 26 32 17l16 9v18l-16 9-16-9Z" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinejoin="round" />
+    <path d="M16 26l16 9 16-9M32 35v18" fill="none" stroke="currentColor" strokeWidth="2" opacity="0.75" />
+  </Icon>
+)
+
+export const ViewHiddenLineIcon = (p: any) => (
+  <Icon {...p}>
+    <path d="M16 26 32 17l16 9v18l-16 9-16-9Z" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinejoin="round" />
+    <path d="M16 26l16 9 16-9M32 35v18" fill="none" stroke="currentColor" strokeWidth="2" strokeDasharray="3 3" opacity="0.7" />
+  </Icon>
+)
