@@ -9,7 +9,7 @@
 import { create } from 'zustand'
 import i18n from '../i18n'
 import { useDocumentStore } from './document-store'
-import { isBrepShape, maxBrepSize, type BrepBase, type BrepEdgeLine, type BrepKind, type BrepMesh } from '../brep/brep-kernel'
+import { isBrepShape, maxBrepSize, type BrepBase, type BrepEdgeLine, type BrepKind, type BrepMesh, type BrepStep } from '../brep/brep-kernel'
 import { brepWorkerEdges, brepWorkerFillet } from '../brep/brep-client'
 import { notify } from './notifications'
 import type { TransformNR } from '../csg/types'
@@ -18,6 +18,8 @@ interface BrepModeState {
   active: BrepKind | null
   targetId: string | null
   base: BrepBase | null
+  /** FILLET-CHAIN-BREP: предыдущие шаги цепочки (B-Rep результата) */
+  steps: BrepStep[]
   transform: TransformNR | null
   edges: BrepEdgeLine[]
   /** Выбранные рёбра (клик по ребру — добавить/убрать, несколько за операцию) */
@@ -39,6 +41,7 @@ export const useBrepModeStore = create<BrepModeState>((set, get) => ({
   active: null,
   targetId: null,
   base: null,
+  steps: [],
   transform: null,
   edges: [],
   selectedEdges: [],
@@ -58,7 +61,7 @@ export const useBrepModeStore = create<BrepModeState>((set, get) => ({
       notify(i18n.t('lock.cantMove'), 'warning')
       return false
     }
-    if (!isBrepShape(obj.shapeType)) {
+    if (!isBrepShape(obj.shapeType) && !obj.brepChain) {
       notify(i18n.t('brep.unsupported'), 'warning')
       return false
     }
@@ -66,15 +69,19 @@ export const useBrepModeStore = create<BrepModeState>((set, get) => ({
       get().cancel()
       return false
     }
-    const base: BrepBase = { shapeType: obj.shapeType, params: { ...obj.params } }
+    // FILLET-CHAIN-BREP: у объекта с цепочкой B-Rep берём исходный примитив и шаги
+    const base: BrepBase = obj.brepChain
+      ? { shapeType: obj.brepChain.base.shapeType, params: { ...obj.brepChain.base.params } }
+      : { shapeType: obj.shapeType, params: { ...obj.params } }
+    const steps: BrepStep[] = obj.brepChain ? obj.brepChain.steps.map((s) => ({ ...s, edgeIndexes: [...s.edgeIndexes] })) : []
     const max = maxBrepSize(base)
     const size = Math.min(2, Number((max * 0.4).toFixed(2)))
     set({
-      active: kind, targetId: id, base, transform: { ...obj.transform },
+      active: kind, targetId: id, base, steps, transform: { ...obj.transform },
       edges: [], selectedEdges: [], hoverEdge: null, size, loading: true,
     })
     try {
-      const edges = await brepWorkerEdges(base)
+      const edges = await brepWorkerEdges(base, steps)
       if (get().active !== kind || get().targetId !== id) return false
       set({ edges, loading: false })
       return true
@@ -94,12 +101,12 @@ export const useBrepModeStore = create<BrepModeState>((set, get) => ({
   setSize: (size) => set({ size }),
 
   cancel: () => set({
-    active: null, targetId: null, base: null, transform: null,
+    active: null, targetId: null, base: null, steps: [], transform: null,
     edges: [], selectedEdges: [], hoverEdge: null, loading: false,
   }),
 
   apply: async () => {
-    const { active, targetId, base, size, selectedEdges, transform } = get()
+    const { active, targetId, base, steps, size, selectedEdges, transform } = get()
     if (!active || !targetId || !base || !transform) return false
     if (selectedEdges.length === 0) {
       notify(i18n.t('brep.selectEdge'), 'warning')
@@ -115,9 +122,9 @@ export const useBrepModeStore = create<BrepModeState>((set, get) => ({
       return false
     }
     try {
-      const mesh: BrepMesh = await brepWorkerFillet(base, active, size, selectedEdges)
+      const mesh: BrepMesh = await brepWorkerFillet(base, steps, active, size, selectedEdges)
       const ok = await doc.applyBrepFillet({
-        targetId, kind: active, size, edgeIndexes: selectedEdges, base, transform, mesh,
+        targetId, kind: active, size, edgeIndexes: selectedEdges, base, steps, transform, mesh,
         name: i18n.t(active === 'fillet' ? 'brep.filletName' : 'brep.chamferName', { name: obj.name ?? i18n.t(`shapes.${obj.shapeType}`) }),
       })
       if (ok) get().cancel()

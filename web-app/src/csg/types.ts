@@ -3,6 +3,7 @@
 // ============================================================
 
 import type { ThreadParams } from './thread-table'
+import type { BrepBase, BrepStep } from '../brep/brep-kernel'
 
 export interface TinkerCraftFile {
   version: string
@@ -315,7 +316,7 @@ export interface StepReplacement {
    * `add_shape` — плита extrude, пересчитанная по рамке базы (9.5.4); может стоять
    * ДО правленого шага (плита — часть extrude-пары), остальные — только ниже по течению.
    */
-  kind: 'group' | 'edit_child_params' | 'align' | 'add_shape'
+  kind: 'group' | 'edit_child_params' | 'align' | 'add_shape' | 'fillet_brep'
   resultVertices?: Float32Array | number[]
   resultIndices?: Uint32Array | number[]
   resultNormals?: Float32Array | number[]
@@ -440,6 +441,8 @@ export interface SceneObject {
   name?: string
   /** UX-AUDIT-31: 3D-текст (import_mesh) — исходная строка; «Тип: Текст», иконка текста */
   text?: string
+  /** FILLET-CHAIN-BREP: B-Rep цепочка (примитив + шаги) — меню скругления активно, B-Rep не теряется */
+  brepChain?: { base: BrepBase; steps: BrepStep[] }
   /** THREAD-PARAMETRIC: объект — параметрическая резьба (операция `thread`), меш пересобирается из params */
   thread?: ThreadParams
   shapeType: ShapeType

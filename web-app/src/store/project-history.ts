@@ -159,6 +159,15 @@ export function applyReplacement(op: TinkerCraftOperation, r: StepReplacement): 
       ...(r.originalBboxSize ? { originalBboxSize: { ...r.originalBboxSize } } : {}),
     }
   }
+  if (op.type === 'fillet_brep') {
+    // FILLET-CHAIN-BREP: пересчитанный шаг цепочки после правки радиуса выше
+    return {
+      ...op,
+      ...(r.resultVertices ? { resultVertices: r.resultVertices } : {}),
+      ...(r.resultIndices ? { resultIndices: r.resultIndices } : {}),
+      ...(r.resultNormals ? { resultNormals: r.resultNormals } : {}),
+    }
+  }
   return null
 }
 

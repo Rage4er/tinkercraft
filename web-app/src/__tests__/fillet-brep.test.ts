@@ -28,8 +28,8 @@ vi.hoisted(() => {
 vi.mock('../brep/brep-client', async () => {
   const kernel = await import('../brep/brep-kernel')
   return {
-    brepWorkerEdges: kernel.brepEdges,
-    brepWorkerFillet: kernel.brepFillet,
+    brepWorkerEdges: kernel.brepEdgesForChain,
+    brepWorkerFillet: kernel.brepFilletChain,
     isBrepWorkerStarted: () => false,
   }
 })

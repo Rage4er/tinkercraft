@@ -21,6 +21,12 @@ export interface BrepBase {
   params: ShapeParams
 }
 
+export interface BrepStep {
+  kind: BrepKind
+  size: number
+  edgeIndexes: number[]
+}
+
 export interface BrepEdgeLine {
   /** Индекс ребра в B-Rep — его принимает filletEdges / chamferEdges */
   index: number
@@ -53,6 +59,27 @@ interface Kernel {
 }
 
 let kernelPromise: Promise<Kernel> | null = null
+
+/**
+ * FILLET-CHAIN-BREP: B-Rep цепочки в памяти воркера. Ключ — base + шаги;
+ * повторный вход в режим (рёбра/следующая фаска) берёт готовое тело, а не
+ * пересобирает из меша. Не сериализуется: после перезагрузки цепочка
+ * воспроизводится из истории операций.
+ */
+const shapeCache = new Map<string, unknown>()
+const MAX_CACHED_SHAPES = 32
+
+export function brepCacheSize(): number {
+  return shapeCache.size
+}
+
+export function resetBrepCache(): void {
+  shapeCache.clear()
+}
+
+function chainKey(base: BrepBase, steps: BrepStep[]): string {
+  return JSON.stringify({ s: base.shapeType, p: base.params, st: steps })
+}
 
 /** Загрузка OCCT WASM (ленивая, один раз на процесс/воркер). */
 export function loadBrepKernel(): Promise<Kernel> {
@@ -162,13 +189,35 @@ interface RawEdge {
   vertexCoord: Array<{ x: number; y: number; z: number }>
 }
 
-/** Полилинии рёбер B-Rep в локальных координатах приложения (Z-up). */
-export async function brepEdges(baseInput: BrepBase): Promise<BrepEdgeLine[]> {
+/**
+ * Тело OCCT для цепочки: примитив + последовательность fillet/chamfer.
+ * Результат кэшируется в памяти воркера (FILLET-CHAIN-BREP), поэтому при
+ * повторном входе в режим B-Rep не пересобирается из триангулированного меша.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function shapeForChain(service: any, base: BrepBase, steps: BrepStep[]): any {
+  const key = chainKey(base, steps)
+  const cached = shapeCache.get(key)
+  if (cached) return cached
+  let shape = createBaseShape(service, base)
+  for (const step of steps) {
+    const next = step.kind === 'fillet'
+      ? service.fillets.filletEdges({ shape, radius: step.size, indexes: step.edgeIndexes })
+      : service.fillets.chamferEdges({ shape, distance: step.size, indexes: step.edgeIndexes })
+    shape = next
+  }
+  if (shapeCache.size >= MAX_CACHED_SHAPES) shapeCache.clear()
+  shapeCache.set(key, shape)
+  return shape
+}
+
+/** Полилинии рёбер B-Rep цепочки (после предыдущих скруглений/фасок). */
+export async function brepEdgesForChain(baseInput: BrepBase, steps: BrepStep[] = []): Promise<BrepEdgeLine[]> {
   const base = sanitizeBase(baseInput)
+  const safeSteps = normalizeSteps(steps)
   const { service } = await loadBrepKernel()
-  let shape
   try {
-    shape = createBaseShape(service, base)
+    const shape = shapeForChain(service, base, safeSteps)
     const mesh = service.shapeToMesh({ shape, precision: 0.2, adjustYtoZ: true })
     return (mesh.edgeList as RawEdge[]).map((e) => {
       const points: number[] = []
@@ -181,39 +230,66 @@ export async function brepEdges(baseInput: BrepBase): Promise<BrepEdgeLine[]> {
   } catch (e) {
     if (e instanceof BrepError) throw e
     throw new BrepError('kernel', `B-Rep edges: ${e instanceof Error ? e.message : String(e)}`)
-  } finally {
-    // OCCT shapes живут в WASM-куче — освобождает GC-хуки библиотеки; явных delete в API нет
-    shape = undefined
   }
 }
 
-/** Скругление (fillet) или фаска (chamfer) выбранных рёбер → триангулированный меш. */
-export async function brepFillet(
+function normalizeSteps(steps: BrepStep[]): BrepStep[] {
+  return steps.map((s) => {
+    if (s.kind !== 'fillet' && s.kind !== 'chamfer') throw new BrepError('unsupported', 'B-Rep: unknown step kind')
+    if (!Number.isFinite(s.size) || s.size <= 0) throw new BrepError('badSize', 'B-Rep: step size must be positive')
+    const edgeIndexes = [...new Set(s.edgeIndexes)].filter((i) => Number.isInteger(i) && i >= 0).sort((a, b) => a - b)
+    if (edgeIndexes.length === 0) throw new BrepError('badEdge', 'B-Rep: step has no edges')
+    return { kind: s.kind, size: s.size, edgeIndexes }
+  })
+}
+
+/** Полилинии рёбер примитива (без цепочки) — совместимость. */
+export async function brepEdges(baseInput: BrepBase): Promise<BrepEdgeLine[]> {
+  return brepEdgesForChain(baseInput, [])
+}
+
+/** Скругление/фаска следующего шага цепочки (B-Rep, не меш). */
+export async function brepFilletChain(
   baseInput: BrepBase,
+  steps: BrepStep[],
   kind: BrepKind,
   sizeInput: number,
   edgeIndexes: number[],
 ): Promise<BrepMesh> {
   const base = sanitizeBase(baseInput)
   const size = checkSize(base, sizeInput)
+  const safeSteps = normalizeSteps(steps)
   const indexes = [...new Set(edgeIndexes)].filter((i) => Number.isInteger(i) && i >= 0).sort((a, b) => a - b)
   if (indexes.length === 0) throw new BrepError('badEdge', 'B-Rep: no edge selected')
   const { service } = await loadBrepKernel()
   try {
-    const shape = createBaseShape(service, base)
-    const edgesCount = service.shapes.edge.getEdges({ shape }).length
+    const current = shapeForChain(service, base, safeSteps)
+    const edgesCount = service.shapes.edge.getEdges({ shape: current }).length
     if (indexes.some((i) => i >= edgesCount)) {
       throw new BrepError('badEdge', `B-Rep: edge index out of range (0..${edgesCount - 1})`)
     }
     const result = kind === 'fillet'
-      ? service.fillets.filletEdges({ shape, radius: size, indexes })
-      : service.fillets.chamferEdges({ shape, distance: size, indexes })
+      ? service.fillets.filletEdges({ shape: current, radius: size, indexes })
+      : service.fillets.chamferEdges({ shape: current, distance: size, indexes })
+    const chain = [...safeSteps, { kind, size, edgeIndexes: indexes }]
+    const key = chainKey(base, chain)
+    if (shapeCache.size >= MAX_CACHED_SHAPES) shapeCache.clear()
+    shapeCache.set(key, result)
     const mesh = service.shapeToMesh({ shape: result, precision: 0.15, adjustYtoZ: true })
     return meshFromOcct(mesh)
   } catch (e) {
     if (e instanceof BrepError) throw e
     throw new BrepError('kernel', `B-Rep ${kind}: ${e instanceof Error ? e.message : String(e)}`)
   }
+}
+
+export async function brepFillet(
+  baseInput: BrepBase,
+  kind: BrepKind,
+  sizeInput: number,
+  edgeIndexes: number[],
+): Promise<BrepMesh> {
+  return brepFilletChain(baseInput, [], kind, sizeInput, edgeIndexes)
 }
 
 /** Сборка одного indexed-меша из списка граней OCCT + рёбра результата. */

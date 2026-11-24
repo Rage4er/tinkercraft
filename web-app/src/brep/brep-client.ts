@@ -4,7 +4,7 @@
 // Один воркер на сессию, промисы по id. Воркер создаётся лениво — при первом
 // входе в режим «Скругление» / «Фаска»; WASM (30 МБ) грузится внутри воркера.
 
-import type { BrepBase, BrepEdgeLine, BrepKind, BrepMesh } from './brep-kernel'
+import type { BrepBase, BrepEdgeLine, BrepKind, BrepMesh, BrepStep } from './brep-kernel'
 import type { BrepRequest, BrepResponse } from './brep.worker'
 
 interface Pending {
@@ -42,14 +42,20 @@ function call(req: BrepRequest): Promise<BrepResponse> {
   })
 }
 
-export async function brepWorkerEdges(base: BrepBase): Promise<BrepEdgeLine[]> {
-  const res = await call({ id: ++seq, type: 'edges', base })
+export async function brepWorkerEdges(base: BrepBase, steps: BrepStep[] = []): Promise<BrepEdgeLine[]> {
+  const res = await call({ id: ++seq, type: 'edges', base, steps })
   if (!res.ok || res.type !== 'edges') throw new Error('OCCT: invalid edges response')
   return res.edges
 }
 
-export async function brepWorkerFillet(base: BrepBase, kind: BrepKind, size: number, edgeIndexes: number[]): Promise<BrepMesh> {
-  const res = await call({ id: ++seq, type: 'result', base, kind, size, edgeIndexes })
+export async function brepWorkerFillet(
+  base: BrepBase,
+  steps: BrepStep[],
+  kind: BrepKind,
+  size: number,
+  edgeIndexes: number[],
+): Promise<BrepMesh> {
+  const res = await call({ id: ++seq, type: 'result', base, steps, kind, size, edgeIndexes })
   if (!res.ok || res.type !== 'result') throw new Error('OCCT: invalid mesh response')
   return res.mesh
 }

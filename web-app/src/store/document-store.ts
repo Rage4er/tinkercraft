@@ -1294,7 +1294,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
 
   // ── Правка прошлого шага с каскадом (Фаза 9.5.2: move, 9.5.3: mirror) ──
   // ── FILLET-CHAMFER-BREP: скругление/фаска ребра (OCCT), шаг `fillet_brep` ──
-  applyBrepFillet: async ({ targetId, kind, size, edgeIndexes, base, transform, mesh, name }) => {
+  applyBrepFillet: async ({ targetId, kind, size, edgeIndexes, base, steps = [], transform, mesh, name }) => {
     if (get().busy) return false
     const { objects, operations, historyIndex } = get()
     const obj = objects[targetId]
@@ -1312,9 +1312,13 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       base: { shapeType: base.shapeType, params: { ...base.params } },
       resultVertices: mesh.vertices, resultIndices: mesh.indices, resultNormals: mesh.normals,
     }
+    const brepChain = {
+      base: { shapeType: base.shapeType, params: { ...base.params } },
+      steps: [...steps.map((st) => ({ ...st, edgeIndexes: [...st.edgeIndexes] })), { kind, size, edgeIndexes: [...edgeIndexes] }],
+    }
     const newObj = makeObject({
       ...obj, shapeType: 'import_mesh', params: {}, name,
-      text: undefined, thread: undefined,
+      text: undefined, thread: undefined, brepChain,
       vertices: mesh.vertices, indices: mesh.indices, normals: mesh.normals,
       aabb, originalBboxSize,
     })
@@ -1341,7 +1345,39 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     set({ busy: true })
     const t0 = performance.now()
     try {
-      const mesh: BrepMesh = await brepWorkerFillet(op.base, op.kind, size, op.edgeIndexes)
+      // FILLET-CHAIN-BREP: правка радиуса пересобирает ВСЮ цепочку этого объекта —
+      // последующие шаги (и их результат) зависят от геометрии предыдущих.
+      const chainIndexes = prefix
+        .map((o, i) => (o.type === 'fillet_brep' && o.id === op.id ? i : -1))
+        .filter((i) => i >= 0)
+      const base = (prefix[chainIndexes[0]] as FilletBrepOperation).base
+      const meshes = new Map<number, BrepMesh>()
+      const chainSteps: import('../brep/brep-kernel').BrepStep[] = []
+      for (const idx of chainIndexes) {
+        const o = prefix[idx] as FilletBrepOperation
+        const step = {
+          kind: o.kind,
+          size: idx === stepIndex ? size : o.size,
+          edgeIndexes: [...o.edgeIndexes],
+        }
+        const m = await brepWorkerFillet(base, chainSteps, step.kind, step.size, step.edgeIndexes)
+        meshes.set(idx, m)
+        chainSteps.push(step)
+      }
+      const mesh = meshes.get(stepIndex)
+      if (!mesh) throw new Error('B-Rep: step mesh not computed')
+      const replacements = chainIndexes
+        .filter((idx) => idx > stepIndex)
+        .map((idx) => {
+          const m = meshes.get(idx)!
+          return {
+            stepIndex: idx,
+            kind: 'fillet_brep' as const,
+            resultVertices: m.vertices,
+            resultIndices: m.indices,
+            resultNormals: m.normals,
+          }
+        })
       const editOp = {
         type: 'edit_step' as const,
         stepIndex,
@@ -1351,7 +1387,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
           resultVertices: mesh.vertices, resultIndices: mesh.indices, resultNormals: mesh.normals,
         },
         before: { kind: 'fillet_brep' as const, size: op.size },
-        replacements: [],
+        replacements,
       }
       const newOps = [...prefix, editOp]
       const newObjects = await rebuildFromHistory(newOps)

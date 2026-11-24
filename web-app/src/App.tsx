@@ -472,7 +472,7 @@ export default function App() {
   // ARRAY-TOOL: «Массив» — нужен выбранный объект
   const canBrep = selectedIds.length === 1 && !busy && (() => {
     const o = objects[selectedIds[0]]
-    return !!o && !o.locked && isBrepShape(o.shapeType)
+    return !!o && !o.locked && (isBrepShape(o.shapeType) || !!o.brepChain)
   })();
   const canArray = selectedIds.length > 0 && !busy;
   // ALIGN-UI-REVIT: «Выровнять» — режим (плоскость → грань B), нужен хотя бы один объект
