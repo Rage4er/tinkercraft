@@ -13,6 +13,7 @@ import { isBrepShape, maxBrepSize, type BrepBase, type BrepEdgeLine, type BrepKi
 import { brepWorkerEdges, brepWorkerFillet } from '../brep/brep-client'
 import { notify } from './notifications'
 import type { TransformNR } from '../csg/types'
+import { FILLET_OCCT_UI } from '../constants'
 
 interface BrepModeState {
   active: BrepKind | null
@@ -50,6 +51,8 @@ export const useBrepModeStore = create<BrepModeState>((set, get) => ({
   loading: false,
 
   start: async (kind, targetId) => {
+    // FILLET-HIDE: UI скрыт — режим не запускается (код B-Rep оставлен)
+    if (!FILLET_OCCT_UI) return false
     const doc = useDocumentStore.getState()
     const id = targetId ?? doc.selectedIds[0]
     const obj = id ? doc.objects[id] : undefined

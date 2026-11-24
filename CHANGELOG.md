@@ -7,6 +7,18 @@
 
 ---
 
+## [1.3.23] — 2026-11-24
+
+### Changed
+- **FILLET-HIDE:** меню «Скругление / фаска» (OCCT, B-Rep) скрыто из тулбара, секция шагов B-Rep убрана из панели свойств, режим выбора рёбер не запускается (`FILLET_OCCT_UI = false` в `constants.ts`). Причина: инструмент сырой — один размер на операцию, ошибки OCCT на сложных углах, не работает с CSG, ступенька на внутренних углах.
+- Код оставлен целиком: `@bitbybit-dev/occt`, `fillet_brep` / `brepChain`, `BrepPanel` / `BrepMenuButton`, kernel/worker/store, тесты ядра. Старые проекты с `brepChain` открываются и отображаются как прежде (без редактора шагов).
+- `DEVELOPMENT_PLAN.md`: запись **FILLET-OCCT-HIDDEN** 🟡 — вернуть после CSG-BREP-MESH-BRIDGE или как альтернативу CSG-FILLET.
+
+### Added
+- Тест `fillet-hide.test.tsx` (2: меню нет, секции B-Rep нет) и e2e `pnpm e2e:fillet-hide`; e2e `fillet-brep` / `fillet-chain` / `fillet-parametric-ui` помечены SKIP, пока UI скрыт (код и проверки сохранены для возврата).
+
+---
+
 ## [1.3.22] — 2026-11-24
 
 ### Added

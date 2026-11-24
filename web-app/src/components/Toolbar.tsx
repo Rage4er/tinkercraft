@@ -9,7 +9,7 @@ import DimensionMenuButton from "./DimensionMenuButton";
 import ExportMenuButton from "./ExportMenuButton";
 import BrepMenuButton from "./BrepMenuButton";
 import type { ExportFormat } from "../io/mesh-formats";
-import { TOOLTIP_DATA, type TooltipData } from "../constants";
+import { TOOLTIP_DATA, FILLET_OCCT_UI, type TooltipData } from "../constants";
 import {
   OpenIcon,
   SaveIcon,
@@ -156,7 +156,7 @@ export default function Toolbar({
     { id: "ruler", buttonCount: 2 },
     { id: "mirror", buttonCount: 3 },
     { id: "align", buttonCount: 2 },
-    { id: "brep", buttonCount: 1 },
+    ...(FILLET_OCCT_UI ? [{ id: "brep", buttonCount: 1 }] : []),
     { id: "csg", buttonCount: 3 },
     { id: "settings", buttonCount: 1 },
     { id: "clear", buttonCount: 1 },
@@ -287,14 +287,18 @@ export default function Toolbar({
       />
       <div className="toolbar-separator" />
 
-      {/* Group 7.5: FILLET-CHAMFER-BREP — скругление / фаска ребра */}
-      <ToolbarRowSplit
-        rows={getRows("brep")}
-        buttons={[
-          <BrepMenuButton key="brep" brepActive={brepActive} canBrep={canBrep} onBrep={(kind) => onBrep?.(kind)} />,
-        ]}
-      />
-      <div className="toolbar-separator" />
+      {/* Group 7.5: FILLET-CHAMFER-BREP — скрыт (FILLET-HIDE), код оставлен */}
+      {FILLET_OCCT_UI && (
+        <>
+          <ToolbarRowSplit
+            rows={getRows("brep")}
+            buttons={[
+              <BrepMenuButton key="brep" brepActive={brepActive} canBrep={canBrep} onBrep={(kind) => onBrep?.(kind)} />,
+            ]}
+          />
+          <div className="toolbar-separator" />
+        </>
+      )}
 
       {/* Group 8: CSG */}
       <CsgButtons disabled={!canCsg} onCsg={onCsg} opStates={csgOpStates} maxRows={getRows("csg")} />

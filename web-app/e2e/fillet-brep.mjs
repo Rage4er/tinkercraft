@@ -61,6 +61,12 @@ async function pickEdges(kind, count = 1) {
   return picked
 }
 
+if (!(await toolbarButton(page, 'Скругление / фаска').count())) {
+  console.log('e2e fillet-brep SKIP: OCCT fillet UI скрыт (FILLET-HIDE)')
+  await browser.close()
+  process.exit(0)
+}
+
 try {
   await page.locator('button.tab-btn', { hasText: 'Дерево' }).click()
 

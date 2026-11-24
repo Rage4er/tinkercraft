@@ -52,7 +52,7 @@ async function applyStep(size, timeout = 60000) {
   const input = page.locator('[data-testid=brep-panel] input').first()
   await input.fill(String(size)); await input.press('Enter')
   await page.locator('[data-testid=brep-apply]').click()
-  try {
+try {
     await page.waitForFunction(() => document.querySelector('.viewport-canvas')?.getAttribute('data-brep-mode') === null, null, { timeout })
   } catch {
     const cancel = page.locator('[data-testid=brep-cancel]')
@@ -62,6 +62,12 @@ async function applyStep(size, timeout = 60000) {
   }
   await waitBusy()
   return true
+}
+
+if (!(await toolbarButton(page, 'Скругление / фаска').count())) {
+  console.log('e2e fillet-parametric-ui SKIP: OCCT fillet UI скрыт (FILLET-HIDE)')
+  await browser.close()
+  process.exit(0)
 }
 
 try {
