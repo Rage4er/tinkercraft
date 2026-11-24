@@ -4,6 +4,7 @@
 // ============================================================
 
 import type {
+  FilletBrepOperation,
   TinkerCraftOperation, SceneObject, ShapeType, ShapeParams,
   TransformNR, Vec3, AlignOperation, MirrorPlane,
 } from '../csg/types'
@@ -422,6 +423,19 @@ export async function rebuildFromHistory(
       // дальнейший CSG маршрутизируется через workerSyncMesh.
       mirrored: info?.mirrored,
     })
+  }
+  // FILLET-CHAIN-BREP: B-Rep цепочка восстанавливается из истории (в т.ч. после
+  // undo/redo/.3dtc) — меню «Скругление / фаска» снова активно для объекта.
+  const chains = new Map<string, { base: FilletBrepOperation['base']; steps: import('../brep/brep-kernel').BrepStep[] }>()
+  for (const op of ops) {
+    if (op.type !== 'fillet_brep') continue
+    const c = chains.get(op.id) ?? { base: { shapeType: op.base.shapeType, params: { ...op.base.params } }, steps: [] }
+    c.steps.push({ kind: op.kind, size: op.size, edgeIndexes: [...op.edgeIndexes] })
+    chains.set(op.id, c)
+  }
+  for (const [id, chain] of chains) {
+    const o = objects[id]
+    if (o) objects[id] = { ...o, brepChain: chain }
   }
   return objects
 }

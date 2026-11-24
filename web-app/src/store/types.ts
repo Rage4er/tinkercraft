@@ -75,6 +75,8 @@ export interface DocumentStore {
     size: number
     edgeIndexes: number[]
     base: import('../brep/brep-kernel').BrepBase
+    /** FILLET-CHAIN-BREP: предыдущие шаги цепочки (B-Rep) */
+    steps?: import('../brep/brep-kernel').BrepStep[]
     transform: TransformNR
     mesh: import('../brep/brep-kernel').BrepMesh
     name: string
