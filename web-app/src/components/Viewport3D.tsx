@@ -10,7 +10,7 @@ import ViewCube from "./ViewCube";
 import ViewModeMenu from "./ViewModeMenu";
 import ChildView from "./ChildView";
 import { viewModeRender } from "./view-mode";
-import { CURVED_WIREFRAME, csgWireframeGeometry, curvedWireframeGeometry } from "./curved-wireframe";
+import { CURVED_WIREFRAME, csgWireframeGeometry, curvedWireframeGeometry, threadWireframe } from "./curved-wireframe";
 import { useUiStore } from "../store/ui-store";
 import { useTranslation } from "react-i18next";
 import {
@@ -273,6 +273,7 @@ export default function Viewport3D({
   const [viewShadowCount, setViewShadowCount] = useState(0);
   const [viewOpaqueCount, setViewOpaqueCount] = useState(0);
   const [viewGridCount, setViewGridCount] = useState(0);
+  const [viewGridSegments, setViewGridSegments] = useState(0);
   const viewGridRef = useRef<THREE.LineSegments[]>([]);
   useEffect(() => {
     const scene = sceneRef.current;
@@ -287,6 +288,7 @@ export default function Viewport3D({
     }
     viewGridRef.current = [];
     let grids = 0;
+    let gridSegments = 0;
     let edges = 0;
     let shadows = 0;
     let opaque = 0;
@@ -327,11 +329,13 @@ export default function Viewport3D({
       // EdgesGeometry по порогу 30° у них рёбер не даёт. CSG-результат —
       // triangle-wireframe меша (если не слишком тяжёлый).
       if (cfg.edges && cfg.curvedGrid && obj) {
-        const geo = CURVED_WIREFRAME.has(obj.shapeType)
-          ? curvedWireframeGeometry(obj.shapeType, obj.params)
-          : obj.shapeType === 'csg'
-            ? csgWireframeGeometry(entry.mesh.geometry)
-            : null;
+        const geo = obj.thread
+          ? threadWireframe(obj.thread)
+          : CURVED_WIREFRAME.has(obj.shapeType)
+            ? curvedWireframeGeometry(obj.shapeType, obj.params)
+            : obj.shapeType === 'csg'
+              ? csgWireframeGeometry(entry.mesh.geometry)
+              : null;
         if (geo) {
           const mat = new THREE.LineBasicMaterial({
             color: new THREE.Color(obj.color).multiplyScalar(0.7),
@@ -345,6 +349,7 @@ export default function Viewport3D({
           entry.mesh.add(grid);
           viewGridRef.current.push(grid);
           grids++;
+          gridSegments += geo.attributes.position.count / 2;
           edges++;
         }
       }
@@ -353,6 +358,7 @@ export default function Viewport3D({
     setViewShadowCount(shadows);
     setViewOpaqueCount(opaque);
     setViewGridCount(grids);
+    setViewGridSegments(gridSegments);
   }, [viewMode, objects, selectedIds, sceneReady, sceneRef, meshMapRef, themeId]);
 
   // ---- Хук 3: Логика линейки (ruler) ----
@@ -982,6 +988,7 @@ export default function Viewport3D({
       data-view-shadows={viewShadowCount}
       data-view-opaque={viewOpaqueCount}
       data-view-grid={viewGridCount}
+      data-view-grid-segments={viewGridSegments}
       data-view-depth-test={viewMode === "wireframe" ? 0 : 1}
       data-brep-hover={brepHover ?? undefined}
       data-camera={cameraMode}
