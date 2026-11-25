@@ -19,6 +19,8 @@ export interface ViewModeRender {
   shadows: boolean
   /** Рисовать рёбра (EdgesGeometry) */
   edges: boolean
+  /** Сетка гладких фигур (WireframeGeometry) — только wireframe / hidden-line */
+  curvedGrid: boolean
   /** depthTest рёбер: true — задние рёбра скрыты заливкой (realistic / hidden-line) */
   edgeDepthTest: boolean
   /** depthWrite рёбер: true — только realistic (обычные рёбра); в режимах — false */
@@ -32,20 +34,20 @@ export function viewModeRender(mode: ViewMode): ViewModeRender {
     // все рёбра, включая задние; граней нет
     return {
       materialVisible: false, useBackgroundColor: false, transparent: false, opacity: 1,
-      shadows: false, edges: true, edgeDepthTest: false, edgeDepthWrite: false, edgeRenderOrder: 2,
+      shadows: false, edges: true, curvedGrid: true, edgeDepthTest: false, edgeDepthWrite: false, edgeRenderOrder: 2,
     }
   }
   if (mode === 'hidden-line') {
     // задние рёбра скрыты заливкой фона
     return {
       materialVisible: true, useBackgroundColor: true, transparent: false, opacity: 1,
-      shadows: false, edges: true, edgeDepthTest: true, edgeDepthWrite: false, edgeRenderOrder: 2,
+      shadows: false, edges: true, curvedGrid: true, edgeDepthTest: true, edgeDepthWrite: false, edgeRenderOrder: 2,
     }
   }
   // UB2-4: рёбра фигур видны и на реалистичном виде (визуальное восприятие формы),
   // но depthTest/depthWrite — как у обычной геометрии: сквозь грани НЕ просвечивают
   return {
     materialVisible: true, useBackgroundColor: false, transparent: false, opacity: 1,
-    shadows: true, edges: true, edgeDepthTest: true, edgeDepthWrite: true, edgeRenderOrder: 0,
+    shadows: true, edges: true, curvedGrid: false, edgeDepthTest: true, edgeDepthWrite: true, edgeRenderOrder: 0,
   }
 }

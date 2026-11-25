@@ -14,7 +14,7 @@
 - **manifold-3d** (WASM) — CSG операции в Web Worker
 - **Zustand 5** — стейт-менеджмент
 - **Vite 6** — сборка
-- **Vitest 4** — тесты (1131 тест, 105 файлов; `it.fails` открытых багов нет — UX-прогон 7 нашёл 0 новых, цикл закрыт; UX-AUDIT-1…10 исправлены в `fix-all`, 11…20 — в `fix-all-2`, 21…31 — в `fix-all-3`, 32…35 — в `fix-all-4`, 32-followup и 36…40 — в `fix-all-5`, 41, 42 — в `fix-all-6`)
+- **Vitest 4** — тесты (1133 теста, 106 файлов; `it.fails` открытых багов нет — UX-прогон 7 нашёл 0 новых, цикл закрыт; UX-AUDIT-1…10 исправлены в `fix-all`, 11…20 — в `fix-all-2`, 21…31 — в `fix-all-3`, 32…35 — в `fix-all-4`, 32-followup и 36…40 — в `fix-all-5`, 41, 42 — в `fix-all-6`)
 - **pnpm** — пакетный менеджер
 
 ## Команды
@@ -23,7 +23,7 @@
 cd web-app
 pnpm dev          # dev-сервер (порт 5000)
 pnpm build        # production-сборка
-pnpm test         # запуск тестов (1131 тест, 105 файлов)
+pnpm test         # запуск тестов (1133 теста, 106 файлов)
 pnpm typecheck    # tsc --noEmit
 pnpm e2e:smoke    # дымовой тест в браузере (Playwright; нужен запущенный pnpm dev; см. web-app/e2e/helpers.mjs). В CI все e2e — job `e2e` в ci-web.yml (CI-E2E)
 pnpm e2e:tree     # Фаза 9.1: раскрытие CSG в дереве, выбор ребёнка
@@ -67,7 +67,7 @@ pnpm e2e:fillet-parametric-ui  # FILLET-PARAMETRIC-UI: шаги B-Rep в пан�
 pnpm e2e:fillet-hide  # FILLET-HIDE: меню OCCT-скругления скрыто, секции B-Rep нет, старые объекты не ломаются
 pnpm e2e:view-modes  # VIEW-MODES: меню у ViewCube, реалистичный / каркас / скрытые линии, сохранение режима
 pnpm e2e:csg-child-view  # CSG-CHILD-VIEW: выбор ребёнка CSG → окно (ребёнок + каркас), правка, закрытие
-pnpm e2e:fix-view-modes-child  # FIX: realistic после wireframe (нет рёбер), кнопка над ViewCube, child-view слева снизу + OrbitControls
+pnpm e2e:fix-view-modes-child  # FIX: realistic (рёбра с depthTest), кнопка над ViewCube, child-view слева снизу (камера на ребёнке, каркас в реальных координатах), OrbitControls, сетка гладких
 pnpm e2e:ux-formats-settings  # Пакет A: «Настройки» (язык ru → en → ru, единицы см — поле «2.00 см», ввод 5 см → 50 мм, перезагрузка, «Сбросить», Esc), «Высокий контраст» (панель и фон сцены чёрные), звуки (click / create / success, выкл. — тишина), «Экспорт» STL / OBJ / 3MF / glTF и «Импорт» OBJ, замок (клик и Ctrl+A не выбирают, Delete — остаётся, снять — выбирается)
 ```
 
@@ -97,7 +97,7 @@ pnpm e2e:ux-formats-settings  # Пакет A: «Настройки» (язык r
 | `<задача>` | Короткие ветки задач от `main` → PR в `main` (merge-коммит после зелёного CI), ветка удаляется. Push в `main` → деплой GitHub Pages. До v1.3.1 задачи Фазы 9 шли через `phase-9` (PR #1–#17) |
 | `yandex-games` | Версия для Яндекс.Игр (экономика, реклама, токены); отдельно, Фазу 9 ещё не содержит |
 
-Цепочка: `main` (v1.3.27) → ветки задач → PR в `main`. `yandex-games` — отдельно.
+Цепочка: `main` (v1.3.28) → ветки задач → PR в `main`. `yandex-games` — отдельно.
 
 **`main` — production.** Любой push в `main` (merge PR) сразу выкладывает GitHub Pages (`deploy.yml`). Поэтому: в `main` — только через PR после зелёного CI, ничего «в процессе»; версия в `web-app/package.json` и `APP_VERSION` (`src/constants.ts`) должна соответствовать коду — значимый merge (фича, фикс) сопровождается patch-релизом: версия + CHANGELOG `[x.y.z]` + тег `vX.Y.Z` после зелёного деплоя.
 
@@ -186,7 +186,8 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 | `src/csg/types.ts` | Типы операций, сцены, параметров, `TreeNode` |
 | `src/csg/BUILD_TREE_SPEC.md` | Спецификация Build Tree (1410 строк) |
 | **Components** | |
-| `src/components/ChildView.tsx` / `ChildViewScene.tsx` | **CSG-CHILD-VIEW:** окно ребёнка CSG (right-bottom, ~42%): ребёнок заливкой + каркас всего CSG, камера по рамке, ×; меш — `rebuildNodeForView` (без кэша), обновляется при правке CSG |
+| `src/components/curved-wireframe.ts` | **VIEW-MODES:** низкополигональная сетка гладких фигур (`WireframeGeometry`: сфера — меридианы/параллели, цилиндр/конус — образующие+кольца, тор, капсула, труба) для wireframe/hidden-line |
+| `src/components/ChildView.tsx` / `ChildViewScene.tsx` | **CSG-CHILD-VIEW:** окно ребёнка CSG (right-bottom, ~42%): ребёнок заливкой + каркас всего CSG, камера нацелена на центр ребёнка, каркас CSG — в реальных координатах (без offset), ×; меш — `rebuildNodeForView` (без кэша), обновляется при правке CSG |
 | `src/components/ViewModeMenu.tsx` / `src/components/view-mode.ts` | **VIEW-MODES:** меню режимов у ViewCube (3 пункта) и настройки отрисовки (заливка/тени/рёбра/depthTest); состояние — `ui-store.viewMode` + localStorage |
 | `src/components/Viewport3D.tsx` | Three.js вьюпорт, гизмо, raycaster, ruler, snap-to-geometry; режим размещения (PLUG-AND-PLAY): наведение → `aim` (throttle 50 мс + последнее положение), клик — `confirmPlacement`, правый клик — отмена, гизмо скрыт, курсор — прицел, `data-placement*` для e2e; навигация (VIEWPORT-NAV): ЛКМ — выбор и рамка, ПКМ — вращение, СКМ — сдвиг, колесо — масштаб, двойной клик СКМ — «Вписать» (`viewport-nav.ts`); рамка выделения (SELECTION-RECT) |
 | `src/components/viewport-nav.ts` | Кнопки мыши OrbitControls (`VIEWPORT_MOUSE_BUTTONS`: LEFT — нет, MIDDLE — сдвиг, RIGHT — вращение), детектор двойного клика СКМ (`createMiddleDoubleClick`) |

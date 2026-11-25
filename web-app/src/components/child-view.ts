@@ -15,7 +15,10 @@ export const CHILD_VIEW_CONTROLS = {
   dampingFactor: 0.12,
 } as const
 
-/** Сдвиг содержимого окна: центр ребёнка → начало координат. */
-export function childViewOffset(center: ChildViewPoint): ChildViewPoint {
-  return { x: -center.x, y: -center.y, z: -center.z }
+/**
+ * Куда смотрит камера окна: центр ребёнка. Содержимое НЕ сдвигается —
+ * каркас CSG остаётся в своих реальных координатах, ребёнок в центре вида.
+ */
+export function childViewTarget(center: ChildViewPoint): ChildViewPoint {
+  return { x: center.x, y: center.y, z: center.z }
 }

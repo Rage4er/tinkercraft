@@ -10,6 +10,7 @@ import ViewCube from "./ViewCube";
 import ViewModeMenu from "./ViewModeMenu";
 import ChildView from "./ChildView";
 import { viewModeRender } from "./view-mode";
+import { CURVED_WIREFRAME, curvedWireframeGeometry } from "./curved-wireframe";
 import { useUiStore } from "../store/ui-store";
 import { useTranslation } from "react-i18next";
 import {
@@ -271,11 +272,21 @@ export default function Viewport3D({
   const [viewEdgeCount, setViewEdgeCount] = useState(0);
   const [viewShadowCount, setViewShadowCount] = useState(0);
   const [viewOpaqueCount, setViewOpaqueCount] = useState(0);
+  const [viewGridCount, setViewGridCount] = useState(0);
+  const viewGridRef = useRef<THREE.LineSegments[]>([]);
   useEffect(() => {
     const scene = sceneRef.current;
     if (!scene) return;
     const cfg = viewModeRender(viewMode);
     const bg = scene.background instanceof THREE.Color ? `#${scene.background.getHexString()}` : "#000000";
+    // Снять сетку гладких фигур от прошлого режима
+    for (const g of viewGridRef.current) {
+      g.parent?.remove(g);
+      g.geometry.dispose();
+      (g.material as THREE.Material).dispose();
+    }
+    viewGridRef.current = [];
+    let grids = 0;
     let edges = 0;
     let shadows = 0;
     let opaque = 0;
@@ -312,10 +323,31 @@ export default function Viewport3D({
         lines.renderOrder = cfg.edgeRenderOrder;
         if (lines.visible) edges++;
       }
+      // Гладкие фигуры (сфера/цилиндр/…) — низкополигональная сетка:
+      // EdgesGeometry по порогу 30° у них рёбер не даёт
+      if (cfg.edges && cfg.curvedGrid && obj && CURVED_WIREFRAME.has(obj.shapeType)) {
+        const geo = curvedWireframeGeometry(obj.shapeType, obj.params);
+        if (geo) {
+          const mat = new THREE.LineBasicMaterial({
+            color: new THREE.Color(obj.color).multiplyScalar(0.7),
+            depthTest: cfg.edgeDepthTest,
+            depthWrite: cfg.edgeDepthWrite,
+          });
+          const grid = new THREE.LineSegments(geo, mat);
+          grid.renderOrder = cfg.edgeRenderOrder;
+          grid.userData.isViewGrid = true;
+          grid.raycast = () => { };
+          entry.mesh.add(grid);
+          viewGridRef.current.push(grid);
+          grids++;
+          edges++;
+        }
+      }
     }
     setViewEdgeCount(edges);
     setViewShadowCount(shadows);
     setViewOpaqueCount(opaque);
+    setViewGridCount(grids);
   }, [viewMode, objects, selectedIds, sceneReady, sceneRef, meshMapRef, themeId]);
 
   // ---- Хук 3: Логика линейки (ruler) ----
@@ -944,6 +976,7 @@ export default function Viewport3D({
       data-view-edges={viewEdgeCount}
       data-view-shadows={viewShadowCount}
       data-view-opaque={viewOpaqueCount}
+      data-view-grid={viewGridCount}
       data-view-depth-test={viewMode === "wireframe" ? 0 : 1}
       data-brep-hover={brepHover ?? undefined}
       data-camera={cameraMode}
