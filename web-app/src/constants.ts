@@ -8,7 +8,7 @@
 import type { ShapeType } from "./csg/types";
 
 // ---- App version ----
-export const APP_VERSION = '1.3.27';
+export const APP_VERSION = '1.3.28';
 
 // ---- Shapes (data only, NO JSX) ----
 // Иконки — это строковые ключи, не React-компоненты.

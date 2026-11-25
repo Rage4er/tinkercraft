@@ -77,10 +77,11 @@ try {
   if (Math.abs((viewBox.y + viewBox.height) - (vpBox.y + vpBox.height - 8)) > 4) fail('C: окно не снизу')
   if ((await view.evaluate((e) => e.style.left)) !== '8px') fail('C: style.left не 8px')
 
-  // каркас и ребёнок в одной системе: общий offset (центр ребёнка в 0)
+  // камера нацелена на центр ребёнка; каркас — в реальных координатах (без offset)
   const sceneEl = page.locator('[data-testid=child-view-scene]')
-  const offset = await sceneEl.getAttribute('data-child-offset')
-  if (!offset || offset.split(',').every((v) => Number(v) === 0)) fail(`C: offset ребёнка не применён (${offset})`)
+  const target = await sceneEl.getAttribute('data-child-target')
+  if (!target) fail('C: цель камеры (центр ребёнка) не задана')
+  if ((await sceneEl.getAttribute('data-child-offset')) !== null) fail('C: общий offset содержимого не должен применяться')
 
   // OrbitControls: drag по канвасу меняет позицию камеры
   const cam0 = await sceneEl.getAttribute('data-child-camera')
@@ -93,7 +94,21 @@ try {
   await page.waitForTimeout(400)
   const cam1 = await sceneEl.getAttribute('data-child-camera')
   if (!cam0 || !cam1 || cam0 === cam1) fail(`C: камера не вращается (${cam0} → ${cam1})`)
-  ok.push(`C: окно слева снизу, offset ребёнка ${offset}, OrbitControls вращает камеру`)
+  ok.push(`C: окно слева снизу, камера на ребёнке (${target}), каркас в реальных координатах, OrbitControls`)
+
+  // ── D. Каркас гладких фигур (сфера/цилиндр) ──
+  stage = 'D. сетка гладких'
+  await placeShape(page, 'Сфера')
+  await page.waitForTimeout(500)
+  await placeShape(page, 'Цилиндр')
+  await page.waitForTimeout(500)
+  await chooseViewMode('wireframe')
+  const grids = Number(await attr('data-view-grid'))
+  if (grids < 2) fail(`D: сеток гладких фигур ${grids}, ждали ≥2 (сфера, цилиндр)`)
+  if (Number(await attr('data-view-edges')) < 2) fail('D: в каркасе нет рёбер/сеток')
+  await chooseViewMode('realistic')
+  if (Number(await attr('data-view-grid')) !== 0) fail('D: сетка гладких осталась в реалистичном')
+  ok.push(`D: каркас сферы и цилиндра — сетка (${grids}), в реалистичном снята`)
 
   if (errors.length) fail('ошибки консоли:\n' + errors.join('\n'))
   for (const line of ok) console.log('  ✓ ' + line)

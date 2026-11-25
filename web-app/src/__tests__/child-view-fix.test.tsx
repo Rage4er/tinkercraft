@@ -11,7 +11,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { act } from 'react-dom/test-utils'
 import i18n from '../i18n'
 import ChildView from '../components/ChildView'
-import { CHILD_VIEW_CONTROLS, childViewOffset } from '../components/child-view'
+import { CHILD_VIEW_CONTROLS, childViewTarget } from '../components/child-view'
 import { useUiStore } from '../store/ui-store'
 import { useDocumentStore } from '../store/document-store'
 import type { SceneObject } from '../csg/types'
@@ -59,11 +59,10 @@ beforeEach(() => {
 })
 
 describe('CSG-CHILD-VIEW — фиксы', () => {
-  it('ребёнок и каркас в одной системе: один offset — центр ребёнка в 0', () => {
-    const off = childViewOffset({ x: 12, y: -4, z: 3 })
-    expect(off).toEqual({ x: -12, y: 4, z: -3 })
-    // один общий сдвиг содержимого (группа): и ребёнок, и корневой каркас
-    expect(off).toEqual(childViewOffset({ x: 12, y: -4, z: 3 }))
+  it('камера нацелена на центр ребёнка; каркас остаётся в реальных координатах', () => {
+    const target = childViewTarget({ x: 12, y: -4, z: 3 })
+    expect(target).toEqual({ x: 12, y: -4, z: 3 })
+    // содержимое не сдвигается общим offset — координаты ребёнка/каркаса не меняются
   })
 
   it('OrbitControls: вращение, зум, панорама, демпфирование', () => {

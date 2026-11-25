@@ -8,7 +8,7 @@ import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import type { ExtractedMesh } from '../csg/types'
-import { CHILD_VIEW_CONTROLS, childViewOffset } from './child-view'
+import { CHILD_VIEW_CONTROLS, childViewTarget } from './child-view'
 
 export interface ChildViewSceneProps {
   child: ExtractedMesh | null
@@ -78,15 +78,16 @@ export default function ChildViewScene({ child, root, color = '#89b4fa' }: Child
     const box = childGeo.boundingBox ?? new THREE.Box3(new THREE.Vector3(-10, -10, -10), new THREE.Vector3(10, 10, 10))
     const center = box.getCenter(new THREE.Vector3())
     const radius = Math.max(1, box.getSize(new THREE.Vector3()).length() / 2)
-    const off = childViewOffset(center)
-    content.position.set(off.x, off.y, off.z)
-    host.dataset.childOffset = [off.x, off.y, off.z].map((v) => (Math.round(v * 100) / 100).toFixed(2)).join(',')
-    camera.position.set(radius * 2.2, -radius * 2.2, radius * 1.8)
-    camera.lookAt(0, 0, 0)
+    // CSG-CHILD-VIEW: без общего offset — каркас остаётся в реальных координатах,
+    // камера (и OrbitControls.target) нацелена на центр ребёнка
+    const target = childViewTarget(center)
+    host.dataset.childTarget = [target.x, target.y, target.z].map((v) => (Math.round(v * 100) / 100).toFixed(2)).join(',')
+    camera.position.set(target.x + radius * 2.2, target.y - radius * 2.2, target.z + radius * 1.8)
+    camera.lookAt(target.x, target.y, target.z)
 
     const controls = new OrbitControls(camera, renderer.domElement)
     Object.assign(controls, CHILD_VIEW_CONTROLS)
-    controls.target.set(0, 0, 0)
+    controls.target.set(target.x, target.y, target.z)
     controls.update()
 
     // e2e/тесты: камера (навигация OrbitControls видна снаружи)
