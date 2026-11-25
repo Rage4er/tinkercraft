@@ -10,7 +10,7 @@ import ViewCube from "./ViewCube";
 import ViewModeMenu from "./ViewModeMenu";
 import ChildView from "./ChildView";
 import { viewModeRender } from "./view-mode";
-import { CURVED_WIREFRAME, curvedWireframeGeometry } from "./curved-wireframe";
+import { CURVED_WIREFRAME, csgWireframeGeometry, curvedWireframeGeometry } from "./curved-wireframe";
 import { useUiStore } from "../store/ui-store";
 import { useTranslation } from "react-i18next";
 import {
@@ -324,9 +324,14 @@ export default function Viewport3D({
         if (lines.visible) edges++;
       }
       // Гладкие фигуры (сфера/цилиндр/…) — низкополигональная сетка:
-      // EdgesGeometry по порогу 30° у них рёбер не даёт
-      if (cfg.edges && cfg.curvedGrid && obj && CURVED_WIREFRAME.has(obj.shapeType)) {
-        const geo = curvedWireframeGeometry(obj.shapeType, obj.params);
+      // EdgesGeometry по порогу 30° у них рёбер не даёт. CSG-результат —
+      // triangle-wireframe меша (если не слишком тяжёлый).
+      if (cfg.edges && cfg.curvedGrid && obj) {
+        const geo = CURVED_WIREFRAME.has(obj.shapeType)
+          ? curvedWireframeGeometry(obj.shapeType, obj.params)
+          : obj.shapeType === 'csg'
+            ? csgWireframeGeometry(entry.mesh.geometry)
+            : null;
         if (geo) {
           const mat = new THREE.LineBasicMaterial({
             color: new THREE.Color(obj.color).multiplyScalar(0.7),

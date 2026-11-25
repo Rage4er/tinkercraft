@@ -14,7 +14,7 @@
 - **manifold-3d** (WASM) — CSG операции в Web Worker
 - **Zustand 5** — стейт-менеджмент
 - **Vite 6** — сборка
-- **Vitest 4** — тесты (1133 теста, 106 файлов; `it.fails` открытых багов нет — UX-прогон 7 нашёл 0 новых, цикл закрыт; UX-AUDIT-1…10 исправлены в `fix-all`, 11…20 — в `fix-all-2`, 21…31 — в `fix-all-3`, 32…35 — в `fix-all-4`, 32-followup и 36…40 — в `fix-all-5`, 41, 42 — в `fix-all-6`)
+- **Vitest 4** — тесты (1135 тестов, 106 файлов; `it.fails` открытых багов нет — UX-прогон 7 нашёл 0 новых, цикл закрыт; UX-AUDIT-1…10 исправлены в `fix-all`, 11…20 — в `fix-all-2`, 21…31 — в `fix-all-3`, 32…35 — в `fix-all-4`, 32-followup и 36…40 — в `fix-all-5`, 41, 42 — в `fix-all-6`)
 - **pnpm** — пакетный менеджер
 
 ## Команды
@@ -23,7 +23,7 @@
 cd web-app
 pnpm dev          # dev-сервер (порт 5000)
 pnpm build        # production-сборка
-pnpm test         # запуск тестов (1133 теста, 106 файлов)
+pnpm test         # запуск тестов (1135 тестов, 106 файлов)
 pnpm typecheck    # tsc --noEmit
 pnpm e2e:smoke    # дымовой тест в браузере (Playwright; нужен запущенный pnpm dev; см. web-app/e2e/helpers.mjs). В CI все e2e — job `e2e` в ci-web.yml (CI-E2E)
 pnpm e2e:tree     # Фаза 9.1: раскрытие CSG в дереве, выбор ребёнка
@@ -68,6 +68,7 @@ pnpm e2e:fillet-hide  # FILLET-HIDE: меню OCCT-скругления скры
 pnpm e2e:view-modes  # VIEW-MODES: меню у ViewCube, реалистичный / каркас / скрытые линии, сохранение режима
 pnpm e2e:csg-child-view  # CSG-CHILD-VIEW: выбор ребёнка CSG → окно (ребёнок + каркас), правка, закрытие
 pnpm e2e:fix-view-modes-child  # FIX: realistic (рёбра с depthTest), кнопка над ViewCube, child-view слева снизу (камера на ребёнке, каркас в реальных координатах), OrbitControls, сетка гладких
+pnpm e2e:fix-curved-wireframe  # FIX-CURVED-WIREFRAME: 10 примитивов (COM), пружина, CSG union/subtract — каркас
 pnpm e2e:ux-formats-settings  # Пакет A: «Настройки» (язык ru → en → ru, единицы см — поле «2.00 см», ввод 5 см → 50 мм, перезагрузка, «Сбросить», Esc), «Высокий контраст» (панель и фон сцены чёрные), звуки (click / create / success, выкл. — тишина), «Экспорт» STL / OBJ / 3MF / glTF и «Импорт» OBJ, замок (клик и Ctrl+A не выбирают, Delete — остаётся, снять — выбирается)
 ```
 
@@ -97,7 +98,7 @@ pnpm e2e:ux-formats-settings  # Пакет A: «Настройки» (язык r
 | `<задача>` | Короткие ветки задач от `main` → PR в `main` (merge-коммит после зелёного CI), ветка удаляется. Push в `main` → деплой GitHub Pages. До v1.3.1 задачи Фазы 9 шли через `phase-9` (PR #1–#17) |
 | `yandex-games` | Версия для Яндекс.Игр (экономика, реклама, токены); отдельно, Фазу 9 ещё не содержит |
 
-Цепочка: `main` (v1.3.28) → ветки задач → PR в `main`. `yandex-games` — отдельно.
+Цепочка: `main` (v1.3.29) → ветки задач → PR в `main`. `yandex-games` — отдельно.
 
 **`main` — production.** Любой push в `main` (merge PR) сразу выкладывает GitHub Pages (`deploy.yml`). Поэтому: в `main` — только через PR после зелёного CI, ничего «в процессе»; версия в `web-app/package.json` и `APP_VERSION` (`src/constants.ts`) должна соответствовать коду — значимый merge (фича, фикс) сопровождается patch-релизом: версия + CHANGELOG `[x.y.z]` + тег `vX.Y.Z` после зелёного деплоя.
 
@@ -186,7 +187,7 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 | `src/csg/types.ts` | Типы операций, сцены, параметров, `TreeNode` |
 | `src/csg/BUILD_TREE_SPEC.md` | Спецификация Build Tree (1410 строк) |
 | **Components** | |
-| `src/components/curved-wireframe.ts` | **VIEW-MODES:** низкополигональная сетка гладких фигур (`WireframeGeometry`: сфера — меридианы/параллели, цилиндр/конус — образующие+кольца, тор, капсула, труба) для wireframe/hidden-line |
+| `src/components/curved-wireframe.ts` | **VIEW-MODES:** низкополигональная сетка гладких фигур (`WireframeGeometry`: сфера, цилиндр, конус (COM: −h/4…3h/4), тор, капсула (h−2r), труба, пружина — спираль) + `csgWireframeGeometry` (CSG ≤ 20k треуг.) для wireframe/hidden-line |
 | `src/components/ChildView.tsx` / `ChildViewScene.tsx` | **CSG-CHILD-VIEW:** окно ребёнка CSG (right-bottom, ~42%): ребёнок заливкой + каркас всего CSG, камера нацелена на центр ребёнка, каркас CSG — в реальных координатах (без offset), ×; меш — `rebuildNodeForView` (без кэша), обновляется при правке CSG |
 | `src/components/ViewModeMenu.tsx` / `src/components/view-mode.ts` | **VIEW-MODES:** меню режимов у ViewCube (3 пункта) и настройки отрисовки (заливка/тени/рёбра/depthTest); состояние — `ui-store.viewMode` + localStorage |
 | `src/components/Viewport3D.tsx` | Three.js вьюпорт, гизмо, raycaster, ruler, snap-to-geometry; режим размещения (PLUG-AND-PLAY): наведение → `aim` (throttle 50 мс + последнее положение), клик — `confirmPlacement`, правый клик — отмена, гизмо скрыт, курсор — прицел, `data-placement*` для e2e; навигация (VIEWPORT-NAV): ЛКМ — выбор и рамка, ПКМ — вращение, СКМ — сдвиг, колесо — масштаб, двойной клик СКМ — «Вписать» (`viewport-nav.ts`); рамка выделения (SELECTION-RECT) |
@@ -354,7 +355,7 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 - Скругления (fillet) нет: прежний параметр куба удалён (remove-fillet) до инструмента на B-Rep; старые шаги `fillet` вырезаются при загрузке (`io/legacy-fillet.ts`) — новых не создавать
 - **SVG-EXTRUDE** (2D → 3D): тело — шаг `import_mesh` «SVG: …» (не параметрический: глубину/масштаб задним числом не поменять, как у STL-текста); контур с самопересечениями manifold не построит — воркер сообщит об ошибке (как незамкнутый STL); размещение — рядом с прошлыми объектами (не режим размещения, не «стоит на сетке»); плоскость контура — XY, выдавливание — +Z
 - **THREAD-GENERATOR / THREAD-EXTEND / THREAD-PARAMETRIC / THREAD-POLISH / THREAD-IN-CSG**: создаётся операцией `thread` (не baked), объект сцены — `import_mesh` + `SceneObject.thread`; параметры правятся в PropertiesPanel и по ✎ шага `thread` в Timeline (`edit_step`), каскад пересчитывает CSG. В дереве CSG thread — тип узла `thread` с `threadParams` (не baked), правится через ChildPropertiesPanel (`edit_child_params`). Многозаходность (`starts` 1/2/3/4/6) — n спиралей со сдвигом 360°/n, ход P·n. Зеркало резьбы — параметрическая независимая копия (шаг mirror хранит `threadParams`; hand инвертирован, имя LH; правка копии — `thread_mirror`), копирование/вставка/массив также сохраняют параметры. Базовый профиль ISO 68-1 / Unified (60°, глубина 5H/8, гребень P/8, впадина P/4) без скругления дна, классов допусков и отдельного зазора для 3D-печати; NPT/BSP — табличные OD/TPI, но прямой профиль 60° (без конусности NPT и профиля BSP 55°); M310…M600 — расширение базового профиля, не ISO 261; гайки вне DIN/ANSI — геометрический размер под ключ; смена серии сбрасывает размер на первый серии; создание — рядом с прошлыми объектами (не режим размещения)
-- После v1.3.1 открыто: связанное зеркало (linked mirror) не делали — копия CSG всегда независимая; «починка» незамкнутого STL. CI — один workflow `ci-web.yml` (CI-DEDUP ✅): job `ci` (install + typecheck + test + build) и job `e2e` — все 44 e2e (CI-E2E ✅; три fillet-* — SKIP, пока UI OCCT скрыт)
+- После v1.3.1 открыто: связанное зеркало (linked mirror) не делали — копия CSG всегда независимая; «починка» незамкнутого STL. CI — один workflow `ci-web.yml` (CI-DEDUP ✅): job `ci` (install + typecheck + test + build) и job `e2e` — все 45 e2e (CI-E2E ✅; три fillet-* — SKIP, пока UI OCCT скрыт)
 - Выравнивание режимом «Выровнять» (ALIGN-UI-REVIT) пишется шагом `align` с плоскостью (ALIGN-PLANE-RESOLVE ✅; с поворотом — UX-AUDIT-32; грань гладкой поверхности — цилиндр, сфера — не поворачивает, только касание): правка прошлого шага пересчитывает его; ✎ у самого шага нет (как у обычного align). Плоскость A следует за системой объекта A (TRS), а не за гранью при правке формы A (правка ребёнка CSG A)
 - Дерево живой сессии, начатой до v1.3.2 (boolean-узлы без `originTransform`), для вложенного CSG, сдвинутого до объединения, остаётся под замком `nested_moved` (предохранитель); после перезагрузки/загрузки проекта дерево перестраивается из истории с TRS₀ — правка работает
 - Блокировка (LOCK-OBJECT) — шаг истории `lock`; заблокированный не выбирается во вьюпорте, не двигается, не удаляется, не идёт в CSG (`document-store` — `notify`), выбрать можно из списка / дерева. Новые действия, меняющие объект, должны проверять `obj.locked`
