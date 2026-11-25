@@ -113,6 +113,7 @@ export default function ComponentTree({ objects, selectedIds, onSelect, onRename
     return m
   }, [csgGroupMode, selectedIds])
   const setSelectedChild = useUiStore((s) => s.setSelectedChild)
+  const setChildViewOpen = useUiStore((s) => s.setChildViewOpen)
   // UX-AUDIT-34: какие запечённые дети CSG — 3D-текст (по истории; объект-текст поглощён CSG)
   const operations = useDocumentStore((s) => s.operations)
   const historyIndex = useDocumentStore((s) => s.historyIndex)
@@ -220,6 +221,7 @@ export default function ComponentTree({ objects, selectedIds, onSelect, onRename
             onClick={() => {
               onSelect(rootId, false)
               setSelectedChild({ rootId, nodeId: child.id })
+              setChildViewOpen(true)
             }}
           >
             {hasKids ? (

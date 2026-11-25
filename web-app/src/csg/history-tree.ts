@@ -552,6 +552,23 @@ export async function rebuildNode(nodeId: string, parentWorld: TransformNR = IDE
 }
 
 /**
+ * CSG-CHILD-VIEW: меш узла для изолированного окна ребёнка — без кэша узла
+ * (кэш может быть посчитан для другой системы/родителя). Геометрия — в системе узла.
+ */
+export async function rebuildNodeForView(nodeId: string): Promise<ExtractedMesh> {
+  const node = treeStore.getNode(nodeId)
+  if (!node) throw new Error(`Node ${nodeId} not found in tree`)
+  const result = await workerRebuildNode(nodeId, collectSubtreeForWorker(nodeId))
+  return {
+    vertices: result.vertices,
+    indices: result.indices,
+    normals: result.normals,
+    tris: result.tris,
+    ms: result.ms,
+  }
+}
+
+/**
  * Фаза 9.3: пересчитать boolean-поддерево в МИРОВЫХ координатах системы создания
  * CSG (корень не центрируется по COM, его localTransform не применяется).
  * Это та же система, в которой csgBoolean считал вершины до un-bake'а (RS⁻¹).

@@ -8,6 +8,7 @@ import * as THREE from "three";
 import type { SceneObject, TransformNR } from "../csg/types";
 import ViewCube from "./ViewCube";
 import ViewModeMenu from "./ViewModeMenu";
+import ChildView from "./ChildView";
 import { viewModeRender } from "./view-mode";
 import { useUiStore } from "../store/ui-store";
 import { useTranslation } from "react-i18next";
@@ -963,6 +964,7 @@ export default function Viewport3D({
       <div ref={selRectRef} className="sel-rect" data-testid="selection-rect" hidden />
       <ViewCube mainCamera={cubeCamera} mainControls={cubeCtrl} />
       <ViewModeMenu />
+      <ChildView />
     </div>
   );
 }

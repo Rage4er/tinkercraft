@@ -696,5 +696,11 @@
     "realistic": "Realistic",
     "wireframe": "Wireframe",
     "hiddenLine": "Hidden line"
+  },
+  "childView": {
+    "title": "CSG child",
+    "close": "Close window",
+    "loading": "Building child…",
+    "error": "Failed to build child"
   }
 }
