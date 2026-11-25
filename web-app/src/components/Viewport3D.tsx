@@ -307,9 +307,9 @@ export default function Viewport3D({
         const lm = lines.material as THREE.LineBasicMaterial;
         // realistic: рёбра из wireframe/hidden-line не остаются; иначе — как в режиме
         lines.visible = cfg.edges;
-        lm.depthTest = cfg.edges ? cfg.edgeDepthTest : true;
-        lm.depthWrite = cfg.edges ? cfg.edgeDepthTest : true;
-        lines.renderOrder = cfg.edges ? 2 : 0;
+        lm.depthTest = cfg.edgeDepthTest;
+        lm.depthWrite = cfg.edgeDepthWrite;
+        lines.renderOrder = cfg.edgeRenderOrder;
         if (lines.visible) edges++;
       }
     }
@@ -944,7 +944,7 @@ export default function Viewport3D({
       data-view-edges={viewEdgeCount}
       data-view-shadows={viewShadowCount}
       data-view-opaque={viewOpaqueCount}
-      data-view-depth-test={viewMode === "hidden-line" ? 1 : 0}
+      data-view-depth-test={viewMode === "wireframe" ? 0 : 1}
       data-brep-hover={brepHover ?? undefined}
       data-camera={cameraMode}
       data-dimension-mode={dimMode ? (dimMode.first ? "b" : "a") : undefined}

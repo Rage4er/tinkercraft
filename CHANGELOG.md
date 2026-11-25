@@ -7,6 +7,14 @@
 
 ---
 
+## [1.3.27] — 2026-11-25
+
+### Fixed
+- **VIEW-MODES — рёбра в реалистичном виде:** восстановлены рёбра фигур (UB2-4, `EdgesGeometry`, цвет ×0.7) — они специально улучшают восприятие формы. В отличие от wireframe, в realistic у рёбер `depthTest`/`depthWrite` включены и `renderOrder` 0: рёбра видны на гранях, но **не просвечивают сквозь объект** (задние/внутренние рёбра скрыты глубиной). `data-view-depth-test` теперь 1 для realistic и hidden-line, 0 — только для wireframe.
+- **VIEW-MODES — wireframe / hidden-line:** без изменений (wireframe — все рёбра с depthTest off; hidden-line — задние скрыты заливкой фона).
+
+---
+
 ## [1.3.26] — 2026-11-25
 
 ### Fixed

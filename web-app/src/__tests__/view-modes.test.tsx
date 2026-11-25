@@ -68,9 +68,10 @@ describe('VIEW-MODES — state и меню', () => {
 })
 
 describe('VIEW-MODES — настройки отрисовки', () => {
-  it('realistic: заливка, тени, без принудительных рёбер', () => {
+  it('realistic: заливка, тени, рёбра UB2-4 видны, но с depthTest (сквозь грани не просвечивают)', () => {
     expect(viewModeRender('realistic')).toMatchObject({
-      materialVisible: true, useBackgroundColor: false, shadows: true, edges: false, edgeDepthTest: false,
+      materialVisible: true, useBackgroundColor: false, shadows: true,
+      edges: true, edgeDepthTest: true, edgeDepthWrite: true, edgeRenderOrder: 0,
     })
   })
 

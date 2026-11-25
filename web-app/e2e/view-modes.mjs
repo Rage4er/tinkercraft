@@ -47,8 +47,9 @@ try {
   await choose('realistic')
   if ((await attr('data-view-mode')) !== 'realistic') fail('B: режим не realistic')
   if (Number(await attr('data-view-shadows')) < 1) fail('B: тени выключены в реалистичном режиме')
-  if (Number(await attr('data-view-edges')) !== 0) fail('B: рёбра форсируются в реалистичном режиме')
-  ok.push('B: реалистичный — заливка и тени')
+  if (Number(await attr('data-view-edges')) < 1) fail('B: рёбра объектов не видны в реалистичном режиме')
+  if ((await attr('data-view-depth-test')) !== '1') fail('B: рёбра реалистичного должны иметь depthTest (не просвечивать)')
+  ok.push('B: реалистичный — заливка, тени, рёбра с depthTest')
 
   // ── C. Каркас ──
   stage = 'C. каркас'

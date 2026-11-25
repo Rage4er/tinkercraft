@@ -31,7 +31,7 @@ afterEach(() => {
 })
 
 describe('VIEW-MODES — реалистичный после wireframe / hidden-line', () => {
-  it('возвращает непрозрачную заливку, тени и без принудительных рёбер', () => {
+  it('возвращает непрозрачную заливку, тени и рёбра UB2-4 с depthTest (без просвечивания)', () => {
     act(() => { useUiStore.getState().setViewMode('wireframe') })
     act(() => { useUiStore.getState().setViewMode('hidden-line') })
     act(() => { useUiStore.getState().setViewMode('realistic') })
@@ -42,11 +42,15 @@ describe('VIEW-MODES — реалистичный после wireframe / hidden-
       transparent: false,
       opacity: 1,
       shadows: true,
-      edges: false,          // рёбра не форсируются (не остаются от wireframe)
+      // UB2-4: рёбра намеренно видны в реалистичном виде, но обычная глубина —
+      // задние/сквозь грани не просвечивают (в wireframe depthTest выключен)
+      edges: true,
+      edgeDepthTest: true,
+      edgeDepthWrite: true,
+      edgeRenderOrder: 0,
     })
-    // wireframe/hidden-line включают рёбра — realistic обязан их выключить
-    expect(viewModeRender('wireframe').edges).toBe(true)
-    expect(viewModeRender('hidden-line').edges).toBe(true)
+    expect(viewModeRender('wireframe')).toMatchObject({ edges: true, edgeDepthTest: false, edgeDepthWrite: false, edgeRenderOrder: 2 })
+    expect(viewModeRender('hidden-line')).toMatchObject({ edges: true, edgeDepthTest: true, edgeDepthWrite: false, edgeRenderOrder: 2 })
   })
 
   it('кнопка режима — над ViewCube, z-index 12 (не накладывается на панель шага)', () => {
