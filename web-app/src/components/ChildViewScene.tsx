@@ -8,6 +8,7 @@ import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import type { ExtractedMesh } from '../csg/types'
+import { CHILD_VIEW_CONTROLS, childViewOffset } from './child-view'
 
 export interface ChildViewSceneProps {
   child: ExtractedMesh | null
@@ -41,6 +42,9 @@ export default function ChildViewScene({ child, root, color = '#89b4fa' }: Child
     const camera = new THREE.PerspectiveCamera(45, (host.clientWidth || 320) / (host.clientHeight || 240), 0.1, 10000)
     camera.up.set(0, 0, 1)
 
+    const content = new THREE.Group()
+    scene.add(content)
+
     scene.add(new THREE.AmbientLight(0xffffff, 0.75))
     const dir = new THREE.DirectionalLight(0xffffff, 1.1)
     dir.position.set(4, -6, 8)
@@ -51,12 +55,12 @@ export default function ChildViewScene({ child, root, color = '#89b4fa' }: Child
     const mesh = new THREE.Mesh(childGeo, new THREE.MeshStandardMaterial({
       color, roughness: 0.55, metalness: 0.15, side: THREE.DoubleSide,
     }))
-    scene.add(mesh)
+    content.add(mesh)
     const childEdges = new THREE.LineSegments(
       new THREE.EdgesGeometry(childGeo, 25),
       new THREE.LineBasicMaterial({ color: 0x1b1b2b, transparent: true, opacity: 0.75 }),
     )
-    scene.add(childEdges)
+    content.add(childEdges)
 
     // Остальной CSG — каркас
     if (root && root.vertices.length >= 9 && root.indices.length >= 3) {
@@ -65,27 +69,42 @@ export default function ChildViewScene({ child, root, color = '#89b4fa' }: Child
         new THREE.EdgesGeometry(rootGeo, 25),
         new THREE.LineBasicMaterial({ color: 0x6c7086, transparent: true, opacity: 0.45 }),
       )
-      scene.add(wire)
+      content.add(wire)
       rootGeo.dispose()
     }
 
-    // Камера — по рамке ребёнка
+    // Камера — по рамке ребёнка; содержимое сдвинуто так, что центр ребёнка в 0
     childGeo.computeBoundingBox()
     const box = childGeo.boundingBox ?? new THREE.Box3(new THREE.Vector3(-10, -10, -10), new THREE.Vector3(10, 10, 10))
     const center = box.getCenter(new THREE.Vector3())
     const radius = Math.max(1, box.getSize(new THREE.Vector3()).length() / 2)
-    camera.position.set(center.x + radius * 2.2, center.y - radius * 2.2, center.z + radius * 1.8)
-    camera.lookAt(center)
+    const off = childViewOffset(center)
+    content.position.set(off.x, off.y, off.z)
+    host.dataset.childOffset = [off.x, off.y, off.z].map((v) => (Math.round(v * 100) / 100).toFixed(2)).join(',')
+    camera.position.set(radius * 2.2, -radius * 2.2, radius * 1.8)
+    camera.lookAt(0, 0, 0)
 
     const controls = new OrbitControls(camera, renderer.domElement)
-    controls.target.copy(center)
-    controls.enableDamping = true
-    controls.dampingFactor = 0.12
+    Object.assign(controls, CHILD_VIEW_CONTROLS)
+    controls.target.set(0, 0, 0)
     controls.update()
 
+    // e2e/тесты: камера (навигация OrbitControls видна снаружи)
+    host.dataset.childControls = '1'
+    const reportCamera = () => {
+      host.dataset.childCamera = [camera.position.x, camera.position.y, camera.position.z]
+        .map((v) => (Math.round(v * 100) / 100).toFixed(2)).join(',')
+    }
+    reportCamera()
+    controls.addEventListener('change', reportCamera)
+
     let raf = 0
+    let lastCam = ''
     const tick = () => {
       controls.update()
+      const cam = [camera.position.x, camera.position.y, camera.position.z]
+        .map((v) => (Math.round(v * 100) / 100).toFixed(2)).join(',')
+      if (cam !== lastCam) { lastCam = cam; host.dataset.childCamera = cam }
       renderer.render(scene, camera)
       raf = requestAnimationFrame(tick)
     }
