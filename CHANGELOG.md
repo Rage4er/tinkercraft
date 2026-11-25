@@ -7,6 +7,17 @@
 
 ---
 
+## [1.3.31] — 2026-11-26
+
+### Fixed
+- **STALE-TREE-TYPE — загрузка проекта с теми же id:** дерево прошлого документа больше не утекает в новый. `openProject` (.3dtc), `loadFromProject` и `restoreAutosave` чистят Build Tree перед пересборкой; `rebuildBuildTree` для `add_shape` теперь перезаписывает **shapeType** и params примитива (раньше — только params), а узел другого типа (baked/thread/boolean) с тем же id заменяется примитивом. Из-за этого Child-View показывал куб вместо конуса (дерево хранило старый `shapeType`, а params нового), а примитивы-дети CSG были под замком из-за рассогласования дерева и меша.
+- **CSG-CHILD-VIEW:** конус + труба — в дереве верные типы, дети без 🔒, Child-View показывает конус (e2e).
+
+### Added
+- `tree-stale.test.ts` (3: перезапись shapeType, baked→primitive, чистое дерево); e2e `csg-child-view` расширен секцией «конус + труба без замка».
+
+---
+
 ## [1.3.30] — 2026-11-25
 
 ### Changed

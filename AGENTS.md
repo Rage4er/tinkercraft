@@ -14,7 +14,7 @@
 - **manifold-3d** (WASM) — CSG операции в Web Worker
 - **Zustand 5** — стейт-менеджмент
 - **Vite 6** — сборка
-- **Vitest 4** — тесты (1138 тестов, 106 файлов; `it.fails` открытых багов нет — UX-прогон 7 нашёл 0 новых, цикл закрыт; UX-AUDIT-1…10 исправлены в `fix-all`, 11…20 — в `fix-all-2`, 21…31 — в `fix-all-3`, 32…35 — в `fix-all-4`, 32-followup и 36…40 — в `fix-all-5`, 41, 42 — в `fix-all-6`)
+- **Vitest 4** — тесты (1141 тест, 107 файлов; `it.fails` открытых багов нет — UX-прогон 7 нашёл 0 новых, цикл закрыт; UX-AUDIT-1…10 исправлены в `fix-all`, 11…20 — в `fix-all-2`, 21…31 — в `fix-all-3`, 32…35 — в `fix-all-4`, 32-followup и 36…40 — в `fix-all-5`, 41, 42 — в `fix-all-6`)
 - **pnpm** — пакетный менеджер
 
 ## Команды
@@ -23,7 +23,7 @@
 cd web-app
 pnpm dev          # dev-сервер (порт 5000)
 pnpm build        # production-сборка
-pnpm test         # запуск тестов (1138 тестов, 106 файлов)
+pnpm test         # запуск тестов (1141 тест, 107 файлов)
 pnpm typecheck    # tsc --noEmit
 pnpm e2e:smoke    # дымовой тест в браузере (Playwright; нужен запущенный pnpm dev; см. web-app/e2e/helpers.mjs). В CI все e2e — job `e2e` в ci-web.yml (CI-E2E)
 pnpm e2e:tree     # Фаза 9.1: раскрытие CSG в дереве, выбор ребёнка
@@ -66,7 +66,7 @@ pnpm e2e:fillet-chain  # FILLET-CHAIN-BREP: цепочка из 2 рёбер н�
 pnpm e2e:fillet-parametric-ui  # FILLET-PARAMETRIC-UI: шаги B-Rep в панели свойств, правка размера из панели, undo/redo (SKIP при FILLET-HIDE)
 pnpm e2e:fillet-hide  # FILLET-HIDE: меню OCCT-скругления скрыто, секции B-Rep нет, старые объекты не ломаются
 pnpm e2e:view-modes  # VIEW-MODES: меню у ViewCube, реалистичный / каркас / скрытые линии, сохранение режима
-pnpm e2e:csg-child-view  # CSG-CHILD-VIEW: выбор ребёнка CSG → окно (ребёнок + каркас), правка, закрытие
+pnpm e2e:csg-child-view  # CSG-CHILD-VIEW: выбор ребёнка CSG → окно, правка, закрытие; конус+труба — типы/без замка
 pnpm e2e:fix-view-modes-child  # FIX: realistic (рёбра с depthTest), кнопка над ViewCube, child-view слева снизу (камера на ребёнке, каркас в реальных координатах), OrbitControls, сетка гладких
 pnpm e2e:fix-curved-wireframe  # FIX-CURVED-WIREFRAME: 10 примитивов (COM), пружина, CSG union/subtract — каркас
 pnpm e2e:clean-wireframe  # CLEAN-WIREFRAME: чистые линии (окружности/образующие), труба с внутренней стенкой, упрощённая резьба
@@ -99,7 +99,7 @@ pnpm e2e:ux-formats-settings  # Пакет A: «Настройки» (язык r
 | `<задача>` | Короткие ветки задач от `main` → PR в `main` (merge-коммит после зелёного CI), ветка удаляется. Push в `main` → деплой GitHub Pages. До v1.3.1 задачи Фазы 9 шли через `phase-9` (PR #1–#17) |
 | `yandex-games` | Версия для Яндекс.Игр (экономика, реклама, токены); отдельно, Фазу 9 ещё не содержит |
 
-Цепочка: `main` (v1.3.30) → ветки задач → PR в `main`. `yandex-games` — отдельно.
+Цепочка: `main` (v1.3.31) → ветки задач → PR в `main`. `yandex-games` — отдельно.
 
 **`main` — production.** Любой push в `main` (merge PR) сразу выкладывает GitHub Pages (`deploy.yml`). Поэтому: в `main` — только через PR после зелёного CI, ничего «в процессе»; версия в `web-app/package.json` и `APP_VERSION` (`src/constants.ts`) должна соответствовать коду — значимый merge (фича, фикс) сопровождается patch-релизом: версия + CHANGELOG `[x.y.z]` + тег `vX.Y.Z` после зелёного деплоя.
 

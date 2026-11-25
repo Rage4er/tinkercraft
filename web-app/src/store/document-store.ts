@@ -949,6 +949,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const doc = await parse3dtc(picked.buffer)
       await workerClearAll()
       clearSnapshots()
+      clearTree()   // FIX (STALE-TREE-TYPE): дерево прошлого документа не должно утекать в новый
       const t0 = performance.now()
       const newObjects = doc.objects
       // DEBUG: verify CSG objects have mesh data and check children
@@ -1544,6 +1545,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     if (get().busy || get().operations.length > 0 || Object.keys(get().objects).length > 0) return false
     await workerClearAll()
     clearSnapshots()
+    clearTree()
     set({ busy: true })
     try {
       const t0 = performance.now()
@@ -1594,6 +1596,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     if (!record) return
     await workerClearAll()
     clearSnapshots()
+    clearTree()
     set({ busy: true })
     try {
       const t0 = performance.now()
