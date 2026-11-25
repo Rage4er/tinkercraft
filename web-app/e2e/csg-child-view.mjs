@@ -70,9 +70,28 @@ try {
   await view.waitFor({ timeout: 5000 })
   ok.push('C: × закрывает окно; повторный выбор ребёнка открывает снова')
 
+  // ── E. Конус + труба: дети не под замком, типы верные, Child-View — конус ──
+  stage = 'E. конус + труба'
+  await page.keyboard.press('Control+a'); await page.keyboard.press('Delete'); await page.waitForTimeout(400)
+  await placeShape(page, 'Конус'); await page.waitForTimeout(500)
+  await placeShape(page, 'Труба'); await page.waitForTimeout(500)
+  await rows.nth(0).click()
+  await rows.nth(1).click({ modifiers: ['Shift'] })
+  await panelButton(page, 'Объединение').click()
+  await page.waitForFunction(() => document.querySelectorAll('.ct-item[data-object-id]').length === 1, null, { timeout: 20000 })
+  await page.locator('.ct-item[data-object-id] .ct-chevron').click()
+  const children = await page.locator('.ct-child').allInnerTexts()
+  if (!children.some((s2) => s2.includes('Конус'))) fail('E: в дереве нет конуса: ' + children.join(' | '))
+  if (!children.some((s2) => s2.includes('Труба'))) fail('E: в дереве нет трубы: ' + children.join(' | '))
+  if (await page.locator('.ct-child [data-testid=ct-lock]').count()) fail('E: примитивы-дети под замком')
+  await page.locator('.ct-child', { hasText: 'Конус' }).click()
+  await view.waitFor({ timeout: 5000 })
+  if (!(await view.innerText()).includes('Конус')) fail('E: Child-View показывает не конус: ' + (await view.innerText()).slice(0, 80))
+  ok.push('E: конус + труба — верные типы, дети без замка, Child-View — конус')
+
   if (errors.length) fail('ошибки консоли:\n' + errors.join('\n'))
   for (const line of ok) console.log('  ✓ ' + line)
-  console.log('e2e csg-child-view OK (окно ребёнка CSG, правка, закрытие)')
+  console.log('e2e csg-child-view OK (окно ребёнка CSG, правка, закрытие; конус+труба без замка)')
 } catch (e) {
   console.error(`e2e csg-child-view FAIL [${stage}]: ${e.message}`)
   process.exitCode = 1

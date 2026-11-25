@@ -468,7 +468,22 @@ export function rebuildBuildTree(
         // Возвращаем начальное состояние — дальнейшие resize_dims / edit_child_params /
         // move ниже воспроизведут нужный префикс истории. Иммутабельно: снимки
         // дерева хранят ссылки на узлы.
-        setNode(op.id, { ...existing, params: { ...op.params }, localTransform: { ...op.transform } })
+        // FIX (STALE-TREE-TYPE): при загрузке другого проекта с теми же id в дереве
+        // мог остаться примитив ДРУГОГО типа (куб вместо конуса) — перезаписываем
+        // shapeType, иначе дерево/Child-View показывают куб и CSG под замком.
+        setNode(op.id, {
+          ...existing,
+          shapeType: op.shapeType,
+          params: { ...op.params },
+          localTransform: { ...op.transform },
+          cachedMesh: undefined,
+          cachedBBox: undefined,
+          cacheHash: undefined,
+        })
+      } else {
+        // FIX (STALE-TREE-TYPE): узел с тем же id был другого типа (baked/thread/
+        // boolean из прошлого документа) — заменяем на примитив нового документа
+        createPrimitiveNode(op.id, op.shapeType, op.params, { ...op.transform })
       }
       transforms[op.id] = { ...op.transform }
 
