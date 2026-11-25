@@ -7,6 +7,18 @@
 
 ---
 
+## [1.3.29] — 2026-11-25
+
+### Fixed
+- **VIEW-MODES — каркас всех фигур:** сетка гладких фигур выровнена по COM основного меша: конус — база −h/4, вершина 3h/4 (`centerManifoldToCOM`), капсула — полная высота h (length = h − 2r), цилиндр/труба — ±h/2. Куб/призма/пирамида — EdgesGeometry (как раньше).
+- **Пружина:** добавлена в `curved-wireframe` — низкополигональная спираль (12 сегментов на виток, высота h, радиус витка R), видна в каркасе.
+- **CSG (union/subtract):** для результата в wireframe/hidden-line строится triangle-wireframe меша (`csgWireframeGeometry`) при числе треугольников ≤ 20 000; тяжёлые CSG — только EdgesGeometry.
+
+### Added
+- Тесты `curved-wireframe.test.ts` расширены (4: все фигуры, COM конуса/цилиндра/капсулы/пружины, плоские без сетки, CSG union/subtract + лимит); e2e `pnpm e2e:fix-curved-wireframe` (10 примитивов, пружина, CSG union/subtract).
+
+---
+
 ## [1.3.28] — 2026-11-25
 
 ### Fixed
