@@ -35,10 +35,11 @@ try {
   await chooseViewMode('hidden-line')
   if (Number(await attr('data-view-edges')) < 1) fail('A: в скрытых линиях нет рёбер')
   await chooseViewMode('realistic')
-  if (Number(await attr('data-view-edges')) !== 0) fail('A: рёбра остались после возврата в реалистичный')
+  if (Number(await attr('data-view-edges')) < 1) fail('A: рёбра объектов пропали в реалистичном')
+  if ((await attr('data-view-depth-test')) !== '1') fail('A: рёбра реалистичного без depthTest — просвечивают')
   if (Number(await attr('data-view-shadows')) < 1) fail('A: тени не вернулись')
   if (Number(await attr('data-view-opaque')) < 1) fail('A: заливка не непрозрачная')
-  ok.push('A: wireframe → hidden-line → realistic: заливка/тени вернулись, рёбер нет')
+  ok.push('A: wireframe → hidden-line → realistic: заливка/тени, рёбра с depthTest')
 
   // ── B. Кнопка режима не накладывается на ViewCube ──
   stage = 'B. кнопка'
