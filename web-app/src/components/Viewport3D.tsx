@@ -270,6 +270,7 @@ export default function Viewport3D({
   const viewMode = useUiStore((s) => s.viewMode);
   const [viewEdgeCount, setViewEdgeCount] = useState(0);
   const [viewShadowCount, setViewShadowCount] = useState(0);
+  const [viewOpaqueCount, setViewOpaqueCount] = useState(0);
   useEffect(() => {
     const scene = sceneRef.current;
     if (!scene) return;
@@ -277,6 +278,7 @@ export default function Viewport3D({
     const bg = scene.background instanceof THREE.Color ? `#${scene.background.getHexString()}` : "#000000";
     let edges = 0;
     let shadows = 0;
+    let opaque = 0;
     for (const [id, entry] of meshMapRef.current) {
       const mat = entry.mesh.material as THREE.MeshStandardMaterial;
       if (!mat) continue;
@@ -298,18 +300,22 @@ export default function Viewport3D({
       entry.mesh.castShadow = cfg.shadows;
       entry.mesh.receiveShadow = cfg.shadows;
       if (cfg.shadows) shadows++;
+      if (mat.visible && !mat.transparent && mat.opacity === 1) opaque++;
       for (const child of entry.mesh.children) {
         const lines = child as THREE.LineSegments;
         if (!lines.userData?.isShapeEdges) continue;
         const lm = lines.material as THREE.LineBasicMaterial;
-        lm.depthTest = cfg.edgeDepthTest;
-        lm.depthWrite = cfg.edgeDepthTest;
+        // realistic: рёбра из wireframe/hidden-line не остаются; иначе — как в режиме
+        lines.visible = cfg.edges;
+        lm.depthTest = cfg.edges ? cfg.edgeDepthTest : true;
+        lm.depthWrite = cfg.edges ? cfg.edgeDepthTest : true;
         lines.renderOrder = cfg.edges ? 2 : 0;
-        if (cfg.edges) edges++;
+        if (lines.visible) edges++;
       }
     }
     setViewEdgeCount(edges);
     setViewShadowCount(shadows);
+    setViewOpaqueCount(opaque);
   }, [viewMode, objects, selectedIds, sceneReady, sceneRef, meshMapRef, themeId]);
 
   // ---- Хук 3: Логика линейки (ruler) ----
@@ -937,6 +943,7 @@ export default function Viewport3D({
       data-view-mode={viewMode}
       data-view-edges={viewEdgeCount}
       data-view-shadows={viewShadowCount}
+      data-view-opaque={viewOpaqueCount}
       data-view-depth-test={viewMode === "hidden-line" ? 1 : 0}
       data-brep-hover={brepHover ?? undefined}
       data-camera={cameraMode}

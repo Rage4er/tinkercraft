@@ -7,6 +7,19 @@
 
 ---
 
+## [1.3.26] — 2026-11-25
+
+### Fixed
+- **VIEW-MODES — реалистичный:** после каркаса / скрытых линий realistic восстанавливает непрозрачную заливку (material.visible, transparent=false, opacity=1), тени (cast/receiveShadow) и **скрывает рёбра** (EdgesGeometry) — линии от wireframe/hidden-line больше не остаются; depthTest/depthWrite рёбер возвращаются в исходное состояние.
+- **VIEW-MODES — кнопка режима:** перенесена над ViewCube (right 8, bottom 148, z-index 12) — не накладывается на ViewCube и панель шага; CSS-правило `.view-mode-menu` починено (пропущенная закрывающая скобка ломала следующие правила).
+- **CSG-CHILD-VIEW — общая система координат:** ребёнок и каркас остального CSG сдвигаются одним offset (центр ребёнка → 0) — контекст вокруг ребёнка, а не отдельно; окно переехало в **левый нижний угол**.
+- **CSG-CHILD-VIEW — OrbitControls:** вращение/зум/панорама работают; renderer/controls больше не пересоздаются на каждый рендер Viewport3D (стабильный объект root-меша через useMemo) — камера не сбрасывалась при drag. В `data-child-camera` видна позиция камеры (e2e).
+
+### Added
+- Тесты `view-modes-fix.test.tsx` (2) и `child-view-fix.test.tsx` (3); e2e `pnpm e2e:fix-view-modes-child`.
+
+---
+
 ## [1.3.25] — 2026-11-25
 
 ### Added

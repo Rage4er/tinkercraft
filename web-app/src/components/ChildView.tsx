@@ -27,6 +27,12 @@ export default function ChildView() {
   const nodeId = selectedChild?.nodeId ?? null
   const verts = root?.vertices
   const inds = root?.indices
+  // Стабильный объект для сцены: иначе каждый рендер Viewport3D пересоздаёт
+  // renderer/OrbitControls в маленьком окне (камера сбрасывалась при drag)
+  const rootMesh = useMemo(
+    () => (root ? { vertices: root.vertices, indices: root.indices } : null),
+    [root?.vertices, root?.indices],
+  )
 
   // Меш ребёнка — из Build Tree (без кэша узла); пересобирается при правке CSG
   useEffect(() => {
@@ -59,7 +65,12 @@ export default function ChildView() {
   if (!selectedChild || !childViewOpen || !root) return null
 
   return (
-    <div className="child-view" data-testid="child-view" data-node-id={selectedChild.nodeId}>
+    <div
+      className="child-view"
+      data-testid="child-view"
+      data-node-id={selectedChild.nodeId}
+      style={{ left: 8, right: "auto", bottom: 8 }}
+    >
       <div className="child-view-header">
         <span className="child-view-title" title={t('childView.title')}>
           {t('childView.title')}{info ? ` · ${info.kind}` : ''}
@@ -79,7 +90,7 @@ export default function ChildView() {
       {error
         ? <div className="child-view-state" data-testid="child-view-error">{t('childView.error')}</div>
         : mesh
-          ? <ChildViewScene child={mesh} root={{ vertices: root.vertices, indices: root.indices }} color={root.color} />
+          ? <ChildViewScene child={mesh} root={rootMesh} color={root.color} />
           : <div className="child-view-state" data-testid="child-view-loading">{t('childView.loading')}</div>}
     </div>
   )

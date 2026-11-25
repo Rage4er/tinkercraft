@@ -64,7 +64,12 @@ export default function ViewModeMenu() {
   }
 
   return (
-    <div className="view-mode-menu" ref={wrapRef}>
+    <div
+      className="view-mode-menu"
+      ref={wrapRef}
+      style={{ right: 8, bottom: 148, zIndex: 12 }}
+      data-testid="view-mode-menu-wrap"
+    >
       <button
         type="button"
         className={`view-mode-btn${open ? ' active' : ''}`}

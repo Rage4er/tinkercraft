@@ -2163,9 +2163,7 @@ body {
 /* ---- VIEW-MODES: меню режимов отображения рядом с ViewCube ---- */
 .view-mode-menu {
   position: absolute;
-  right: 116px;
-  bottom: 40px;
-  z-index: 10;
+  /* позиция — inline (справа над ViewCube); CSS — только раскладка/вид */
 }
 
 .view-mode-btn {
@@ -2191,8 +2189,7 @@ body {
 /* ---- CSG-CHILD-VIEW: маленькое окно выбранного ребёнка CSG ---- */
 .child-view {
   position: absolute;
-  right: 8px;
-  bottom: 8px;
+  /* CSG-CHILD-VIEW: левый нижний угол (позиция — inline: left 8, bottom 8) */
   width: min(42%, 420px);
   height: min(46%, 340px);
   min-width: 240px;
