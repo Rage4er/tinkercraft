@@ -11,7 +11,8 @@ import { createRoot, type Root } from 'react-dom/client'
 import { act } from 'react-dom/test-utils'
 import i18n from '../i18n'
 import ChildView from '../components/ChildView'
-import { CHILD_VIEW_CONTROLS, childViewTarget } from '../components/child-view'
+import * as THREE from 'three'
+import { CHILD_VIEW_CONTROLS, snapshotMainView } from '../components/child-view'
 import { useUiStore } from '../store/ui-store'
 import { useDocumentStore } from '../store/document-store'
 import type { SceneObject } from '../csg/types'
@@ -59,10 +60,16 @@ beforeEach(() => {
 })
 
 describe('CSG-CHILD-VIEW — фиксы', () => {
-  it('камера нацелена на центр ребёнка; каркас остаётся в реальных координатах', () => {
-    const target = childViewTarget({ x: 12, y: -4, z: 3 })
-    expect(target).toEqual({ x: 12, y: -4, z: 3 })
-    // содержимое не сдвигается общим offset — координаты ребёнка/каркаса не меняются
+  it('камера окна — снимок камеры основного вида (та же позиция/цель)', () => {
+    const cam = new THREE.PerspectiveCamera(50, 1.5, 0.1, 1000)
+    cam.position.set(120, -80, 60)
+    cam.up.set(0, 0, 1)
+    const view = snapshotMainView(cam, { x: 10, y: 20, z: 30 })
+    expect(view.kind).toBe('perspective')
+    expect(view.position).toEqual({ x: 120, y: -80, z: 60 })
+    expect(view.up).toEqual({ x: 0, y: 0, z: 1 })
+    expect(view.target).toEqual({ x: 10, y: 20, z: 30 })
+    expect(view.fov).toBe(50)
   })
 
   it('OrbitControls: вращение, зум, панорама, демпфирование', () => {

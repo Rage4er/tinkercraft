@@ -1,19 +1,37 @@
 // ============================================================
-// ChildViewScene.tsx — CSG-CHILD-VIEW: маленький 3D-вид ребёнка CSG
+// ChildViewScene.tsx — CSG-CHILD-VIEW: копия основного вида
 // ============================================================
-// Своя сцена/камера/renderer: выбранный ребёнок — заливкой, остальной CSG —
-// каркасом (EdgesGeometry), камера вписана в ребёнка. OrbitControls — вращение.
+// Та же сцена/координаты и та же камера, что в основном вьюпорте (снимок на
+// момент открытия): корневой CSG — каркас, выбранный ребёнок — реалистичной
+// заливкой, остальные объекты сцены — каркасом. Никакой отдельной центровки:
+// всё в мировых координатах, OrbitControls — свободная навигация.
 
 import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
-import type { ExtractedMesh } from '../csg/types'
-import { CHILD_VIEW_CONTROLS, childViewTarget } from './child-view'
+import type { ExtractedMesh, ShapeParams, ShapeType, TransformNR } from '../csg/types'
+import { CHILD_VIEW_CONTROLS, snapshotMainView } from './child-view'
+import { CURVED_WIREFRAME, curvedWireframeGeometry } from './curved-wireframe'
+
+export interface ChildViewObject {
+  id: string
+  vertices: Float32Array
+  indices: Uint32Array
+  shapeType: ShapeType
+  params: ShapeParams
+  transform: TransformNR
+  color?: string
+}
 
 export interface ChildViewSceneProps {
   child: ExtractedMesh | null
-  /** Меш всего CSG-результата (для каркаса остального) */
-  root: { vertices: Float32Array; indices: Uint32Array } | null
+  /** Корневой CSG-объект (каркас + система координат ребёнка) */
+  root: ChildViewObject | null
+  /** Остальные объекты сцены — каркасом */
+  others: ChildViewObject[]
+  /** Камера основного вида — стартовая для окна */
+  mainCamera: THREE.Camera | null
+  mainTarget: THREE.Vector3 | null
   color?: string
 }
 
@@ -26,12 +44,30 @@ function geometryOf(vertices: Float32Array, indices: Uint32Array, normals?: Floa
   return g
 }
 
-export default function ChildViewScene({ child, root, color = '#89b4fa' }: ChildViewSceneProps) {
+function applyTransform(obj: THREE.Object3D, t: TransformNR): void {
+  obj.position.set(t.x, t.y, t.z)
+  obj.rotation.set(
+    THREE.MathUtils.degToRad(t.rotX),
+    THREE.MathUtils.degToRad(t.rotY),
+    THREE.MathUtils.degToRad(t.rotZ),
+  )
+  obj.scale.set(t.scaleX, t.scaleY, t.scaleZ)
+}
+
+function wireGeometryFor(obj: ChildViewObject): THREE.BufferGeometry | null {
+  if (CURVED_WIREFRAME.has(obj.shapeType)) return curvedWireframeGeometry(obj.shapeType, obj.params)
+  const geo = geometryOf(obj.vertices, obj.indices)
+  const edges = new THREE.EdgesGeometry(geo, 30)
+  geo.dispose()
+  return edges
+}
+
+export default function ChildViewScene({ child, root, others, mainCamera, mainTarget, color = '#89b4fa' }: ChildViewSceneProps) {
   const hostRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const host = hostRef.current
-    if (!host || !child || child.vertices.length < 9) return
+    if (!host || !root || root.vertices.length < 9) return
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
     renderer.setPixelRatio(window.devicePixelRatio)
     renderer.setSize(host.clientWidth || 320, host.clientHeight || 240)
@@ -39,67 +75,121 @@ export default function ChildViewScene({ child, root, color = '#89b4fa' }: Child
     host.appendChild(renderer.domElement)
 
     const scene = new THREE.Scene()
-    const camera = new THREE.PerspectiveCamera(45, (host.clientWidth || 320) / (host.clientHeight || 240), 0.1, 10000)
-    camera.up.set(0, 0, 1)
+    const aspect = (host.clientWidth || 320) / (host.clientHeight || 240)
+    const view = mainCamera && mainTarget
+      ? snapshotMainView(mainCamera, { x: mainTarget.x, y: mainTarget.y, z: mainTarget.z })
+      : null
+    let camera: THREE.PerspectiveCamera | THREE.OrthographicCamera
+    if (view?.kind === 'orthographic' && view.ortho) {
+      const o = view.ortho
+      camera = new THREE.OrthographicCamera(o.left, o.right, o.top, o.bottom, 0.1, 100000)
+      camera.zoom = view.zoom ?? 1
+    } else {
+      camera = new THREE.PerspectiveCamera(view?.fov ?? 45, aspect, 0.1, 10000)
+    }
+    camera.up.set(view?.up.x ?? 0, view?.up.y ?? 0, view?.up.z ?? 1)
+    camera.position.set(view?.position.x ?? 120, view?.position.y ?? -120, view?.position.z ?? 90)
+    const target = new THREE.Vector3(view?.target.x ?? 0, view?.target.y ?? 0, view?.target.z ?? 0)
+    camera.lookAt(target)
+    camera.updateProjectionMatrix()
+    host.dataset.mainCamera = [camera.position.x, camera.position.y, camera.position.z]
+      .map((v) => (Math.round(v * 100) / 100).toFixed(2)).join(',')
+    host.dataset.mainTarget = [target.x, target.y, target.z]
+      .map((v) => (Math.round(v * 100) / 100).toFixed(2)).join(',')
 
-    const content = new THREE.Group()
-    scene.add(content)
-
-    scene.add(new THREE.AmbientLight(0xffffff, 0.75))
-    const dir = new THREE.DirectionalLight(0xffffff, 1.1)
-    dir.position.set(4, -6, 8)
+    scene.add(new THREE.AmbientLight(0xffffff, 0.8))
+    const dir = new THREE.DirectionalLight(0xffffff, 1.0)
+    dir.position.set(60, -80, 120)
     scene.add(dir)
 
-    // Ребёнок — заливка + рёбра
-    const childGeo = geometryOf(child.vertices, child.indices, child.normals)
-    const mesh = new THREE.Mesh(childGeo, new THREE.MeshStandardMaterial({
-      color, roughness: 0.55, metalness: 0.15, side: THREE.DoubleSide,
-    }))
-    content.add(mesh)
-    const childEdges = new THREE.LineSegments(
-      new THREE.EdgesGeometry(childGeo, 25),
-      new THREE.LineBasicMaterial({ color: 0x1b1b2b, transparent: true, opacity: 0.75 }),
-    )
-    content.add(childEdges)
+    // Корневой CSG — в своих мировых координатах (та же система, что в основном виде)
+    const rootGroup = new THREE.Group()
+    applyTransform(rootGroup, root.transform)
+    scene.add(rootGroup)
+    host.dataset.rootTransform = [root.transform.x, root.transform.y, root.transform.z]
+      .map((v) => (Math.round(v * 100) / 100).toFixed(2)).join(',')
 
-    // Остальной CSG — каркас
-    if (root && root.vertices.length >= 9 && root.indices.length >= 3) {
-      const rootGeo = geometryOf(root.vertices, root.indices)
-      const wire = new THREE.LineSegments(
-        new THREE.EdgesGeometry(rootGeo, 25),
-        new THREE.LineBasicMaterial({ color: 0x6c7086, transparent: true, opacity: 0.45 }),
+    // Остальной CSG — каркасом
+    const rootGeo = geometryOf(root.vertices, root.indices)
+    const rootWire = new THREE.LineSegments(
+      new THREE.EdgesGeometry(rootGeo, 30),
+      new THREE.LineBasicMaterial({ color: 0x6c7086, transparent: true, opacity: 0.5 }),
+    )
+    rootGroup.add(rootWire)
+    rootGeo.dispose()
+
+    // Выбранный ребёнок — реалистичной заливкой
+    if (child && child.vertices.length >= 9) {
+      const childGeo = geometryOf(child.vertices, child.indices, child.normals)
+      const mesh = new THREE.Mesh(childGeo, new THREE.MeshStandardMaterial({
+        color, roughness: 0.55, metalness: 0.15, side: THREE.DoubleSide,
+      }))
+      rootGroup.add(mesh)
+      const childEdges = new THREE.LineSegments(
+        new THREE.EdgesGeometry(childGeo, 25),
+        new THREE.LineBasicMaterial({ color: 0x1b1b2b, transparent: true, opacity: 0.75 }),
       )
-      content.add(wire)
-      rootGeo.dispose()
+      rootGroup.add(childEdges)
+      host.dataset.childRealistic = '1'
     }
 
-    // Камера — по рамке ребёнка; содержимое сдвинуто так, что центр ребёнка в 0
-    childGeo.computeBoundingBox()
-    const box = childGeo.boundingBox ?? new THREE.Box3(new THREE.Vector3(-10, -10, -10), new THREE.Vector3(10, 10, 10))
-    const center = box.getCenter(new THREE.Vector3())
-    const radius = Math.max(1, box.getSize(new THREE.Vector3()).length() / 2)
-    // CSG-CHILD-VIEW: без общего offset — каркас остаётся в реальных координатах,
-    // камера (и OrbitControls.target) нацелена на центр ребёнка
-    const target = childViewTarget(center)
-    host.dataset.childTarget = [target.x, target.y, target.z].map((v) => (Math.round(v * 100) / 100).toFixed(2)).join(',')
-    camera.position.set(target.x + radius * 2.2, target.y - radius * 2.2, target.z + radius * 1.8)
-    camera.lookAt(target.x, target.y, target.z)
+    // Остальные объекты сцены — каркасом, в своих координатах
+    for (const obj of others) {
+      if (obj.vertices.length < 9) continue
+      const geo = wireGeometryFor(obj)
+      if (!geo) continue
+      const wire = new THREE.LineSegments(
+        geo,
+        new THREE.LineBasicMaterial({
+          color: new THREE.Color(obj.color ?? '#6c7086').multiplyScalar(0.8),
+          transparent: true,
+          opacity: 0.5,
+        }),
+      )
+      const group = new THREE.Group()
+      applyTransform(group, obj.transform)
+      group.add(wire)
+      scene.add(group)
+    }
+    host.dataset.othersWireframe = String(others.length)
+
+    // Вписать всю сцену в окно (как F в основном виде): ориентация — от основной
+    // камеры, но расстояние — по рамке сцены и соотношению сторон маленького окна.
+    const sceneBox = new THREE.Box3().setFromObject(scene)
+    if (!sceneBox.isEmpty()) {
+      const center = sceneBox.getCenter(new THREE.Vector3())
+      const radius = Math.max(1, sceneBox.getSize(new THREE.Vector3()).length() / 2)
+      const dir = view
+        ? new THREE.Vector3(view.position.x - view.target.x, view.position.y - view.target.y, view.position.z - view.target.z)
+        : new THREE.Vector3(0.5, -0.9, 0.6)
+      if (dir.lengthSq() < 1e-9) dir.set(0.5, -0.9, 0.6)
+      dir.normalize()
+      if (camera instanceof THREE.PerspectiveCamera) {
+        const halfV = (camera.fov * Math.PI) / 360
+        const halfH = Math.atan(Math.tan(halfV) * Math.max(aspect, 1e-3))
+        const dist = (radius / Math.sin(Math.min(halfV, halfH))) * 1.05
+        camera.position.copy(center).addScaledVector(dir, dist)
+        host.dataset.fit = String(Math.round(dist * 100) / 100)
+      } else {
+        const o = camera as THREE.OrthographicCamera
+        const halfH = (o.top - o.bottom) / 2 / (o.zoom || 1)
+        const dist = (radius / halfH) * 2 * 1.05
+        camera.position.copy(center).addScaledVector(dir, Math.max(1, dist))
+        o.zoom = 1
+        host.dataset.fit = String(Math.round(dist * 100) / 100)
+      }
+      camera.lookAt(center)
+      target.copy(center)
+      host.dataset.sceneCenter = [center.x, center.y, center.z]
+        .map((v) => (Math.round(v * 100) / 100).toFixed(2)).join(',')
+    }
 
     const controls = new OrbitControls(camera, renderer.domElement)
     Object.assign(controls, CHILD_VIEW_CONTROLS)
-    controls.target.set(target.x, target.y, target.z)
+    controls.target.copy(target)
     controls.update()
 
-    // e2e/тесты: камера (навигация OrbitControls видна снаружи)
     host.dataset.childControls = '1'
-    const reportCamera = () => {
-      host.dataset.childCamera = [camera.position.x, camera.position.y, camera.position.z]
-        .map((v) => (Math.round(v * 100) / 100).toFixed(2)).join(',')
-    }
-    reportCamera()
-    controls.addEventListener('change', reportCamera)
-
-    let raf = 0
     let lastCam = ''
     const tick = () => {
       controls.update()
@@ -109,13 +199,20 @@ export default function ChildViewScene({ child, root, color = '#89b4fa' }: Child
       renderer.render(scene, camera)
       raf = requestAnimationFrame(tick)
     }
-    tick()
+    let raf = requestAnimationFrame(tick)
 
     const ro = new ResizeObserver(() => {
       const w = host.clientWidth, h = host.clientHeight
       if (!w || !h) return
       renderer.setSize(w, h)
-      camera.aspect = w / h
+      if (camera instanceof THREE.PerspectiveCamera) {
+        camera.aspect = w / h
+      } else {
+        const o = camera as THREE.OrthographicCamera
+        const halfH = (o.top - o.bottom) / 2 / o.zoom
+        const halfW = halfH * (w / h)
+        o.left = -halfW; o.right = halfW; o.top = halfH; o.bottom = -halfH
+      }
       camera.updateProjectionMatrix()
     })
     ro.observe(host)
@@ -134,7 +231,7 @@ export default function ChildViewScene({ child, root, color = '#89b4fa' }: Child
       renderer.dispose()
       renderer.domElement.remove()
     }
-  }, [child, root, color])
+  }, [child, root, others, mainCamera, mainTarget, color])
 
-  return <div ref={hostRef} className="child-view-canvas-host" data-testid="child-view-scene" data-child-tris={child ? child.indices.length / 3 : 0} data-root-wireframe={root ? 1 : 0} />
+  return <div ref={hostRef} className="child-view-canvas-host" data-testid="child-view-scene" />
 }

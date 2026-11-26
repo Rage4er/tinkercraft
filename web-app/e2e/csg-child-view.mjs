@@ -36,10 +36,12 @@ try {
   await cyl.click()
   await view.waitFor({ timeout: 10000 })
   await scene.waitFor({ timeout: 30000 })
-  await page.waitForFunction(() => Number(document.querySelector('[data-testid=child-view-scene]')?.getAttribute('data-child-tris')) > 0, null, { timeout: 30000 })
-  if ((await scene.getAttribute('data-root-wireframe')) !== '1') fail('каркас остального CSG не построен')
+  await page.waitForFunction(() => document.querySelector('[data-testid=child-view-scene]')?.getAttribute('data-child-realistic') === '1', null, { timeout: 30000 })
+  if ((await scene.getAttribute('data-child-realistic')) !== '1') fail('ребёнок не реалистичный в окне')
+  if (!(await scene.getAttribute('data-fit'))) fail('окно не вписало сцену в вид')
+  if (!(await scene.getAttribute('data-scene-center'))) fail('центр сцены не задан')
   if (!(await view.innerText()).includes('Цилиндр')) fail('в заголовке окна нет типа ребёнка')
-  ok.push('A: выбор цилиндра в дереве → окно ребёнка (меш ребёнка + каркас CSG)')
+  ok.push('A: выбор цилиндра → окно-копия (ребёнок реалистичный, сцена вписана)')
 
   // ── B. Правка ребёнка ──
   stage = 'B. правка'
@@ -58,7 +60,7 @@ try {
   const histAfter = await page.locator('.tl-item').count()
   if (histAfter <= histBefore) fail('правка не добавила шаг истории')
   await view.waitFor({ timeout: 5000 })
-  await page.waitForFunction(() => Number(document.querySelector('[data-testid=child-view-scene]')?.getAttribute('data-child-tris')) > 0, null, { timeout: 20000 })
+  await page.waitForFunction(() => document.querySelector('[data-testid=child-view-scene]')?.getAttribute('data-child-realistic') === '1', null, { timeout: 20000 })
   ok.push(`B: правка радиуса 10 → 16 — CSG пересобран, окно ребёнка обновлено (${histBefore} → ${histAfter} шагов)`)
 
   // ── C. Закрыть и открыть снова ──

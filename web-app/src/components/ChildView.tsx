@@ -7,6 +7,7 @@
 // (root CSG меняет вершины). Закрытие — ×; выбор ребёнка снова открывает окно.
 
 import { useEffect, useMemo, useState } from 'react'
+import type * as THREE from 'three'
 import { useTranslation } from 'react-i18next'
 import { useUiStore } from '../store/ui-store'
 import { useDocumentStore } from '../store/document-store'
@@ -15,23 +16,42 @@ import { formatParams, formatThreadParams } from '../csg/tree-view'
 import ChildViewScene from './ChildViewScene'
 import type { ExtractedMesh } from '../csg/types'
 
-export default function ChildView() {
+export default function ChildView({
+  mainCamera = null,
+  mainTarget = null,
+}: {
+  mainCamera?: THREE.Camera | null
+  mainTarget?: THREE.Vector3 | null
+} = {}) {
   const { t } = useTranslation()
   const selectedChild = useUiStore((s) => s.selectedChild)
   const childViewOpen = useUiStore((s) => s.childViewOpen)
   const setChildViewOpen = useUiStore((s) => s.setChildViewOpen)
   const root = useDocumentStore((s) => (selectedChild ? s.objects[selectedChild.rootId] : undefined))
+  const objects = useDocumentStore((s) => s.objects)
   const [mesh, setMesh] = useState<ExtractedMesh | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const nodeId = selectedChild?.nodeId ?? null
   const verts = root?.vertices
   const inds = root?.indices
-  // Стабильный объект для сцены: иначе каждый рендер Viewport3D пересоздаёт
+  // Стабильные данные сцены: иначе каждый рендер Viewport3D пересоздаёт
   // renderer/OrbitControls в маленьком окне (камера сбрасывалась при drag)
-  const rootMesh = useMemo(
-    () => (root ? { vertices: root.vertices, indices: root.indices } : null),
-    [root?.vertices, root?.indices],
+  const rootObj = useMemo(
+    () => (root ? {
+      id: root.id, vertices: root.vertices, indices: root.indices,
+      shapeType: root.shapeType, params: root.params, transform: root.transform, color: root.color,
+    } : null),
+    [root],
+  )
+  const others = useMemo(
+    () => Object.values(objects)
+      .filter((o) => o.id !== selectedChild?.rootId)
+      .map((o) => ({
+        id: o.id, vertices: o.vertices, indices: o.indices,
+        shapeType: o.shapeType, params: o.params, transform: o.transform, color: o.color,
+      })),
+    [objects, selectedChild?.rootId],
   )
 
   // Меш ребёнка — из Build Tree (без кэша узла); пересобирается при правке CSG
@@ -90,7 +110,7 @@ export default function ChildView() {
       {error
         ? <div className="child-view-state" data-testid="child-view-error">{t('childView.error')}</div>
         : mesh
-          ? <ChildViewScene child={mesh} root={rootMesh} color={root.color} />
+          ? <ChildViewScene child={mesh} root={rootObj} others={others} mainCamera={mainCamera} mainTarget={mainTarget} color={root.color} />
           : <div className="child-view-state" data-testid="child-view-loading">{t('childView.loading')}</div>}
     </div>
   )
