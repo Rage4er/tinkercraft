@@ -67,7 +67,7 @@ try {
   await page.locator('.ct-child', { hasText: 'Цилиндр' }).click()
   const view = page.locator('[data-testid=child-view]')
   await view.waitFor({ timeout: 10000 })
-  await page.waitForSelector('[data-testid=child-view-scene] canvas', { timeout: 30000 })
+  await page.waitForSelector('[data-testid=child-view-scene]', { timeout: 30000 })
   await page.waitForFunction(() => document.querySelector('[data-testid=child-view-scene]')?.getAttribute('data-child-controls') === '1', null, { timeout: 20000 })
 
   const vpBox = await vp.boundingBox()
@@ -84,7 +84,7 @@ try {
 
   // OrbitControls: drag по канвасу меняет позицию камеры
   const cam0 = await sceneEl.getAttribute('data-child-camera')
-  const canvas = page.locator('[data-testid=child-view-scene] canvas')
+  const canvas = page.locator('[data-testid=child-view-scene]')
   const cb = await canvas.boundingBox()
   await page.mouse.move(cb.x + cb.width / 2, cb.y + cb.height / 2)
   await page.mouse.down({ button: 'left' })

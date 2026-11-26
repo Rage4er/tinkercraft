@@ -9,6 +9,7 @@ import type { SceneObject, TransformNR } from "../csg/types";
 import ViewCube from "./ViewCube";
 import ViewModeMenu from "./ViewModeMenu";
 import ChildView from "./ChildView";
+import { useChildViewport } from "./child-view-render";
 import { viewModeRender } from "./view-mode";
 import { CURVED_WIREFRAME, csgWireframeGeometry, curvedWireframeGeometry, threadWireframe } from "./curved-wireframe";
 import { useUiStore } from "../store/ui-store";
@@ -154,6 +155,9 @@ export default function Viewport3D({
   const { t } = useTranslation();
   const [webglOk] = useState<boolean>(() => checkWebGL());
 
+  // CHILD-VIEW: дорисовка маленького окна в основном цикле (тот же renderer/scene)
+  const childAfterRenderRef = useRef<((renderer: THREE.WebGLRenderer, scene: THREE.Scene) => void) | null>(null)
+
   // ---- Хук 1: Инициализация Three.js ----
   const {
     sceneReady,
@@ -168,7 +172,11 @@ export default function Viewport3D({
     fitTargetRef,
     cubeCamera,
     cubeCtrl,
-  } = useThreeInit(webglOk, cameraMode, onFpsUpdate, selectedIds);
+  } = useThreeInit(webglOk, cameraMode, onFpsUpdate, selectedIds, childAfterRenderRef);
+
+  useChildViewport({
+    sceneReady, sceneRef, cameraRef, controlsRef, meshMapRef, afterRenderRef: childAfterRenderRef,
+  });
 
   // ---- Refs for props ----
   const onTransformEndRef = useRef(onTransformEnd);
@@ -1016,7 +1024,7 @@ export default function Viewport3D({
       <div ref={selRectRef} className="sel-rect" data-testid="selection-rect" hidden />
       <ViewCube mainCamera={cubeCamera} mainControls={cubeCtrl} />
       <ViewModeMenu />
-      <ChildView mainCamera={activeCameraRef.current ?? cameraRef.current} mainTarget={controlsRef.current?.target ?? null} />
+      <ChildView />
     </div>
   );
 }
