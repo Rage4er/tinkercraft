@@ -24,6 +24,7 @@ import {
   snapshotSubtree,
   instantiateSubtree,
   syncNodeTransform,
+  nodeWorldTransform,
 } from '../csg/history-tree'
 import { subtractTransform, composeTransforms } from '../csg/worker-matrix'
 import type { TreeNode, BoundingBox, ExtractedMesh } from '../csg/types'
@@ -1228,5 +1229,23 @@ describe('originTransform (NESTED-MOVED-EDIT)', () => {
     const legacy = snap.map((n) => { const { originTransform: _o, ...rest } = n; void _o; return rest })
     instantiateSubtree(legacy, 'g', 'k2', T({ x: 50 }), T({ x: 3 }))
     expect(getNode('k2')!.originTransform).toEqual(T({ x: 3 }))
+  })
+})
+
+describe('nodeWorldTransform', () => {
+  beforeEach(() => {
+    clearTree()
+  })
+
+  it('мир ребёнка = root.localTransform ∘ relativeToParent; следует за корнем', () => {
+    const t = (x = 0) => ({ ...defaultTransform, x })
+    createPrimitiveNode('a', 'cube', { width: 2, height: 2, depth: 2 }, t())
+    createPrimitiveNode('b', 'cube', { width: 2, height: 2, depth: 2 }, t(30))
+    createBooleanNode('u', 'union', 'a', 'b', t())
+    expect(nodeWorldTransform('u', 'a')?.x).toBeCloseTo(0)
+    expect(nodeWorldTransform('u', 'b')?.x).toBeCloseTo(30)
+    syncNodeTransform('u', t(50))
+    expect(nodeWorldTransform('u', 'b')?.x).toBeCloseTo(80)
+    expect(nodeWorldTransform('u', 'missing')).toBeNull()
   })
 })

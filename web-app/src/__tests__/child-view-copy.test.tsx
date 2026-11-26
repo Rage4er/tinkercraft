@@ -13,7 +13,7 @@ import { act } from 'react-dom/test-utils'
 import i18n from '../i18n'
 import ChildView from '../components/ChildView'
 import { CHILD_VIEW_CONTROLS } from '../components/child-view'
-import { childViewportRect, fitChildViewCamera, CHILD_VIEW_MATERIALS } from '../components/child-view-render'
+import { childViewportRect, fitChildViewCamera, CHILD_VIEW_MATERIALS, childViewWorldMatrix } from '../components/child-view-render'
 import { useUiStore } from '../store/ui-store'
 import { useDocumentStore } from '../store/document-store'
 import { useChildViewSource } from '../store/child-view-source'
@@ -77,8 +77,15 @@ describe('CHILD-VIEW-COPY', () => {
     expect((src as unknown as { others?: unknown }).others).toBeUndefined()
   })
 
-  it('ребёнок — реалистичный, мир — каркасом', () => {
-    expect(CHILD_VIEW_MATERIALS).toEqual({ child: 'standard', world: 'wireframe' })
+  it('ребёнок — реалистичный, мир — чистым каркасом', () => {
+    expect(CHILD_VIEW_MATERIALS).toEqual({ child: 'standard', world: 'clean-wireframe' })
+  })
+
+  it('мир окна: меш ребёнка переносится в мировые координаты корня', () => {
+    const m = childViewWorldMatrix({ x: 25, y: -10, z: 5, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 })
+    const p = new THREE.Vector3(0, 0, 0).applyMatrix4(m)
+    expect([p.x, p.y, p.z]).toEqual([25, -10, 5])
+    expect(new THREE.Vector3(0, 0, 0).applyMatrix4(childViewWorldMatrix(undefined))).toEqual(new THREE.Vector3(0, 0, 0))
   })
 
   it('fitView: прямоугольник окна и камера вписывает сцену', () => {

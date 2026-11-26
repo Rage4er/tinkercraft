@@ -14,7 +14,7 @@
 - **manifold-3d** (WASM) — CSG операции в Web Worker
 - **Zustand 5** — стейт-менеджмент
 - **Vite 6** — сборка
-- **Vitest 4** — тесты (1142 теста, 107 файлов; `it.fails` открытых багов нет — UX-прогон 7 нашёл 0 новых, цикл закрыт; UX-AUDIT-1…10 исправлены в `fix-all`, 11…20 — в `fix-all-2`, 21…31 — в `fix-all-3`, 32…35 — в `fix-all-4`, 32-followup и 36…40 — в `fix-all-5`, 41, 42 — в `fix-all-6`)
+- **Vitest 4** — тесты (1144 теста, 107 файлов; `it.fails` открытых багов нет — UX-прогон 7 нашёл 0 новых, цикл закрыт; UX-AUDIT-1…10 исправлены в `fix-all`, 11…20 — в `fix-all-2`, 21…31 — в `fix-all-3`, 32…35 — в `fix-all-4`, 32-followup и 36…40 — в `fix-all-5`, 41, 42 — в `fix-all-6`)
 - **pnpm** — пакетный менеджер
 
 ## Команды
@@ -23,7 +23,7 @@
 cd web-app
 pnpm dev          # dev-сервер (порт 5000)
 pnpm build        # production-сборка
-pnpm test         # запуск тестов (1142 теста, 107 файлов)
+pnpm test         # запуск тестов (1144 теста, 107 файлов)
 pnpm typecheck    # tsc --noEmit
 pnpm e2e:smoke    # дымовой тест в браузере (Playwright; нужен запущенный pnpm dev; см. web-app/e2e/helpers.mjs). В CI все e2e — job `e2e` в ci-web.yml (CI-E2E)
 pnpm e2e:tree     # Фаза 9.1: раскрытие CSG в дереве, выбор ребёнка
@@ -190,7 +190,7 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 | `src/csg/BUILD_TREE_SPEC.md` | Спецификация Build Tree (1410 строк) |
 | **Components** | |
 | `src/components/curved-wireframe.ts` | **VIEW-MODES / CLEAN-WIREFRAME:** чистый каркас гладких фигур линиями (цилиндр — окружности+образующие+радиусы; конус; сфера — меридианы/параллели; тор — кольца; капсула; труба — внешняя+внутренняя стенки; пружина; резьба — 6 сегментов/виток) + `csgWireframeGeometry` (CSG ≤ 20k треуг.) |
-| `src/components/ChildView.tsx` / `child-view-render.ts` / `child-view.ts` | **CSG-CHILD-VIEW:** окно ребёнка — прозрачный div на основном canvas; рендер в основном цикле (`afterRenderRef`) тем же renderer/scene: `setViewport`+scissor, мир временно каркасом, ребёнок реалистичный; камера — fitView, OrbitControls на теле окна; источник — `store/child-view-source` |
+| `src/components/ChildView.tsx` / `child-view-render.ts` / `child-view.ts` | **CSG-CHILD-VIEW:** окно ребёнка — прозрачный div на основном canvas; рендер в основном цикле (`afterRenderRef`) тем же renderer/scene: `setViewport`+scissor, мир временно каркасом, ребёнок реалистичный; камера — fitView (рамка сцены ∪ ребёнка), OrbitControls на теле окна; источник — `store/child-view-source`. Меш ребёнка из `rebuildNodeForView` (запечённый `localTransform`) переводится в текущий мир поправкой `nodeWorldTransform·localTransform⁻¹`; каркас — `curved-wireframe.ts` (окружности/образующие/меридианы), не `wireframe: true` |
 | `src/components/ViewModeMenu.tsx` / `src/components/view-mode.ts` | **VIEW-MODES:** меню режимов у ViewCube (3 пункта) и настройки отрисовки (заливка/тени/рёбра/depthTest); состояние — `ui-store.viewMode` + localStorage |
 | `src/components/Viewport3D.tsx` | Three.js вьюпорт, гизмо, raycaster, ruler, snap-to-geometry; режим размещения (PLUG-AND-PLAY): наведение → `aim` (throttle 50 мс + последнее положение), клик — `confirmPlacement`, правый клик — отмена, гизмо скрыт, курсор — прицел, `data-placement*` для e2e; навигация (VIEWPORT-NAV): ЛКМ — выбор и рамка, ПКМ — вращение, СКМ — сдвиг, колесо — масштаб, двойной клик СКМ — «Вписать» (`viewport-nav.ts`); рамка выделения (SELECTION-RECT) |
 | `src/components/viewport-nav.ts` | Кнопки мыши OrbitControls (`VIEWPORT_MOUSE_BUTTONS`: LEFT — нет, MIDDLE — сдвиг, RIGHT — вращение), детектор двойного клика СКМ (`createMiddleDoubleClick`) |

@@ -7,6 +7,18 @@
 
 ---
 
+## [1.3.34] — 2026-11-26
+
+### Fixed
+- **CHILD-VIEW: ребёнок в мировых координатах.** Меш ребёнка из `rebuildNodeForView` приходит с запечённым `localTransform` узла; теперь к нему применяется поправка `Mat(nodeWorldTransform)·Mat(localTransform)⁻¹` (система создания → текущий мир родительского CSG). Ребёнок стоит там же, где в основном виде (призма/конус не «слева вместо справа»), а не в локальной системе. `data-child-center` — диагностика/проверка e2e.
+- **CHILD-VIEW: чистый каркас вместо плотной сетки.** Остальной CSG и другие объекты рисуются тем же механизмом, что VIEW-MODES (`curved-wireframe.ts`): окружности/образующие/меридианы/витки для гладких фигур, `EdgesGeometry` — для плоских; `wireframe: true` на основном меше больше не используется.
+- Рамка fitView окна включает тело ребёнка (`Box3.union`), а не только объекты сцены.
+
+### Added
+- `childViewWorldMatrix` (экспорт, тест) — матрица TRS для проверки мировых координат; `child-view-copy.test.tsx` +1 и `history-tree.test.ts` +1 (`nodeWorldTransform`) — 1144 теста, 107 файлов; e2e `child-view-copy` проверяет `data-child-center` относительно `data-root-transform`.
+
+---
+
 ## [1.3.33] — 2026-11-26
 
 ### Changed

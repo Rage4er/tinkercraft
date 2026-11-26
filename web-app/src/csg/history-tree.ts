@@ -552,6 +552,34 @@ export async function rebuildNode(nodeId: string, parentWorld: TransformNR = IDE
 }
 
 /**
+ * CSG-CHILD-VIEW: мировой трансформ узла относительно системы сцены (`rootId`):
+ * root.localTransform ∘ relativeToParent (по цепочке предков). `null` — узел не в этом дереве.
+ */
+export function nodeWorldTransform(rootId: string, nodeId: string): TransformNR | null {
+  const path: TreeNode[] = []
+  let cur = treeStore.getNode(nodeId)
+  while (cur) {
+    path.push(cur)
+    if (cur.id === rootId) break
+    cur = cur.parentId ? treeStore.getNode(cur.parentId) : undefined
+  }
+  if (path[path.length - 1]?.id !== rootId) return null
+  const rootNode = path[path.length - 1]
+  const rootT: TransformNR = rootNode.localTransform ?? IDENTITY_TRANSFORM
+  let world: TransformNR = { ...rootT }
+  for (let i = path.length - 2; i >= 0; i--) {
+    const rel = path[i].relativeToParent
+    const lt = path[i].localTransform
+    if (rel) {
+      world = composeTransforms(world, rel)
+    } else if (lt) {
+      world = { x: lt.x, y: lt.y, z: lt.z, rotX: lt.rotX, rotY: lt.rotY, rotZ: lt.rotZ, scaleX: lt.scaleX, scaleY: lt.scaleY, scaleZ: lt.scaleZ }
+    }
+  }
+  return world
+}
+
+/**
  * CSG-CHILD-VIEW: меш узла для изолированного окна ребёнка — без кэша узла
  * (кэш может быть посчитан для другой системы/родителя). Геометрия — в системе узла.
  */

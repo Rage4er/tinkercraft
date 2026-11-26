@@ -30,13 +30,18 @@ try {
   await rows.nth(2).click({ modifiers: ['Shift'] })
   await panelButton(page, 'Объединение').click()
   await page.waitForFunction(() => document.querySelectorAll('.ct-item[data-object-id]').length === 2, null, { timeout: 20000 })
+  // корень сдвинут после объединения: ребёнок должен ехать вместе с ним (не в локальной системе)
+  const posX = page.locator('.panel-right #num-input-pos-X')
+  await posX.fill('60'); await posX.press('Enter')
+  await page.waitForTimeout(700)
   const csgRow = page.locator('.ct-item[data-object-id]', { hasText: 'CSG' })
   await csgRow.click()
   await csgRow.locator('.ct-chevron').click()
   await page.locator('.ct-child', { hasText: 'Конус' }).click()
   await view.waitFor({ timeout: 10000 })
   await page.waitForFunction(() => document.querySelector('[data-testid=child-view-scene]')?.getAttribute('data-child-realistic') === '1', null, { timeout: 30000 })
-  if ((await scene.getAttribute('data-others-wireframe')) !== '1') fail('A: другие объекты не попали в каркас окна')
+  const others = Number(await scene.getAttribute('data-others-wireframe') ?? '0')
+  if (!(others >= 1)) fail('A: другие объекты не попали в каркас окна')
   if (!(await view.innerText()).includes('Конус')) fail('A: окно показывает не конус')
   ok.push('A: ребёнок (конус) — реалистичный, остальной CSG и куб — каркасом')
 
@@ -56,7 +61,14 @@ try {
   if (!rootT) fail('C: система координат корня не применена')
   await page.waitForTimeout(300)
   if ((await scene.getAttribute('data-root-transform')) !== rootT) fail('C: координаты корня изменились без правки')
-  ok.push(`C: корень в реальных координатах (${rootT})`)
+  const childCenter = (await scene.getAttribute('data-child-center') ?? '').split(',').map(Number)
+  const rootPos = rootT.split(',').map(Number)
+  if (childCenter.length !== 3 || childCenter.some((v) => !Number.isFinite(v))) fail(`C: центр ребёнка не задан (${childCenter})`)
+  // ребёнок (конус = операнд A) стоит там же, где корень CSG, а не в локальном origin
+  if (childCenter.some((v, i) => Math.abs(v - rootPos[i]) > 6)) {
+    fail(`C: ребёнок не в мировых координатах (${childCenter} vs корень ${rootPos})`)
+  }
+  ok.push(`C: корень в реальных координатах (${rootT}), ребёнок на месте (${childCenter})`)
 
   // ── D. OrbitControls ──
   stage = 'D. навигация'
