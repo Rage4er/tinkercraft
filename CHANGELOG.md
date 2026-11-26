@@ -7,6 +7,21 @@
 
 ---
 
+## [1.3.33] — 2026-11-26
+
+### Changed
+- **CHILD-VIEW на основном renderer/scene:** вторая сцена и второй `WebGLRenderer` удалены (`ChildViewScene.tsx`). Маленькое окно — прозрачный div поверх основного канваса; в цикле отрисовки после основного кадра `renderer.setViewport`/scissor рисует тот же мир с дочерней камерой: остальные объекты временно переводятся в каркас, ребёнок — реалистичная заливка; материалы восстанавливаются. Больше нет рассинхрона сферы/положений.
+- Камера окна — fitView основной сцены (ориентация от основной камеры), один `OrbitControls` привязан к телу окна (pointer-events: auto, z-index выше).
+- `ui-store`-независимый источник: `child-view-source` (меш ребёнка + DOM-хост), рендер — `child-view-render.ts`.
+
+### Fixed
+- Сфера/ребёнок больше не «разъезжается»: координаты и сцена — основные, без второй сцены и offset.
+
+### Added
+- `childViewportRect`, `fitChildViewCamera`, `CHILD_VIEW_MATERIALS` (тесты); `child-view-copy.test.tsx` (5) и `csg-child-view.test.tsx` (3) обновлены; e2e `child-view-copy` / `csg-child-view` / `fix-view-modes-child` — зелёные.
+
+---
+
 ## [1.3.32] — 2026-11-26
 
 ### Changed

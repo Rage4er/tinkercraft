@@ -153,6 +153,11 @@ export function useThreeInit(
     onFpsUpdate: (fps: number) => void,
     /** SELECTION-OUTLINE: выделенные объекты — кайма в цикле отрисовки */
     selectedIds: ReadonlySet<string> = new Set(),
+    /**
+     * CHILD-VIEW: дополнительная отрисовка после основного кадра (маленькое окно
+     * ребёнка на том же renderer/scene, через setViewport/scissor).
+     */
+    afterRenderRef?: React.MutableRefObject<((renderer: THREE.WebGLRenderer, scene: THREE.Scene) => void) | null>,
 ): ThreeInitResult {
     const [sceneReady, setSceneReady] = useState(false);
     const [cubeCamera, setCubeCamera] = useState<THREE.PerspectiveCamera | null>(null);
@@ -402,6 +407,7 @@ export function useThreeInit(
                 outlineCount = outlined;
                 container.dataset.outlineCount = String(outlined);
             }
+            afterRenderRef?.current?.(renderer, scene);
             const outlinedA = drawn ? outlineA.selectedObjects.length : 0;
             if (outlinedA !== outlineACount) {
                 outlineACount = outlinedA;

@@ -60,7 +60,7 @@ try {
 
   // ── D. OrbitControls ──
   stage = 'D. навигация'
-  const canvas = page.locator('[data-testid=child-view-scene] canvas')
+  const canvas = page.locator('[data-testid=child-view-scene]')
   const cb = await canvas.boundingBox()
   const before = await scene.getAttribute('data-child-camera')
   await page.mouse.move(cb.x + cb.width / 2, cb.y + cb.height / 2)
