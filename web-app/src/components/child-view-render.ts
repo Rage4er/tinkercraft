@@ -3,29 +3,34 @@
 // ============================================================
 // Второй WebGLRenderer/сцена не создаются. Маленькое окно рисуется тем же
 // renderer в прямоугольнике тела окна (setViewport + scissor):
-//   1) весь мир — временным wireframe-материалом (scene.overrideMaterial);
-//   2) выбранный ребёнок (layer 2) — реалистичной заливкой.
+//   • ребёнок — реалистичная заливка (мировые координаты: трансформ узла
+//     относительно корня CSG + поправка от системы создания);
+//   • остальной CSG и другие объекты — ЧИСТЫЙ каркас (curved-wireframe:
+//     окружности/образующие/меридианы; плоские — EdgesGeometry), а не
+//     плотная треугольная сетка.
 // Камера — своя (снимок основной ориентации + fitView сцены), OrbitControls
 // привязан к телу окна.
 
 import { useEffect } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
-import type { ExtractedMesh } from '../csg/types'
+import type { ExtractedMesh, TransformNR } from '../csg/types'
 import { useChildViewSource } from '../store/child-view-source'
+import { useDocumentStore } from '../store/document-store'
+import { useUiStore } from '../store/ui-store'
+import { getNode, nodeWorldTransform, rebuildNodeForView } from '../csg/history-tree'
 import { CHILD_VIEW_CONTROLS } from './child-view'
+import { CURVED_WIREFRAME, curvedWireframeGeometry, threadWireframe } from './curved-wireframe'
 
 export interface RectLike { left: number; top: number; right: number; bottom: number; width: number; height: number }
 
 /** Прямоугольник окна в координатах canvas (WebGL: origin — левый нижний). */
 export function childViewportRect(canvas: RectLike, host: RectLike): { x: number; y: number; width: number; height: number } {
-  const width = Math.max(0, host.width)
-  const height = Math.max(0, host.height)
   return {
     x: host.left - canvas.left,
     y: canvas.bottom - host.bottom,
-    width,
-    height,
+    width: Math.max(0, host.width),
+    height: Math.max(0, host.height),
   }
 }
 
@@ -53,31 +58,49 @@ export function fitChildViewCamera(
   return { center, distance }
 }
 
-function sceneBox(scene: THREE.Scene, rootId: string | null, meshMap: Map<string, { mesh: THREE.Mesh }>): THREE.Box3 {
+/** Материалы окна (документация/тесты): ребёнок — standard, мир — clean wireframe. */
+export const CHILD_VIEW_MATERIALS = { child: 'standard', world: 'clean-wireframe' } as const
+
+const IDENTITY: TransformNR = { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 }
+
+function matrixOf(t: TransformNR | undefined): THREE.Matrix4 {
+  const u = t ?? IDENTITY
+  const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(
+    THREE.MathUtils.degToRad(u.rotX), THREE.MathUtils.degToRad(u.rotY), THREE.MathUtils.degToRad(u.rotZ),
+  ))
+  return new THREE.Matrix4().compose(
+    new THREE.Vector3(u.x, u.y, u.z), q, new THREE.Vector3(u.scaleX, u.scaleY, u.scaleZ),
+  )
+}
+
+/** Матрица TRS трансформа (мировые координаты; экспорт — для тестов и диагностики). */
+export function childViewWorldMatrix(rootTransform: TransformNR | undefined): THREE.Matrix4 {
+  return matrixOf(rootTransform)
+}
+
+/** Поправка: текущий мировой трансформ узла от запечённого в его геометрии. */
+function correctionMatrix(world: TransformNR | null, baked: TransformNR | undefined): THREE.Matrix4 {
+  return (world ? matrixOf(world) : new THREE.Matrix4()).multiply(matrixOf(baked).invert())
+}
+
+function geometryOfMesh(vertices: Float32Array, indices: Uint32Array): THREE.BufferGeometry {
+  const g = new THREE.BufferGeometry()
+  g.setAttribute('position', new THREE.BufferAttribute(vertices, 3))
+  g.setIndex(new THREE.BufferAttribute(indices, 1))
+  return g
+}
+
+function sceneBox(scene: THREE.Scene, meshMap: Map<string, { mesh: THREE.Mesh }>): THREE.Box3 {
   scene.updateMatrixWorld(true)
   const box = new THREE.Box3()
-  for (const [id, entry] of meshMap) {
-    if (entry.mesh.visible !== false) {
-      const g = entry.mesh.geometry
-      if (!g.boundingBox) g.computeBoundingBox()
-      if (g.boundingBox) box.union(g.boundingBox.clone().applyMatrix4(entry.mesh.matrixWorld))
-    }
+  for (const entry of meshMap.values()) {
+    const g = entry.mesh.geometry
+    if (!g.boundingBox) g.computeBoundingBox()
+    if (g.boundingBox) box.union(g.boundingBox.clone().applyMatrix4(entry.mesh.matrixWorld))
   }
   return box
 }
 
-interface MiniState {
-  camera: THREE.PerspectiveCamera
-  controls: OrbitControls
-  childMesh: THREE.Mesh
-  rootId: string
-  host: HTMLDivElement
-}
-
-/**
- * Рендер маленького окна в основном цикле. Вызывается из useThreeInit после
- * основного кадра; `afterRenderRef` — точка подключения.
- */
 export function useChildViewport(opts: {
   sceneReady: boolean
   sceneRef: React.MutableRefObject<THREE.Scene | null>
@@ -89,6 +112,9 @@ export function useChildViewport(opts: {
   const child = useChildViewSource((s) => s.child)
   const rootId = useChildViewSource((s) => s.rootId)
   const host = useChildViewSource((s) => s.host)
+  const objects = useDocumentStore((s) => s.objects)
+  const selectedChild = useUiStore((s) => s.selectedChild)
+  const selectedNodeId = selectedChild?.nodeId ?? null
 
   useEffect(() => {
     if (!opts.sceneReady || !child || !rootId || !host) {
@@ -98,41 +124,102 @@ export function useChildViewport(opts: {
     const scene = opts.sceneRef.current
     const mainCamera = opts.cameraRef.current
     const rootEntry = opts.meshMapRef.current.get(rootId)
-    if (!scene || !mainCamera || !rootEntry) return
+    const rootObj = objects[rootId]
+    if (!scene || !mainCamera || !rootEntry || !rootObj) return
 
-    const root = rootEntry.pivot
-    const geo = new THREE.BufferGeometry()
-    geo.setAttribute('position', new THREE.BufferAttribute(child.vertices, 3))
-    geo.setIndex(new THREE.BufferAttribute(child.indices, 1))
+    let alive = true
+    const rootNode = getNode(rootId)
+    const miniGroup = new THREE.Group()
+    miniGroup.visible = false
+    scene.add(miniGroup)
+    const childGroup = new THREE.Group()
+    childGroup.visible = false
+    scene.add(childGroup)
+
+    // ── Ребёнок: меш из дерева → текущие мировые координаты сцены ──
+    const childGeo = geometryOfMesh(child.vertices, child.indices)
     if (child.normals && child.normals.length === child.vertices.length) {
-      geo.setAttribute('normal', new THREE.BufferAttribute(child.normals, 3))
+      childGeo.setAttribute('normal', new THREE.BufferAttribute(child.normals, 3))
     } else {
-      geo.computeVertexNormals()
+      childGeo.computeVertexNormals()
     }
-    const mat = new THREE.MeshStandardMaterial({ color: '#89b4fa', roughness: 0.55, metalness: 0.15, side: THREE.DoubleSide })
-    const childMesh = new THREE.Mesh(geo, mat)
-    childMesh.visible = false   // показываем только в маленьком окне (main рисуется раньше)
-    root.add(childMesh)
+    const childMat = new THREE.MeshStandardMaterial({ color: '#89b4fa', roughness: 0.55, metalness: 0.15, side: THREE.DoubleSide })
+    const childMesh = new THREE.Mesh(childGeo, childMat)
+    childGroup.add(childMesh)
+    const selectedNode = selectedNodeId ? getNode(selectedNodeId) : null
+    const selectedWorld = selectedNodeId ? nodeWorldTransform(rootId, selectedNodeId) : null
+    childGroup.matrix.copy(correctionMatrix(selectedWorld, selectedNode?.localTransform))
+    childGroup.matrixAutoUpdate = false
+    childGroup.updateMatrixWorld(true)
 
+    // ── Чистый каркас: дети CSG, кроме выбранного, + другие объекты ──
+    const wireMat = new THREE.LineBasicMaterial({ color: 0x9aa0b0, transparent: true, opacity: 0.65 })
+    const addWire = (geo: THREE.BufferGeometry, transform?: TransformNR) => {
+      const line = new THREE.LineSegments(geo, wireMat)
+      if (transform) {
+        line.matrix.copy(matrixOf(transform))
+        line.matrixAutoUpdate = false
+      }
+      miniGroup.add(line)
+    }
+    for (const childId of rootNode?.children ?? []) {
+      if (childId === selectedNodeId) continue
+      const n = getNode(childId)
+      if (!n) continue
+      const w = nodeWorldTransform(rootId, childId) ?? rootObj.transform
+      if (n.type === 'thread' && n.threadParams) {
+        const g = threadWireframe(n.threadParams)
+        if (g) addWire(g, w)
+      } else if (n.type === 'primitive' && n.shapeType && CURVED_WIREFRAME.has(n.shapeType)) {
+        const g = curvedWireframeGeometry(n.shapeType, n.params ?? {})
+        if (g) addWire(g, w)
+      } else {
+        void rebuildNodeForView(childId).then((m) => {
+          if (!alive) return
+          const g = geometryOfMesh(m.vertices, m.indices)
+          const lines = new THREE.EdgesGeometry(g, 30)
+          g.dispose()
+          const line = new THREE.LineSegments(lines, wireMat)
+          line.matrix.copy(correctionMatrix(w, n.localTransform))
+          line.matrixAutoUpdate = false
+          miniGroup.add(line)
+        }).catch(() => { /* ребёнок не построился — без каркаса */ })
+      }
+    }
+    for (const obj of Object.values(objects)) {
+      if (obj.id === rootId) continue
+      let g: THREE.BufferGeometry | null = null
+      if (obj.thread) g = threadWireframe(obj.thread)
+      else if (CURVED_WIREFRAME.has(obj.shapeType)) g = curvedWireframeGeometry(obj.shapeType, obj.params)
+      if (!g) {
+        const base = geometryOfMesh(obj.vertices, obj.indices)
+        g = new THREE.EdgesGeometry(base, 30)
+        base.dispose()
+      }
+      addWire(g, obj.transform)
+    }
+
+    // ── Камера: снимок ориентации основной + fitView сцены ──
     const camera = new THREE.PerspectiveCamera(45, Math.max(0.2, host.clientWidth / Math.max(1, host.clientHeight)), 0.1, 100000)
-    const box = sceneBox(scene, rootId, opts.meshMapRef.current)
+    const box = sceneBox(scene, opts.meshMapRef.current).union(new THREE.Box3().setFromObject(childGroup))
     const fitted = fitChildViewCamera(camera, box, mainCamera, opts.controlsRef.current?.target ?? null)
     const controls = new OrbitControls(camera, host)
     Object.assign(controls, CHILD_VIEW_CONTROLS)
     controls.target.copy(fitted.center)
     controls.update()
 
-    const state: MiniState = { camera, controls, childMesh, rootId, host }
-
     host.dataset.childControls = '1'
     host.dataset.childRealistic = '1'
-    host.dataset.othersWireframe = String(Math.max(0, opts.meshMapRef.current.size - 1))
-    host.dataset.rootTransform = [root.position.x, root.position.y, root.position.z]
+    host.dataset.othersWireframe = String((rootNode?.children?.length ?? 1) - 1 + Object.keys(objects).length - 1)
+    host.dataset.rootTransform = [rootObj.transform.x, rootObj.transform.y, rootObj.transform.z]
       .map((v) => (Math.round(v * 100) / 100).toFixed(2)).join(',')
     host.dataset.mainCamera = [mainCamera.position.x, mainCamera.position.y, mainCamera.position.z]
       .map((v) => (Math.round(v * 100) / 100).toFixed(2)).join(',')
     host.dataset.fit = String(Math.round(fitted.distance * 100) / 100)
     host.dataset.sceneCenter = [fitted.center.x, fitted.center.y, fitted.center.z]
+      .map((v) => (Math.round(v * 100) / 100).toFixed(2)).join(',')
+    const childCenter = new THREE.Box3().setFromObject(childGroup).getCenter(new THREE.Vector3())
+    host.dataset.childCenter = [childCenter.x, childCenter.y, childCenter.z]
       .map((v) => (Math.round(v * 100) / 100).toFixed(2)).join(',')
 
     let lastCam = ''
@@ -146,11 +233,11 @@ export function useChildViewport(opts: {
 
     const renderMini = (renderer: THREE.WebGLRenderer, sc: THREE.Scene) => {
       const canvasRect = renderer.domElement.getBoundingClientRect()
-      const hostRect = state.host.getBoundingClientRect()
+      const hostRect = host.getBoundingClientRect()
       const rect = childViewportRect(canvasRect, hostRect)
       if (rect.width < 4 || rect.height < 4) return
-      state.camera.aspect = rect.width / rect.height
-      state.camera.updateProjectionMatrix()
+      camera.aspect = rect.width / rect.height
+      camera.updateProjectionMatrix()
 
       const prevAutoClear = renderer.autoClear
       const prevClear = renderer.getClearColor(new THREE.Color())
@@ -162,30 +249,18 @@ export function useChildViewport(opts: {
       if (sc.background instanceof THREE.Color) renderer.setClearColor(sc.background, 1)
       renderer.clear()
 
-      // Временные материалы: остальной мир — каркасом, ребёнок — реалистичный.
-      // Один проход: свет/тени работают, без overrideMaterial (он гасит свет).
-      type Saved = { mat: THREE.MeshStandardMaterial; wireframe: boolean; depthWrite: boolean; color: number; transparent: boolean; opacity: number }
-      const saved: Saved[] = []
+      // Прячем заливку основного мира; показываем чистый каркас + ребёнка
+      const hidden: THREE.Material[] = []
       for (const entry of opts.meshMapRef.current.values()) {
-        const m = entry.mesh.material as THREE.MeshStandardMaterial
-        if (!m || !('wireframe' in m)) continue
-        saved.push({ mat: m, wireframe: m.wireframe, depthWrite: m.depthWrite, color: m.color.getHex(), transparent: m.transparent, opacity: m.opacity })
-        m.wireframe = true
-        m.depthWrite = false
-        m.transparent = true
-        m.opacity = 0.55
-        m.color.set(0x9aa0b0)
+        const m = entry.mesh.material as THREE.Material
+        if (m && m.visible) { hidden.push(m); m.visible = false }
       }
-      state.childMesh.visible = true
-      renderer.render(sc, state.camera)
-      state.childMesh.visible = false
-      for (const s2 of saved) {
-        s2.mat.wireframe = s2.wireframe
-        s2.mat.depthWrite = s2.depthWrite
-        s2.mat.color.setHex(s2.color)
-        s2.mat.transparent = s2.transparent
-        s2.mat.opacity = s2.opacity
-      }
+      miniGroup.visible = true
+      childGroup.visible = true
+      renderer.render(sc, camera)
+      miniGroup.visible = false
+      childGroup.visible = false
+      for (const m of hidden) m.visible = true
 
       renderer.setClearColor(prevClear, prevAlpha)
       renderer.setScissorTest(false)
@@ -195,23 +270,22 @@ export function useChildViewport(opts: {
     opts.afterRenderRef.current = renderMini
 
     return () => {
+      alive = false
       opts.afterRenderRef.current = null
       controls.removeEventListener('change', reportCamera)
       controls.dispose()
-      root.remove(state.childMesh)
-      geo.dispose()
-      mat.dispose()
-      delete state.host.dataset.childControls
-      delete state.host.dataset.childRealistic
-      delete state.host.dataset.othersWireframe
-      delete state.host.dataset.rootTransform
-      delete state.host.dataset.mainCamera
-      delete state.host.dataset.fit
-      delete state.host.dataset.sceneCenter
-      delete state.host.dataset.childCamera
+      scene.remove(miniGroup)
+      scene.remove(childGroup)
+      miniGroup.traverse((o) => {
+        const l = o as THREE.LineSegments
+        l.geometry?.dispose?.()
+      })
+      wireMat.dispose()
+      childGeo.dispose()
+      childMat.dispose()
+      for (const k of ['childControls', 'childRealistic', 'othersWireframe', 'rootTransform', 'mainCamera', 'fit', 'sceneCenter', 'childCamera', 'childCenter']) {
+        delete host.dataset[k]
+      }
     }
-  }, [opts.sceneReady, child, rootId, host, opts.sceneRef, opts.cameraRef, opts.controlsRef, opts.meshMapRef, opts.afterRenderRef])
+  }, [opts.sceneReady, child, rootId, host, objects, selectedNodeId, opts.sceneRef, opts.cameraRef, opts.controlsRef, opts.meshMapRef, opts.afterRenderRef])
 }
-
-/** Роли материалов в маленьком окне (документация/тесты). */
-export const CHILD_VIEW_MATERIALS = { child: 'standard', world: 'wireframe' } as const
