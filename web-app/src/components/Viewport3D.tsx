@@ -1016,7 +1016,7 @@ export default function Viewport3D({
       <div ref={selRectRef} className="sel-rect" data-testid="selection-rect" hidden />
       <ViewCube mainCamera={cubeCamera} mainControls={cubeCtrl} />
       <ViewModeMenu />
-      <ChildView />
+      <ChildView mainCamera={activeCameraRef.current ?? cameraRef.current} mainTarget={controlsRef.current?.target ?? null} />
     </div>
   );
 }

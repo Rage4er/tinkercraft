@@ -77,11 +77,10 @@ try {
   if (Math.abs((viewBox.y + viewBox.height) - (vpBox.y + vpBox.height - 8)) > 4) fail('C: окно не снизу')
   if ((await view.evaluate((e) => e.style.left)) !== '8px') fail('C: style.left не 8px')
 
-  // камера нацелена на центр ребёнка; каркас — в реальных координатах (без offset)
+  // копия основного вида: камера = снимок основной, корень — в своих координатах
   const sceneEl = page.locator('[data-testid=child-view-scene]')
-  const target = await sceneEl.getAttribute('data-child-target')
-  if (!target) fail('C: цель камеры (центр ребёнка) не задана')
-  if ((await sceneEl.getAttribute('data-child-offset')) !== null) fail('C: общий offset содержимого не должен применяться')
+  if (!(await sceneEl.getAttribute('data-fit'))) fail('C: окно не вписало сцену')
+  if (!(await sceneEl.getAttribute('data-root-transform'))) fail('C: корневая система координат не применена')
 
   // OrbitControls: drag по канвасу меняет позицию камеры
   const cam0 = await sceneEl.getAttribute('data-child-camera')
@@ -94,7 +93,7 @@ try {
   await page.waitForTimeout(400)
   const cam1 = await sceneEl.getAttribute('data-child-camera')
   if (!cam0 || !cam1 || cam0 === cam1) fail(`C: камера не вращается (${cam0} → ${cam1})`)
-  ok.push(`C: окно слева снизу, камера на ребёнке (${target}), каркас в реальных координатах, OrbitControls`)
+  ok.push('C: окно слева снизу, сцена вписана, корень в реальных координатах, OrbitControls')
 
   // ── D. Каркас гладких фигур (сфера/цилиндр) ──
   stage = 'D. сетка гладких'
