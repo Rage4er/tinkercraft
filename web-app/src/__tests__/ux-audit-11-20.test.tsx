@@ -142,9 +142,9 @@ describe('UX-AUDIT-14 — геометрия та же, старые цилин�
     expect(b.indices.length).toBe(a.indices.length)
     expect(Array.from(b.vertices)).toEqual(Array.from(a.vertices))
   })
-  it('сводка — по параметрам фигуры: старый цилиндр (W/H/D) — «R10 H20», куб — «W20 H20 D20», призма — «R12 H20 n6»', () => {
+  it('сводка — по параметрам фигуры: старый цилиндр (W/H/D) — «R10 H20», куб — «X20 Y20 Z20», призма — «R12 H20 n6»', () => {
     expect(formatParams({ width: 20, height: 20, depth: 20 }, 'cylinder')).toBe('R10 H20')
-    expect(formatParams({ width: 20, height: 20, depth: 20 }, 'cube')).toBe('W20 H20 D20')
+    expect(formatParams({ width: 20, height: 20, depth: 20 }, 'cube')).toBe('X20 Y20 Z20')
     expect(formatParams({ radius: 12, height: 20, sides: 6 }, 'prism')).toBe('R12 H20 n6')
     expect(formatParams({ torusRadius: 15, tubeRadius: 4 }, 'torus')).toBe('R15 r4')
   })

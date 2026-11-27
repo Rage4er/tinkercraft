@@ -14,7 +14,7 @@
 - **manifold-3d** (WASM) — CSG операции в Web Worker
 - **Zustand 5** — стейт-менеджмент
 - **Vite 6** — сборка
-- **Vitest 4** — тесты (1144 теста, 107 файлов; `it.fails` открытых багов нет — UX-прогон 7 нашёл 0 новых, цикл закрыт; UX-AUDIT-1…10 исправлены в `fix-all`, 11…20 — в `fix-all-2`, 21…31 — в `fix-all-3`, 32…35 — в `fix-all-4`, 32-followup и 36…40 — в `fix-all-5`, 41, 42 — в `fix-all-6`)
+- **Vitest 4** — тесты (1145 тестов, 107 файлов; `it.fails` открытых багов нет — UX-прогон 7 нашёл 0 новых, цикл закрыт; UX-AUDIT-1…10 исправлены в `fix-all`, 11…20 — в `fix-all-2`, 21…31 — в `fix-all-3`, 32…35 — в `fix-all-4`, 32-followup и 36…40 — в `fix-all-5`, 41, 42 — в `fix-all-6`)
 - **pnpm** — пакетный менеджер
 
 ## Команды
@@ -23,7 +23,7 @@
 cd web-app
 pnpm dev          # dev-сервер (порт 5000)
 pnpm build        # production-сборка
-pnpm test         # запуск тестов (1144 теста, 107 файлов)
+pnpm test         # запуск тестов (1145 тестов, 107 файлов)
 pnpm typecheck    # tsc --noEmit
 pnpm e2e:smoke    # дымовой тест в браузере (Playwright; нужен запущенный pnpm dev; см. web-app/e2e/helpers.mjs). В CI все e2e — job `e2e` в ci-web.yml (CI-E2E)
 pnpm e2e:tree     # Фаза 9.1: раскрытие CSG в дереве, выбор ребёнка
@@ -150,7 +150,7 @@ User Input → App.tsx (UI) → document-store.ts (Zustand) → worker-client.ts
 | **CSG / Build Tree** | |
 | `src/csg/history-tree.ts` | **Build Tree** — параметрическое дерево (primitive/boolean/baked/thread; thread — `createThreadNode` + `threadParams`, `generateThread` в rebuild, THREAD-IN-CSG; boolean — N детей + `groupA`, `createBooleanNode(id, op, childIds, transform?, groupA?)`, N-ARY-CSG), `rebuildNode`, `mirrorNodeRecursive`, `cloneSubtree`; независимая копия CSG (`copySubtree`, `snapshotSubtree`, `instantiateSubtree`, id узлов `${idКопии}:${idИсточника}`); у boolean-узла `originTransform` (TRS₀ — система листьев; вложенный boolean воркер переносит на `Mat(localTransform)·Mat(originTransform)⁻¹`, NESTED-MOVED-EDIT) |
 | `src/csg/tree-store.ts` | Zustand-стор для Build Tree |
-| `src/csg/tree-view.ts` | Read-модель Build Tree для UI (`getTreeView` — дети N-арного узла плоским списком, `viewGroupSplit` — заголовки «Группа A»/«Группа B» у subtract/intersect, `findViewNode`, `formatParams`) и единая проверка редактируемости `isChildEditable` — Фаза 9.1/9.9 |
+| `src/csg/tree-view.ts` | Read-модель Build Tree для UI (`getTreeView` — дети N-арного узла плоским списком, `viewGroupSplit` — заголовки «Группа A»/«Группа B» у subtract/intersect, `findViewNode`, `formatParams` — сводка размеров: куб — X/Y/Z по осям (SIZE-LABELS: height — Y, depth — Z), остальные — R/H/n) и единая проверка редактируемости `isChildEditable` — Фаза 9.1/9.9 |
 | `src/hooks/useRootConsistency.ts` | Согласованность дерева CSG-корня с мешем (замки в дереве) — Фаза 9.9 |
 | `src/csg/child-params.ts` | Поля параметров примитива для формы правки ребёнка CSG (`getParamFields`, `clampFieldValue`) — Фаза 9.2. Подписи размеров — по оси (AXIS-LABELS): куб `width` — X, `height` — **Y**, `depth` — **Z** (`Manifold.cube([w, h, d])`, вверх — Z); высота цилиндра / конуса / призмы / пирамиды — Z (`properties.sizeX/Y/Z`) |
 | `src/csg/worker-handlers.ts` › `buildCapsule` / `buildTube` / `buildSpring` | **Новые примитивы** (NEW-PRIMITIVES), ось — Z: капсула и труба — `Manifold.revolve` профиля (симметричны, центр масс в 0), пружина — круг проволоки вдоль спирали + плоские торцы (меш → `new Manifold`, обход наружу по знаку объёма, `centerManifoldToCOM`; `springGeometry` — проволока ≤ 0,45 шага и ≤ 0,9 радиуса витка). Новая фигура: тип в `ShapeType`, `buildPrimitive`, `getParamFields` (поля свойств и правки ребёнка), `defaultShapeParams`, `localParamsBox`, палитра `ALL_SHAPES_DATA` + **обе** карты иконок (`constants.tsx` — палитра, `constants-react.tsx`), иконки в `ComponentTree` / `Timeline`, `shapes.*` / `shapesAcc.*` |

@@ -37,7 +37,7 @@ try {
   if ((await children.count()) !== 2) fail('ожидалось 2 ребёнка, получено ' + (await children.count()))
   const texts = await children.allInnerTexts()
   if (!texts[0].includes('Куб') || !texts[1].includes('Сфера')) fail('порядок/названия детей: ' + texts.join(' | '))
-  if (!/W\d/.test(texts[0]) || !/R\d/.test(texts[1])) fail('нет сводки параметров: ' + texts.join(' | '))
+  if (!/X\d/.test(texts[0]) || !/R\d/.test(texts[1])) fail('нет сводки параметров: ' + texts.join(' | '))
   if ((await page.locator('.ct-child.ct-readonly').count()) !== 0) fail('примитивы-дети должны быть редактируемыми')
 
   // выбор ребёнка: подсветка ребёнка, корень в сцене выделен

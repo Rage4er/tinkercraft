@@ -7,10 +7,13 @@
 
 ---
 
-## [Unreleased]
+## [1.3.35] — 2026-11-27
 
 ### Added
 - **Tinkercraft Workflow Skill:** `.agents/skills/tinkercraft-workflow/` — проектный skill для повторяющегося цикла задач: ветка от `main`, реализация, `typecheck`/`test`/`build`, e2e-регресс, документация и версия, PR → CI → merge → deploy → тег, стандартный отчёт. Справочники: проверки и регресс-набор, шаблон отчёта, работа с репозиторием, скриншоты/видео-демо; скрипты `verify.sh` и `e2e-regression.sh`.
+
+### Changed
+- **SIZE-LABELS: подписи размеров куба в дереве CSG — по осям.** В строках детей CSG куб теперь показывается «X20 Y20 Z20» вместо «W20 H20 D20» (`csg/tree-view.ts::formatParams`): width — X, height — Y, depth — Z, как в AXIS-LABELS. У цилиндра, конуса, призмы, пирамиды и других фигур подписи прежние (R/H/n). Ключи `params` не менялись — файлы и история совместимы. `csg/tree-view.test.ts` (+1), `__tests__/ux-audit-11-20.test.tsx`; e2e `tree`, `edit-child`, `n-ary-csg`.
 
 ---
 

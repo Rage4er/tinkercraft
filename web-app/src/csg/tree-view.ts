@@ -190,19 +190,30 @@ const PARAM_LABELS: Array<[keyof ShapeParams, string]> = [
 ]
 
 /**
- * Краткая сводка параметров для строки дерева: «W20 H20 D20».
+ * SIZE-LABELS: у куба размеры — по осям (AXIS-LABELS): width — X, height — Y, depth — Z.
+ * У остальных фигур подписи прежние (R/H/n…), height у них — вертикаль Z.
+ */
+const CUBE_LABELS: Partial<Record<keyof ShapeParams, string>> = {
+  width: 'X',
+  height: 'Y',
+  depth: 'Z',
+}
+
+/**
+ * Краткая сводка параметров для строки дерева: «X20 Y20 Z20» у куба, «R10 H20» у цилиндра.
  * UX-AUDIT-14: с `shapeType` — только параметры этой фигуры (те же поля и умолчания, что у
  * формы правки, `getParamFields`): цилиндр старых проектов с параметрами куба (`width/height/
- * depth`) показывается «R10 H20», а не «W20 H20 D20».
+ * depth`) показывается «R10 H20», а не «X20 Y20 Z20».
  */
 export function formatParams(params: ShapeParams | undefined, shapeType?: ShapeType): string {
   if (!params) return ''
   const fields = getParamFields(shapeType)
   if (fields.length > 0) {
     const label = Object.fromEntries(PARAM_LABELS) as Partial<Record<keyof ShapeParams, string>>
+    const cubeLabels = shapeType === 'cube' ? CUBE_LABELS : null
     return fields.map((f) => {
       const v = params[f.key]
-      return `${label[f.key]}${Math.round((typeof v === 'number' ? v : f.fallback) * 100) / 100}`
+      return `${(cubeLabels?.[f.key] ?? label[f.key])}${Math.round((typeof v === 'number' ? v : f.fallback) * 100) / 100}`
     }).join(' ')
   }
   const parts: string[] = []

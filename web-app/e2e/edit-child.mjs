@@ -33,7 +33,7 @@ try {
   await inputs.nth(0).fill('34')
   await inputs.nth(0).blur()
   await page.waitForFunction(
-    () => /W34/.test(document.querySelector('.ct-child')?.textContent ?? ''),
+    () => /X34/.test(document.querySelector('.ct-child')?.textContent ?? ''),
     null, { timeout: 15000 },
   )
   // выбор ребёнка сохранился, панель показывает новое значение
@@ -64,7 +64,7 @@ try {
   await page.waitForFunction(() => document.querySelectorAll('.ct-item[data-object-id]').length === 1, null, { timeout: 15000 })
   // раскрытие сохраняется между undo/redo (id корня тот же) — повторный клик не нужен
   await page.waitForFunction(
-    () => /W20/.test(document.querySelector('.ct-child')?.textContent ?? ''),
+    () => /X20/.test(document.querySelector('.ct-child')?.textContent ?? ''),
     null, { timeout: 15000 },
   )
 

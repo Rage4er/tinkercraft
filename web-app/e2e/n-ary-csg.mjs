@@ -1,7 +1,7 @@
 // e2e/n-ary-csg.mjs — N-ARY-CSG в браузере: union N, subtract/intersect группа A против группы B.
 //  A. 10 кубов → выделить все → «Объединение» → ОДИН объект, в дереве 10 детей плоским списком
 //     (без вложенных CSG, без заголовков групп, без замков), уведомлений нет; правка ширины
-//     5-го ребёнка (9.2/9.3) → W30 в дереве, шаг истории; undo/redo (правка, CSG).
+//     5-го ребёнка (9.2/9.3) → X30 в дереве, шаг истории; undo/redo (правка, CSG).
 //  B. 5 кубов (A) + 5 сфер в их центрах (B): выделить A → «Вычитание» → режим (метки «A»,
 //     CSG-GROUP-FIX) → выделить B → Enter → ОДИН объект; в дереве «Группа A» (5 детей),
 //     «Группа B» (5 детей); уведомлений нет; undo → A → «Пересечение» → B → «ОК» → то же.
@@ -110,26 +110,26 @@ try {
   const before = await steps()
   await inputs.nth(0).fill('30')
   await inputs.nth(0).blur()
-  await page.waitForFunction(() => /W30/.test(document.querySelectorAll('.ct-child')[4]?.textContent ?? ''), null, { timeout: 15000 })
+  await page.waitForFunction(() => /X30/.test(document.querySelectorAll('.ct-child')[4]?.textContent ?? ''), null, { timeout: 15000 })
   await waitSteps(before + 1)
-  if ((await page.locator('.ct-child', { hasText: 'W30' }).count()) !== 1) fail('правка задела не одного ребёнка')
+  if ((await page.locator('.ct-child', { hasText: 'X30' }).count()) !== 1) fail('правка задела не одного ребёнка')
   await noToasts('правка ребёнка')
   if (shot) await page.screenshot({ path: shot })
-  console.log('✅ A. правка ширины 5-го ребёнка 20 → 30: новый шаг, W30 только у него, без уведомлений')
+  console.log('✅ A. правка ширины 5-го ребёнка 20 → 30: новый шаг, X30 только у него, без уведомлений')
 
   // undo/redo: правка → CSG → обратно
   stage = 'A. undo/redo'
   await page.locator('.props-header').click(); await blur()
   await page.keyboard.press('Control+z')
-  await page.waitForFunction(() => !/W30/.test(document.body.innerText), null, { timeout: 15000 })
+  await page.waitForFunction(() => !/X30/.test(document.body.innerText), null, { timeout: 15000 })
   await page.keyboard.press('Control+z')
   await waitRows(10)
   await page.keyboard.press('Control+Shift+z')
   await waitRows(1)
   await page.keyboard.press('Control+Shift+z')
-  await page.waitForFunction(() => /W30/.test(document.body.innerText), null, { timeout: 15000 })
+  await page.waitForFunction(() => /X30/.test(document.body.innerText), null, { timeout: 15000 })
   await noToasts('undo/redo')
-  console.log('✅ A. undo → 10 объектов, redo → один CSG с правкой W30')
+  console.log('✅ A. undo → 10 объектов, redo → один CSG с правкой X30')
 
   // ── B. subtract / intersect: группа A (5 кубов) против группы B (5 сфер) ──
   stage = 'B. вычитание 5 vs 5'
