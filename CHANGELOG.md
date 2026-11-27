@@ -7,6 +7,13 @@
 
 ---
 
+## [Unreleased]
+
+### Added
+- **Tinkercraft Workflow Skill:** `.agents/skills/tinkercraft-workflow/` — проектный skill для повторяющегося цикла задач: ветка от `main`, реализация, `typecheck`/`test`/`build`, e2e-регресс, документация и версия, PR → CI → merge → deploy → тег, стандартный отчёт. Справочники: проверки и регресс-набор, шаблон отчёта, работа с репозиторием, скриншоты/видео-демо; скрипты `verify.sh` и `e2e-regression.sh`.
+
+---
+
 ## [1.3.34] — 2026-11-26
 
 ### Fixed
