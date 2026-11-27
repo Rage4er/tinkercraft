@@ -85,7 +85,10 @@ describe('getTreeView', () => {
 })
 
 describe('formatParams', () => {
-  it('куб: W/H/D', () => {
+  it('куб (с shapeType): X/Y/Z — оси, height — Y', () => {
+    expect(formatParams({ width: 20, height: 10, depth: 5 }, 'cube')).toBe('X20 Y10 Z5')
+  })
+  it('без shapeType — прежние W/H/D (fallback)', () => {
     expect(formatParams({ width: 20, height: 10, depth: 5 })).toBe('W20 H10 D5')
   })
   it('сфера, тор, округление, пусто', () => {
